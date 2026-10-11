@@ -1,0 +1,122 @@
+{
+ "events": [
+  [
+   "loadstart",
+   2,
+   0,
+   0,
+   2,
+   1
+  ],
+  [
+   "progress",
+   5,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "suspend",
+   5,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "durationchange",
+   7,
+   0,
+   1,
+   1,
+   1
+  ],
+  [
+   "loadedmetadata",
+   7,
+   0,
+   1,
+   1,
+   1
+  ],
+  [
+   "loadeddata",
+   12,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplay",
+   12,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplaythrough",
+   12,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "play",
+   465,
+   0.012,
+   4,
+   1,
+   0
+  ],
+  [
+   "playing",
+   465,
+   0.012,
+   4,
+   1,
+   0
+  ],
+  [
+   "pause",
+   2032,
+   1.5,
+   4,
+   1,
+   1
+  ],
+  [
+   "ended",
+   2032,
+   1.5,
+   4,
+   1,
+   1
+  ]
+ ],
+ "x": {
+  "play": "resolved",
+  "endedAfter": 1583,
+  "currentTime": 1.5,
+  "ended": true,
+  "paused": true,
+  "duration": 1.5,
+  "timeupdates": 6,
+  "tuGaps": [
+   266,
+   265,
+   266,
+   266,
+   256
+  ],
+  "played": [
+   [
+    0,
+    1.5
+   ]
+  ]
+ }
+}

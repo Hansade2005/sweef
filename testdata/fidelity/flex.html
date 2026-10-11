@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>flex</title>
+<style>
+* { box-sizing: border-box; }
+body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; }
+.row { display: flex; gap: 12px; margin-bottom: 16px; }
+.row > div { background: #dbeafe; border: 2px solid #3b82f6; padding: 10px; }
+.grow { flex: 1; }
+.two { flex: 2; }
+.center { justify-content: center; align-items: center; height: 100px; background: #fef3c7; }
+.between { justify-content: space-between; }
+.col { flex-direction: column; width: 200px; height: 220px; background: #ecfccb; }
+.wrap { flex-wrap: wrap; width: 360px; }
+.wrap > div { width: 110px; }
+</style></head>
+<body>
+<div class="row"><div>Fixed</div><div class="grow">Grow 1</div><div class="two">Grow 2 with more text inside to see wrapping behaviour</div></div>
+<div class="row center"><div>Centered</div><div>Items</div></div>
+<div class="row between"><div>A</div><div>B</div><div>C</div></div>
+<div class="row"><div class="row col"><div>One</div><div class="grow">Two grows</div><div>Three</div></div>
+<div class="row wrap"><div>1</div><div>2</div><div>3</div><div>4</div><div>5</div></div></div>
+</body></html>

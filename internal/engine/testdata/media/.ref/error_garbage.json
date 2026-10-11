@@ -1,0 +1,41 @@
+{
+ "events": [
+  [
+   "loadstart",
+   8,
+   0,
+   0,
+   2,
+   1
+  ],
+  [
+   "progress",
+   9,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "suspend",
+   9,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "error",
+   11,
+   0,
+   0,
+   3,
+   1
+  ]
+ ],
+ "x": {
+  "readyState": 0,
+  "networkState": 3,
+  "errCode": 4
+ }
+}

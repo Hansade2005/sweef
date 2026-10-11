@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>pseudo</title>
+<style>
+body { margin: 20px; font: 15px Arial, sans-serif; }
+.q::before { content: "\201C"; color: #999; } .q::after { content: "\201D"; color: #999; }
+.badge::after { content: attr(data-count); background: #e33; color: #fff; padding: 0 6px; border-radius: 8px; margin-left: 6px; font-size: 12px; }
+.arrow::before { content: ""; display: inline-block; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid #333; margin-right: 6px; }
+.clearfix::after { content: ""; display: table; clear: both; }
+.fl { float: left; width: 60px; height: 40px; background: #cde; }
+.tip { position: relative; display: inline-block; border-bottom: 1px dotted; }
+.tip::after { content: "tooltip"; position: absolute; left: 0; top: 100%; background: #333; color: #fff; padding: 2px 6px; white-space: nowrap; }
+.pre-block::before { content: "Block before"; display: block; background: #eee; padding: 4px; }
+.fl-first::first-letter { font-size: 28px; font-weight: bold; float: left; line-height: 1; padding-right: 4px; }
+.step { counter-reset: s; } .step p { counter-increment: s; margin: 4px 0; } .step p::before { content: "Step " counter(s) ": "; font-weight: bold; }
+blockquote { quotes: "«" "»"; } blockquote::before { content: open-quote; } blockquote::after { content: close-quote; }
+.sep > span + span::before { content: " | "; color: #aaa; }
+</style></head><body>
+<p class="q">Quoted text</p>
+<p><span class="badge" data-count="12">Inbox</span></p>
+<p class="arrow">With arrow</p>
+<div class="clearfix"><div class="fl"></div><div class="fl"></div></div>
+<p><span class="tip">hover me</span></p>
+<div class="pre-block">Body of block</div>
+<p class="fl-first">First letter drop cap paragraph text that goes on for a while to show wrapping around the float.</p>
+<div class="step"><p>One</p><p>Two</p><p>Three</p></div>
+<blockquote>Quoted via quotes property</blockquote>
+<p class="sep"><span>One</span><span>Two</span><span>Three</span></p>
+</body></html>

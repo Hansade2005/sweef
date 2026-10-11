@@ -1,0 +1,22 @@
+<!doctype html><meta charset=utf-8><canvas id=c width=256 height=192></canvas>
+<script src="vendor/three.min.js"></script>
+<script>
+try {
+  var canvas = document.getElementById('c');
+  var renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: false, preserveDrawingBuffer: true});
+  renderer.setPixelRatio(1); renderer.setSize(256, 192, false); renderer.setClearColor(0x101820, 1);
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+  var scene = new THREE.Scene(); scene.fog = new THREE.Fog(0x101820, 8, 20);
+  var camera = new THREE.PerspectiveCamera(45, 256/192, 0.1, 100); camera.position.set(4, 4, 6); camera.lookAt(0, 0.5, 0);
+  scene.add(new THREE.HemisphereLight(0x8899aa, 0x222222, 0.6));
+  var dl = new THREE.DirectionalLight(0xffffff, 1.0); dl.position.set(-3, 6, 2); dl.castShadow = true;
+  dl.shadow.mapSize.set(256, 256); dl.shadow.camera.left = -6; dl.shadow.camera.right = 6; dl.shadow.camera.top = 6; dl.shadow.camera.bottom = -6; dl.shadow.camera.near = 1; dl.shadow.camera.far = 20; dl.shadow.bias = -0.002;
+  scene.add(dl);
+  var floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({color: 0x9aa7b4, roughness: 0.9})); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+  var box = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), new THREE.MeshStandardMaterial({color: 0xd05030, roughness: 0.5})); box.position.set(0, 0.75, 0); box.rotation.y = 0.5; box.castShadow = true; box.receiveShadow = true; scene.add(box);
+  var ball = new THREE.Mesh(new THREE.SphereGeometry(0.7, 20, 14), new THREE.MeshPhongMaterial({color: 0x3080d0, shininess: 80})); ball.position.set(2, 0.7, 1); ball.castShadow = true; scene.add(ball);
+  renderer.render(scene, camera);
+  var gl = renderer.getContext();
+  window.__result = 'calls=' + renderer.info.render.calls + ' tris=' + renderer.info.render.triangles + ' programs=' + renderer.info.programs.length + ' err=' + gl.getError();
+} catch (e) { window.__error = String(e && (e.message + "\n" + e.stack) || e); }
+</script>

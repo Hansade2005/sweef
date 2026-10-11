@@ -1,0 +1,19 @@
+{
+ "events": [],
+ "x": {
+  "buffered": [
+   [
+    0,
+    1.5
+   ]
+  ],
+  "seekable": [
+   [
+    0,
+    1.5
+   ]
+  ],
+  "playedLen": 0,
+  "idxErr": "IndexSizeError"
+ }
+}

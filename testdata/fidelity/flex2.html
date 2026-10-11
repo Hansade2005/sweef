@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>flex2</title>
+<style>
+* { box-sizing: border-box; } body { margin: 16px; font: 14px Arial, sans-serif; }
+.c { display: flex; border: 1px solid #888; margin-bottom: 14px; background: #f7f7f7; } .c > div { background: #cde; border: 1px solid #69c; padding: 6px 10px; }
+.wrap { flex-wrap: wrap; width: 420px; } .wrap > div { flex: 1 1 130px; }
+.col { flex-direction: column; height: 200px; } .colr { flex-direction: column-reverse; height: 160px; } .rowr { flex-direction: row-reverse; }
+.ai-c { align-items: center; height: 100px; } .ai-e { align-items: flex-end; height: 100px; } .ai-b { align-items: baseline; } .ai-s { align-items: stretch; height: 100px; }
+.jc-c { justify-content: center; } .jc-e { justify-content: flex-end; } .jc-sb { justify-content: space-between; } .jc-sa { justify-content: space-around; } .jc-se { justify-content: space-evenly; }
+.gap { gap: 20px 8px; flex-wrap: wrap; width: 330px; }
+.auto-m > div:nth-child(2) { margin-left: auto; } .auto-m2 > div { margin: auto; }
+.order > div:nth-child(1) { order: 3; } .order > div:nth-child(2) { order: 1; } .order > div:nth-child(3) { order: 2; }
+.shrink > div { flex: 0 1 300px; } .noshrink > div { flex-shrink: 0; width: 300px; }
+.basis > div:nth-child(1) { flex: 0 0 25%; } .basis > div:nth-child(2) { flex: 0 0 50%; } .grow3 > div:nth-child(1) { flex-grow: 1; } .grow3 > div:nth-child(2) { flex-grow: 2; } .grow3 > div:nth-child(3) { flex-grow: 3; }
+.self > div:nth-child(1) { align-self: flex-start; } .self > div:nth-child(2) { align-self: center; } .self > div:nth-child(3) { align-self: flex-end; } .self { height: 90px; }
+.nest { display: flex; } .nest .inner { display: flex; flex-direction: column; flex: 1; } .minw > div { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.img > div { padding: 0; } .tall { height: 60px; font-size: 22px; }
+.inl { display: inline-flex; vertical-align: middle; }
+</style></head><body>
+<div class="c"><div>One</div><div>Two</div><div>Three</div></div>
+<div class="c wrap"><div>wrap 1</div><div>wrap 2 longer text</div><div>wrap 3</div><div>wrap 4</div><div>wrap 5 even longer text inside</div></div>
+<div class="c col"><div>col 1</div><div style="flex:1">col 2 flex</div><div>col 3</div></div>
+<div class="c colr"><div>a</div><div>b</div></div>
+<div class="c rowr"><div>one</div><div>two</div><div>three</div></div>
+<div class="c ai-c"><div>center</div><div class="tall">tall</div><div>x</div></div>
+<div class="c ai-e"><div>end</div><div>y</div></div>
+<div class="c ai-b"><div>base</div><div class="tall">tall big</div><div style="padding-top:20px">pad</div></div>
+<div class="c ai-s"><div>stretch</div><div>stretch two</div></div>
+<div class="c jc-c"><div>c1</div><div>c2</div></div><div class="c jc-e"><div>e1</div><div>e2</div></div><div class="c jc-sb"><div>s1</div><div>s2</div><div>s3</div></div>
+<div class="c jc-sa"><div>a1</div><div>a2</div></div><div class="c jc-se"><div>v1</div><div>v2</div></div>
+<div class="c gap"><div>g1</div><div>g2</div><div>g3</div><div>g4</div><div>g5</div><div>g6</div><div>g7</div></div>
+<div class="c auto-m"><div>left</div><div>pushed right</div></div><div class="c auto-m2" style="height:70px"><div>centered</div></div>
+<div class="c order"><div>A</div><div>B</div><div>C</div></div>
+<div class="c shrink"><div>shrink item one</div><div>shrink item two</div><div>shrink item three that is long</div><div>four</div><div>five</div></div>
+<div class="c noshrink" style="width:500px"><div>fixed</div><div>fixed</div></div>
+<div class="c basis"><div>25%</div><div>50%</div><div>rest</div></div><div class="c grow3"><div>1</div><div>2</div><div>3</div></div>
+<div class="c self"><div>start</div><div>center</div><div>end</div></div>
+<div class="c nest" style="height:120px"><div class="inner"><div>n1</div><div style="flex:1">n2</div></div><div class="inner"><div>m1</div></div></div>
+<div class="c minw" style="width:300px"><div>Long text that should truncate with an ellipsis</div><div>Another long text to be cut</div></div>
+<p>Inline flex: <span class="c inl" style="margin:0"><div>in</div><div>line</div></span> after.</p>
+</body></html>

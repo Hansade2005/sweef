@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);x.fillStyle='#000';
+[10,12,14,16,20,28].forEach(function(s,i){x.font=s+'px "Liberation Sans"';x.fillText('The quick brown fox',6+i*0.37,18+[0,16,34,54,76,106][i]);});
+x.fillStyle='#903';x.font='italic 15px "Liberation Sans"';x.fillText('italic text sample',110,24);x.font='bold 15px "Liberation Sans"';x.fillText('bold text sample',110,50);
+</script>

@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>responsive</title>
+<style>
+:root { --gap: 12px; --pad: calc(var(--gap) * 2); --c: #369; }
+* { box-sizing: border-box; } body { margin: 0; font: 15px/1.5 system-ui, sans-serif; }
+.hdr { background: var(--c); color: #fff; padding: var(--pad); display: flex; justify-content: space-between; align-items: center; } .hdr nav a { color: #fff; margin-left: 16px; text-decoration: none; }
+.menu-btn { display: none; }
+.wrap { max-width: 960px; margin: 0 auto; padding: var(--pad); display: grid; grid-template-columns: 2fr 1fr; gap: var(--gap); }
+.card { background: #f3f4f6; padding: var(--gap); border-radius: 8px; } .card h3 { margin: 0 0 6px; }
+.row3 { display: flex; gap: var(--gap); margin: var(--gap) 0; } .row3 > div { flex: 1; background: #e5e7eb; padding: var(--gap); }
+@media (max-width: 700px) { .wrap { grid-template-columns: 1fr; } .row3 { flex-direction: column; } .hdr nav { display: none; } .menu-btn { display: block; } }
+@media (min-width: 701px) and (max-width: 1100px) { .row3 { flex-wrap: wrap; } .row3 > div { flex: 1 1 40%; } }
+@supports (display: grid) { .sup { color: #090; } } @supports not (display: grid) { .sup { color: #900; } }
+.sup { font-weight: 700; } @media print { body { display: none; } } @media (prefers-color-scheme: dark) { body { background: #111; } } @media (hover: hover) { .hov { text-decoration: underline; } }
+.vars { --x: 10px; --y: var(--x); width: calc(var(--y) * 10); background: var(--missing, #fc9); }
+.sel li:not(:last-child) { border-bottom: 1px solid #ddd; } .sel li:nth-child(odd) { background: #f9f9f9; } .sel li:first-child { font-weight: bold; } .sel li:has(b) { color: #c00; } .sel :is(h4, h5) { margin: 0; } .sel li:nth-of-type(3n) { padding-left: 10px; }
+.sel { list-style: none; padding: 0; margin: 12px 0; }
+</style></head><body>
+<div class="hdr"><b>Brand</b><nav><a href="#">One</a><a href="#">Two</a><a href="#">Three</a></nav><button class="menu-btn">Menu</button></div>
+<div class="wrap"><main><div class="card"><h3>Main content</h3><p>Responsive layouts change with the viewport using media queries and fluid sizing.</p></div><div class="row3"><div>A</div><div>B</div><div>C</div></div></main><aside class="card"><h3>Sidebar</h3><p>Aside content.</p></aside></div>
+<div class="wrap" style="display:block"><p class="sup">supports grid</p><p class="hov">hover</p><div class="vars">vars</div><ul class="sel"><li>First</li><li>Second</li><li>Third <b>bold</b></li><li>Fourth</li><li>Fifth</li><li>Sixth</li></ul></div>
+</body></html>

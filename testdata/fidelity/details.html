@@ -1,0 +1,21 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>details</title>
+<style>
+body { margin: 16px; font: 15px Arial, sans-serif; } details { border: 1px solid #ccc; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; } summary { cursor: pointer; font-weight: bold; } details p { margin: 8px 0 0; }
+.acc details + details { margin-top: -1px; border-radius: 0; } dialog { position: static; display: block; border: 2px solid #333; padding: 12px; width: 300px; margin: 10px 0; }
+mark { background: #ff0; } .vh { visibility: hidden; } .dn { display: none; } .dc { display: contents; } .dc > span { background: #def; padding: 2px; } abbr { text-decoration: underline dotted; } .ib { display: inline-block; width: 100px; background: #eee; } hr { margin: 20px 0; }
+.wb { width: 120px; border: 1px solid #aaa; margin: 4px; display: inline-block; vertical-align: top; } .wb1 { word-break: break-all; } .wb2 { overflow-wrap: break-word; } .wb3 { hyphens: auto; } .wb4 { word-break: keep-all; }
+.ls { letter-spacing: 3px; } .tt { text-transform: capitalize; } .lt { text-transform: lowercase; } .ut { text-transform: uppercase; } .ta-j { text-align: justify; text-align-last: center; width: 250px; }
+.rtl { direction: rtl; } .tabs { tab-size: 4; white-space: pre; }
+</style></head><body>
+<details open><summary>Open details</summary><p>Content shown because the open attribute is present.</p></details>
+<details><summary>Closed details</summary><p>Hidden content</p></details>
+<div class="acc"><details open><summary>Accordion 1</summary><p>Body one</p></details><details><summary>Accordion 2</summary><p>Body two</p></details></div>
+<dialog open>Dialog box content<br><button>OK</button></dialog>
+<p>Text with <mark>mark</mark> and <span class="vh">hidden but takes space</span> and <span class="dn">removed</span><span class="dc"><span>contents</span></span> <abbr title="x">abbr</abbr> <span class="ib">ib</span></p>
+<hr>
+<div class="wb wb1">Averyveryveryveryverylongwordwithoutbreaks and more</div><div class="wb wb2">Averyveryveryveryverylongwordwithoutbreaks and more</div><div class="wb wb3">Internationalization hyphenation test words</div><div class="wb wb4">keep all words together 日本語のテキスト</div>
+<p class="ls">Letter spacing three</p><p class="tt">capitalize each word here</p><p class="lt">LOWERCASE THIS</p><p class="ut">uppercase this text</p><p class="ta-j">Justified paragraph with enough words to wrap across lines, last line centered.</p>
+<p class="rtl">Right to left paragraph text here</p><pre class="tabs">a	b	c
+aa	bb	cc</pre>
+</body></html>

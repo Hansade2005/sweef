@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Login</title>
+<style>
+body { margin: 0; font-family: Helvetica, Arial, sans-serif; background: #f0f2f5; color: #1c1e21; }
+.wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.card { width: 100%; max-width: 400px; background: #fff; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,.1), 0 8px 16px rgba(0,0,0,.1); padding: 32px; }
+.card h1 { margin: 0 0 4px; font-size: 26px; text-align: center; } .card .sub { margin: 0 0 24px; text-align: center; color: #65676b; font-size: 15px; }
+.field { margin-bottom: 14px; } .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #4b4f56; }
+.field input[type=email], .field input[type=password], .field input[type=text] { width: 100%; height: 44px; padding: 0 14px; font-size: 16px; border: 1px solid #dddfe2; border-radius: 8px; box-sizing: border-box; }
+.row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin: 4px 0 18px; } .row a { color: #1877f2; text-decoration: none; }
+.btn { width: 100%; height: 46px; border: 0; border-radius: 8px; background: #1877f2; color: #fff; font-size: 17px; font-weight: 700; cursor: pointer; }
+.div { display: flex; align-items: center; margin: 20px 0; color: #8a8d91; font-size: 13px; } .div::before, .div::after { content: ""; flex: 1; height: 1px; background: #dadde1; } .div span { padding: 0 12px; }
+.social { display: flex; gap: 10px; } .social button { flex: 1; height: 42px; border: 1px solid #dddfe2; background: #fff; border-radius: 8px; font-size: 14px; }
+.foot { text-align: center; margin-top: 20px; font-size: 14px; color: #65676b; } .foot a { color: #1877f2; text-decoration: none; font-weight: 600; }
+</style></head><body><div class="wrap"><form class="card"><h1>Welcome back</h1><p class="sub">Sign in to continue to your account</p>
+<div class="field"><label for="e">Email address</label><input id="e" type="email" placeholder="you@example.com"></div>
+<div class="field"><label for="p">Password</label><input id="p" type="password" placeholder="••••••••"></div>
+<div class="row"><label><input type="checkbox" checked> Remember me</label><a href="#">Forgot password?</a></div>
+<button class="btn" type="button">Sign in</button>
+<div class="div"><span>or continue with</span></div>
+<div class="social"><button type="button">Google</button><button type="button">GitHub</button><button type="button">Apple</button></div>
+<p class="foot">Don't have an account? <a href="#">Sign up</a></p></form></div></body></html>

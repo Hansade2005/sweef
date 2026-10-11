@@ -1,0 +1,27 @@
+{
+ "events": [],
+ "x": {
+  "pipEnabled": true,
+  "mk": null,
+  "sinkId": "",
+  "capTracks": [],
+  "remote": "object",
+  "cps": [
+   "probably",
+   "probably",
+   "",
+   ""
+  ],
+  "recorder": "function",
+  "voices": 0,
+  "audioTracks": "undefined",
+  "vtt": "function",
+  "pip": "InvalidStateError",
+  "mediaKeys": "resolved",
+  "gumEmpty": "TypeError",
+  "sink": "NotFoundError",
+  "eme": "NotSupportedError",
+  "gum": "NotFoundError",
+  "devices": 0
+ }
+}

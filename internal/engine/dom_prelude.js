@@ -964,11 +964,11 @@
     shadowRoot: { get: function () { return slots(this).shadowRoot || null; } },
     assignedSlot: { get: function () { return null; } },
     // geometry from the Go side
-    clientWidth: { get: function () { return hostBox(this[ID]).width | 0; } },
-    clientHeight: { get: function () { return hostBox(this[ID]).height | 0; } },
+    clientWidth: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.cw : b.width); } },
+    clientHeight: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.ch : b.height); } },
     clientTop: { get: function () { return 0; } }, clientLeft: { get: function () { return 0; } },
-    scrollWidth: { get: function () { return hostBox(this[ID]).width | 0; } },
-    scrollHeight: { get: function () { return hostBox(this[ID]).height | 0; } },
+    scrollWidth: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.sw : b.width); } },
+    scrollHeight: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.sh : b.height); } },
     scrollTop: { get: function () { return slots(this).scrollTop || 0; }, set: function (v) { slots(this).scrollTop = +v || 0; } },
     scrollLeft: { get: function () { return slots(this).scrollLeft || 0; }, set: function (v) { slots(this).scrollLeft = +v || 0; } }
   });
@@ -1027,7 +1027,7 @@
     insertAdjacentElement: function (position, el) { return insertAdjacent(this, position, el); },
     insertAdjacentText: function (position, text) { insertAdjacent(this, position, documentWrapper.createTextNode(toStr(text))); },
     getBoundingClientRect: function () { return domRect(hostBox(this[ID])); },
-    getClientRects: function () { var r = this.getBoundingClientRect(); var list = [r]; list.item = function (i) { return list[i] || null; }; return list; },
+    getClientRects: function () { var hb = hostBox(this[ID]); var list = hb.precise && hb.frags && hb.frags.length ? hb.frags.map(function (f) { return new DOMRect(f[0], f[1], f[2], f[3]); }) : [this.getBoundingClientRect()]; list.item = function (i) { return list[i] || null; }; return list; },
     scrollIntoView: function () { }, scrollIntoViewIfNeeded: function () { }, scroll: function () { }, scrollTo: function () { }, scrollBy: function () { },
     attachShadow: function (init) { var s = slots(this); if (s.shadowRoot) throw DOMException('Shadow root cannot be created on a host which already hosts a shadow tree.', 'NotSupportedError'); s.shadowRoot = this; return this; },
     requestFullscreen: function () { return Promise.resolve(); },
@@ -1082,10 +1082,10 @@
   getters(HTMLElement.prototype, {
     style: { get: function () { var s = slots(this); return s.style || (s.style = styleDecl(this)); }, set: function (v) { this.style.cssText = toStr(v); } },
     dataset: { get: function () { var s = slots(this); return s.dataset || (s.dataset = dataset(this)); } },
-    offsetWidth: { get: function () { return hostBox(this[ID]).width | 0; } },
-    offsetHeight: { get: function () { return hostBox(this[ID]).height | 0; } },
-    offsetTop: { get: function () { return hostBox(this[ID]).y | 0; } },
-    offsetLeft: { get: function () { return hostBox(this[ID]).x | 0; } },
+    offsetWidth: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.ow : b.width); } },
+    offsetHeight: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.oh : b.height); } },
+    offsetTop: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.oy : b.y); } },
+    offsetLeft: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.ox : b.x); } },
     offsetParent: { get: function () { return this.isConnected && this.localName !== 'body' && this.localName !== 'html' ? (this.parentElement && this.parentElement.closest('body') ? documentWrapper.body : null) : null; } },
     isContentEditable: { get: function () { var v = this.getAttribute('contenteditable'); return v === '' || v === 'true' || v === 'plaintext-only'; } },
     nonce: { get: function () { return this.getAttribute('nonce') || ''; }, set: function (v) { this.setAttribute('nonce', toStr(v)); } },
@@ -1838,7 +1838,7 @@
     } catch (e) { reportError(e); }
     runningTimer = null;
   }
-  function runTimers(now) {
+  function runTimers(now, withBg) {
     now = +now; if (!(now >= 0)) now = nowMs(); if (now > lastNow) lastNow = now;
     // Only timers that were pending when this pass started run now; timers armed
     // by callbacks (and re-armed intervals) wait for the next pump so microtasks
@@ -1853,9 +1853,15 @@
         t.seq = ++timerSeq; timerInsert(t);
       }
     }
-    if (!timers.length) return -1;
-    return Math.max(0, timers[0].when - now);
+    // background timers (media clock ticks) never hold the pump open
+    for (var bi = 0; bi < timers.length; bi++) if (withBg || !timers[bi].bg) return Math.max(0, timers[bi].when - now);
+    return -1;
   }
+  Object.defineProperty(global, '__swBgTimeout', { value: function (fn, delay) {
+    var id = setTimeoutImpl(fn, [], delay, false);
+    for (var i = 0; i < timers.length; i++) if (timers[i].id === id) { timers[i].bg = true; break; }
+    return id;
+  } });
   function timerArgs(args) { return slice.call(args, 2); }
   global.setTimeout = function setTimeout(fn, delay) { return setTimeoutImpl(fn, timerArgs(arguments), delay, false); };
   global.setInterval = function setInterval(fn, delay) { return setTimeoutImpl(fn, timerArgs(arguments), delay, true); };
@@ -3180,7 +3186,7 @@
   exportFn('__swDrag', function (src, dst) { try { return dragFromGo(src, dst); } catch (e) { reportError(e); return false; } });
   exportFn('__swWheel', function (dx, dy, x, y) { try { return wheelFromGo(dx, dy, x, y); } catch (e) { reportError(e); return true; } });
   exportFn('__swSetValueFromGo', function (id, value) { try { return setValueFromGo(id, value); } catch (e) { reportError(e); return false; } });
-  exportFn('__swRunTimers', function (now) { try { return runTimers(now); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
+  exportFn('__swRunTimers', function (now, withBg) { try { return runTimers(now, !!withBg); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
   exportFn('__swFlushMutationObservers', function () { try { flushMutationObservers(); } catch (e) { reportError(e); } return pendingObservers.length; });
   exportFn('__swFireLifecycle', function (name) { try { return fireLifecycle(name); } catch (e) { reportError(e); return true; } });
   exportFn('__swSetDocument', function (url, state) { return setDocument(url, state); });

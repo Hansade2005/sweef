@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>background</title>
+<style>
+body { margin: 16px; font: 13px Arial, sans-serif; } .t { width: 200px; height: 90px; margin: 0 12px 12px 0; display: inline-block; vertical-align: top; border: 1px solid #333; padding: 6px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.l1 { background: linear-gradient(90deg, #f06, #4a90e2); } .l2 { background: linear-gradient(to bottom right, #ff9a9e, #fad0c4, #a1c4fd); } .l3 { background: linear-gradient(45deg, rgba(255,255,255,.3) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.3) 50%, rgba(255,255,255,.3) 75%, transparent 75%) 0 0 / 20px 20px, #2a9d8f; }
+.r1 { background: radial-gradient(circle at 30% 30%, #fff, #08f 60%, #013); } .r2 { background: radial-gradient(ellipse closest-side, #ff0, #f00); } .c1 { background: conic-gradient(from 90deg, red, yellow, lime, aqua, blue, magenta, red); } .rep { background: repeating-linear-gradient(45deg, #606dbc, #606dbc 10px, #465298 10px, #465298 20px); }
+.bs { background: #ddd url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") no-repeat center / 50px 30px; } .multi { background: linear-gradient(rgba(0,0,0,.4), rgba(0,0,0,.4)), linear-gradient(90deg, #f93, #39f); }
+.clip { background: #f90; background-clip: content-box; padding: 20px; } .origin { background: #09f linear-gradient(#fff,#fff) no-repeat; background-origin: content-box; background-clip: padding-box; padding: 20px; }
+.sh { background: #fff; color: #333; box-shadow: 0 4px 12px rgba(0,0,0,.3), inset 0 0 0 3px #9cf; text-shadow: none; border-radius: 12px; }
+.bd1 { border: 4px dashed #c33; background: #333; } .bd2 { border: 6px double #3c3; } .bd3 { border: 5px groove #99f; } .bd4 { border: 4px dotted #fc0; border-radius: 20px; } .bd5 { border-width: 2px 8px 4px 0; border-style: solid; border-color: #f00 #0a0 #00f #000; }
+.rad { border-radius: 50%; } .rad2 { border-radius: 30px 5px 30px 5px / 20px 10px 20px 10px; background: #639; } .out { outline: 3px solid #f0f; outline-offset: 4px; background: #555; }
+.op { opacity: .5; background: #c00; } .filt { filter: blur(2px) brightness(1.2); background: #06c; } .blend { background: #f60; mix-blend-mode: multiply; }
+</style></head><body>
+<div class="t l1">linear 90</div><div class="t l2">to bottom right</div><div class="t l3">stripes</div><div class="t r1">radial circle</div><div class="t r2">ellipse closest-side</div><div class="t c1">conic</div><div class="t rep">repeating</div>
+<div class="t bs" style="color:#000">bg image</div><div class="t multi">multiple</div><div class="t clip">clip content</div><div class="t origin">origin</div><div class="t sh">shadows</div>
+<div class="t bd1">dashed</div><div class="t bd2">double</div><div class="t bd3">groove</div><div class="t bd4">dotted round</div><div class="t bd5">sides</div>
+<div class="t rad" style="background:#369">50%</div><div class="t rad2">elliptic</div><div class="t out">outline</div><div class="t op">opacity</div><div class="t filt">filter</div><div class="t blend">blend</div>
+</body></html>

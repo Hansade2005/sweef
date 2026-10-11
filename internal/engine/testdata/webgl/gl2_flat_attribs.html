@@ -1,0 +1,29 @@
+<!doctype html><meta charset=utf-8><canvas id=c width=128 height=128></canvas>
+<script>
+function ctx(attrs, v){ var c=document.getElementById('c'); return c.getContext(v||'webgl', Object.assign({preserveDrawingBuffer:true, antialias:false}, attrs||{})); }
+function sh(gl,t,s){var o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
+function prog(gl,v,f){var p=gl.createProgram();gl.attachShader(p,sh(gl,gl.VERTEX_SHADER,v));gl.attachShader(p,sh(gl,gl.FRAGMENT_SHADER,f));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));return p;}
+function vbo(gl,arr,t){var b=gl.createBuffer();gl.bindBuffer(t||gl.ARRAY_BUFFER,b);gl.bufferData(t||gl.ARRAY_BUFFER,arr,gl.STATIC_DRAW);return b;}
+function attr(gl,p,name,size,stride,off,type){var l=gl.getAttribLocation(p,name);gl.enableVertexAttribArray(l);gl.vertexAttribPointer(l,size,type||gl.FLOAT,false,stride||0,off||0);return l;}
+function m4mul(a,b){var r=new Float32Array(16);for(var c=0;c<4;c++)for(var i=0;i<4;i++){var s=0;for(var k=0;k<4;k++)s+=a[k*4+i]*b[c*4+k];r[c*4+i]=s;}return r;}
+function persp(fovy,asp,n,f){var t=1/Math.tan(fovy/2);return new Float32Array([t/asp,0,0,0, 0,t,0,0, 0,0,(f+n)/(n-f),-1, 0,0,2*f*n/(n-f),0]);}
+function trans(x,y,z){return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1]);}
+function rotY(a){var c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);}
+function rotX(a){var c=Math.cos(a),s=Math.sin(a);return new Float32Array([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]);}
+function scl(x,y,z){return new Float32Array([x,0,0,0, 0,y,0,0, 0,0,z,0, 0,0,0,1]);}
+function tex(gl,w,h,data,o){o=o||{};var t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,o.ifmt||gl.RGBA,w,h,0,o.fmt||gl.RGBA,o.type||gl.UNSIGNED_BYTE,data);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,o.min||gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,o.mag||gl.NEAREST);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,o.ws||gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,o.wt||gl.CLAMP_TO_EDGE);return t;}
+function checker(w,h,cell,a,b){var d=new Uint8Array(w*h*4);for(var y=0;y<h;y++)for(var x=0;x<w;x++){var c=(((x/cell)|0)+((y/cell)|0))&1?a:b;var i=(y*w+x)*4;d[i]=c[0];d[i+1]=c[1];d[i+2]=c[2];d[i+3]=c[3];}return d;}
+function quad(gl,p,x0,y0,x1,y1,u0,v0,u1,v1){var d=new Float32Array([x0,y0,u0,v0, x1,y0,u1,v0, x0,y1,u0,v1, x1,y1,u1,v1]);vbo(gl,d);attr(gl,p,'a_pos',2,16,0);var l=gl.getAttribLocation(p,'a_uv');if(l>=0)attr(gl,p,'a_uv',2,16,8);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);}
+var QVS='attribute vec2 a_pos;attribute vec2 a_uv;varying vec2 v_uv;void main(){v_uv=a_uv;gl_Position=vec4(a_pos,0.0,1.0);}';
+try{var gl=ctx({}, 'webgl2'); var p=prog(gl,`#version 300 es
+layout(location=0) in vec2 a_pos;layout(location=1) in ivec2 a_id;layout(location=2) in uvec2 a_u;layout(location=3) in mat2 a_m;flat out ivec2 v_id;flat out uvec2 v_u;out vec2 v_m;smooth out float v_s;void main(){v_id=a_id;v_u=a_u;v_m=a_m*vec2(1.0,0.5);v_s=a_pos.x;gl_Position=vec4(a_pos,0.0,1.0);}`,`#version 300 es
+precision highp float;flat in ivec2 v_id;flat in uvec2 v_u;in vec2 v_m;smooth in float v_s;out vec4 o;void main(){o=vec4(float(v_id.x)/10.0,float(v_u.y)/10.0,v_m.x*0.3+v_s*0.1+0.3,1.0);}`);
+gl.useProgram(p);vbo(gl,new Float32Array([-1,-1,1,-1,0,1]));gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+vbo(gl,new Int32Array([1,2,3,4,5,6]));gl.enableVertexAttribArray(1);gl.vertexAttribIPointer(1,2,gl.INT,8,0);
+vbo(gl,new Uint32Array([7,8,9,1,2,3]));gl.enableVertexAttribArray(2);gl.vertexAttribIPointer(2,2,gl.UNSIGNED_INT,8,0);
+vbo(gl,new Float32Array([1,0,0,1, 1,0,0,1, 1,0,0,1]));gl.enableVertexAttribArray(3);gl.vertexAttribPointer(3,2,gl.FLOAT,false,16,0);gl.enableVertexAttribArray(4);gl.vertexAttribPointer(4,2,gl.FLOAT,false,16,8);
+gl.clearColor(0.1,0.1,0.1,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,3);
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
+</script>

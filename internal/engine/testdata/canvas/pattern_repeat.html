@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);
+var p=document.createElement('canvas');p.width=10;p.height=10;var q=p.getContext('2d');q.fillStyle='#e33';q.fillRect(0,0,5,5);q.fillStyle='#33e';q.fillRect(5,5,5,5);q.fillStyle='#3a3';q.fillRect(5,0,5,2);
+['repeat','repeat-x','repeat-y','no-repeat'].forEach(function(r,i){x.fillStyle=x.createPattern(p,r);x.save();x.translate(8+(i%2)*115,8+Math.floor(i/2)*75);x.fillRect(0,0,105,65);x.restore();});
+var pp=x.createPattern(p,'repeat');pp.setTransform(new DOMMatrix([1.5,0.5,-0.5,1.5,3,2]));x.fillStyle=pp;x.fillRect(120,90,100,60);
+</script>

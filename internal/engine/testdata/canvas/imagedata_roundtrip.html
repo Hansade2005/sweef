@@ -1,0 +1,9 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);
+var g=x.createLinearGradient(0,0,100,0);g.addColorStop(0,'#f00');g.addColorStop(1,'#00f');x.fillStyle=g;x.fillRect(10,10,100,40);
+var d=x.getImageData(10,10,100,40);for(var i=0;i<d.data.length;i+=4){d.data[i]=255-d.data[i];d.data[i+1]=255-d.data[i+1];d.data[i+2]=255-d.data[i+2];}
+x.putImageData(d,10,60);x.putImageData(d,130,10,20,5,40,20);
+var id=x.createImageData(60,40);for(var j=0;j<40;j++)for(var i=0;i<60;i++){var k=(j*60+i)*4;id.data[k]=i*4;id.data[k+1]=j*6;id.data[k+2]=128;id.data[k+3]=i*4;}x.putImageData(id,130,60);
+x.fillStyle='rgba(10,20,30,0.2)';x.fillRect(10,120,30,30);var p=x.getImageData(20,130,1,1).data;x.fillStyle='rgb('+p[0]+','+p[1]+','+p[2]+')';x.fillRect(60,120,30,30);x.fillStyle='#000';x.font='9px sans-serif';x.fillText(p.join(','),100,140);
+</script>

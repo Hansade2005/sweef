@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>typography2</title>
+<style>
+html { font-size: 18px; } body { margin: 0; padding: 1.5rem; font-family: Georgia, "Times New Roman", serif; line-height: 1.7; color: #333; }
+h1 { font-size: 2.2rem; line-height: 1.15; margin: 0 0 .4em; font-weight: 700; } h2 { font-size: 1.5rem; margin: 1.6em 0 .4em; } p { margin: 0 0 1em; }
+.lede { font-size: 1.2em; color: #555; } .dropcap::first-letter { font-size: 3em; float: left; line-height: .8; padding: 4px 6px 0 0; } small { font-size: .8em; }
+sup, sub { font-size: .7em; line-height: 0; } .caps { font-variant: small-caps; letter-spacing: .05em; } .indent { text-indent: 1.5em; } .indent + .indent { text-indent: 1.5em; margin-top: -1em; }
+.sans { font-family: Helvetica, Arial, sans-serif; font-size: 15px; } .sans p { line-height: 1.35; } .narrow { max-width: 28em; } .tight { line-height: 1; } .loose { line-height: 2.2; }
+blockquote { margin: 1.2em 0; padding-left: 1em; border-left: 3px solid #ccc; font-style: italic; } cite { font-size: .85em; font-style: normal; display: block; margin-top: .3em; }
+.cols { display: flex; gap: 2em; } .cols > div { flex: 1; } .em { font-size: 1.25em; } .em span { font-size: .8em; } .mixed span { vertical-align: super; font-size: 60%; }
+mark { padding: 0 .2em; } code { font-size: .9em; } .fs-a { font-size: 10px; } .fs-b { font-size: 13.5px; } .fs-c { font-size: 0.83rem; } .fs-d { font-size: 150%; } .fs-e { font-size: larger; } .fs-f { font-size: x-small; }
+</style></head><body>
+<h1>Typographic details and the rhythm of text</h1><p class="lede">Careful attention to type makes long reading comfortable, and tests a layout engine thoroughly.</p>
+<p class="dropcap">Once upon a time in a land of CSS, the first letter of this paragraph grew larger than the rest and floated to the left so that the following lines wrapped around it neatly, which is a common editorial flourish.</p>
+<p class="caps">Small caps text with letter spacing</p><p>Water is H<sub>2</sub>O and E = mc<sup>2</sup> but also x<sup>10</sup>y<sub>i</sub> in a longer sentence that includes both.</p>
+<p class="indent">Indented first paragraph of an essay that continues across several lines to show the indent only on the first line.</p><p class="indent">Second indented paragraph.</p>
+<div class="cols sans"><div class="narrow"><p>Column one in a sans serif face with tighter leading. Text wraps within the column width and flows naturally to the next lines.</p></div><div><p class="tight">Line height one. Line height one. Line height one. Line height one. Line height one. Line height one. Line height one.</p><p class="loose">Line height two point two. Line height two point two. Line height two point two.</p></div></div>
+<blockquote>The details are not the details; they make the design.<cite>— Charles Eames</cite></blockquote>
+<p class="em">Em sizing <span>nested smaller <span>and smaller</span></span> back</p><p class="mixed">Footnote reference<span>1</span> and another<span>23</span> mark.</p>
+<p><span class="fs-a">ten px</span> <span class="fs-b">13.5px</span> <span class="fs-c">0.83rem</span> <span class="fs-d">150%</span> <span class="fs-e">larger</span> <span class="fs-f">x-small</span> normal <mark>marked</mark> <code>code()</code></p>
+<h2>A second heading</h2><p>Final paragraph with a <a href="#">link</a>, <strong>strong</strong> and <em>emphasised</em> inline content to finish.</p>
+</body></html>

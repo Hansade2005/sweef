@@ -1,0 +1,44 @@
+{
+ "events": [
+  [
+   "track-load",
+   13
+  ]
+ ],
+ "x": {
+  "tracksLen": 1,
+  "mode0": "disabled",
+  "kind": "subtitles",
+  "label": "English",
+  "lang": "en",
+  "cues": 2,
+  "cue0": [
+   "cue1",
+   0.3,
+   0.8,
+   "First <b>cue</b>",
+   "start",
+   80,
+   false
+  ],
+  "cueChanges": [
+   [
+    300,
+    1
+   ],
+   [
+    900,
+    0
+   ],
+   [
+    1100,
+    1
+   ],
+   [
+    1500,
+    0
+   ]
+  ],
+  "trackReady": 2
+ }
+}

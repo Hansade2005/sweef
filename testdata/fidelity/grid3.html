@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>grid3</title>
+<style>
+* { box-sizing: border-box; } body { margin: 16px; font: 14px Arial, sans-serif; }
+.g { display: grid; gap: 8px; background: #eee; padding: 8px; margin-bottom: 14px; } .g > div { background: #cde; padding: 8px; border: 1px solid #69c; }
+.a { grid-template-columns: 1fr 2fr 1fr; grid-template-rows: 50px 80px; } .named { grid-template-columns: [a] 100px [b] 1fr [c]; } .named > div:first-child { grid-column: c-start / span 1; }
+.rowflow { grid-auto-flow: column; grid-template-rows: repeat(2, 40px); grid-auto-columns: 120px; }
+.autorows { grid-auto-rows: minmax(40px, auto); grid-template-columns: repeat(2, 1fr); }
+.fr { grid-template-columns: 1fr 3fr; } .pct { grid-template-columns: 25% 75%; } .mc { grid-template-columns: min-content max-content auto; }
+.center { grid-template-columns: repeat(3, 100px); justify-items: center; align-items: center; grid-auto-rows: 70px; } .place { place-items: end start; grid-template-columns: 200px 200px; grid-auto-rows: 60px; }
+.holes { grid-template-columns: repeat(4, 1fr); grid-auto-rows: 30px; } .holes > div:nth-child(1) { grid-column: 2 / 4; } .holes > div:nth-child(2) { grid-column: 1 / 3; grid-row: 2; }
+.inline-g { display: inline-grid; grid-template-columns: 60px 60px; vertical-align: top; }
+.card-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); } .card-grid > div { padding: 0; } .card-grid .img { height: 70px; background: #9bd; } .card-grid .body { padding: 10px; }
+.nested { grid-template-columns: 1fr 1fr; } .nested > div { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.sub { grid-template-columns: 200px 1fr; grid-template-areas: "side main" "side foot"; } .sub .s { grid-area: side; } .sub .m { grid-area: main; } .sub .f { grid-area: foot; }
+.big { grid-template-columns: repeat(12, 1fr); } .big > div { grid-column: span 4; } .big > div.w { grid-column: span 8; }
+.ov { grid-template-columns: 100px 100px; } .ov > div:nth-child(1) { grid-area: 1 / 1 / 3 / 2; } .ov > div:nth-child(2) { grid-area: 1 / 2; } .ov > div:nth-child(3) { grid-area: 2 / 2; }
+</style></head><body>
+<div class="g a"><div>1</div><div>2</div><div>3</div><div>4</div></div>
+<div class="g named"><div>named</div><div>two</div></div>
+<div class="g rowflow"><div>1</div><div>2</div><div>3</div><div>4</div><div>5</div></div>
+<div class="g autorows"><div>a</div><div>b<br>two</div><div>c</div><div>d</div></div>
+<div class="g fr"><div>1fr</div><div>3fr</div></div><div class="g pct"><div>25%</div><div>75%</div></div><div class="g mc"><div>min-content text</div><div>max-content text here</div><div>auto</div></div>
+<div class="g center"><div>c</div><div>c</div><div>c</div><div>c</div></div><div class="g place"><div>pe</div><div>pe</div></div>
+<div class="g holes"><div>1</div><div>2</div><div>3</div><div>4</div></div>
+<div class="g"><span class="inline-g"><div>i1</div><div>i2</div></span> text next to inline grid</div>
+<div class="g card-grid"><div><div class="img"></div><div class="body">Card one title</div></div><div><div class="img"></div><div class="body">Card two with longer text that wraps in the card body</div></div><div><div class="img"></div><div class="body">Card 3</div></div><div><div class="img"></div><div class="body">Card 4</div></div></div>
+<div class="g nested"><div><div>n1</div><div>n2</div></div><div><div>n3</div><div>n4</div><div>n5</div></div></div>
+<div class="g sub"><div class="s">side<br>bar<br>tall</div><div class="m">main</div><div class="f">foot</div></div>
+<div class="g big"><div>4</div><div>4</div><div>4</div><div class="w">8</div><div>4</div></div>
+<div class="g ov"><div>tall</div><div>b</div><div>c</div></div>
+</body></html>

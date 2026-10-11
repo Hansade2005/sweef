@@ -1,0 +1,27 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>grid2</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px Arial, sans-serif; }
+.layout { display: grid; grid-template-columns: 220px 1fr 180px; grid-template-rows: 60px 1fr 50px; grid-template-areas: "header header header" "nav main aside" "footer footer footer"; gap: 8px; min-height: 500px; padding: 8px; background: #f3f3f3; }
+.layout > * { padding: 10px; border: 1px solid #aaa; background: #fff; }
+header { grid-area: header; background: #def; } nav { grid-area: nav; } main { grid-area: main; } aside { grid-area: aside; } footer { grid-area: footer; background: #fed; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; padding: 12px; }
+.gallery div { height: 90px; background: #bcd; display: flex; align-items: center; justify-content: center; }
+.gallery .wide { grid-column: span 2; background: #cdb; }
+.fitgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; padding: 12px; }
+.fitgrid div { background: #dcb; padding: 10px; }
+.align { display: grid; grid-template-columns: 150px 150px; grid-auto-rows: 80px; gap: 6px; padding: 8px; justify-content: center; align-content: start; background: #eef; height: 200px; }
+.align div { background: #fcc; }
+.align .s { align-self: end; justify-self: end; width: 50px; height: 30px; }
+.align .c { align-self: center; justify-self: center; }
+.dense { display: grid; grid-template-columns: repeat(4, 60px); grid-auto-flow: row dense; gap: 4px; padding: 8px; }
+.dense div { background: #cfc; height: 30px; }
+.dense .w2 { grid-column: span 2; background: #fcf; }
+</style></head><body>
+<div class="layout"><header>Header</header><nav>Nav<br>links</nav><main>Main content area with text that wraps nicely across the available width of the central column.</main><aside>Aside</aside><footer>Footer</footer></div>
+<div class="gallery"><div>1</div><div>2</div><div class="wide">3 wide</div><div>4</div><div>5</div><div>6</div><div>7</div></div>
+<div class="fitgrid"><div>a</div><div>b</div><div>c</div></div>
+<div class="align"><div>1</div><div class="s">end</div><div class="c">center</div><div>4</div></div>
+<div class="dense"><div>1</div><div class="w2">2 span</div><div>3</div><div class="w2">4 span</div><div>5</div><div>6</div></div>
+</body></html>

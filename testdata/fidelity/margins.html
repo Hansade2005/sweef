@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>margins</title>
+<style>
+body { margin: 0; font: 14px/1.4 Arial, sans-serif; }
+.a { margin: 20px 0 30px; background: #eef; }
+.b { margin: 40px 0 10px; background: #fee; }
+.c { background: #efe; margin-top: 10px; }
+.c > p { margin: 25px 0; background: #ffe; }
+.empty { margin: 50px 0 20px; }
+.neg { margin-top: -10px; background: #eee; }
+.pad { padding: 1px; background: #ddf; }
+.pad > div { margin: 20px; background: #fdd; }
+.bfc { overflow: hidden; background: #dfd; }
+.bfc > div { margin: 15px 0; background: #ffd; }
+.auto { width: 400px; margin: 10px auto; background: #def; }
+.pct { margin: 5% 10%; background: #fed; }
+.inl { margin: 0 20px; }
+</style></head><body>
+<div class="a">A: margin 20/30</div>
+<div class="b">B: margin 40/10 collapses with A</div>
+<div class="c"><p>child margin collapses through parent</p><p>second paragraph</p></div>
+<div class="empty"></div>
+<div class="neg">negative margin</div>
+<div class="pad"><div>inner margin 20 inside padded parent</div></div>
+<div class="bfc"><div>bfc parent contains margins</div></div>
+<div class="auto">centered via auto margins</div>
+<div class="pct">percent margins</div>
+<span class="inl">inline with horizontal margin</span> <span>next</span>
+<div style="height:30px"></div>
+<div style="margin-bottom:20px;background:#eee">before</div><div style="margin-top:20px;background:#ddd">after</div>
+</body></html>

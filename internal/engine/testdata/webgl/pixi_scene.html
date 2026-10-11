@@ -1,0 +1,14 @@
+<!doctype html><meta charset=utf-8><canvas id=c width=256 height=192></canvas>
+<script src="vendor/pixi.min.js"></script>
+<script>
+try {
+  var app = new PIXI.Application({view: document.getElementById('c'), width: 256, height: 192, backgroundColor: 0x203040, antialias: false, preserveDrawingBuffer: true, resolution: 1, autoStart: false, forceCanvas: false});
+  var g = new PIXI.Graphics(); g.beginFill(0xff8844); g.drawRect(20, 20, 80, 50); g.endFill(); g.beginFill(0x44aaff, 0.6); g.drawCircle(120, 80, 40); g.endFill(); g.lineStyle(4, 0xffffff); g.moveTo(10, 150); g.lineTo(240, 120); g.beginFill(0x88ff88); g.drawPolygon([180, 20, 240, 40, 200, 100]); g.endFill();
+  app.stage.addChild(g);
+  var c2 = document.createElement('canvas'); c2.width = 32; c2.height = 32; var x = c2.getContext('2d'); x.fillStyle = '#e33'; x.fillRect(0, 0, 16, 16); x.fillStyle = '#3e3'; x.fillRect(16, 0, 16, 16); x.fillStyle = '#33e'; x.fillRect(0, 16, 16, 16); x.fillStyle = '#ee3'; x.fillRect(16, 16, 16, 16);
+  var spr = new PIXI.Sprite(PIXI.Texture.from(c2)); spr.position.set(100, 110); spr.scale.set(1.5); spr.rotation = 0.3; app.stage.addChild(spr);
+  app.render();
+  var gl = app.renderer.gl;
+  window.__result = 'webgl2=' + (gl instanceof WebGL2RenderingContext) + ' err=' + gl.getError() + ' type=' + app.renderer.type;
+} catch (e) { window.__error = String(e && (e.message + "\n" + e.stack) || e); }
+</script>

@@ -35,6 +35,21 @@ type Layout struct {
 	Width, Height int
 	Boxes         map[*html.Node][4]int
 	Items         []WireItem
+
+	// Set by a layout provider (the render engine): precise geometry and
+	// hit-testing. Nil for the built-in flow layout.
+	Hit func(x, y float64) *html.Node
+	Geo func(n *html.Node) (Geometry, bool)
+	Ext any // provider-private result (the engine keeps *render.Result here)
+}
+
+// Geometry is the CSSOM View geometry of one element, in CSS px.
+type Geometry struct {
+	Client           [4]float64 // getBoundingClientRect: x, y, w, h (transforms applied)
+	Border           [4]float64 // untransformed border box (offsetLeft/Top/Width/Height basis)
+	ClientW, ClientH float64
+	ScrollW, ScrollH float64
+	Frags            [][4]float64 // getClientRects
 }
 
 type lctx struct {
@@ -90,6 +105,13 @@ func (d *Doc) Layout(width int) *Layout {
 	gen := d.layoutGen()
 	if d.layoutCache != nil && d.layoutCacheW == width && d.layoutCacheGen == gen {
 		return d.layoutCache
+	}
+	if d.layoutProvider != nil {
+		l := d.layoutProvider(width)
+		if l != nil {
+			d.layoutCache, d.layoutCacheW, d.layoutCacheGen = l, width, gen
+			return l
+		}
 	}
 	l := &Layout{Width: width, Boxes: map[*html.Node][4]int{}}
 	c := &lctx{d: d, l: l, x: 8, y: 8, left: 8, right: width - 8, scale: 2}
@@ -452,4 +474,43 @@ func elementChildren(n *html.Node) []*html.Node {
 		}
 	}
 	return out
+}
+
+// BoxRow is one element's box in document order, for fidelity scoring and
+// diagnostics (every element appears; Has is false when it has no box).
+type BoxRow struct {
+	Tag        string
+	ID         string
+	X, Y, W, H float64
+	Has        bool
+}
+
+// ElementBoxes lists every element in document order with its layout box.
+func (d *Doc) ElementBoxes(width int) []BoxRow {
+	l := d.Layout(width)
+	var out []BoxRow
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			r := BoxRow{Tag: n.Data, ID: attr(n, "id")}
+			if g, ok := geoOf(l, n); ok {
+				r.X, r.Y, r.W, r.H, r.Has = g.Client[0], g.Client[1], g.Client[2], g.Client[3], true
+			} else if b, ok := l.Boxes[n]; ok {
+				r.X, r.Y, r.W, r.H, r.Has = float64(b[0]), float64(b[1]), float64(b[2]), float64(b[3]), true
+			}
+			out = append(out, r)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(d.Root)
+	return out
+}
+
+func geoOf(l *Layout, n *html.Node) (Geometry, bool) {
+	if l.Geo == nil {
+		return Geometry{}, false
+	}
+	return l.Geo(n)
 }

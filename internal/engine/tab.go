@@ -181,6 +181,7 @@ func (t *Tab) Context() *BrowserContext {
 
 func (t *Tab) close() {
 	if t.closed.CompareAndSwap(false, true) {
+		dropBitmapSources(t.ID)
 		t.mu.Lock()
 		j := t.js
 		t.js = nil
@@ -367,6 +368,7 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 	if w, _, _, _, _ := t.Viewport(); w > 0 {
 		doc.SetLayoutWidth(w)
 	}
+	t.installRender(doc)
 	t.applyStyles(doc)
 	t.mu.Lock()
 	t.html = htmlSrc

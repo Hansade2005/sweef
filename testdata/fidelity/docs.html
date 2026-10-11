@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Docs</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.65 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #24292f; }
+.top { height: 56px; border-bottom: 1px solid #d0d7de; display: flex; align-items: center; padding: 0 24px; position: sticky; top: 0; background: #fff; } .top b { font-size: 18px; margin-right: 32px; } .top span { color: #57606a; margin-right: 20px; font-size: 14px; }
+.layout { display: flex; max-width: 1280px; margin: 0 auto; }
+.sidebar { width: 260px; flex: none; padding: 24px 16px; border-right: 1px solid #d0d7de; font-size: 14px; } .sidebar h4 { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase; color: #57606a; letter-spacing: .05em; } .sidebar ul { list-style: none; margin: 0; padding: 0; } .sidebar li a { display: block; padding: 4px 10px; color: #24292f; text-decoration: none; border-radius: 6px; } .sidebar li a.on { background: #ddf4ff; color: #0969da; font-weight: 600; }
+.content { flex: 1; min-width: 0; padding: 32px 48px 80px; } .content h1 { font-size: 34px; margin: 0 0 8px; border-bottom: 1px solid #d0d7de; padding-bottom: 12px; } .content h2 { font-size: 24px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #eaeef2; } .content p { margin: 0 0 16px; }
+pre { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 14px 16px; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; overflow-x: auto; margin: 0 0 16px; }
+code { font: 85% ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(175,184,193,.2); padding: .2em .4em; border-radius: 6px; } pre code { background: none; padding: 0; font-size: 100%; }
+.note { border-left: 4px solid #0969da; background: #ddf4ff; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; } .warn { border-left-color: #bf8700; background: #fff8c5; }
+table { border-collapse: collapse; margin: 0 0 16px; display: block; overflow: auto; } th, td { border: 1px solid #d0d7de; padding: 6px 13px; } th { background: #f6f8fa; } tr:nth-child(2n) td { background: #fafbfc; }
+.toc { width: 220px; flex: none; padding: 32px 16px; font-size: 13px; color: #57606a; } .toc a { display: block; color: inherit; text-decoration: none; padding: 3px 0; }
+kbd { background: #f6f8fa; border: 1px solid #d0d7de; border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; font: 12px monospace; }
+</style></head><body>
+<div class="top"><b>DocsKit</b><span>Guide</span><span>API</span><span>Examples</span></div>
+<div class="layout"><nav class="sidebar"><h4>Getting started</h4><ul><li><a href="#">Introduction</a></li><li><a class="on" href="#">Installation</a></li><li><a href="#">Quick start</a></li></ul><h4>Guides</h4><ul><li><a href="#">Configuration</a></li><li><a href="#">Routing</a></li><li><a href="#">Deployment</a></li></ul></nav>
+<main class="content"><h1>Installation</h1><p>This page explains how to install the toolkit and verify that your environment is ready. You will need <code>node</code> version 18 or later.</p>
+<h2>Using a package manager</h2><pre><code>npm install --save docskit
+# or
+yarn add docskit</code></pre>
+<div class="note"><b>Note:</b> Global installs are supported but not recommended for projects with multiple contributors.</div>
+<h2>Configuration options</h2><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody><tr><td><code>port</code></td><td>number</td><td>3000</td><td>Port for the dev server</td></tr><tr><td><code>open</code></td><td>boolean</td><td>false</td><td>Open the browser on start</td></tr><tr><td><code>base</code></td><td>string</td><td>"/"</td><td>Public base path of the site</td></tr></tbody></table>
+<div class="note warn"><b>Warning:</b> Changing <code>base</code> after the first deployment may break existing links. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop the server.</div>
+<h2>Verify the install</h2><p>Run the following command and confirm the version number appears in your terminal output.</p><pre><code>$ docskit --version
+docskit/2.4.1 linux-x64 node-v20.11.0</code></pre><p>If you see an error, consult the troubleshooting guide or open an issue with the output of <code>docskit doctor</code>.</p></main>
+<aside class="toc"><b>On this page</b><a href="#">Using a package manager</a><a href="#">Configuration options</a><a href="#">Verify the install</a></aside></div></body></html>

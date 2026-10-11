@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>table</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 16px; font-size: 14px; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+th, td { border: 1px solid #9ca3af; padding: 6px 10px; text-align: left; }
+th { background: #e5e7eb; }
+.num { text-align: right; }
+.sp { border-collapse: separate; border-spacing: 6px; width: 60%; }
+.sp td { background: #f3f4f6; }
+</style></head>
+<body>
+<table><thead><tr><th>Item</th><th>Qty</th><th class="num">Price</th></tr></thead>
+<tbody><tr><td>Widget</td><td>3</td><td class="num">$30.00</td></tr><tr><td>Gadget with a longer name</td><td>12</td><td class="num">$144.00</td></tr><tr><td colspan="2">Total</td><td class="num">$174.00</td></tr></tbody></table>
+<table class="sp"><tr><td>A</td><td>B</td></tr><tr><td>C</td><td rowspan="1">D</td></tr></table>
+</body></html>

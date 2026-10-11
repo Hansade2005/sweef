@@ -1,0 +1,15 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>kanban</title>
+<style>
+* { box-sizing: border-box; } body { margin: 0; font: 13px/1.4 Arial, sans-serif; background: #0079bf; color: #172b4d; }
+.bar { padding: 10px 16px; color: #fff; font-weight: bold; font-size: 16px; background: rgba(0,0,0,.25); }
+.board { display: flex; gap: 12px; padding: 12px; overflow-x: auto; align-items: flex-start; height: 480px; }
+.col { flex: 0 0 272px; background: #ebecf0; border-radius: 6px; padding: 8px; max-height: 100%; display: flex; flex-direction: column; } .col h4 { margin: 4px 6px 8px; font-size: 14px; }
+.cards { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; } .card { background: #fff; border-radius: 3px; padding: 6px 8px 8px; box-shadow: 0 1px 0 rgba(9,30,66,.25); } .card .tags { display: flex; gap: 4px; margin-bottom: 4px; } .card .tags i { height: 8px; width: 40px; border-radius: 4px; background: #61bd4f; } .card .tags i.r { background: #eb5a46; } .card .foot { display: flex; justify-content: space-between; color: #5e6c84; margin-top: 6px; font-size: 12px; }
+.add { margin-top: 8px; padding: 6px; color: #5e6c84; border-radius: 3px; }
+</style></head><body><div class="bar">Project Board</div><div class="board">
+<div class="col"><h4>To do</h4><div class="cards"><div class="card"><div class="tags"><i></i><i class="r"></i></div>Write the layout engine specification and examples</div><div class="card">Short task</div><div class="card">Review pull requests from the team before the end of the sprint<div class="foot"><span>📎 2</span><span>Mar 12</span></div></div></div><div class="add">+ Add a card</div></div>
+<div class="col"><h4>In progress</h4><div class="cards"><div class="card">Implement grid auto-placement</div><div class="card"><div class="tags"><i></i></div>Flexbox shrink algorithm edge cases</div></div><div class="add">+ Add a card</div></div>
+<div class="col"><h4>Review</h4><div class="cards"><div class="card">Table layout</div></div><div class="add">+ Add a card</div></div>
+<div class="col"><h4>Done</h4><div class="cards"><div class="card">Block layout</div><div class="card">Inline layout</div><div class="card">Float layout</div><div class="card">Margin collapsing</div></div><div class="add">+ Add a card</div></div>
+<div class="col"><h4>Backlog</h4><div class="cards"><div class="card">Multi-column</div></div><div class="add">+ Add a card</div></div></div></body></html>

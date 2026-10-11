@@ -1,0 +1,46 @@
+<!doctype html><meta charset=utf-8><canvas id=c width=8 height=8></canvas>
+<script>
+try {
+var gl = document.getElementById('c').getContext('webgl2', {antialias:false,preserveDrawingBuffer:true});
+gl.getExtension('EXT_color_buffer_float');
+var exprs = ["sin(U)", "cos(U)", "tan(U)", "asin(U*0.3)", "acos(U*0.3)", "atan(U)", "atan(U, U.yxwz)", "sinh(U)", "cosh(U)", "tanh(U)", "asinh(U)", "acosh(abs(U)+1.0)", "atanh(U*0.3)", "radians(U)", "degrees(U)", "pow(abs(U), U.yxwz)", "exp(U)", "log(abs(U))", "exp2(U)", "log2(abs(U))", "sqrt(abs(U))", "inversesqrt(abs(U))", "abs(U)", "sign(U)", "floor(U)", "ceil(U)", "trunc(U)", "round(U)", "roundEven(U+0.5)", "fract(U)", "mod(U, 0.7)", "mod(U, U.yxwz)", "min(U, 0.5)", "max(U, vec4(0.5,-2.0,0.0,1.0))", "clamp(U, -0.5, 0.5)", "clamp(U, vec4(-1.0), vec4(1.0,0.5,2.0,0.1))", "mix(U, U.wzyx, 0.3)", "mix(U, U.wzyx, vec4(0.0,1.0,0.5,0.25))", "step(0.5, U)", "step(U.yxwz, U)", "smoothstep(-1.0, 1.0, U)", "smoothstep(U.yxwz*0.1, vec4(2.0), U)", "vec4(length(U), distance(U, U.wzyx), dot(U, U.yxwz), 0.0)", "vec4(length(U.xy), length(U.xyz), distance(U.xy, U.zw), dot(U.xyz, U.yzx))", "vec4(cross(U.xyz, U.yzx), 0.0)", "normalize(U)", "vec4(normalize(U.xyz), normalize(U.xy).x)", "faceforward(U, U.yxwz, U.zwxy)", "reflect(U, normalize(U.yxwz))", "vec4(refract(normalize(U.xyz), normalize(U.yzx), 0.5), 0.0)", "vec4(M2[0], M2[1])", "vec4(M2*U.xy, U.zw*M2)", "vec4((M3*U.xyz), 0.0)", "(M4*U)", "(U*M4)", "vec4(M3[1], determinant(M3))", "vec4(determinant(M4), determinant(M2), 0.0, 0.0)", "vec4(inverse(M2)[0], inverse(M2)[1])", "vec4(inverse(M3)[0], inverse(M3)[1].x)", "vec4(inverse(M4)[0].xyz, inverse(M4)[3].w)", "vec4(transpose(M3)[0], transpose(M3)[2].z)", "vec4(matrixCompMult(M2, M2)[0], matrixCompMult(M2, M2)[1])", "vec4(outerProduct(U.xyz, U.yzw)[0], outerProduct(U.xy, U.zw)[1].x)", "vec4((M2*M2)[0], (M2*M2)[1])", "vec4((M3*M3)[2], 0.0)", "vec4(M4*M4*vec4(1.0))", "vec4(lessThan(U, U.yxwz))", "vec4(greaterThanEqual(U, U.yxwz))", "vec4(equal(U, U.xyyw))", "vec4(notEqual(U, U.xyyw))", "vec4(any(lessThan(U, vec4(0.0))), all(lessThan(U, vec4(5.0))), 0.0, 0.0)", "vec4(not(lessThan(U, U.yxwz)))", "vec4(I) ", "vec4(I / ivec4(2))", "vec4(I % ivec4(4))", "vec4(I * I - I)", "vec4(I << 2)", "vec4(I >> 1)", "vec4(I & ivec4(5))", "vec4(I | ivec4(8))", "vec4(I ^ ivec4(3))", "vec4(~I)", "vec4(abs(I))", "vec4(sign(I))", "vec4(min(I, ivec4(2)))", "vec4(max(I, 2))", "vec4(clamp(I, -2, 4))", "vec4(UI)", "vec4(UI / uvec4(2u))", "vec4(UI % uvec4(4u))", "vec4(UI << 3u)", "vec4(UI >> 1u)", "vec4(UI & uvec4(5u))", "vec4(~UI & 255u)", "vec4(floatBitsToInt(U) & 0xFFFF)", "vec4(floatBitsToUint(U) >> 16u)", "intBitsToFloat(floatBitsToInt(U))", "uintBitsToFloat(floatBitsToUint(U))", "vec4(unpackHalf2x16(packHalf2x16(U.xy)), unpackHalf2x16(packHalf2x16(U.zw)))", "vec4(unpackUnorm2x16(packUnorm2x16(U.xy*0.5)), unpackSnorm2x16(packSnorm2x16(U.zw*0.5)))", "vec4(isnan(U.xyz/0.0), 0.0)", "vec4(isinf(U/0.0))", "vec4(float(int(U.x*3.0)), float(int(U.y*3.0)), float(uint(abs(U.z))), float(bool(U.w)))", "vec4(ivec4(U*3.0))", "vec4(U.x > 0.0 ? 1.0 : 2.0, U.y > 0.0 ? 1.0 : 2.0, 0.0, 0.0)", "vec4(float(length(U) > 2.0 && U.x > 0.0), float(length(U) > 2.0 || U.y > 0.0), float(U.x > 0.0 ^^ U.y > 0.0), 0.0)", "vec4(dFdx(U.x)*0.0 + 1.0)", "vec4(U.zyx, U.w).wzyx", "U.xxyy + U.zzww", "vec4(U.x, U[1], U[int(U.w*4.0)], U.w)", "vec4(TX(U.xy*0.5))", "vec4(mix(U, U.yxwz, bvec4(true,false,true,false)))", "vec4(float(min(I.x, I.y)), float(max(UI.x, UI.y)), float(I.x < I.y), float(UI.x == UI.x))", "vec4(ARR[0], ARR[1], ARR[2], float(ARR.length()))", "vec4(ST.a, ST.b[1], ST.c.xy)", "vec4(f1(U.x), f2(U.xy), f3(U.xyz), f4(U))", "vec4(textureSize(T0, 0), textureSize(T0, 1))", "vec4(texelFetch(T0, ivec2(1, 1), 0))", "vec4(textureLod(T0, vec2(0.3, 0.6), 0.0))", "vec4(textureLod(T0, vec2(0.3, 0.6), 1.0))", "vec4(texture(T0, vec2(1.7, -0.2)))", "vec4(textureOffset(T0, vec2(0.3, 0.6), ivec2(1, 0)))", "vec4(textureProj(T0, vec3(0.3, 0.6, 0.5)))", "vec4(textureGrad(T0, vec2(0.3, 0.6), vec2(0.1, 0.0), vec2(0.0, 0.1)))", "vec4(texture(TC, normalize(vec3(0.3, 0.6, -0.5))))", "vec4(texelFetch(TI, ivec2(1, 0), 0))", "vec4(texelFetch(TU, ivec2(0, 1), 0))"];
+var N = exprs.length;
+var fs = '#version 300 es\nprecision highp float; precision highp int; precision highp sampler2D; precision highp isampler2D; precision highp usampler2D;\n' +
+ 'uniform vec4 U; uniform ivec4 I; uniform uvec4 UI; uniform mat2 M2; uniform mat3 M3; uniform mat4 M4; uniform sampler2D T0; uniform samplerCube TC; uniform isampler2D TI; uniform usampler2D TU; uniform float ARR[3]; struct S { float a; float b[2]; vec3 c; }; uniform S ST;\n' +
+ 'out vec4 o;\n' +
+ 'vec4 TX(vec2 p){ return texture(T0, p); }\n' +
+ 'float f1(float x){ return x*x + 1.0; } float f2(vec2 v){ float s=0.0; for(int i=0;i<2;i++){ if(i==1) break; s+=v[i]; } return s; } float f3(vec3 v){ float s=0.0; int i=0; while(i<3){ s+=v[i]*float(i); i++; } return s; } float f4(inout vec4 v){ v.x += 1.0; return v.x; }\n' +
+ 'void main(){ int i = int(gl_FragCoord.x); vec4 r = vec4(0.0); vec4 UU = U;\n';
+fs += ' switch (i) {\n';
+exprs.forEach(function(e, k){ fs += 'case ' + k + ': r = ' + (e.indexOf('f4(U)') >= 0 ? e.replace('f4(U)', 'f4(UU)') : e) + '; break;\n'; });
+fs += 'default: break; }\n o = r; }';
+function sh(t,s){var o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
+var p = gl.createProgram();
+gl.attachShader(p, sh(gl.VERTEX_SHADER, '#version 300 es\nin vec2 a; void main(){ gl_Position = vec4(a,0.0,1.0); }'));
+gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+gl.useProgram(p);
+var U_ = function(n){ return gl.getUniformLocation(p, n); };
+gl.uniform4f(U_('U'), 0.7, -1.3, 2.5, 0.25); gl.uniform4i(U_('I'), 7, -3, 5, 2); gl.uniform4ui(U_('UI'), 7, 3, 12, 2);
+gl.uniformMatrix2fv(U_('M2'), false, [1, 2, 0.5, -1]); gl.uniformMatrix3fv(U_('M3'), false, [2,0,1, 1,3,0, 0,1,4]); gl.uniformMatrix4fv(U_('M4'), false, [2,0,0,1, 0,3,0,0, 1,0,4,0, 0,0.5,0,1]);
+gl.uniform1fv(U_('ARR'), [1.5, 2.5, 3.5]); gl.uniform1f(U_('ST.a'), 4); gl.uniform1fv(U_('ST.b'), [5, 6]); gl.uniform3f(U_('ST.c'), 7, 8, 9);
+function t2(unit, target, ifmt, fmt, type, w, h, data, filt) { gl.activeTexture(gl.TEXTURE0 + unit); var t = gl.createTexture(); gl.bindTexture(target, t); gl.texImage2D(target, 0, ifmt, w, h, 0, fmt, type, data); gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, filt); gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, filt === gl.NEAREST_MIPMAP_NEAREST ? gl.NEAREST : filt); gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.REPEAT); return t; }
+var d = new Uint8Array(4*4*4); for (var i = 0; i < 16; i++) { d[i*4] = i*16; d[i*4+1] = 255 - i*16; d[i*4+2] = (i*37) & 255; d[i*4+3] = 255; }
+t2(0, gl.TEXTURE_2D, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, 4, 4, d, gl.NEAREST_MIPMAP_NEAREST); gl.generateMipmap(gl.TEXTURE_2D);
+gl.activeTexture(gl.TEXTURE1); var tc = gl.createTexture(); gl.bindTexture(gl.TEXTURE_CUBE_MAP, tc); for (var f = 0; f < 6; f++) gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + f, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([f*40, 255 - f*40, 100, 255]));
+gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+t2(2, gl.TEXTURE_2D, gl.RGBA8I, gl.RGBA_INTEGER, gl.BYTE, 2, 2, new Int8Array([1,-2,3,-4, 5,-6,7,-8, 9,-10,11,-12, 13,-14,15,-16]), gl.NEAREST);
+t2(3, gl.TEXTURE_2D, gl.RGBA8UI, gl.RGBA_INTEGER, gl.UNSIGNED_BYTE, 2, 2, new Uint8Array([1,2,3,4, 5,6,7,8, 9,10,11,12, 13,14,15,16]), gl.NEAREST);
+gl.uniform1i(U_('T0'), 0); gl.uniform1i(U_('TC'), 1); gl.uniform1i(U_('TI'), 2); gl.uniform1i(U_('TU'), 3);
+var tex = gl.createTexture(); gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, N, 1, 0, gl.RGBA, gl.FLOAT, null);
+var fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('fb incomplete');
+gl.viewport(0, 0, N, 1);
+var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+var px = new Float32Array(N * 4); gl.readPixels(0, 0, N, 1, gl.RGBA, gl.FLOAT, px);
+var out = [];
+for (var k = 0; k < N; k++) { out.push(k + ' ' + exprs[k] + ' => ' + Array.prototype.map.call(px.subarray(k*4, k*4+4), function(v){ return isNaN(v) ? 'nan' : (Math.abs(v) > 1e6 ? (v>0?'inf':'-inf') : v.toFixed(3)); }).join(' ')); }
+window.__result = out.join('\n') + '\nerr=' + gl.getError();
+} catch (e) { window.__error = String(e && e.stack || e); }
+</script>

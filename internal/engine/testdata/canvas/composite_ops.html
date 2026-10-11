@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);
+var ops=['source-over', 'source-in', 'source-out', 'source-atop', 'destination-over', 'destination-in', 'destination-out', 'destination-atop', 'lighter', 'copy', 'xor', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity'];
+ops.forEach(function(op,i){var ox=(i%6)*40,oy=Math.floor(i/6)*38;x.save();x.beginPath();x.rect(ox,oy,40,38);x.clip();x.globalCompositeOperation='source-over';x.fillStyle='rgba(220,60,40,0.9)';x.fillRect(ox+4,oy+4,22,22);x.globalCompositeOperation=op;x.fillStyle='rgba(40,90,220,0.8)';x.beginPath();x.arc(ox+24,oy+24,12,0,7);x.fill();x.restore();});
+</script>

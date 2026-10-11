@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Dashboard</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f1f5f9; color: #0f172a; }
+.app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+.side { background: #0f172a; color: #cbd5e1; padding: 20px 12px; } .side h1 { color: #fff; font-size: 18px; margin: 0 8px 24px; }
+.side a { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; color: inherit; text-decoration: none; margin-bottom: 2px; } .side a.active { background: #1e293b; color: #fff; }
+.side a i { width: 16px; height: 16px; border-radius: 4px; background: #475569; display: inline-block; }
+.main { padding: 24px 28px; min-width: 0; }
+.top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; } .top h2 { margin: 0; font-size: 22px; }
+.search { width: 260px; height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 12px; background: #fff; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+.stat { background: #fff; border-radius: 12px; padding: 16px 18px; border: 1px solid #e2e8f0; } .stat .label { color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; } .stat .val { font-size: 28px; font-weight: 700; margin: 6px 0 2px; } .up { color: #16a34a; font-size: 12px; } .down { color: #dc2626; font-size: 12px; }
+.row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.panel { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 18px; } .panel h3 { margin: 0 0 14px; font-size: 16px; }
+.chart { height: 200px; display: flex; align-items: flex-end; gap: 10px; padding-top: 10px; } .chart span { flex: 1; background: linear-gradient(#6366f1, #a5b4fc); border-radius: 6px 6px 0 0; }
+table { width: 100%; border-collapse: collapse; } th { text-align: left; font-weight: 600; color: #64748b; font-size: 12px; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; } td { padding: 10px; border-bottom: 1px solid #f1f5f9; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #dcfce7; color: #166534; } .badge.warn { background: #fef9c3; color: #854d0e; } .badge.err { background: #fee2e2; color: #991b1b; }
+.list { list-style: none; margin: 0; padding: 0; } .list li { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+.bar { height: 6px; border-radius: 3px; background: #e2e8f0; margin-top: 6px; } .bar > div { height: 100%; border-radius: 3px; background: #6366f1; }
+</style></head><body><div class="app">
+<aside class="side"><h1>Analytics</h1><a class="active" href="#"><i></i>Overview</a><a href="#"><i></i>Reports</a><a href="#"><i></i>Customers</a><a href="#"><i></i>Products</a><a href="#"><i></i>Settings</a></aside>
+<main class="main"><div class="top"><h2>Overview</h2><input class="search" placeholder="Search..."></div>
+<div class="stats"><div class="stat"><div class="label">Revenue</div><div class="val">$48,290</div><div class="up">▲ 12.4% vs last month</div></div><div class="stat"><div class="label">Orders</div><div class="val">1,284</div><div class="up">▲ 4.1%</div></div><div class="stat"><div class="label">Customers</div><div class="val">8,402</div><div class="down">▼ 1.2%</div></div><div class="stat"><div class="label">Refunds</div><div class="val">36</div><div class="up">▲ 0.4%</div></div></div>
+<div class="row"><div class="panel"><h3>Sales this year</h3><div class="chart"><span style="height:40%"></span><span style="height:55%"></span><span style="height:35%"></span><span style="height:70%"></span><span style="height:60%"></span><span style="height:85%"></span><span style="height:75%"></span><span style="height:95%"></span><span style="height:65%"></span><span style="height:80%"></span><span style="height:50%"></span><span style="height:90%"></span></div></div>
+<div class="panel"><h3>Top products</h3><ul class="list"><li><span>Aurora Lamp</span><b>$12,400</b></li><li><span>Nimbus Chair</span><b>$9,810</b></li><li><span>Pixel Desk</span><b>$7,120</b></li></ul><div style="margin-top:14px">Goal progress<div class="bar"><div style="width:68%"></div></div></div></div></div>
+<div class="panel" style="margin-top:16px"><h3>Recent orders</h3><table><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Status</th><th style="text-align:right">Total</th></tr></thead><tbody>
+<tr><td>#10241</td><td>Maria Gonzales</td><td>Mar 3, 2026</td><td><span class="badge">Paid</span></td><td style="text-align:right">$129.00</td></tr>
+<tr><td>#10240</td><td>Chen Wei</td><td>Mar 3, 2026</td><td><span class="badge warn">Pending</span></td><td style="text-align:right">$58.20</td></tr>
+<tr><td>#10239</td><td>Oliver Smith</td><td>Mar 2, 2026</td><td><span class="badge err">Refunded</span></td><td style="text-align:right">$310.00</td></tr>
+<tr><td>#10238</td><td>Amara Okafor</td><td>Mar 2, 2026</td><td><span class="badge">Paid</span></td><td style="text-align:right">$74.50</td></tr></tbody></table></div></main></div></body></html>

@@ -2,7 +2,9 @@ package engine
 
 import (
 	"bytes"
+	"encoding/json"
 	"image/png"
+	"strings"
 	"testing"
 )
 
@@ -48,8 +50,14 @@ func TestLayoutGeometryIsConsistent(t *testing.T) {
 	}
 	// getBoundingClientRect in page JS reports the same box
 	r := mustEval(t, tab, `JSON.stringify((r => [r.x, r.y, r.width, r.height])(document.getElementById('go').getBoundingClientRect()))`)
-	if r != `"[`+itoa(btn[0])+`,`+itoa(btn[1])+`,`+itoa(btn[2])+`,`+itoa(btn[3])+`]"` {
-		t.Fatalf("getBoundingClientRect %s vs box %v", r, btn)
+	var rect []float64
+	if err := json.Unmarshal([]byte(strings.Trim(strings.ReplaceAll(r, `\"`, `"`), `"`)), &rect); err != nil || len(rect) != 4 {
+		t.Fatalf("getBoundingClientRect %s: %v", r, err)
+	}
+	for i, v := range []int{btn[0], btn[1], btn[2], btn[3]} {
+		if d := rect[i] - float64(v); d > 1 || d < -1 {
+			t.Fatalf("getBoundingClientRect %s vs box %v", r, btn)
+		}
 	}
 	// the screenshot paints something non-white inside the button's box
 	img, err := png.Decode(bytes.NewReader(tab.PNGScreenshot(420, 600, 1)))

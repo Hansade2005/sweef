@@ -1,0 +1,9 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);
+x.fillStyle='#c33';x.beginPath();x.moveTo(10,10);x.lineTo(70,20);x.lineTo(40,70);x.closePath();x.fill();
+x.fillStyle='#36c';x.beginPath();var cx=130,cy=45,r=38;for(var i=0;i<5;i++){var a=-Math.PI/2+i*4*Math.PI/5;x.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));}x.closePath();x.fill('nonzero');
+x.fillStyle='#3a3';x.beginPath();cx=210;for(var i=0;i<5;i++){var a=-Math.PI/2+i*4*Math.PI/5;x.lineTo(cx+r*Math.cos(a)*0.5,cy+r*Math.sin(a)*0.5);}x.closePath();x.fill('evenodd');
+x.strokeStyle='#000';x.lineWidth=2;x.beginPath();x.moveTo(10,100);x.lineTo(60,140);x.lineTo(110,100);x.lineTo(160,140);x.stroke();
+x.beginPath();x.rect(170,100,50,40);x.rect(180,110,30,20);x.fillStyle='#a5a';x.fill('evenodd');x.stroke();
+</script>

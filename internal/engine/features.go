@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	fnet "github.com/sweefbrowser/sweef/internal/net"
 	"io"
 	"mime"
 	"net/http"
@@ -500,3 +501,19 @@ func decodeDataURL(u string) (mimeType string, data []byte, err error) {
 	s, err := url.PathUnescape(payload)
 	return mimeType, []byte(s), err
 }
+
+// ElementBoxes returns every element's layout box in document order (all
+// coordinates in CSS px, document space). Used by the fidelity harness and
+// diagnostics.
+func (t *Tab) ElementBoxes() []fnetBoxRow {
+	t.mu.RLock()
+	d := t.dom
+	w := t.vpW
+	t.mu.RUnlock()
+	if d == nil {
+		return nil
+	}
+	return d.ElementBoxes(w)
+}
+
+type fnetBoxRow = fnet.BoxRow

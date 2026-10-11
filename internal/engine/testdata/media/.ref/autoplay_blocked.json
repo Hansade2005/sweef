@@ -1,0 +1,72 @@
+{
+ "events": [
+  [
+   "loadstart",
+   1,
+   0,
+   0,
+   2,
+   1
+  ],
+  [
+   "progress",
+   6,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "suspend",
+   6,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "durationchange",
+   8,
+   0,
+   1,
+   1,
+   1
+  ],
+  [
+   "loadedmetadata",
+   8,
+   0,
+   1,
+   1,
+   1
+  ],
+  [
+   "loadeddata",
+   11,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplay",
+   11,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplaythrough",
+   11,
+   0,
+   4,
+   1,
+   1
+  ]
+ ],
+ "x": {
+  "paused": true,
+  "readyState": 4
+ }
+}

@@ -1,0 +1,108 @@
+{
+ "events": [
+  [
+   "play",
+   2,
+   0,
+   0,
+   2,
+   0
+  ],
+  [
+   "waiting",
+   2,
+   0,
+   0,
+   2,
+   0
+  ],
+  [
+   "loadstart",
+   2,
+   0,
+   0,
+   2,
+   0
+  ],
+  [
+   "progress",
+   5,
+   0,
+   0,
+   1,
+   0
+  ],
+  [
+   "suspend",
+   5,
+   0,
+   0,
+   1,
+   0
+  ],
+  [
+   "durationchange",
+   10,
+   0,
+   1,
+   1,
+   0
+  ],
+  [
+   "resize",
+   10,
+   0,
+   1,
+   1,
+   0
+  ],
+  [
+   "loadedmetadata",
+   10,
+   0,
+   1,
+   1,
+   0
+  ],
+  [
+   "loadeddata",
+   21,
+   0,
+   4,
+   1,
+   0
+  ],
+  [
+   "canplay",
+   22,
+   0.001,
+   4,
+   1,
+   0
+  ],
+  [
+   "playing",
+   22,
+   0.001,
+   4,
+   1,
+   0
+  ],
+  [
+   "canplaythrough",
+   22,
+   0.001,
+   4,
+   1,
+   0
+  ]
+ ],
+ "x": {
+  "play": "resolved",
+  "paused": false,
+  "readyState": 4,
+  "videoWidth": 160,
+  "videoHeight": 120,
+  "duration": 2.003
+ }
+}

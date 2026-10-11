@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>lists</title>
+<style>
+body { margin: 20px; font: 15px/1.5 Georgia, 'Times New Roman', serif; }
+ul.plain { list-style: none; padding: 0; margin: 0 0 14px; }
+ul.plain li { padding: 4px 0; border-bottom: 1px solid #ddd; }
+ol.roman { list-style-type: upper-roman; }
+ol.alpha { list-style: lower-alpha inside; }
+ul.sq { list-style-type: square; }
+li > ul { margin: 4px 0; }
+dl dt { font-weight: bold; margin-top: 6px; } dl dd { margin-left: 24px; }
+ol.start { counter-reset: item 4; }
+.cnt { counter-reset: sec; } .cnt h4 { counter-increment: sec; margin: 8px 0 2px; } .cnt h4::before { content: counter(sec) ". "; color: #06c; }
+.nested { counter-reset: a; } .nested li { counter-increment: a; list-style: none; } .nested li::before { content: counters(a, ".") " "; }
+</style></head><body>
+<ul><li>Apple</li><li>Banana<ul><li>Green</li><li>Yellow<ul><li>deep</li></ul></li></ul></li><li>Cherry with a very long text that needs to wrap around the end of the line because it is so long indeed and even longer</li></ul>
+<ol><li>First</li><li>Second</li><li value="10">Tenth</li><li>Eleventh</li></ol>
+<ol class="roman" start="3"><li>Three</li><li>Four</li></ol>
+<ol class="alpha"><li>alpha a</li><li>alpha b</li></ol>
+<ul class="sq"><li>square one</li><li>square two</li></ul>
+<ul class="plain"><li>No bullets</li><li>With borders</li></ul>
+<dl><dt>Term</dt><dd>Definition of the term</dd><dt>Another</dt><dd>Second definition that wraps across lines when it is long enough to do so</dd></dl>
+<div class="cnt"><h4>Intro</h4><h4>Body</h4><h4>Outro</h4></div>
+<ol reversed><li>c</li><li>b</li><li>a</li></ol>
+</body></html>

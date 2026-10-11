@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>grid1</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 16px; font: 14px Arial, sans-serif; }
+.g { display: grid; gap: 10px; margin-bottom: 16px; background: #eee; padding: 8px; }
+.g > div { background: #cde; padding: 8px; border: 1px solid #69c; }
+.c3 { grid-template-columns: 1fr 1fr 1fr; }
+.mix { grid-template-columns: 100px 2fr 1fr; }
+.auto { grid-template-columns: auto 1fr auto; }
+.rows { grid-template-columns: 200px 200px; grid-template-rows: 60px auto 40px; }
+.minmax { grid-template-columns: minmax(100px, 200px) minmax(0, 1fr) 80px; }
+.span > div:first-child { grid-column: span 2; }
+.span > div:nth-child(3) { grid-row: span 2; }
+.fit { grid-template-columns: repeat(3, minmax(60px, 1fr)); width: 400px; }
+.col2 { column-gap: 30px; row-gap: 4px; grid-template-columns: repeat(2, 1fr); }
+</style></head><body>
+<div class="g c3"><div>One</div><div>Two</div><div>Three is longer text that might wrap in its cell</div><div>Four</div><div>Five</div></div>
+<div class="g mix"><div>fixed</div><div>2fr</div><div>1fr</div></div>
+<div class="g auto"><div>auto small</div><div>flexible middle</div><div>auto end content</div></div>
+<div class="g rows"><div>a</div><div>b</div><div>c<br>tall<br>cell</div><div>d</div><div>e</div><div>f</div></div>
+<div class="g minmax"><div>minmax 100-200</div><div>minmax 0 1fr</div><div>80px</div></div>
+<div class="g c3 span"><div>span 2</div><div>x</div><div>row span 2</div><div>y</div><div>z</div></div>
+<div class="g fit"><div>a</div><div>b</div><div>c</div><div>d</div></div>
+<div class="g col2"><div>cell 1</div><div>cell 2</div><div>cell 3</div><div>cell 4</div></div>
+</body></html>
