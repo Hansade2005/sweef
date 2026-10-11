@@ -1,0 +1,2 @@
+- heading "Count: 1" [level=1 ref=e1]
+- button "Increment" [ref=e2]

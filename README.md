@@ -8,13 +8,34 @@ Sweef is not a fork of Chromium and does not do pixel layout. It bets that agent
 
 | | Playwright + Chromium | Sweef |
 |---|---|---|
-| Install | ~250 MB browser download | **~8 MB static binary** |
-| Idle RSS | ~90 to 150 MB | **~15 MB** measured loading a full Wikipedia article |
+| Install | ~250 MB browser download | **11 MB static binary** |
+| Memory | ~90 to 150 MB idle, 1.1 GB process tree under agent-browser | **13 MB idle, 22 MB typical page, 52 MB peak on a script-heavy Wikipedia article** |
 | CPU | 2 to 4 cores wanted | **1 core** |
 | Agent interface | CDP + language bindings | **MCP native**, plus a framed JSON-RPC socket and a Node SDK |
 | Page view for the model | DOM dumps or custom snapshots | **Playwright-format accessibility tree** with small `[ref=eN]` handles |
 | JavaScript | V8 | **QuickJS (ES2023)** via [modernc.org/quickjs](https://pkg.go.dev/modernc.org/quickjs), pure Go, no CGO |
 | Pixels, WebGL, media | Yes | No, by design |
+
+## Benchmark against Vercel agent-browser
+
+Same 11-step agent flow (open, snapshot, click, fill, submit, React counter, eval) on a local fixture site, median of 5 runs, Chromium 1194 for agent-browser 0.27. Reproduce with `bench/run.sh`.
+
+| step | Sweef | agent-browser | ratio |
+|---|---|---|---|
+| open page | 115 ms | 765 ms | 6.7x |
+| snapshot, interactive only | 10 ms | 277 ms | 27.7x |
+| click (navigates) | 46 ms | 300 ms | 6.5x |
+| snapshot, full | 10 ms | 254 ms | 25.4x |
+| fill | 10 ms | 235 ms | 23.5x |
+| press Enter (submits) | 36 ms | 243 ms | 6.8x |
+| get title | 9 ms | 257 ms | 28.6x |
+| open React app | 79 ms | 285 ms | 3.6x |
+| click in React | 13 ms | 268 ms | 20.6x |
+| eval | 11 ms | 246 ms | 22.4x |
+| whole flow | 404 ms | 3523 ms | 8.7x |
+| daemon RSS | 25 MB | 1153 MB | 46x less |
+
+Commands that do not navigate are 20 to 29 times faster; navigations are 4 to 7 times faster and bounded by fetching and running the page's scripts. Snapshot sizes are equal or smaller (466 vs 480 bytes on the landing page, 68 vs 137 on the React app).
 
 ## Quick start
 
@@ -22,6 +43,14 @@ Sweef is not a fork of Chromium and does not do pixel layout. It bets that agent
 go build -o sweef ./cmd/sweef          # pure Go; cross-compiles with GOOS/GOARCH
 ./sweef version
 
+# session CLI (a daemon keeps the page alive between calls)
+./sweef open https://example.com
+./sweef snapshot -i                    # controls and headings with [ref=eN]
+./sweef click @e1
+./sweef get title
+./sweef close
+
+# one-shot
 ./sweef fetch https://example.com                 # visible text
 ./sweef snapshot https://example.com --aria       # accessibility tree, YAML
 ./sweef eval https://example.com 'document.querySelectorAll("p").length'
@@ -30,6 +59,10 @@ go build -o sweef ./cmd/sweef          # pure Go; cross-compiles with GOOS/GOARC
 ./sweef mcp                                       # MCP server on stdio
 ./sweef serve --addr 127.0.0.1:9222               # socket server for SDKs
 ```
+
+### Session CLI
+
+Every verb agent-browser has for driving a page, at a fraction of the latency: `open`, `snapshot [-i] [-c] [-d n] [-s sel] [--delta]`, `click`, `dblclick`, `fill`, `type`, `press`, `hover`, `focus`, `check`, `uncheck`, `select`, `scroll`, `drag`, `get text|html|value|attr|title|url|count|box`, `is visible|enabled|checked`, `wait <sel|ms> | --text | --url | --fn | --load`, `eval`, `console`, `network`, `back`, `forward`, `reload`, `tab`, `screenshot`, `find role|text|label|placeholder|alt|testid … click|fill|text`, `set viewport|offline|headers|media|geo|ua`, `cookies`, `storage`, `state save|load`, `dialog`, `close`. Refs are accepted as `@e3`, `e3` or `ref=e3`. `--session <name>` isolates sessions, `--json` gives machine output. The daemon exits after an hour idle (`SWEEF_IDLE_TIMEOUT`).
 
 MCP configuration for any MCP host:
 
@@ -69,7 +102,7 @@ Refs are small integers from a per-document table, so they stay valid while scri
 
 Each tab owns a QuickJS VM with a 64 MB heap cap and a 5 s per-script timeout. The Go DOM is the source of truth; a prelude implements `window`, `document`, elements, events, timers, `fetch`, `XMLHttpRequest`, `localStorage`, `MutationObserver` and the rest of the browser API on top of a small host bridge (see `internal/engine/jsbridge.md`). Scripts load the way browsers load them: inline and `src` scripts in order, `async` and `defer` after, `type=module` with relative imports, scripts inserted by page code (webpack chunks, tag managers) when they connect. After `load`, the event loop pumps until the page is idle or the settle budget (`--settle-ms`, default 1500) is spent, and again briefly after every action, so a click that triggers a fetch and a re-render is reflected in the next snapshot.
 
-What this means in practice: server-rendered sites, documentation, forms, dashboards and React, Preact or jQuery apps that do not depend on layout measurement run. Pages that need `getBoundingClientRect` to be real, WebGL, canvas painting, video or Web Workers do not, and Sweef says so in the console log rather than pretending.
+The prelude is compiled to QuickJS bytecode once per process, so a new document gets a full browser environment in about 19 ms. What this means in practice: server-rendered sites, documentation, forms, dashboards and React, Preact or jQuery apps that do not depend on layout measurement run. example.com renders its script-injected paragraphs, react.dev renders its navigation and content, GitHub login and Wikipedia snapshot cleanly. Pages that need `getBoundingClientRect` to be real, WebGL, canvas painting, video or Web Workers do not, and Sweef says so in the console log rather than pretending.
 
 ## Feature map
 
@@ -110,7 +143,7 @@ internal/net           HTML parser, DOM tree with stable ids, CSS selector engin
 internal/rpc           SWF1 wire protocol server (framed JSON over TCP/unix)
 internal/mcp           MCP server (stdio JSON-RPC, 40+ tools)
 pkg/sdk/node           Node.js SDK (Playwright-shaped)
-pkg/sdk/py             Python SDK: README and packaging only, no code yet
+pkg/sdk/py             Python SDK (Playwright-shaped, stdlib only)
 ```
 
 Concurrency: one VM per tab, serialised; the DOM is behind a tab lock; code that holds the DOM lock never calls into the VM.
@@ -126,7 +159,7 @@ go test ./...                       # includes golden snapshots of real pages an
 GOOS=linux GOARCH=arm64 go build -o sweef-arm64 ./cmd/sweef
 ```
 
-Requires Go 1.26 (the `go` toolchain downloads it automatically when `GOTOOLCHAIN=auto`). The binary has zero runtime dependencies.
+Requires Go 1.26 (the `go` toolchain downloads it automatically when `GOTOOLCHAIN=auto`). The binary has zero runtime dependencies. Measured on 2026-10-11: `go test ./...` runs golden snapshots of six real pages, the selector engine, ref lifecycle, and JavaScript fixtures (inline DOM build, script order, fetch and timers, preventDefault, React 18 counter with a controlled input, Preact, jQuery incl. ajax, dynamic script insertion, ES modules, localStorage, `location.href` navigation, infinite-loop interrupt).
 
 ## Roadmap
 

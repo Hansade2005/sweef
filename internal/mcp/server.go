@@ -209,19 +209,32 @@ func (s *Server) handle(ctx context.Context, req *rpcReq) {
 			reply(map[string]any{"isError": true, "content": []map[string]any{{"type": "text", "text": err.Error()}}}, nil)
 			return
 		}
-		_ = out
-		parts := []map[string]any{{"type": "text", "text": content}}
-		// For screenshots, also emit a native MCP image content part so
-		// clients (Claude Desktop, Playwright-MCP-style agents) can render it.
+		// Screenshots go out as a native MCP image part plus the text render;
+		// the base64 is not repeated inside the text part, which would double
+		// the tokens the client pays for.
 		if p.Name == "browser_screenshot" {
-			var probe struct {
-				PNGBase64 string `json:"pngBase64"`
+			var r struct {
+				PNG  string `json:"pngBase64"`
+				Text string `json:"text"`
 			}
-			if json.Unmarshal([]byte(content), &probe) == nil && probe.PNGBase64 != "" {
-				parts = append(parts, map[string]any{"type": "image", "mimeType": "image/png", "data": probe.PNGBase64})
+			if json.Unmarshal(out, &r) == nil && r.PNG != "" {
+				reply(map[string]any{"content": []map[string]any{
+					{"type": "image", "data": r.PNG, "mimeType": "image/png"},
+					{"type": "text", "text": r.Text},
+				}}, nil)
+				return
 			}
 		}
-		reply(map[string]any{"content": parts}, nil)
+		// Snapshots are plain YAML, not YAML wrapped in a JSON string.
+		if p.Name == "browser_aria_snapshot" {
+			var r struct {
+				YAML string `json:"yaml"`
+			}
+			if json.Unmarshal(out, &r) == nil && r.YAML != "" {
+				content = r.YAML
+			}
+		}
+		reply(map[string]any{"content": []map[string]any{{"type": "text", "text": content}}}, nil)
 	default:
 		reply(nil, &rpcErr{-32601, "method not found: " + req.Method})
 	}

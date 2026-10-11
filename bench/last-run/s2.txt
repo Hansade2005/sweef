@@ -1,0 +1,13 @@
+- heading "Sign in to Acme" [level=1 ref=e1]
+- form:
+  - text: Email
+  - textbox "Email" [required ref=e2]
+  - text: Password
+  - textbox "Password" [type=password ref=e3]
+  - checkbox "Remember me" [ref=e4]
+  - text: Remember me
+  - button "Sign in" [ref=e5]
+- paragraph:
+  - text: New here?
+  - link "Create an account" [ref=e6]:
+    - /url: /signup
