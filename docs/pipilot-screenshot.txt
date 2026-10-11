@@ -1,0 +1,133 @@
+# PiPilot — The AI fullstack build hub Skip to content PiPilot Product Pricing
+# Enterprise Docs Community Log in Start building free Start free #1 Product of
+# the Month · PeerPush Describe it. Own it. Ship it anywhere. One description
+# becomes a real, running app — web, mobile, desktop or API — with the
+# backend wired in and the repo in your Google Drive. pipilot · new project
+# Build Remote New Ready Auto stack Pilot Pilot · Smart · default Boost ·
+# Strong · free Lite · Fast · free Nitro · Quick · design-led SaaS analytics
+# dashboard Modern storefront AI chatbot app Kanban project board Real-time team
+# chat Personal finance tracker Booking platform Customer support desk Free to
+# start · No card · You own the code Have a codebase? Import it Builds Web
+# Android iOS Desktop API CLI npm Video pipilot · deploy Replay $ pipilot deploy
+# --prod bundling app uploading to edge network provisioning functions warming
+# CDN aliasing domain deployed · production One build · your cloud Vercel
+# Cloudflare Netlify acme.pipilot.dev Live Region iad1 Build passed Status 200 OK
+# Backed by 7 Kinds of app 130+ MCP integrations SOC 2 Type I + II · audited $0
+# To start · no card 01 / See it run From prompt to live URL. Four short replays
+# of what the builder does — a backend provisioned mid-build, a deploy that
+# returns a link, two agents splitting one job, a mission that finishes after you
+# close the tab. Postgres + API, provisioned Prompt → live URL Two agents, one
+# build Ships while you sleep pipilot · database Replay $ pipilot db
+# provisioning Postgres · PiPilot Cloud create table users (…) insert 3 rows
+# select * from users Query result id email plan 1 ada@acme.io Pro 2
+# grace@acme.io Team 3 linus@acme.io Free GET /api/users 200 · 3 rows 02 / What
+# you get Not a demo. A product you own. Most AI builders hand you a hosted
+# preview. PiPilot hands you the repo, the database and the deploy. Web Mobile
+# Desktop API CLI npm package Video Installers Windows macOS Linux Any kind of
+# app. Web apps, real Android and iOS builds, desktop installers, Python and Node
+# APIs, CLIs and npm packages — from one builder. kinds: web · mobile ·
+# desktop · api · cli · npm package · video postgres · ready create table
+# orders (…); ↳ 1 table · REST endpoint live Tables + SQL Auth Storage
+# Claimable Backend included. Postgres, auth, storage and keyless AI, provisioned
+# by the agent while it builds. Claim it and it’s yours. pp.from() · pp.auth
+# · pp.storage · pp.ai My Drive / acme-bookings Synced src/ · your code .git/
+# · real history package.json You own the code. Real files and real Git history,
+# synced to a folder in your Google Drive. Export or push whenever you like.
+# drive sync · git history · export .zip Instant link — free and keyless
+# Default Vercel Netlify Cloudflare Google Play App Store Connect once — the
+# URL, the data and the billing stay yours. Ship it where you want. A free
+# instant link in one click — or your own Vercel, Netlify, Cloudflare, Google
+# Play and App Store on Pilot. instant link · vercel · netlify · cloudflare ·
+# play · app store W1 Built the dashboard UI W2 Created /api/metrics QA Ran the
+# test suite Agents in parallel — and while you sleep. Agent Teams split one
+# build across workers. Mission Runners keep going in the cloud and report back.
+# agent teams: squadron+ · cadet: 2 cloud hours / mo GitHub Stripe Supabase
+# Slack Figma Notion 130+ in the catalog 130+ integrations. GitHub, Stripe,
+# Supabase, Slack, Figma, Notion and more through MCP. Your keys stay on the
+# server. mcp · 130+ servers · keys server-side 03 / Ownership Ships to your
+# stack, not ours. Every project is a real repository synced to your Google
+# Drive. Push it to your GitHub and deploy it to your own Vercel, Netlify or
+# Cloudflare — or ship the whole stack to PiPilot Host in one click. Nothing is
+# held hostage. Google Drive Synced · real Git synced synced GitHub Pilot+ Push
+# + pull requests pushed pushed Your cloud Pilot+ Your account, your URL live
+# live PiPilot Host Frontend + API + DB · one deploy Connect once · Tokens
+# never leave the server · Own-host deploys on Pilot How deploys work 04 / How
+# it works Four steps from idea to shipped. Three of them every AI builder
+# promises. The fourth only a real repo can keep. pipilot · acme-bookings 4
+# STEPS 01 read the prompt prompt.md 02 wrote screens, wired auth + db src/ 03
+# published a live link here.now 04 committed to your Drive drive://acme-bookings
+# Describe it. Plain words: a web app, a mobile app, a desktop tool, an API.
+# Attach a sketch, a screenshot or a repo. Watch it build. The agent plans,
+# writes and wires a running project, with a live preview you can click while it
+# works. Ship it. Refine in chat, then ship — a live URL, an installer, an APK,
+# or your own host. Keep it. It’s a real repo in your Google Drive. Push it to
+# GitHub, export it, keep building. Nothing is locked in. Start building free 05
+# / Compared with Lovable · Bolt · v0 · Base44 · Replit Not just another app
+# generator. Most AI builders stop at a hosted web preview. PiPilot builds the
+# whole product and hands you the keys. How PiPilot compares with most AI app
+# builders Feature Most AI builders PiPilot Output Only builds web apps Web,
+# mobile, desktop, APIs, CLIs, SDKs & npm packages — one hub Mobile No real
+# mobile output Real Android & iOS via EAS — submit to Google Play & the App
+# Store Desktop No desktop story Signed Windows, macOS & Linux installers built
+# for you Backends JavaScript backends only Express, Hono — and full Python /
+# FastAPI backends Your code Your code lives on their servers Your code lives in
+# your own Google Drive with real Git — export anytime Deploy Deploys only to
+# their platform Free keyless instant deploy — or ship to YOUR Vercel, Netlify,
+# Cloudflare, App Store & Play Agents One model, one pass Agent Teams plus
+# Mission Runners that build, deploy & debug in the background Database
+# Bring-your-own database, hours of setup PiPilot Cloud — a real Postgres with
+# auth & a REST API, provisioned in seconds, yours to claim 06 / Shipped with
+# PiPilot Real apps, shipped this week. Published with PiPilot and voted up by
+# the community. Publish yours — the top three each week win build hours.
+# Launchpad Templates Browse the Launchpad → 07 / Also built in Agents,
+# missions and a demo video — included. Squadron splits one build across
+# parallel agents. Mission Runners keep working in the cloud after you close the
+# tab. And every app can ship with its own narrated demo video. pipilot · agent
+# teams Replay Lead · orchestrating Build a SaaS analytics dashboard — auth,
+# charts, Stripe billing. On it. Splitting this across a team of two. Spawned
+# Worker 1 (frontend) + Worker 2 (data). Assigning tasks… Worker 1 → Worker
+# 2: align on the /metrics shape. Both workers done. Running checks… Types ✓
+# Lint ✓ Build ✓ Shipped → demo.pipilot.dev W1 frontend ✓ W2 data ✓ APP
+# preview ✓ demo.pipilot.dev Live Revenue $48,920 Users 2,481 Sessions 9.7k
+# Churn 1.2% pipilot · render_video // generated by the agent: script, screen
+# capture, voice-over, music How Agent Teams work → Mission Runners → How
+# video works → 08 / Pricing Free to start. $20/mo to ship. No card. Projects
+# never expire. You keep every repo. $0 Cadet · Prove an idea, free 5 AI prompts
+# a day · no card $20 /mo Pilot · For solo builders who ship 25 premium prompts
+# a day · your own host $40 /seat Squadron · For teams building together Agent
+# Teams · 60 premium prompts a day per seat Custom Command · For organizations
+# at scale SSO · SLA · custom Cloud Hours See pricing 09 / Questions Asked
+# before signing up. All pricing questions → Is it real code, or am I locked
+# in? It is a real repo. Real files, real git history, real dependencies. On
+# Pilot you push it to your own GitHub and deploy it to your own Vercel, Netlify
+# or Cloudflare account, and your PiPilot Cloud (a Postgres backend) can be
+# claimed into your own account and kept. If you leave, you leave with the
+# codebase and the database. Is there really a free plan? Yes, and it does not
+# expire — no card, unlimited projects, the full builder, live preview, PiPilot
+# Cloud (a Postgres backend) and instant deploy. It is metered rather than
+# crippled: 5 AI prompts a day on a model pool shared with every other free
+# account, and 2 Cloud Hours a month for cloud missions and deploys. That is
+# sized to prove an idea, not to run a product people depend on. Does it really
+# build mobile and desktop apps? Yes. Real Android and iOS builds through EAS,
+# with Google Play and App Store submission, and Windows, macOS and Linux desktop
+# installers — not a website in a wrapper. Do I need to set up a database? No.
+# Every app gets PiPilot Cloud — a real Postgres backend provisioned in
+# seconds, with tables, SQL, auth and a REST Data API. No signup, no connection
+# string, and the agent creates tables and runs queries as it builds. Claim it
+# into your own account to keep it. How is PiPilot different from Lovable or
+# Bolt? They build web apps and host your code. PiPilot builds web, mobile,
+# desktop, APIs and CLIs, provisions the backend for you, keeps the repo in your
+# Google Drive with real Git, and deploys to a free link, PiPilot Host, or — on
+# Pilot — your own Vercel, Netlify or Cloudflare. You can leave with
+# everything. Start in seconds Your first app is free to build. Describe it,
+# watch it build, keep the code. No card, no setup. Describe the app you want No
+# credit card · You own the code · Live link in minutes Prefer to read first?
+# Browse the docs → PiPilot The AI fullstack build hub. Describe it. Own the
+# code. Ship it anywhere — web, mobile, desktop, API. 606 Baltimore Ave, Suite
+# 202-802 Towson, MD 21204, USA +1 (240) 905-4550 Product Builder PiPilot Host
+# PiPilot Cloud Integrations Templates AI Video Pricing Enterprise Resources Docs
+# Quickstart Changelog Blog Community Launchpad Video Hub Forum Roadmap Company
+# About Trust Center Status hello@pipilot.dev sales@pipilot.dev
+# technical@pipilot.dev ( support ) Backed by SOC 2 Type I + Type II · Trust
+# Center → Powered by Vercel · Supabase · E2B A PIXELWAYS Solutions Inc.
+# company · © 2026 · Privacy · Terms · Refund Start building free
