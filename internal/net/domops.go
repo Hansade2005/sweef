@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // domops.go — id-addressed DOM operations used by the JavaScript bridge.
@@ -108,6 +109,8 @@ func (d *Doc) CreateElement(tag, ns string) int64 {
 		n.Namespace = "svg"
 		n.Data = tag
 	}
+	// html.Render and ParseFragment require DataAtom to agree with Data.
+	n.DataAtom = atom.Lookup([]byte(n.Data))
 	return d.idOf(n)
 }
 

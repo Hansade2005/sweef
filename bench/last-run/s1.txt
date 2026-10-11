@@ -1,0 +1,19 @@
+- banner:
+  - navigation:
+    - link "Home" [ref=e1]:
+      - /url: /
+    - link "Pricing" [ref=e2]:
+      - /url: /pricing
+    - link "Docs" [ref=e3]:
+      - /url: /docs
+    - link "Sign in" [ref=e4]:
+      - /url: /login
+- main:
+  - heading "Ship faster with Acme" [level=1 ref=e5]
+  - heading "Plans" [level=2 ref=e6]
+  - button "Start free" [ref=e7]
+- contentinfo:
+  - link "Terms" [ref=e8]:
+    - /url: /terms
+  - link "Privacy" [ref=e9]:
+    - /url: /privacy

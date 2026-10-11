@@ -190,9 +190,15 @@ func (t *Tab) URL() string {
 	return t.url.String()
 }
 
+// Title reads the live <title> so changes made by page scripts are visible.
 func (t *Tab) Title() string {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	if t.dom != nil {
+		if s := t.dom.Title(); s != "" || t.title == "" {
+			return s
+		}
+	}
 	return t.title
 }
 
