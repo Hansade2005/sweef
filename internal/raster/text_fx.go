@@ -1,56 +1,34 @@
 package raster
 
-import (
-	"math"
-	"slices"
-	"sort"
-)
+import "math"
 
 // Fixed-point edge setup after Skia's SkAnalyticEdge / SkEdge (SkFixed 16.16,
-// FDot6 26.6, forward differencing for quads and cubics). The coverage walk
-// of SkScan_AAAPath computes the exact trapezoid area of every segment, so
-// the segments produced here are accumulated with the exact-area rasterizer;
-// what matters for matching Chromium is where the segment end points land.
-
-// tunables for experiments (see text_fx_lab_test.go)
-var (
-	fxEvenRound = false // SK_RASTERIZE_EVEN_ROUNDING: round instead of truncate to 1/256
-	fxBigSnap   = true  // snap curve vertices to whole pixels when a step is >= 2px tall
-)
+// FDot6 26.6, forward differencing for quads and cubics), which Chromium uses
+// to scan convert glyph outlines.
+//
+// SkScan_AAAPath then walks the edges and adds up the exact trapezoid area of
+// every row segment, so what decides the pixels is where the segment end
+// points land; the coverage itself is accumulated here with the exact-area
+// rasterizer. Measured against Chromium 1194 (canvas paths, text_fx_*_test.go)
+// the vertex rules below are what matter:
+//
+//   - input coordinates are truncated to 1/256 pixel (relative to the mask
+//     origin, which is an integer pixel);
+//   - the start and end y of every curve and both y of every line are rounded
+//     to a quarter pixel (SnapY); the vertices in between are the forward
+//     differences added to the snapped start, again rounded to a quarter pixel
+//     with x left where it was;
+//   - when one forward-difference step is two or more pixels tall, the vertex
+//     is rounded to a whole pixel instead and slides along the chord;
+//   - slopes come from FDot6 (1/64 pixel) differences.
 
 const fxOne = 1 << 16
-
-var fxBigThresh = fxOne * 2
-var fxBigVariant = 0
-var fxSmallRound = 0
-var fxMidOv = map[[2]int]float64{}
-var fxExactSet = map[int]bool{}
-var fxShiftOv func(idx int) int
-var fxSmallSlide = false
-var fxVTrace func(idx, count int, nx, ny, sx, sy float64)
-var fxQuadIdx, fxQuadOverride int
-var fxQInfo func(idx, shift, y0, y2, wind, qy int)
-var fxStartMode = 0
-var fxRMode = 0
-var fxShiftMap []int
-var fxQOffMode = 0
-var fxQSnap = true
-var fxQNoSnapMid = false
-var fxDS = 5
-var fxQuadOffset = false
-var fxTrace = false
-var fxShiftBias = 0
 
 func fxSnapY(y int) int {
 	return int((uint32(y)+(fxOne>>3))>>14) << 14
 }
 
-func fxToFDot6x4(v float32) int {
-	if fxEvenRound {
-		return int(math.RoundToEven(float64(v) * 256))
-	}
-	return int(v * 256)
-}
+func fxToFDot6x4(v float32) int { return int(v * 256) }
 
 func fxAbs(a int) int {
 	if a < 0 {
@@ -59,20 +37,38 @@ func fxAbs(a int) int {
 	return a
 }
 
+func fxMin(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func fxMax(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // fxQuickDiv is the 16.16 quotient of two FDot6 values.
 func fxQuickDiv(a, b int) int { return int((int64(a) << 16) / int64(b)) }
 
 func fxMul(a, b int) int { return int((int64(a) * int64(b)) >> 16) }
 
+func fxCheapDist(dx, dy int) int {
+	dx, dy = fxAbs(dx), fxAbs(dy)
+	if dx > dy {
+		return dx + dy>>1
+	}
+	return dy + dx>>1
+}
+
 func fxDiffToShift(dx, dy int) int {
-	dist := aaaCheapDist(dx, dy)
-	dist = (dist + (1 << (fxDS - 1))) >> fxDS
+	dist := (fxCheapDist(dx, dy) + (1 << 4)) >> (3 + 2)
 	n := 0
 	for v := dist; v > 0; v >>= 1 {
 		n++
-	}
-	if fxShiftMap != nil {
-		return fxShiftMap[min(n, len(fxShiftMap)-1)]
 	}
 	return n >> 1
 }
@@ -105,15 +101,12 @@ func (b *fxBuilder) line(p0, p1 fpt) {
 	if dy == 0 {
 		return
 	}
-	dx := (x1 - x0) >> 10
-	b.edges = append(b.edges, fxEdge{x0, y0, y1, fxQuickDiv(dx, dy), wind})
+	b.edges = append(b.edges, fxEdge{x0, y0, y1, fxQuickDiv((x1-x0)>>10, dy), wind})
 }
 
 // seg adds one piece of a curve (SkAnalyticEdge::updateLine).
-func (b *fxBuilder) seg(x0, y0, x1, y1, slope, wind int) bool {
-	if fxQSnap {
-		y0, y1 = fxSnapY(y0), fxSnapY(y1)
-	}
+func (b *fxBuilder) seg(x0, y0, y1, slope, wind int) bool {
+	y0, y1 = fxSnapY(y0), fxSnapY(y1)
 	if (y1-y0)>>10 == 0 {
 		return false
 	}
@@ -139,6 +132,13 @@ func lerp32(a, b fpt, t float32) fpt {
 	return fpt{a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t}
 }
 
+func absf32(v float32) float32 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
 // quad adds a quadratic, chopped at its y extremum as SkEdgeBuilder does.
 func (b *fxBuilder) quad(p [3]fpt) {
 	a, bb, c := p[0].y, p[1].y, p[2].y
@@ -150,8 +150,7 @@ func (b *fxBuilder) quad(p [3]fpt) {
 		if t, ok := fxValidUnitDivide(a-bb, a-bb-bb+c); ok {
 			p01, p12 := lerp32(p[0], p[1], t), lerp32(p[1], p[2], t)
 			m := lerp32(p01, p12, t)
-			// flatten_double_quad_extrema
-			p01.y, p12.y = m.y, m.y
+			p01.y, p12.y = m.y, m.y // flatten_double_quad_extrema
 			b.monoQuad([3]fpt{p[0], p01, m})
 			b.monoQuad([3]fpt{m, p12, p[2]})
 			return
@@ -166,13 +165,7 @@ func (b *fxBuilder) quad(p [3]fpt) {
 	b.monoQuad(p)
 }
 
-func absf32(v float32) float32 {
-	if v < 0 {
-		return -v
-	}
-	return v
-}
-
+// monoQuad mirrors SkAnalyticQuadraticEdge::setQuadratic / updateQuadratic.
 func (b *fxBuilder) monoQuad(q [3]fpt) {
 	x0, y0 := fxToFDot6x4(q[0].x), fxToFDot6x4(q[0].y)
 	x1, y1 := fxToFDot6x4(q[1].x), fxToFDot6x4(q[1].y)
@@ -189,12 +182,6 @@ func (b *fxBuilder) monoQuad(q [3]fpt) {
 	dx := ((x1 << 1) - x0 - x2) >> 2
 	dy := ((y1 << 1) - y0 - y2) >> 2
 	shift := fxDiffToShift(dx, dy)
-	if shift > 0 {
-		shift += fxShiftBias
-	}
-	if fxShiftOv != nil && fxShiftOv(fxQuadIdx+1) != 0 {
-		shift += fxShiftOv(fxQuadIdx + 1)
-	}
 	if shift == 0 {
 		shift = 1
 	} else if shift > 6 {
@@ -203,107 +190,41 @@ func (b *fxBuilder) monoQuad(q [3]fpt) {
 	count := 1 << shift
 	ax, ay := (x0-x1-x1+x2)<<9, (y0-y1-y1+y2)<<9
 	bx, by := (x1-x0)<<10, (y1-y0)<<10
+	// everything is scaled by 4 (accuracy 2) and brought back to 16.16
 	qx, qy := (x0<<10)>>2, (y0<<10)>>2
 	qdx, qdy := (bx+(ax>>shift))>>2, (by+(ay>>shift))>>2
 	qddx, qddy := (ax>>(shift-1))>>2, (ay>>(shift-1))>>2
-	lastX, lastY := (x2<<10)>>2, (y2<<10)>>2
-	cshift := shift - 1
-	fxQuadIdx++
-	if fxExactSet[fxQuadIdx] {
-		fx0, fy0, fx1, fy1, fx2, fy2 := float64(x0)/256, float64(y0)/256, float64(x1)/256, float64(y1)/256, float64(x2)/256, float64(y2)/256
-		px, py := fx0, fy0
-		for k := 1; k <= 32; k++ {
-			t := float64(k) / 32
-			mt := 1 - t
-			nx := mt*mt*fx0 + 2*mt*t*fx1 + t*t*fx2
-			ny := mt*mt*fy0 + 2*mt*t*fy1 + t*t*fy2
-			b.edges = append(b.edges, fxEdge{int(px * fxOne), int(py * fxOne), int(ny * fxOne), int((nx - px) / (ny - py) * fxOne), wind})
-			px, py = nx, ny
-		}
-		return
-	}
-	oldx, oldy := qx, qy
-	if fxQInfo != nil {
-		fxQInfo(fxQuadIdx, shift, y0, y2, wind, qy)
-	}
-	switch fxStartMode {
-	case 1:
-		oldy = (qy >> 14) << 14 // floor
-	case 2:
-		oldy = ((qy + (1<<14 - 1)) >> 14) << 14 // ceil
-	}
+	lastX, lastY := (x2<<10)>>2, fxSnapY((y2<<10)>>2)
 	qy = fxSnapY(qy)
-	lastY = fxSnapY(lastY)
-	sx, sy := qx, qy
-	if fxQuadOverride == fxQuadIdx || fxQuadOffset || (fxQOffMode == 1 && wind > 0) || (fxQOffMode == 2 && wind < 0) {
-		oldy = oldy // true start
-	} else if fxStartMode == 0 {
-		oldy = qy
-	}
+	cshift := shift - 1
+	sx, sy := qx, qy // snapped position of the last emitted vertex
+	oldx, oldy := qx, qy
 	for count > 0 {
 		var newx, newy, nsx, nsy, slope int
 		count--
-		if fxTrace {
-			println("step", count, qdx>>cshift, qdy>>cshift, oldy)
-		}
 		if count > 0 {
 			newx = oldx + (qdx >> cshift)
 			newy = oldy + (qdy >> cshift)
-			if fxBigSnap && fxAbs(qdy>>cshift) >= fxBigThresh {
+			if fxAbs(qdy>>cshift) >= fxOne*2 { // only snap to whole pixels when the step is tall
 				diffY := (newy - sy) >> 10
 				slope = math.MaxInt32
 				if diffY != 0 {
 					slope = fxQuickDiv((newx-sx)>>10, diffY)
 				}
 				nsy = fxMin(lastY, (newy+fxOne/2)&^(fxOne-1))
-				switch fxBigVariant {
-				case 0:
-					nsx = newx - fxMul(slope, newy-nsy)
-				case 1:
-					nsx = newx
-				case 2:
-					nsx = newx
-					if d := (nsy - sy) >> 10; d != 0 {
-						slope = fxQuickDiv((newx-sx)>>10, d)
-					}
-				case 3:
-					if d := (nsy - sy) >> 10; d != 0 {
-						slope = fxQuickDiv((newx-sx)>>10, d)
-					}
-					nsx = newx - fxMul(slope, newy-nsy)
-				}
+				nsx = newx - fxMul(slope, newy-nsy)
 			} else {
 				nsy = fxMin(lastY, fxSnapY(newy))
-				switch fxSmallRound {
-				case 1:
-					nsy = fxMin(lastY, ((newy+(1<<14-1))>>14)<<14)
-				case 2:
-					nsy = fxMin(lastY, (newy>>14)<<14)
-				case 3:
-					nsy = fxMin(lastY, ((newy+(1<<13)-1)>>14)<<14)
-				}
-				if fxQNoSnapMid {
-					nsy = fxMin(lastY, newy)
-				}
 				nsx = newx
 				diffY := (nsy - sy) >> 10
 				slope = math.MaxInt32
 				if diffY != 0 {
 					slope = fxQuickDiv((newx-sx)>>10, diffY)
 				}
-				if fxSmallSlide {
-					if dY := (newy - sy) >> 10; dY != 0 {
-						sl := fxQuickDiv((newx-sx)>>10, dY)
-						nsx = newx - fxMul(sl, newy-nsy)
-						if diffY != 0 {
-							slope = fxQuickDiv((nsx-sx)>>10, diffY)
-						}
-					}
-				}
 			}
 			qdx += qddx
 			qdy += qddy
-		} else {
+		} else { // last segment
 			newx, newy = lastX, lastY
 			nsx, nsy = newx, newy
 			diffY := (newy - sy) >> 10
@@ -312,40 +233,17 @@ func (b *fxBuilder) monoQuad(q [3]fpt) {
 				slope = fxQuickDiv((newx-sx)>>10, diffY)
 			}
 		}
-		if v, ok := fxMidOv[[2]int{fxQuadIdx, count}]; ok {
-			nsy = int(v * fxOne)
-		}
-		if fxVTrace != nil {
-			fxVTrace(fxQuadIdx, count, float64(newx)/65536, float64(newy)/65536, float64(nsx)/65536, float64(nsy)/65536)
-		}
-		if slope < math.MaxInt32 && b.seg(sx, sy, nsx, nsy, slope, wind) {
+		if slope < math.MaxInt32 && b.seg(sx, sy, nsy, slope, wind) {
 			sx, sy = nsx, nsy
 		}
 		oldx, oldy = newx, newy
-		if fxRMode == 1 && count > 0 {
-			oldy = nsy
-		}
 	}
-}
-
-func fxMin(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func fxCubicDelta(a, b, c, d int) int {
 	one := ((a*8 - b*15 + 6*c + d) * 19) >> 9
 	two := ((a + 6*b - c*15 + d*8) * 19) >> 9
-	return maxInt(fxAbs(one), fxAbs(two))
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	return fxMax(fxAbs(one), fxAbs(two))
 }
 
 // fxFindUnitQuadRoots mirrors SkFindUnitQuadRoots.
@@ -391,6 +289,7 @@ func fxChopCubic(c [4]fpt, t float32) (l, r [4]fpt) {
 	return [4]fpt{c[0], p01, p012, m}, [4]fpt{m, p123, p23, c[3]}
 }
 
+// cubic adds a cubic chopped at its y extrema (SkChopCubicAtYExtrema).
 func (b *fxBuilder) cubic(c [4]fpt) {
 	A := c[3].y - c[0].y + 3*(c[1].y-c[2].y)
 	B := 2 * (c[0].y - c[1].y - c[1].y + c[2].y)
@@ -407,8 +306,7 @@ func (b *fxBuilder) cubic(c [4]fpt) {
 	default:
 		l, r := fxChopCubic(c, ts[0])
 		l[2].y, r[1].y = l[3].y, l[3].y
-		t2 := (ts[1] - ts[0]) / (1 - ts[0])
-		m, rr := fxChopCubic(r, t2)
+		m, rr := fxChopCubic(r, (ts[1]-ts[0])/(1-ts[0]))
 		m[2].y, rr[1].y = m[3].y, m[3].y
 		b.monoCubic(l)
 		b.monoCubic(m)
@@ -416,6 +314,7 @@ func (b *fxBuilder) cubic(c [4]fpt) {
 	}
 }
 
+// monoCubic mirrors SkAnalyticCubicEdge::setCubic / updateCubic.
 func (b *fxBuilder) monoCubic(c [4]fpt) {
 	var x, y [4]int
 	for i := range c {
@@ -432,9 +331,7 @@ func (b *fxBuilder) monoCubic(c [4]fpt) {
 	if (y[0]+32)>>6 == (y[3]+32)>>6 {
 		return
 	}
-	dx := fxCubicDelta(x[0], x[1], x[2], x[3])
-	dy := fxCubicDelta(y[0], y[1], y[2], y[3])
-	shift := fxDiffToShift(dx, dy) + 1
+	shift := fxDiffToShift(fxCubicDelta(x[0], x[1], x[2], x[3]), fxCubicDelta(y[0], y[1], y[2], y[3])) + 1
 	if shift > 6 {
 		shift = 6
 	}
@@ -452,12 +349,11 @@ func (b *fxBuilder) monoCubic(c [4]fpt) {
 		cdx = B + (C >> shift) + (D >> (2 * shift))
 		cddx = 2*C + ((3 * D) >> (shift - 1))
 		cdddx = (3 * D) >> (shift - 1)
-		return
+		return cx >> 2, cdx >> 2, cddx >> 2, cdddx >> 2
 	}
 	cx, cdx, cddx, cdddx := coef(x)
 	cy, cdy, cddy, cdddy := coef(y)
-	cx >>= 2
-	cy = fxSnapY(cy >> 2)
+	cy = fxSnapY(cy)
 	lastX, lastY := (x[3]<<10)>>2, fxSnapY((y[3]<<10)>>2)
 	sx, sy := cx, cy
 	oldx, oldy := cx, cy
@@ -478,42 +374,31 @@ func (b *fxBuilder) monoCubic(c [4]fpt) {
 		if newy < oldy {
 			newy = oldy
 		}
-		nsy := fxMin(lastY, fxSnapY(newy))
+		nsy := fxSnapY(newy)
+		if lastY < nsy {
+			nsy = lastY
+			count = 0
+		}
 		diffY := (nsy - sy) >> 10
 		slope := math.MaxInt32
 		if diffY != 0 {
 			slope = fxQuickDiv((newx-sx)>>10, diffY)
 		}
-		if slope < math.MaxInt32 && b.seg(sx, sy, newx, nsy, slope, wind) {
+		if slope < math.MaxInt32 && b.seg(sx, sy, nsy, slope, wind) {
 			sx, sy = newx, nsy
 		}
 		oldx, oldy = newx, newy
 	}
 }
 
-// fxFillPath rasterizes p (device pixels, y down) like Skia's analytic AA.
-// Cubic and quad scaling follow SkEdgeBuilder.
-func fxFillPath(p *Path, clip IRect) *Mask {
-	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
-	for i := 0; i < len(p.Pts); i += 2 {
-		x, y := p.Pts[i], p.Pts[i+1]
-		if math.IsNaN(x) || math.IsNaN(y) {
-			return nil
-		}
-		minX, maxX = math.Min(minX, x), math.Max(maxX, x)
-		minY, maxY = math.Min(minY, y), math.Max(maxY, y)
-	}
-	if minX > maxX {
-		return nil
-	}
-	const lim = 1 << 20
-	bounds := IRect{int(math.Floor(math.Max(minX, -lim))), int(math.Floor(math.Max(minY, -lim))), int(math.Ceil(math.Min(maxX, lim))), int(math.Ceil(math.Min(maxY, lim)))}
-	b := bounds.Intersect(clip)
-	if b.Empty() {
-		return nil
-	}
-	ox, oy := float64(bounds.X0), float64(bounds.Y0)
-	var fb fxBuilder
+// fxFillPath rasterizes p (device pixels, y down) like Skia's analytic AA,
+// nonzero winding, restricted to clip. Returns nil when nothing is covered.
+func fxFillPath(p *Path, clip IRect) *Mask { return fxFillUnion(p, nil, false, clip) }
+
+// fxPathEdges converts p (device pixels) to analytic edges relative to
+// (ox, oy), flipping their winding when asked.
+func fxPathEdges(fb *fxBuilder, p *Path, ox, oy float64, flip bool) {
+	first := len(fb.edges)
 	pts := p.Pts
 	i := 0
 	var cur, start fpt
@@ -553,108 +438,118 @@ func fxFillPath(p *Path, clip IRect) *Mask {
 		}
 	}
 	closeContour()
-	r := newRasterizer(IRect{b.X0, b.Y0, b.X1, b.Y1})
-	defer r.release()
-	fxWalk(r, fb.edges, ox, oy)
-	return r.mask(NonZero)
+	if flip {
+		for j := first; j < len(fb.edges); j++ {
+			fb.edges[j].wind = -fb.edges[j].wind
+		}
+	}
 }
 
-var fxCross = 0
-var fxCrossMin = 0
-var fxWalkTrace func(ya, yb, ul, ur, ll, lr int)
-
-type fxAct struct {
-	xa, xb int
-	e      *fxEdge
-}
-
-// fxWalk accumulates the coverage of the edges row segment by row segment
-// the way SkScan_AAAPath's aaa_walk_edges does: the active edges are ordered
-// by x, pairs bound intervals, and every interval of every segment is a
-// trapezoid whose corners come from the edges' fixed-point x positions.
-func fxWalk(r *rasterizer, edges []fxEdge, ox, oy float64) {
-	if len(edges) == 0 {
-		return
-	}
-	ys := make([]int, 0, len(edges)*2+64)
-	minY, maxY := edges[0].y0, edges[0].y1
-	for _, e := range edges {
-		ys = append(ys, e.y0, e.y1)
-		minY = fxMin(minY, e.y0)
-		maxY = maxInt(maxY, e.y1)
-	}
-	for y := (minY>>16 + 1) << 16; y < maxY; y += fxOne {
-		ys = append(ys, y)
-	}
-	sort.Ints(ys)
-	ys = slices.Compact(ys)
-	const k = 1.0 / fxOne
-	order := make([]int, len(edges))
-	for i := range order {
-		order[i] = i
-	}
-	sort.Slice(order, func(a, b int) bool { return edges[order[a]].y0 < edges[order[b]].y0 })
-	next := 0
-	var live []int
-	var act []fxAct
-	for n := 0; n+1 < len(ys); n++ {
-		ya, yb := ys[n], ys[n+1]
-		for next < len(order) && edges[order[next]].y0 <= ya {
-			live = append(live, order[next])
-			next++
-		}
-		act = act[:0]
-		keep := live[:0]
-		for _, i := range live {
-			e := &edges[i]
-			if e.y1 <= ya {
-				continue
-			}
-			keep = append(keep, i)
-			act = append(act, fxAct{e.x + fxMul(e.slope, ya-e.y0), e.x + fxMul(e.slope, yb-e.y0), e})
-		}
-		live = keep
-		if len(act) < 2 {
+// fxFillUnion fills p, together with the second path q when it is not nil
+// (the outline of a stroke), as the nonzero union of both: this is Skia's
+// stroke-and-fill. flipP reverses the winding of p so that it agrees with q.
+func fxFillUnion(p, q *Path, flipP bool, clip IRect) *Mask {
+	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+	for _, pp := range []*Path{p, q} {
+		if pp == nil {
 			continue
 		}
-		sort.SliceStable(act, func(i, j int) bool {
-			if act[i].xa != act[j].xa {
-				return act[i].xa < act[j].xa
+		for i := 0; i < len(pp.Pts); i += 2 {
+			x, y := pp.Pts[i], pp.Pts[i+1]
+			if math.IsNaN(x) || math.IsNaN(y) {
+				return nil
 			}
-			return act[i].e.slope < act[j].e.slope
-		})
-		w := 0
-		left := -1
-		for i := range act {
-			prev := w
-			w += act[i].e.wind
-			if prev == 0 && w != 0 {
-				left = i
-			} else if prev != 0 && w == 0 && left >= 0 {
-				l, rr := act[left], act[i]
-				left = -1
-				ul, ur, ll, lr := l.xa, rr.xa, l.xb, rr.xb
-				if fxWalkTrace != nil {
-					fxWalkTrace(ya, yb, ul, ur, ll, lr)
-				}
-				if ul > ur {
-					continue
-				}
-				if ll > lr+fxCrossMin {
-					switch fxCross {
-					case 3:
-						a, b := fxMin(ul, ll), maxInt(ur, lr)
-						ul, ll, ur, lr = a, a, b, b
-					case 1:
-						ll, lr = ul, ur
-					case 2:
-						ll = lr
-					}
-				}
-				fy0, fy1 := float64(ya)*k+oy, float64(yb)*k+oy
-				r.line(float64(ul)*k+ox, fy0, float64(ll)*k+ox, fy1)
-				r.line(float64(lr)*k+ox, fy1, float64(ur)*k+ox, fy0)
+			minX, maxX = math.Min(minX, x), math.Max(maxX, x)
+			minY, maxY = math.Min(minY, y), math.Max(maxY, y)
+		}
+	}
+	if minX > maxX {
+		return nil
+	}
+	const lim = 1 << 20
+	bounds := IRect{int(math.Floor(math.Max(minX, -lim))), int(math.Floor(math.Max(minY, -lim))), int(math.Ceil(math.Min(maxX, lim))), int(math.Ceil(math.Min(maxY, lim)))}
+	b := bounds.Intersect(clip)
+	if b.Empty() {
+		return nil
+	}
+	ox, oy := float64(bounds.X0), float64(bounds.Y0)
+	var fb fxBuilder
+	fxPathEdges(&fb, p, ox, oy, flipP)
+	if q != nil {
+		fxPathEdges(&fb, q, ox, oy, false)
+	}
+	r := newRasterizer(b)
+	defer r.release()
+	if q != nil {
+		fxWalk(r, fb.edges, ox, oy)
+		return fxMask(r)
+	}
+	const k = 1.0 / fxOne
+	for _, e := range fb.edges {
+		xe := e.x + fxMul(e.slope, e.y1-e.y0)
+		x0, y0 := float64(e.x)*k+ox, float64(e.y0)*k+oy
+		x1, y1 := float64(xe)*k+ox, float64(e.y1)*k+oy
+		if e.wind > 0 {
+			r.line(x0, y0, x1, y1)
+		} else {
+			r.line(x1, y1, x0, y0)
+		}
+	}
+	return fxMask(r)
+}
+
+// fxMask turns the accumulated signed areas into 8-bit coverage. Skia's
+// analytic AA truncates its fixed-point coverage (area * 256, capped at 255).
+func fxMask(r *rasterizer) *Mask {
+	m := newMask(r.b)
+	for y := 0; y < r.h; y++ {
+		row := r.acc[y*r.stride : y*r.stride+r.w]
+		out := m.A[y*m.Stride : y*m.Stride+r.w]
+		var a float32
+		for x, d := range row {
+			a += d
+			v := a
+			if v < 0 {
+				v = -v
+			}
+			if v >= 1 {
+				out[x] = 255
+			} else {
+				out[x] = uint8(v * 256)
 			}
 		}
 	}
+	return m
+}
+
+// fxTrim shrinks a mask to its non-zero bounding box (the exact outline
+// bounds are larger than the snapped polygon the scan converter fills).
+func fxTrim(m *Mask) *Mask {
+	if m == nil {
+		return nil
+	}
+	x0, y0, x1, y1 := m.B.W(), m.B.H(), -1, -1
+	for y := 0; y < m.B.H(); y++ {
+		row := m.A[y*m.Stride : y*m.Stride+m.B.W()]
+		for x, v := range row {
+			if v != 0 {
+				x0 = min(x0, x)
+				x1 = max(x1, x)
+				y0 = min(y0, y)
+				y1 = max(y1, y)
+			}
+		}
+	}
+	if x1 < 0 {
+		return nil
+	}
+	if x0 == 0 && y0 == 0 && x1 == m.B.W()-1 && y1 == m.B.H()-1 {
+		return m
+	}
+	nb := IRect{m.B.X0 + x0, m.B.Y0 + y0, m.B.X0 + x1 + 1, m.B.Y0 + y1 + 1}
+	o := newMask(nb)
+	for y := y0; y <= y1; y++ {
+		copy(o.A[(y-y0)*o.Stride:(y-y0+1)*o.Stride], m.A[y*m.Stride+x0:y*m.Stride+x1+1])
+	}
+	return o
 }
