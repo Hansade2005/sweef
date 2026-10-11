@@ -26,5 +26,5 @@ mk(0,gl.RGBA8I,gl.RGBA_INTEGER,gl.BYTE,new Int8Array([10,0,0,1, 40,0,0,1, 70,0,0
 mk(1,gl.RGBA8UI,gl.RGBA_INTEGER,gl.UNSIGNED_BYTE,new Uint8Array([0,50,0,1, 0,100,0,1, 0,150,0,1, 0,200,0,1]));
 mk(2,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,new Uint16Array([0,0,0x3800,0x3c00, 0,0,0x3a00,0x3c00, 0,0,0x3c00,0x3c00, 0,0,0x3400,0x3c00]));
 gl.uniform1i(gl.getUniformLocation(p,'ti'),0);gl.uniform1i(gl.getUniformLocation(p,'tu'),1);gl.uniform1i(gl.getUniformLocation(p,'tf'),2);quad(gl,p,-1,-1,1,1,0,0,1,1);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

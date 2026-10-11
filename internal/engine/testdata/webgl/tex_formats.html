@@ -27,5 +27,5 @@ up(2,gl.RGBA,gl.RGBA,gl.UNSIGNED_SHORT_5_5_5_1,2,2,new Uint16Array([0xF801,0x07C
 up(3,gl.LUMINANCE,gl.LUMINANCE,gl.UNSIGNED_BYTE,2,2,new Uint8Array([0,100,200,255]));
 up(4,gl.ALPHA,gl.ALPHA,gl.UNSIGNED_BYTE,2,2,new Uint8Array([0,100,200,255]));
 up(5,gl.LUMINANCE_ALPHA,gl.LUMINANCE_ALPHA,gl.UNSIGNED_BYTE,2,2,new Uint8Array([255,255, 255,128, 100,255, 100,64]));
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

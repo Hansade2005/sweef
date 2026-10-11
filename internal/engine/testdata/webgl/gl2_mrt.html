@@ -31,5 +31,5 @@ gl.drawBuffers([gl.COLOR_ATTACHMENT0,gl.COLOR_ATTACHMENT1,gl.COLOR_ATTACHMENT2])
 gl.viewport(0,0,32,32);gl.useProgram(p1);vbo(gl,new Float32Array([-1,-1,1,-1,-1,1,1,1]));attr(gl,p1,'a_pos',2,0,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,128,128);gl.useProgram(p2);for(var i=0;i<3;i++){gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,ts[i]);gl.uniform1i(gl.getUniformLocation(p2,'t'+i),i);}
 gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);quad(gl,p2,-1,-0.4,1,0.4,0,0,1,1);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

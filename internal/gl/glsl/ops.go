@@ -135,7 +135,11 @@ func intBinFn(code string, uns bool) func(a, b uint32) uint32 {
 				if int32(b) == 0 {
 					return 0
 				}
-				return uint32(int32(a) % int32(b))
+				r := int32(a) % int32(b)
+				if r != 0 && (r < 0) != (int32(b) < 0) {
+					r += int32(b)
+				}
+				return uint32(r)
 			}
 		case "<<":
 			return func(a, b uint32) uint32 { return uint32(int32(a) << (b & 31)) }

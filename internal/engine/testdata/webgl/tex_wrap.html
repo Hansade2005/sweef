@@ -21,5 +21,5 @@ try{var gl=ctx(); var p=prog(gl,QVS,'precision mediump float;varying vec2 v_uv;u
 gl.useProgram(p);var data=checker(4,4,1,[255,230,0,255],[20,120,60,255]);data[0]=255;data[1]=0;data[2]=0;
 gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
 [gl.CLAMP_TO_EDGE,gl.REPEAT,gl.MIRRORED_REPEAT].forEach(function(w,i){tex(gl,4,4,data,{ws:w,wt:w});var x=-1+i*0.67;quad(gl,p,x+0.03,-0.9,x+0.64,0.9,-1,-1,2,2);});
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

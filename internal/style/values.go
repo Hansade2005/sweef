@@ -1169,4 +1169,6 @@ func parseColorMix(args string, cc colorCtx) (Color, bool, bool) {
 }
 
 // ParseColor parses a CSS color for callers outside the cascade (light scheme).
-func ParseColor(s string) (Color, bool, bool) { return parseColor(s, colorCtx{cur: Color{0, 0, 0, 255}}) }
+func ParseColor(s string) (Color, bool, bool) {
+	return parseColor(s, colorCtx{cur: Color{0, 0, 0, 255}})
+}

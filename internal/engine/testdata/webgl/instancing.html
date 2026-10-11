@@ -22,5 +22,5 @@ gl.useProgram(p);vbo(gl,new Float32Array([-0.5,-0.5,0.5,-0.5,0.0,0.6]));attr(gl,
 var off=[],col=[];for(var y=0;y<4;y++)for(var x=0;x<4;x++){off.push(-0.75+x*0.5,-0.75+y*0.5);col.push(x/3,y/3,0.5);}
 vbo(gl,new Float32Array(off));var l=attr(gl,p,'a_off',2,0,0);ext.vertexAttribDivisorANGLE(l,1);vbo(gl,new Float32Array(col));l=attr(gl,p,'a_col',3,0,0);ext.vertexAttribDivisorANGLE(l,1);
 gl.clearColor(0.1,0.1,0.1,1);gl.clear(gl.COLOR_BUFFER_BIT);ext.drawArraysInstancedANGLE(gl.TRIANGLES,0,3,16);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

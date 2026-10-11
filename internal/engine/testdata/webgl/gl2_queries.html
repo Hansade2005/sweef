@@ -24,5 +24,5 @@ gl.useProgram(p);gl.enable(gl.DEPTH_TEST);gl.clear(gl.DEPTH_BUFFER_BIT|gl.COLOR_
 var q=gl.createQuery();gl.beginQuery(gl.ANY_SAMPLES_PASSED,q);vbo(gl,new Float32Array([-0.3,-0.3,0.5,0.3,-0.3,0.5,0,0.3,0.5]));attr(gl,p,'a_pos',3,0,0);gl.drawArrays(gl.TRIANGLES,0,3);gl.endQuery(gl.ANY_SAMPLES_PASSED);
 var q2=gl.createQuery();gl.beginQuery(gl.ANY_SAMPLES_PASSED,q2);vbo(gl,new Float32Array([-0.3,-0.3,-0.5,0.3,-0.3,-0.5,0,0.3,-0.5]));attr(gl,p,'a_pos',3,0,0);gl.drawArrays(gl.TRIANGLES,0,3);gl.endQuery(gl.ANY_SAMPLES_PASSED);
 window.__result=[gl.getQueryParameter(q,gl.QUERY_RESULT),gl.getQueryParameter(q2,gl.QUERY_RESULT)].join(',');
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

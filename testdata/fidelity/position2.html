@@ -1,0 +1,21 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>position2</title>
+<style>
+body { margin: 0; font: 14px Arial, sans-serif; } .a { position: relative; margin: 20px; padding: 10px; border: 2px solid #468; height: 160px; background: #eef; }
+.b { position: absolute; width: 50%; padding: 8px; background: #fdb; top: 20px; left: 20px; } .c { position: absolute; right: 10px; bottom: 10px; max-width: 150px; background: #cfc; padding: 4px; }
+.d { position: absolute; top: 0; left: 0; right: 0; bottom: 0; margin: 40px; background: rgba(0,0,0,.1); } .e { position: relative; top: -8px; left: 12px; background: #ffc; display: inline-block; }
+.f { position: relative; z-index: 1; background: #fcc; padding: 10px; margin: -20px 40px 0 60px; } .g { position: relative; background: #ccf; padding: 10px; margin: 0 20px; z-index: 0; }
+.h { position: absolute; width: 100px; height: 100px; background: #aaf; top: 10px; left: 220px; z-index: 5; } .h > div { position: absolute; top: 80px; left: 80px; width: 60px; height: 60px; background: #fa0; }
+.sc { height: 120px; overflow: auto; border: 1px solid #333; margin: 20px; position: relative; } .sc .in { height: 300px; padding: 4px; background: linear-gradient(#fff, #bdf); } .sc .stk { position: sticky; top: 0; background: #ff9; padding: 4px; } .sc .ab { position: absolute; top: 60px; left: 120px; background: #9f9; padding: 2px 6px; }
+.w { position: relative; display: inline-block; margin: 30px; } .w .tag { position: absolute; top: -10px; right: -10px; background: red; color: #fff; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; font-size: 12px; }
+.fx { position: fixed; top: 4px; left: 4px; padding: 4px; background: #333; color: #fff; z-index: 10; } .bot { position: absolute; bottom: 0; left: 0; right: 0; background: #ddd; padding: 6px; }
+.over { position: absolute; width: 300px; height: 20px; left: 90%; background: #f66; } .ctr { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #6c6; padding: 6px 10px; }
+</style></head><body>
+<div class="fx">fixed</div>
+<div class="a"><div class="b">abs 50% width with padding and some text that wraps</div><div class="c">bottom right max-width box with long content</div><div class="e">relative offset</div><div class="d"></div><div class="h"><div></div></div></div>
+<div class="f">z-index 1 overlapping</div><div class="g">z-index 0 below</div>
+<div class="sc"><div class="in"><div class="stk">sticky inside scroller</div>content<br>content<div class="ab">abs in scroller</div></div></div>
+<span class="w">Badge target<span class="tag">3</span></span><span class="w">Another<span class="tag">12</span></span>
+<div class="a" style="height:80px"><div class="ctr">centered by transform</div></div>
+<div class="a" style="height:80px;overflow:hidden"><div class="over">clipped overflow abs</div><div class="bot">bottom bar</div></div>
+</body></html>

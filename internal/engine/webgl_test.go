@@ -225,3 +225,54 @@ func trim(s string, n int) string {
 	}
 	return s
 }
+
+func TestWebGLBitmapSource(t *testing.T) {
+	_, tab := newTestTab(t)
+	tab.SetDocument(`<!doctype html><canvas id=c width=8 height=6></canvas>`, "https://example.test/")
+	id := evalStr(t, tab, `var gl=document.getElementById('c').getContext('webgl');gl.enable(gl.SCISSOR_TEST);gl.scissor(0,0,8,2);gl.clearColor(1,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);String(__swIdOf(document.getElementById('c')))`)
+	var nid int64
+	fmt.Sscan(id, &nid)
+	src := tab.BitmapSourceFor(tab.dom.NodeByID(nid))
+	if src == nil {
+		t.Fatal("no bitmap source registered")
+	}
+	if w, h := src.Size(); w != 8 || h != 6 {
+		t.Fatalf("size %dx%d", w, h)
+	}
+	// WebGL's origin is bottom-left: the cleared strip is at the bottom of the bitmap.
+	r, _, _, a := src.Bitmap().At(3, 5).RGBA()
+	if r>>8 != 255 || a>>8 != 255 {
+		t.Fatalf("bottom row pixel r=%d a=%d", r>>8, a>>8)
+	}
+	if _, _, _, a := src.Bitmap().At(3, 0).RGBA(); a != 0 {
+		t.Fatalf("top row should be transparent, a=%d", a>>8)
+	}
+	// The frame is still visible after it has been presented (preserveDrawingBuffer=false).
+	tab.Settle(100 * time.Millisecond)
+	if r, _, _, _ := src.Bitmap().At(3, 5).RGBA(); r>>8 != 255 {
+		t.Fatalf("presented frame lost: r=%d", r>>8)
+	}
+	// the drawing buffer itself was cleared at presentation
+	if got := evalStr(t, tab, `var p=new Uint8Array(4);gl.readPixels(3,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,p);Array.prototype.join.call(p)`); got != "0,0,0,0" {
+		t.Fatalf("drawing buffer after present: %s", got)
+	}
+}
+
+func TestWebGLTransferAndDrawPerf(t *testing.T) {
+	_, tab := newTestTab(t)
+	tab.SetDocument(`<!doctype html><canvas id=c width=512 height=512></canvas>`, "https://example.test/")
+	got := evalStr(t, tab, `(function(){
+var c=document.getElementById('c'),gl=c.getContext('webgl',{antialias:false,preserveDrawingBuffer:true});
+function sh(t,s){var o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
+var p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,'attribute vec2 a;attribute vec3 c;varying vec3 v;void main(){v=c;gl_Position=vec4(a,0.,1.);}'));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,'precision mediump float;varying vec3 v;void main(){gl_FragColor=vec4(v,1.);}'));gl.linkProgram(p);gl.useProgram(p);
+var n=100000,d=new Float32Array(n*3*5),r=1;function rnd(){r=(r*1664525+1013904223)>>>0;return r/4294967296;}
+for(var i=0;i<n;i++){var cx=rnd()*2-1,cy=rnd()*2-1;for(var k=0;k<3;k++){var o=(i*3+k)*5;d[o]=cx+(rnd()-0.5)*0.03;d[o+1]=cy+(rnd()-0.5)*0.03;d[o+2]=rnd();d[o+3]=rnd();d[o+4]=rnd();}}
+var t0=performance.now();var b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,d,gl.STATIC_DRAW);var t1=performance.now();
+var a=gl.getAttribLocation(p,'a'),cc=gl.getAttribLocation(p,'c');gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,2,gl.FLOAT,false,20,0);gl.enableVertexAttribArray(cc);gl.vertexAttribPointer(cc,3,gl.FLOAT,false,20,8);
+gl.clear(gl.COLOR_BUFFER_BIT);var t2=performance.now();gl.drawArrays(gl.TRIANGLES,0,n*3);var t3=performance.now();
+var px=new Uint8Array(512*512*4);gl.readPixels(0,0,512,512,gl.RGBA,gl.UNSIGNED_BYTE,px);var t4=performance.now();
+var tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,512,512,0,gl.RGBA,gl.UNSIGNED_BYTE,px);var t5=performance.now();
+var f=new Float32Array(16),loc=gl.getUniformLocation(p,'nope');var t6=performance.now();for(var i=0;i<2000;i++){gl.uniform4fv(loc,[1,2,3,4]);gl.getError();}var t7=performance.now();
+return [Math.round(t1-t0),Math.round(t3-t2),Math.round(t4-t3),Math.round(t5-t4),((t7-t6)/2000*1000).toFixed(1)].join(',');})()`)
+	t.Logf("bufferData 6MB ms, 100k triangle draw ms, readPixels 1MB ms, texImage2D 1MB ms, us per gl call pair: %s", got)
+}

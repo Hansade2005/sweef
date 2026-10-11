@@ -103,6 +103,7 @@ type compiler struct {
 	fragOutLoc int
 	line       int
 	precs      map[string]string
+	sites      int
 }
 
 func (c *compiler) fail(line int, tok, f string, a ...any) {

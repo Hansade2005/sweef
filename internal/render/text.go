@@ -121,10 +121,13 @@ type shaped struct {
 
 // shape computes glyph positions for runes in the given style.
 func (c *ctx) shape(fs *fontSpec, st *style.Computed, rs []rune) *shaped {
+	return c.shapeWith(fs, st, rs, 0, nil)
+}
+
+// shapeWith shapes rs continuing a text run whose previous glyph was prev in face prevFace.
+func (c *ctx) shapeWith(fs *fontSpec, st *style.Computed, rs []rune, prev rune, prevFace *font.Face) *shaped {
 	sh := &shaped{r: rs, faces: make([]*font.Face, len(rs)), x: make([]float64, len(rs)+1)}
 	kern := st.LetterSpacing == 0 && st.FontKerning != "none" && st.TextRendering != "optimizespeed"
-	var prev rune
-	var prevFace *font.Face
 	x := 0.0
 	for i, r := range rs {
 		f := fs.faceFor(r)

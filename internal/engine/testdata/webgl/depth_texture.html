@@ -24,5 +24,5 @@ var ct=tex(gl,64,64,null);var fb=gl.createFramebuffer();gl.bindFramebuffer(gl.FR
 if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('fb incomplete');
 gl.viewport(0,0,64,64);gl.enable(gl.DEPTH_TEST);gl.clear(gl.DEPTH_BUFFER_BIT|gl.COLOR_BUFFER_BIT);gl.useProgram(cp);vbo(gl,new Float32Array([-0.8,-0.8,-0.5, 0.8,-0.8,0.5, 0.0,0.8,0.0]));attr(gl,cp,'a_pos',3,0,0);gl.drawArrays(gl.TRIANGLES,0,3);
 gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,128,128);gl.disable(gl.DEPTH_TEST);gl.useProgram(vp);gl.bindTexture(gl.TEXTURE_2D,dt);gl.clearColor(0,0,0.3,1);gl.clear(gl.COLOR_BUFFER_BIT);quad(gl,vp,-1,-1,1,1,0,0,1,1);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

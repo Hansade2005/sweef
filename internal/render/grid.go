@@ -155,7 +155,8 @@ func (gm *gridModel) resolveLine(g style.GridLine, names map[string][]int, areaL
 				return v, true
 			}
 		}
-		return 0, false
+		// an unknown line name resolves to the first implicit line
+		return ntracks, true
 	}
 	if g.Num > 0 {
 		return g.Num - 1, true
@@ -617,9 +618,13 @@ func (c *ctx) layoutGridContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 		}
 	}
 	b.hasBase = false
-	if len(items) > 0 && items[0].b.hasBase {
+	if len(items) > 0 {
 		b.hasBase = true
-		b.baseline = items[0].b.y + items[0].b.baseline
+		if items[0].b.hasBase {
+			b.baseline = items[0].b.y + items[0].b.baseline
+		} else {
+			b.baseline = items[0].b.y + items[0].b.h
+		}
 		b.lastBase = b.baseline
 	}
 	return innerH
@@ -885,12 +890,21 @@ func (c *ctx) sizeAxis(tracks []*gtrack, items []*gitem, gap, avail float64, isC
 			if isCol {
 				minC = contrib(it, true)
 				maxC = contrib(it, false)
-				if k.overflowX() != "visible" && k.overflowX() != "clip" && k.st.MinWidth.K == style.LAuto {
+				if k.st.MinWidth.K != style.LAuto && k.st.MinWidth.K != style.LNone {
+					v, _ := c.specW(k, k.st.MinWidth, cw)
+					minC = k.mar[1] + k.mar[3] + k.hExtra() + v
+				} else if k.overflowX() != "visible" && k.overflowX() != "clip" {
 					minC = k.mar[1] + k.mar[3] + k.hExtra()
 				}
 			} else {
 				minC = contrib(it, true)
 				maxC = minC
+				if k.st.MinHeight.K != style.LAuto && k.st.MinHeight.K != style.LNone && k.st.MinHeight.K != style.LPct {
+					v, _ := c.specH(k, k.st.MinHeight, cbh)
+					if need := k.mar[0] + k.mar[2] + k.vExtra() + v; need < minC {
+						minC = need
+					}
+				}
 			}
 			if pass == 0 {
 				// base sizes

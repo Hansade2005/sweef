@@ -26,5 +26,5 @@ gl.blendColor(0.8,0.2,0.4,0.5);
 cfg.forEach(function(c,i){gl.blendFunc(c[0],c[1]);var x=-1+(i%4)*0.5;var y=i<4?0:-1;rect(x+0.03,y+0.05,x+0.47,y+0.95,[0.9,0.6,0.2,0.6]);});
 gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);gl.blendFunc(gl.ONE,gl.ONE);rect(-0.9,0.1,-0.1,0.9,[0.3,0.1,0.5,1]);
 gl.blendEquationSeparate(gl.FUNC_ADD,gl.FUNC_SUBTRACT);gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE);rect(0.1,0.1,0.9,0.9,[0.1,0.7,0.4,0.5]);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

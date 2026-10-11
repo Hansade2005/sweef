@@ -25,5 +25,5 @@ gl.enable(gl.CULL_FACE);var modes=[null,gl.BACK,gl.FRONT,gl.FRONT_AND_BACK];
 modes.forEach(function(m,i){if(m===null)gl.disable(gl.CULL_FACE);else{gl.enable(gl.CULL_FACE);gl.cullFace(m);}
  [[ccw,0.5],[vb2,-0.5]].forEach(function(b,j){gl.bindBuffer(gl.ARRAY_BUFFER,b[0]);attr(gl,p,'a_pos',2,0,0);gl.uniform2f(ol,-0.75+i*0.5,b[1]);gl.uniform3f(cl,j?0.9:0.3,j?0.3:0.9,0.4);gl.drawArrays(gl.TRIANGLES,0,3);});});
 gl.disable(gl.CULL_FACE);gl.frontFace(gl.CW);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);gl.bindBuffer(gl.ARRAY_BUFFER,ccw);attr(gl,p,'a_pos',2,0,0);gl.uniform2f(ol,0,0);gl.uniform3f(cl,1,1,0);gl.drawArrays(gl.TRIANGLES,0,3);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

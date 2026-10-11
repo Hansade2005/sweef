@@ -94,7 +94,7 @@ func (c *ctx) controlInfo(b *lbox) ctrlInfo {
 		_, _, _, avg, _ := fs.primary.RawMetrics()
 		bb := fs.primary.BBoxWidth()
 		k := fs.size / float64(fs.primary.UnitsPerEm())
-		return round(avg * k), round(bb * k)
+		return round(avg * k), math.Ceil(bb*k - 1e-6)
 	}
 	switch r.kind {
 	case "input":

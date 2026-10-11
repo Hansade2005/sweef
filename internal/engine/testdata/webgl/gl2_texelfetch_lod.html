@@ -22,5 +22,5 @@ in vec2 a_pos;in vec2 a_uv;out vec2 v_uv;void main(){v_uv=a_uv;gl_Position=vec4(
 precision highp float;in vec2 v_uv;uniform sampler2D t;out vec4 o;
 void main(){ivec2 sz=textureSize(t,0);if(v_uv.y>0.5){ivec2 c=ivec2(v_uv*vec2(sz));o=texelFetch(t,c,0);}else{float l=floor(v_uv.x*4.0);o=textureLod(t,v_uv*vec2(1.0,2.0),l);o.a=1.0;}}`);
 gl.useProgram(p);var t=tex(gl,16,16,checker(16,16,2,[255,200,0,255],[0,60,200,255]),{min:gl.NEAREST_MIPMAP_NEAREST,mag:gl.NEAREST});gl.generateMipmap(gl.TEXTURE_2D);quad(gl,p,-1,-1,1,1,0,0,1,1);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

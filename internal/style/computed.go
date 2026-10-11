@@ -314,10 +314,10 @@ type Computed struct {
 	CounterReset, CounterIncr, CounterSet []CounterOp
 
 	// internal helpers
-	Zoom  float64
-	Flags uint32
+	Zoom       float64
+	Flags      uint32
 	OrigInline bool
-	id    uint64
+	id         uint64
 }
 
 // Flags bits.

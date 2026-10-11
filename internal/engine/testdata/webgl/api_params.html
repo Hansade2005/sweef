@@ -16,5 +16,5 @@ var gp=gl2.getParameter(gl2.MAX_DRAW_BUFFERS);
 ['EXT_color_buffer_float','EXT_texture_filter_anisotropic'].forEach(function(n){var e=gl2.getExtension(n);out.push(n+'='+(e?'yes':'no'));});
 out.push('aniso='+(gl.getExtension('EXT_texture_filter_anisotropic')?gl.getParameter(0x84FF):'n/a'));
 window.__result=out.join('\n');
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

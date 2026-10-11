@@ -403,15 +403,35 @@ func (v *texView) rho(r *glsl.SampleReq, im *Image) float64 {
 	w, h, d := float64(im.W), float64(im.H), float64(im.D)
 	switch v.dim {
 	case 6:
-		// derivative of face coordinates using the major axis
-		ax, ay, az := math.Abs(float64(r.Coord[0])), math.Abs(float64(r.Coord[1])), math.Abs(float64(r.Coord[2]))
-		ma := math.Max(ax, math.Max(ay, az))
-		if ma == 0 {
-			return 0
+		face, _, _ := cubeFace(r.Coord[0], r.Coord[1], r.Coord[2])
+		x, y, z := float64(r.Coord[0]), float64(r.Coord[1]), float64(r.Coord[2])
+		comp := func(d [3]float32) (float64, float64) {
+			dx, dy, dz := float64(d[0]), float64(d[1]), float64(d[2])
+			var sc, tc, ma, dsc, dtc, dma float64
+			switch face {
+			case 0:
+				sc, tc, ma, dsc, dtc, dma = -z, -y, x, -dz, -dy, dx
+			case 1:
+				sc, tc, ma, dsc, dtc, dma = z, -y, -x, dz, -dy, -dx
+			case 2:
+				sc, tc, ma, dsc, dtc, dma = x, z, y, dx, dz, dy
+			case 3:
+				sc, tc, ma, dsc, dtc, dma = x, -z, -y, dx, -dz, -dy
+			case 4:
+				sc, tc, ma, dsc, dtc, dma = x, -y, z, dx, -dy, dz
+			default:
+				sc, tc, ma, dsc, dtc, dma = -x, -y, -z, -dx, -dy, -dz
+			}
+			if ma == 0 {
+				return 0, 0
+			}
+			ds := 0.5 * (dsc*ma - sc*dma) / (ma * ma)
+			dt := 0.5 * (dtc*ma - tc*dma) / (ma * ma)
+			return ds * w, dt * w
 		}
-		dx := math.Sqrt(float64(r.DX[0]*r.DX[0]+r.DX[1]*r.DX[1]+r.DX[2]*r.DX[2])) / ma * 0.5 * w
-		dy := math.Sqrt(float64(r.DY[0]*r.DY[0]+r.DY[1]*r.DY[1]+r.DY[2]*r.DY[2])) / ma * 0.5 * w
-		return math.Max(dx, dy)
+		ax, ay := comp(r.DX)
+		bx, by := comp(r.DY)
+		return math.Max(math.Hypot(ax, ay), math.Hypot(bx, by))
 	case 3:
 		dx := math.Sqrt(sq(float64(r.DX[0])*w) + sq(float64(r.DX[1])*h) + sq(float64(r.DX[2])*d))
 		dy := math.Sqrt(sq(float64(r.DY[0])*w) + sq(float64(r.DY[1])*h) + sq(float64(r.DY[2])*d))
@@ -525,6 +545,31 @@ func (v *texView) sampleLevel(r *glsl.SampleReq, level int, linear bool) [4]floa
 	fx, fy := s*float64(w)-0.5, t*float64(h)-0.5
 	x0, y0 := int(math.Floor(fx)), int(math.Floor(fy))
 	ax, ay := float32(fx-float64(x0)), float32(fy-float64(y0))
+	if v.dim == 6 {
+		cf := func(i, j int) [4]float32 {
+			if i >= 0 && i < w && j >= 0 && j < h {
+				return v.texel(im, i, j, 0)
+			}
+			// seamless: find the neighbouring face texel
+			sc := 2*(float64(i)+0.5)/float64(w) - 1
+			tc := 2*(float64(j)+0.5)/float64(h) - 1
+			dx, dy, dz := faceDir(face, sc, tc)
+			f2, s2, t2 := cubeFace(float32(dx), float32(dy), float32(dz))
+			if f2 >= len(v.levels) || level >= len(v.levels[f2]) {
+				return v.texel(im, min(max(i, 0), w-1), min(max(j, 0), h-1), 0)
+			}
+			im2 := v.levels[f2][level]
+			return v.texel(im2, min(max(int(s2*float64(im2.W)), 0), im2.W-1), min(max(int(t2*float64(im2.H)), 0), im2.H-1), 0)
+		}
+		c00, c10, c01, c11 := cf(x0, y0), cf(x0+1, y0), cf(x0, y0+1), cf(x0+1, y0+1)
+		var out [4]float32
+		for k := 0; k < 4; k++ {
+			top := c00[k]*(1-ax) + c10[k]*ax
+			bot := c01[k]*(1-ax) + c11[k]*ax
+			out[k] = top*(1-ay) + bot*ay
+		}
+		return out
+	}
 	xa, xb := wrapCoord(x0+offx, w, wrapS), wrapCoord(x0+1+offx, w, wrapS)
 	ya, yb := wrapCoord(y0+offy, h, wrapT), wrapCoord(y0+1+offy, h, wrapT)
 	c00, c10 := fetch(xa, ya, layer), fetch(xb, ya, layer)
@@ -536,4 +581,22 @@ func (v *texView) sampleLevel(r *glsl.SampleReq, level int, linear bool) [4]floa
 		out[k] = top*(1-ay) + bot*ay
 	}
 	return out
+}
+
+// faceDir returns a direction for face coordinates sc,tc in [-1,1] (may lie
+// outside the face for seamless filtering).
+func faceDir(face int, sc, tc float64) (x, y, z float64) {
+	switch face {
+	case 0:
+		return 1, -tc, -sc
+	case 1:
+		return -1, -tc, sc
+	case 2:
+		return sc, 1, tc
+	case 3:
+		return sc, -1, -tc
+	case 4:
+		return sc, -tc, 1
+	}
+	return -sc, -tc, -1
 }

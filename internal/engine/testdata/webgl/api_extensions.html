@@ -7,5 +7,5 @@ out.push('gl1='+gl.getSupportedExtensions().slice().sort().join(','));out.push('
 gl.getSupportedExtensions().forEach(function(n){var e=gl.getExtension(n);out.push(n+':'+(e?Object.keys(e).sort().join(','):'null')+' same='+(gl.getExtension(n)===e)+' lower='+(gl.getExtension(n.toLowerCase())===e));});
 out.push('bogus='+gl.getExtension('NOT_AN_EXT'));
 window.__result=out.join('\n');
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

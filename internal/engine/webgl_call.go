@@ -190,6 +190,15 @@ func (h *glHost) call(a []any) (any, error) {
 		if c.PeekError() != before {
 			return nil, nil
 		}
+		if fw, fh, ok := c.ReadExtent(); ok && (x < 0 || y < 0 || x+w > fw || y+hh > fh) && w > 0 && hh > 0 {
+			// pixels outside the framebuffer must stay untouched: describe the valid window
+			pb, rs, base := c.PackLayout(w, format, typ)
+			ix0, iy0, ix1, iy1 := max(0, -x), max(0, -y), min(w, fw-x), min(hh, fh-y)
+			if ix1 <= ix0 || iy1 <= iy0 {
+				return nil, nil
+			}
+			return []any{b64(buf), pb, rs, base, ix0, iy0, ix1, iy1}, nil
+		}
 		return b64(buf), nil
 	// ---- buffers
 	case "createBuffer":

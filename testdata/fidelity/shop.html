@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>shop</title>
+<style>
+* { box-sizing: border-box; } body { margin: 0; font: 14px/1.4 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #222; background: #fafafa; }
+.top { background: #131921; color: #fff; display: flex; align-items: center; padding: 8px 16px; gap: 16px; } .top .logo { font-size: 22px; font-weight: bold; } .top .search { flex: 1; display: flex; } .top .search input { flex: 1; height: 38px; border: 0; padding: 0 10px; border-radius: 4px 0 0 4px; } .top .search button { width: 46px; border: 0; background: #febd69; border-radius: 0 4px 4px 0; }
+.sub { background: #232f3e; color: #fff; padding: 6px 16px; display: flex; gap: 20px; font-size: 13px; }
+.layout { display: flex; max-width: 1280px; margin: 0 auto; padding: 16px; gap: 20px; } .filters { width: 220px; flex: none; } .filters h4 { margin: 0 0 6px; } .filters ul { list-style: none; padding: 0; margin: 0 0 16px; } .filters li { padding: 2px 0; }
+.grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; align-content: start; }
+.item { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; } .item .pic { height: 140px; background: linear-gradient(135deg, #e0eafc, #cfdef3); border-radius: 6px; margin-bottom: 10px; } .item h3 { font-size: 15px; margin: 0 0 4px; font-weight: 500; } .stars { color: #f90; font-size: 13px; } .price { font-size: 18px; font-weight: bold; margin: 6px 0; } .price s { font-size: 13px; font-weight: normal; color: #888; margin-left: 6px; } .item .add { margin-top: auto; padding: 8px; background: #ffd814; border: 1px solid #fcd200; border-radius: 20px; text-align: center; }
+.badge { align-self: flex-start; background: #cc0c39; color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 3px; margin-bottom: 6px; }
+.pager { text-align: center; margin: 20px 0; } .pager span { display: inline-block; padding: 6px 12px; border: 1px solid #ccc; margin: 0 2px; border-radius: 4px; background: #fff; }
+footer { background: #232f3e; color: #ddd; padding: 28px 16px; display: flex; justify-content: space-around; } footer ul { list-style: none; margin: 0; padding: 0; } footer li { margin: 6px 0; }
+</style></head><body>
+<div class="top"><span class="logo">shopfront</span><div class="search"><input placeholder="Search products"><button>Go</button></div><span>Account</span><span>Cart (2)</span></div>
+<div class="sub"><span>All</span><span>Deals</span><span>Electronics</span><span>Home</span><span>Books</span><span>Fashion</span></div>
+<div class="layout"><aside class="filters"><h4>Category</h4><ul><li>Electronics</li><li>Home &amp; Kitchen</li><li>Books</li></ul><h4>Price</h4><ul><li>Under $25</li><li>$25 to $50</li><li>$50 to $100</li></ul><h4>Rating</h4><ul><li>4 stars &amp; up</li><li>3 stars &amp; up</li></ul></aside>
+<div class="grid">
+<div class="item"><div class="pic"></div><span class="badge">-30%</span><h3>Wireless Bluetooth Headphones with Noise Cancelling</h3><div class="stars">★★★★☆ 1,284</div><div class="price">$59.99<s>$84.99</s></div><div class="add">Add to cart</div></div>
+<div class="item"><div class="pic"></div><h3>Stainless Steel Water Bottle</h3><div class="stars">★★★★★ 540</div><div class="price">$18.50</div><div class="add">Add to cart</div></div>
+<div class="item"><div class="pic"></div><h3>Mechanical Keyboard</h3><div class="stars">★★★★☆ 2,031</div><div class="price">$89.00</div><div class="add">Add to cart</div></div>
+<div class="item"><div class="pic"></div><h3>LED Desk Lamp with Wireless Charging Base and USB Port</h3><div class="stars">★★★☆☆ 96</div><div class="price">$34.99</div><div class="add">Add to cart</div></div>
+<div class="item"><div class="pic"></div><h3>Cotton Throw Blanket</h3><div class="stars">★★★★★ 780</div><div class="price">$27.00</div><div class="add">Add to cart</div></div>
+<div class="item"><div class="pic"></div><h3>Ceramic Coffee Mug Set</h3><div class="stars">★★★★☆ 312</div><div class="price">$21.99<s>$29.99</s></div><div class="add">Add to cart</div></div></div></div>
+<div class="pager"><span>‹</span><span>1</span><span>2</span><span>3</span><span>…</span><span>9</span><span>›</span></div>
+<footer><ul><li><b>Get to Know Us</b></li><li>Careers</li><li>About</li></ul><ul><li><b>Make Money</b></li><li>Sell</li><li>Affiliate</li></ul><ul><li><b>Help</b></li><li>Returns</li><li>Shipping</li></ul></footer>
+</body></html>

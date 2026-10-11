@@ -27,5 +27,5 @@ gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texPar
 gl.activeTexture(gl.TEXTURE1);var t3=gl.createTexture();gl.bindTexture(gl.TEXTURE_3D,t3);var vol=new Uint8Array(4*4*4*4);for(var z=0;z<4;z++)for(var y=0;y<4;y++)for(var x=0;x<4;x++){var i=((z*4+y)*4+x)*4;vol[i]=x*85;vol[i+1]=y*85;vol[i+2]=z*85;vol[i+3]=255;}
 gl.texImage3D(gl.TEXTURE_3D,0,gl.RGBA8,4,4,4,0,gl.RGBA,gl.UNSIGNED_BYTE,vol);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);
 gl.uniform1i(gl.getUniformLocation(p,'ta'),0);gl.uniform1i(gl.getUniformLocation(p,'t3'),1);gl.uniform1f(gl.getUniformLocation(p,'z'),0.6);quad(gl,p,-1,-1,1,1,0,0,1,1);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

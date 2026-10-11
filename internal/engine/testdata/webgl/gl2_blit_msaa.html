@@ -26,5 +26,5 @@ gl.viewport(0,0,64,64);gl.clearColor(0.1,0.2,0.4,1);gl.clear(gl.COLOR_BUFFER_BIT
 var t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,64,64);var fb2=gl.createFramebuffer();gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,fb2);gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);
 gl.bindFramebuffer(gl.READ_FRAMEBUFFER,fb);gl.blitFramebuffer(0,0,64,64,0,0,64,64,gl.COLOR_BUFFER_BIT,gl.NEAREST);
 gl.bindFramebuffer(gl.READ_FRAMEBUFFER,fb2);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,null);gl.viewport(0,0,128,128);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.blitFramebuffer(0,0,64,64,0,0,128,128,gl.COLOR_BUFFER_BIT,gl.LINEAR);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

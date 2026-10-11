@@ -22,5 +22,5 @@ gl.useProgram(p);var data=checker(4,4,1,[255,255,255,255],[30,60,200,255]);data[
 var modes=[[gl.NEAREST,gl.NEAREST],[gl.LINEAR,gl.LINEAR],[gl.NEAREST,gl.LINEAR],[gl.LINEAR,gl.NEAREST]];
 gl.clearColor(0.2,0.2,0.2,1);gl.clear(gl.COLOR_BUFFER_BIT);
 modes.forEach(function(m,i){tex(gl,4,4,data,{min:m[0],mag:m[1]});var x=(i%2)*1.0-1,y=(i>>1)*1.0-1;quad(gl,p,x+0.05,y+0.05,x+0.95,y+0.95,0,0,1,1);});
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

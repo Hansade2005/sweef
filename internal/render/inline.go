@@ -84,6 +84,8 @@ type flatState struct {
 	atoms     []atom
 	prevSpace bool
 	prevRune  rune
+	lastRune  rune
+	lastFace  *font.Face
 	open      []*lbox
 	any       bool
 }
@@ -110,14 +112,22 @@ func (f *flatState) walk(parent, owner *lbox) {
 			f.text(k, owner)
 		case k.kind == kMarker:
 		case k.kind == kBreak:
+			f.lastRune, f.lastFace = 0, nil
 			f.atoms = append(f.atoms, atom{kind: aBreak, box: k, forced: true})
 			f.prevSpace = true
 			f.prevRune = '\n'
 		case k.kind == kInline:
 			f.atoms = append(f.atoms, atom{kind: aOpen, box: k})
+			if hasInlineEdge(k, true) {
+				f.lastRune, f.lastFace = 0, nil
+			}
 			f.walk(k, k)
 			f.atoms = append(f.atoms, atom{kind: aClose, box: k})
+			if hasInlineEdge(k, false) {
+				f.lastRune, f.lastFace = 0, nil
+			}
 		case k.kind == kAtomic:
+			f.lastRune, f.lastFace = 0, nil
 			f.atoms = append(f.atoms, atom{kind: aAtomic, box: k})
 			f.prevSpace = false
 			f.prevRune = 0xfffc
@@ -176,7 +186,10 @@ func (f *flatState) text(t *lbox, owner *lbox) {
 		return
 	}
 	fs := f.c.spec(st)
-	sh := f.c.shape(fs, st, out)
+	sh := f.c.shapeWith(fs, st, out, f.lastRune, f.lastFace)
+	if n := len(out); n > 0 {
+		f.lastRune, f.lastFace = out[n-1], sh.faces[n-1]
+	}
 	it := &textItem{owner: owner, src: t, runes: out, sh: sh, fs: fs, st: st}
 	f.addTextAtoms(it)
 }
@@ -822,6 +835,7 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 	var pl []placed
 	nsp := 0
 	hasBreak := false
+	brOwners := map[*lbox]bool{}
 	for idx, a := range items {
 		owner := b
 		if len(cur) > 0 {
@@ -904,6 +918,7 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 				ib = getBox(owner)
 			}
 			ib.used = true
+			brOwners[owner] = true
 			if a.box != nil && a.box.kind == kBreak {
 				fr := &frag{kind: aBreak, box: a.box, x: x}
 				frs = append(frs, fr)
@@ -1019,6 +1034,44 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 		}
 	}
 	_ = shift
+	// fonts actually used: with line-height normal, fallback fonts widen the inline box
+	for _, p := range pl {
+		if p.fr.kind != aText || p.ib == nil {
+			continue
+		}
+		ib := p.ib
+		if ib.box.st.LineHeight.K != style.LAuto || ib.fs.primary == nil {
+			continue
+		}
+		var seen [4]*font.Face
+		ns := 0
+		for k := p.fr.a; k < p.fr.e; k++ {
+			f := p.fr.it.sh.faces[k]
+			if f == nil || f == ib.fs.primary {
+				continue
+			}
+			dup := false
+			for _, s := range seen[:ns] {
+				if s == f {
+					dup = true
+				}
+			}
+			if dup {
+				continue
+			}
+			if ns < len(seen) {
+				seen[ns] = f
+				ns++
+			}
+			m := f.Metrics(ib.fs.size)
+			asc, desc, gap := round(m.Ascent), round(m.Descent), round(m.LineGap)
+			lsp := asc + desc + gap
+			a2 := asc + math.Floor((lsp-(asc+desc))/2)
+			d2 := lsp - a2
+			ib.ascL = math.Max(ib.ascL, a2)
+			ib.descL = math.Max(ib.descL, d2)
+		}
+	}
 	// vertical metrics
 	rootIB.shift = 0
 	// compute shift for each box (parent chain by DOM order: use box.parent chain)
@@ -1046,19 +1099,22 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 		calcShift(bx)
 	}
 	T, B := rootIB.ascL, -rootIB.descL
+	directText := map[*lbox]bool{}
 	if c.quirks {
-		hasText, hasAtom, hasBr := false, false, false
 		for _, p := range pl {
-			switch {
-			case p.fr.kind == aText:
-				hasText = true
-			case p.atom != nil:
-				hasAtom = true
-			case p.fr.kind == aBreak:
-				hasBr = true
+			if p.fr.kind == aText {
+				if p.fr.it != nil && allSpaces(p.fr.it.runes[p.fr.a:p.fr.e]) {
+					continue
+				}
+				directText[p.fr.box] = true
 			}
 		}
-		if !hasText && hasAtom && !hasBr {
+		if len(directText) == 0 {
+			for o := range brOwners {
+				directText[o] = true
+			}
+		}
+		if !directText[b] {
 			T, B = 0, 0
 		}
 	}
@@ -1110,6 +1166,9 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 	for _, bx := range order {
 		ib := boxes[bx]
 		if !ib.used && !c.boxHasEdges(bx) {
+			continue
+		}
+		if c.quirks && !directText[bx] {
 			continue
 		}
 		if ib.valign == "top" || ib.valign == "bottom" {
@@ -1264,4 +1323,32 @@ func atomBO(ab *lbox) float64 {
 		return ab.baseline + ab.mar[0]
 	}
 	return mh
+}
+
+func allSpaces(r []rune) bool {
+	for _, x := range r {
+		if x != ' ' && x != '\t' && x != '\n' {
+			return false
+		}
+	}
+	return true
+}
+
+// hasInlineEdge reports whether an inline box has horizontal margin, border or
+// padding on its start (or end) side; such edges end a shaping run.
+func hasInlineEdge(b *lbox, start bool) bool {
+	st := b.st
+	i := 1
+	if start {
+		i = 3
+	}
+	if st.BorderWidth[i] > 0 {
+		return true
+	}
+	for _, l := range []style.Length{st.Margin[i], st.Padding[i]} {
+		if l.K == style.LPct || l.K == style.LCalc || l.V != 0 {
+			return true
+		}
+	}
+	return false
 }

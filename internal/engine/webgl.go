@@ -8,10 +8,15 @@ package engine
 // drawImage see the pixels.
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/base64"
 	"fmt"
 	"image"
+	"image/draw"
+	"image/jpeg"
+	"image/png"
+	"strings"
 	"sync"
 
 	"modernc.org/quickjs"
@@ -25,23 +30,26 @@ var webglPreludeJS string
 func init() {
 	registerPrelude("webgl", webglPreludeJS)
 	registerHostExtension("webgl", func(j *jsVM) map[string]hostFn {
-		h := &glHost{j: j, ctxs: map[int]*glCtx{}, next: 1}
+		h := &glHost{j: j, ctxs: map[int]*glCtx{}, next: 1, imgCache: map[string][]any{}}
 		return map[string]hostFn{
 			"glConsts":  h.consts,
 			"glCreate":  h.create,
 			"glResize":  h.resize,
 			"glDestroy": h.destroy,
 			"glPresent": h.present,
+			"glImage":   h.imageData,
+			"glEncode":  h.encode,
 			"glc":       h.call,
 		}
 	})
 }
 
 type glHost struct {
-	j    *jsVM
-	mu   sync.Mutex
-	ctxs map[int]*glCtx
-	next int
+	j        *jsVM
+	mu       sync.Mutex
+	ctxs     map[int]*glCtx
+	next     int
+	imgCache map[string][]any
 }
 
 type glCtx struct {
@@ -279,4 +287,82 @@ func (h *glHost) present(a []any) (any, error) {
 		g.c.Present()
 	}
 	return nil, nil
+}
+
+// imageData decodes an image URL (data: or fetched) to straight-alpha RGBA
+// for texImage2D(HTMLImageElement). Returns [w, h, base64] or nil.
+func (h *glHost) imageData(a []any) (any, error) {
+	t := h.j.tab
+	u := glS(a, 0)
+	if t == nil || u == "" {
+		return nil, nil
+	}
+	abs, err := resolveURL(t.URL(), u)
+	if err != nil {
+		return nil, nil
+	}
+	h.mu.Lock()
+	if c, ok := h.imgCache[abs]; ok {
+		h.mu.Unlock()
+		return c, nil
+	}
+	h.mu.Unlock()
+	var data []byte
+	if strings.HasPrefix(abs, "data:") {
+		_, d, err := decodeDataURL(abs)
+		if err != nil {
+			return nil, nil
+		}
+		data = d
+	} else {
+		body, status, err := t.fetchResource(abs)
+		if err != nil || status >= 400 {
+			return nil, nil
+		}
+		data = []byte(body)
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, nil
+	}
+	b := img.Bounds()
+	n := image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(n, n.Bounds(), img, b.Min, draw.Src)
+	res := []any{b.Dx(), b.Dy(), base64.StdEncoding.EncodeToString(n.Pix)}
+	h.mu.Lock()
+	if len(h.imgCache) > 16 {
+		h.imgCache = map[string][]any{}
+	}
+	h.imgCache[abs] = res
+	h.mu.Unlock()
+	return res, nil
+}
+
+// encode renders the context's current picture as PNG or JPEG (base64).
+func (h *glHost) encode(a []any) (any, error) {
+	g := h.get(a)
+	if g == nil {
+		return nil, nil
+	}
+	img := g.c.Bitmap()
+	if img == nil || img.Bounds().Empty() {
+		return nil, nil
+	}
+	var buf bytes.Buffer
+	if glS(a, 1) == "image/jpeg" {
+		// composite over black like canvas.toDataURL does
+		bg := image.NewRGBA(img.Bounds())
+		draw.Draw(bg, bg.Bounds(), image.Black, image.Point{}, draw.Src)
+		draw.Draw(bg, bg.Bounds(), img, img.Bounds().Min, draw.Over)
+		q := int(glNum(a, 2) * 100)
+		if q <= 0 {
+			q = 92
+		}
+		if err := jpeg.Encode(&buf, bg, &jpeg.Options{Quality: q}); err != nil {
+			return nil, nil
+		}
+	} else if err := png.Encode(&buf, img); err != nil {
+		return nil, nil
+	}
+	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }

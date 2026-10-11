@@ -28,5 +28,5 @@ var fb=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.framebuff
 gl.viewport(0,0,32,32);gl.useProgram(p);vbo(gl,new Float32Array([-1,-1,1,-1,-1,1,1,1]));attr(gl,p,'a_pos',2,0,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 var px=new Float32Array(4);gl.readPixels(31,31,1,1,gl.RGBA,gl.FLOAT,px);window.__result=Array.from(px).map(function(v){return v.toFixed(2)}).join(',');
 gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,128,128);gl.useProgram(p2);quad(gl,p2,-1,-1,1,1,0,0,1,1);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

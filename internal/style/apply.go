@@ -334,15 +334,15 @@ func (s *cstate) apply(name, v, l string) bool {
 	case "inset-block":
 		return s.logical2(v, 0, 2, &c.Inset)
 	case "inset-inline":
-		return s.logical2(v, 3, 1, &c.Inset)
+		return s.logical2(v, s.inlineStart(), s.inlineEnd(), &c.Inset)
 	case "inset-block-start":
 		return s.setLen(&c.Inset[0], v, true)
 	case "inset-block-end":
 		return s.setLen(&c.Inset[2], v, true)
 	case "inset-inline-start":
-		return s.setLen(&c.Inset[3], v, true)
+		return s.setLen(&c.Inset[s.inlineStart()], v, true)
 	case "inset-inline-end":
-		return s.setLen(&c.Inset[1], v, true)
+		return s.setLen(&c.Inset[s.inlineEnd()], v, true)
 	case "contain":
 		c.Contain = l
 	case "isolation":
@@ -416,15 +416,15 @@ func (s *cstate) apply(name, v, l string) bool {
 	case "margin-block":
 		return s.logical2(v, 0, 2, &c.Margin)
 	case "margin-inline":
-		return s.logical2(v, 3, 1, &c.Margin)
+		return s.logical2(v, s.inlineStart(), s.inlineEnd(), &c.Margin)
 	case "margin-block-start":
 		return s.setLen(&c.Margin[0], v, true)
 	case "margin-block-end":
 		return s.setLen(&c.Margin[2], v, true)
 	case "margin-inline-start":
-		return s.setLen(&c.Margin[3], v, true)
+		return s.setLen(&c.Margin[s.inlineStart()], v, true)
 	case "margin-inline-end":
-		return s.setLen(&c.Margin[1], v, true)
+		return s.setLen(&c.Margin[s.inlineEnd()], v, true)
 	case "padding":
 		b, ok := s.box4Len(v, false, true)
 		if !ok {
@@ -440,15 +440,15 @@ func (s *cstate) apply(name, v, l string) bool {
 	case "padding-block":
 		return s.logical2(v, 0, 2, &c.Padding)
 	case "padding-inline":
-		return s.logical2(v, 3, 1, &c.Padding)
+		return s.logical2(v, s.inlineStart(), s.inlineEnd(), &c.Padding)
 	case "padding-block-start":
 		return s.setLen(&c.Padding[0], v, false)
 	case "padding-block-end":
 		return s.setLen(&c.Padding[2], v, false)
 	case "padding-inline-start":
-		return s.setLen(&c.Padding[3], v, false)
+		return s.setLen(&c.Padding[s.inlineStart()], v, false)
 	case "padding-inline-end":
-		return s.setLen(&c.Padding[1], v, false)
+		return s.setLen(&c.Padding[s.inlineEnd()], v, false)
 	case "aspect-ratio":
 		c.AspectAuto = false
 		c.AspectRatio = 0
@@ -505,9 +505,13 @@ func (s *cstate) apply(name, v, l string) bool {
 	case "border-block-end":
 		return s.borderShorthand(v, l, [4]bool{false, false, true, false})
 	case "border-inline-start":
-		return s.borderShorthand(v, l, [4]bool{false, false, false, true})
+		var m [4]bool
+		m[s.inlineStart()] = true
+		return s.borderShorthand(v, l, m)
 	case "border-inline-end":
-		return s.borderShorthand(v, l, [4]bool{false, true, false, false})
+		var m [4]bool
+		m[s.inlineEnd()] = true
+		return s.borderShorthand(v, l, m)
 	case "border-width":
 		f := fields(l)
 		if len(f) == 0 || len(f) > 4 {
@@ -1985,4 +1989,18 @@ func (s *cstate) flexShorthand(v, l string) bool {
 	}
 	c.FlexGrow, c.FlexShrink, c.FlexBasis = grow, shrink, basis
 	return true
+}
+
+func (s *cstate) inlineStart() int {
+	if s.c.Direction == "rtl" {
+		return 1
+	}
+	return 3
+}
+
+func (s *cstate) inlineEnd() int {
+	if s.c.Direction == "rtl" {
+		return 3
+	}
+	return 1
 }

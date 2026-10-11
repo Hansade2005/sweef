@@ -96,7 +96,7 @@
   }
 
   var EXT1 = ['ANGLE_instanced_arrays', 'EXT_blend_minmax', 'EXT_color_buffer_half_float', 'EXT_float_blend', 'EXT_frag_depth', 'EXT_shader_texture_lod',
-    'EXT_texture_filter_anisotropic', 'OES_element_index_uint', 'OES_standard_derivatives', 'OES_texture_float', 'OES_texture_float_linear',
+    'EXT_texture_filter_anisotropic', 'OES_element_index_uint', 'OES_fbo_render_mipmap', 'OES_standard_derivatives', 'OES_texture_float', 'OES_texture_float_linear',
     'OES_texture_half_float', 'OES_texture_half_float_linear', 'OES_vertex_array_object', 'WEBGL_color_buffer_float', 'WEBGL_debug_renderer_info',
     'WEBGL_debug_shaders', 'WEBGL_depth_texture', 'WEBGL_draw_buffers', 'WEBGL_lose_context'];
   var EXT2 = ['EXT_color_buffer_float', 'EXT_color_buffer_half_float', 'EXT_float_blend', 'EXT_texture_filter_anisotropic', 'OES_texture_float_linear',
@@ -518,6 +518,10 @@
   }
   // returns {w,h,b64} of straight-alpha RGBA8 pixels
   function srcPixels(ctx, src) {
+    if (typeof global.HTMLImageElement === 'function' && src instanceof global.HTMLImageElement) {
+      var u = src.currentSrc || src.src;
+      if (u) { var r = sw.glImage(u); if (r) return { w: r[0], h: r[1], b64: r[2] }; }
+    }
     var d = srcDims(src), w = d[0], h = d[1];
     if (!w || !h) return null;
     if (src instanceof global.ImageData) return { w: w, h: h, b64: toB64(bytesOf(src.data)) };
@@ -541,8 +545,8 @@
     var n = arguments.length;
     target = u32(target); level = i32(level); ifmt = i32(ifmt);
     if (n === 6) {
-      var src = a6;
-      if (!isTexSource(src)) { if (src === null || src === undefined) throw typeErr(this, 'texImage2D', 6, 'TexImageSource'); throw typeErr(this, 'texImage2D', 6, 'TexImageSource'); }
+      var src = a5;
+      if (!isTexSource(src)) throw typeErr(this, 'texImage2D', 6, 'TexImageSource');
       var px = srcPixels(this, src);
       if (!px) { setErr(this, GL_INVALID_VALUE); return; }
       call(this._h, 'texImage2D', target, level, ifmt, px.w, px.h, 0, u32(a3), u32(a4), px.b64, 0, true);
@@ -630,11 +634,16 @@
     if (types && !viewOk(type, dst)) { setErr(this, GL_INVALID_OPERATION); return; }
     var r = call(this._h, 'readPixels', i32(x), i32(y), i32(w), i32(h), format, type, 0);
     if (!r) return;
-    var bytes = fromB64(r);
+    var bytes = fromB64(typeof r === 'string' ? r : r[0]);
     var el = dst.BYTES_PER_ELEMENT || 1;
     var off = ((dstOff | 0) * el);
     if (off + bytes.length > dst.byteLength) { setErr(this, GL_INVALID_OPERATION); return; }
-    new Uint8Array(dst.buffer, dst.byteOffset + off, bytes.length).set(bytes);
+    var d8 = new Uint8Array(dst.buffer, dst.byteOffset + off, bytes.length);
+    if (typeof r === 'string') d8.set(bytes);
+    else { // partially outside the framebuffer: copy only the valid window
+      var pb = r[1], rs = r[2], base = r[3], ix0 = r[4], iy0 = r[5], ix1 = r[6], iy1 = r[7];
+      for (var yy = iy0; yy < iy1; yy++) { var o = base + yy * rs + ix0 * pb; d8.set(bytes.subarray(o, o + (ix1 - ix0) * pb), o); }
+    }
   }, undefined);
 
   /* ---- draw ---- */
@@ -804,6 +813,7 @@
       case 'EXT_shader_texture_lod': return Ext('EXTShaderTextureLOD', function (o) { });
       case 'EXT_texture_filter_anisotropic': return Ext('EXTTextureFilterAnisotropic', function (o) { consts(o, ['TEXTURE_MAX_ANISOTROPY_EXT', 'MAX_TEXTURE_MAX_ANISOTROPY_EXT']); });
       case 'OES_element_index_uint': return Ext('OESElementIndexUint', function (o) { });
+      case 'OES_fbo_render_mipmap': return Ext('OESFBORenderMipmap', function (o) { });
       case 'OES_standard_derivatives': return Ext('OESStandardDerivatives', function (o) { consts(o, ['FRAGMENT_SHADER_DERIVATIVE_HINT_OES']); });
       case 'OES_texture_float': return Ext('OESTextureFloat', function (o) { });
       case 'OES_texture_float_linear': return Ext('OESTextureFloatLinear', function (o) { });
@@ -884,6 +894,22 @@
       ctx._w = c.width; ctx._hh = c.height;
       fire(ctx, 'webglcontextrestored', false);
     }, 0);
+  }
+
+  /* ---- OffscreenCanvas with a GL context ---- */
+  if (typeof global.OffscreenCanvas === 'function' && sw.glEncode) {
+    var origBlob = global.OffscreenCanvas.prototype.convertToBlob;
+    def(global.OffscreenCanvas.prototype, 'convertToBlob', function (opts) {
+      var ctx = this._ctx;
+      if (ctx && ctx._h !== undefined && ctx._v) {
+        var type = opts && opts.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+        var q = opts && typeof opts.quality === 'number' ? opts.quality : 0.92;
+        var b = sw.glEncode(ctx._h, type, q);
+        if (!b) return Promise.reject(new global.DOMException("Failed to execute 'convertToBlob' on 'OffscreenCanvas': Blob creation failed.", 'EncodingError'));
+        return Promise.resolve(new global.Blob([fromB64(b)], { type: type }));
+      }
+      return origBlob.apply(this, arguments);
+    });
   }
 
   /* ---- factories ---- */

@@ -159,7 +159,11 @@ func (c *ctx) setupReplaced(b *lbox) bool {
 // replacedIntrinsic gives the intrinsic content widths of replaced boxes.
 func (c *ctx) replacedIntrinsic(b *lbox) (float64, float64) {
 	if b.inner == iControl {
-		w, _, _ := c.controlSize(b)
+		ci := c.controlInfo(b)
+		w := ci.cw
+		if wv, ok := c.specW(b, b.st.Width, 0); ok && b.st.Width.K == style.LPx {
+			w = wv
+		}
 		return w, w
 	}
 	st := b.st
@@ -179,7 +183,7 @@ func (c *ctx) replacedUsedSize(b *lbox, cbw, cbh float64, intrinsicOnly bool) (f
 	hasW, hasH := r.hasIW, r.hasIH
 	iw, ih = r.iw, r.ih
 	ratio := r.ratio
-	if st.AspectRatio > 0 && (!hasW || !hasH) {
+	if st.AspectRatio > 0 && (!st.AspectAuto || ratio == 0) {
 		ratio = st.AspectRatio
 	}
 	c.edges(b, math.Max(cbw, 0))

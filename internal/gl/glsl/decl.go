@@ -319,6 +319,8 @@ func (c *compiler) funcDef(fd *FuncDef) {
 		r := body(fr)
 		if r == ctlDiscard {
 			fr.Discarded = true
+		} else if r == ctlAbort {
+			fr.aborted = true
 		}
 		return ctlNone
 	}

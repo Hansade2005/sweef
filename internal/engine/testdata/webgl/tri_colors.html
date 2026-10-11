@@ -21,5 +21,5 @@ try{var gl=ctx(); var p=prog(gl,'attribute vec2 a_pos;attribute vec3 a_col;varyi
  'precision mediump float;varying vec3 v_col;void main(){gl_FragColor=vec4(v_col,1.0);}');
 gl.useProgram(p);vbo(gl,new Float32Array([-0.8,-0.8,1,0,0, 0.8,-0.7,0,1,0, 0.0,0.8,0,0,1]));attr(gl,p,'a_pos',2,20,0);attr(gl,p,'a_col',3,20,8);
 gl.clearColor(0.1,0.1,0.15,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,3);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

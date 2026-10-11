@@ -27,5 +27,5 @@ chk('uniform bad loc',function(){gl.uniform1f({},1)});
 chk('uniform sampler range',function(){gl.uniform1i(gl.getUniformLocation(p,'tex'),100)});
 chk('bindAttribLocation relink',function(){gl.bindAttribLocation(p,5,'uv');gl.linkProgram(p);return gl.getAttribLocation(p,'uv')});
 window.__result=out.join('\n');
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

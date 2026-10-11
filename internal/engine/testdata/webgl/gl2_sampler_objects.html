@@ -23,5 +23,5 @@ precision mediump float;in vec2 v_uv;uniform sampler2D t;out vec4 o;void main(){
 gl.useProgram(p);var t=tex(gl,4,4,checker(4,4,1,[255,255,255,255],[200,40,40,255]));gl.clearColor(0.2,0.2,0.2,1);gl.clear(gl.COLOR_BUFFER_BIT);
 [[gl.NEAREST,gl.REPEAT],[gl.LINEAR,gl.MIRRORED_REPEAT],[gl.NEAREST,gl.CLAMP_TO_EDGE],[gl.LINEAR,gl.REPEAT]].forEach(function(c,i){var s=gl.createSampler();gl.samplerParameteri(s,gl.TEXTURE_MIN_FILTER,c[0]);gl.samplerParameteri(s,gl.TEXTURE_MAG_FILTER,c[0]);gl.samplerParameteri(s,gl.TEXTURE_WRAP_S,c[1]);gl.samplerParameteri(s,gl.TEXTURE_WRAP_T,c[1]);gl.bindSampler(0,s);
  var x=-1+(i%2),y=i<2?0:-1;quad(gl,p,x+0.05,y+0.05,x+0.95,y+0.95,-0.5,-0.5,1.5,1.5);});
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

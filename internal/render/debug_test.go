@@ -40,6 +40,9 @@ func TestDump(t *testing.T) {
 	if v := os.Getenv("SWEEF_W"); v != "" {
 		fmt.Sscan(v, &w)
 	}
+	if v := os.Getenv("SWEEF_H"); v != "" {
+		fmt.Sscan(v, &h)
+	}
 	res := Layout(doc, Options{Width: w, Height: h, DPR: 1, Sheets: sheets})
 	fmt.Printf("doc %vx%v viewport %v\n", res.Width, res.Height, res.Viewport)
 	var refs []struct {

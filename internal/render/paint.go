@@ -175,26 +175,7 @@ func (p *painter) paintSC(b *lbox, isRoot bool) {
 		r, rad := p.overflowClip(cb)
 		p.pushClip(r, rad, nil)
 	}
-	layer := st.OpacitySet && st.Opacity < 1 || len(st.Filter) > 0 || st.MixBlend != "normal" && st.MixBlend != ""
-	tx := b.hasTransform() && !isRoot || b.hasTransform() && isRoot
-	if tx {
-		m := b.fullMatrix()
-		p.emit(PushTransform{M: m})
-		saveM, saveHas := p.m, p.hasM
-		p.m = mulM(p.m, m)
-		p.hasM = true
-		defer func() { p.m, p.hasM = saveM, saveHas }()
-	}
-	if layer {
-		pl := PushLayer{Opacity: 1, Blend: st.MixBlend, Bounds: Rect{b.ovLeft, b.ovTop, b.ovRight - b.ovLeft, b.ovBottom - b.ovTop}}
-		if st.OpacitySet {
-			pl.Opacity = st.Opacity
-		}
-		for _, f := range st.Filter {
-			pl.Filter = append(pl.Filter, Filter{Name: f.Name, Args: f.Args, Color: f.Color})
-		}
-		p.emit(pl)
-	}
+	endFx := p.beginEffects(b)
 	var deferred []*lbox
 	if !isRoot || true {
 		p.paintDecor(b, isRoot)
@@ -222,16 +203,45 @@ func (p *painter) paintSC(b *lbox, isRoot bool) {
 	if clipped {
 		p.popClip(b)
 	}
-	if layer {
-		p.emit(PopLayer{})
-	}
-	if tx {
-		p.emit(PopTransform{})
-	}
+	endFx()
 	for range chain {
 		p.popClip(nil)
 	}
 	_ = st
+}
+
+// beginEffects opens the transform and layer (opacity, filter, blend) of b and
+// returns the function that closes them.
+func (p *painter) beginEffects(b *lbox) func() {
+	st := b.st
+	layer := st.OpacitySet && st.Opacity < 1 || len(st.Filter) > 0 || st.MixBlend != "normal" && st.MixBlend != ""
+	tx := b.hasTransform()
+	saveM, saveHas := p.m, p.hasM
+	if tx {
+		m := b.fullMatrix()
+		p.emit(PushTransform{M: m})
+		p.m = mulM(p.m, m)
+		p.hasM = true
+	}
+	if layer {
+		pl := PushLayer{Opacity: 1, Blend: st.MixBlend, Bounds: Rect{b.ovLeft, b.ovTop, b.ovRight - b.ovLeft, b.ovBottom - b.ovTop}}
+		if st.OpacitySet {
+			pl.Opacity = st.Opacity
+		}
+		for _, f := range st.Filter {
+			pl.Filter = append(pl.Filter, Filter{Name: f.Name, Args: f.Args, Color: f.Color})
+		}
+		p.emit(pl)
+	}
+	return func() {
+		if layer {
+			p.emit(PopLayer{})
+		}
+		if tx {
+			p.emit(PopTransform{})
+		}
+		p.m, p.hasM = saveM, saveHas
+	}
 }
 
 func mulM(a, b [6]float64) [6]float64 {
@@ -271,7 +281,22 @@ func (p *painter) clipChain(b *lbox) []*lbox {
 // children in paint (tree) order, including inline-level descendants of IFCs.
 func (p *painter) flowKids(b *lbox) []*lbox {
 	if !b.ifc {
-		return b.kids
+		hasHidden := false
+		for _, k := range b.kids {
+			if k.hiddenFlow {
+				hasHidden = true
+			}
+		}
+		if !hasHidden {
+			return b.kids
+		}
+		var out []*lbox
+		for _, k := range b.kids {
+			if !k.hiddenFlow {
+				out = append(out, k)
+			}
+		}
+		return out
 	}
 	var out []*lbox
 	var rec func(x *lbox)
@@ -389,15 +414,7 @@ func (p *painter) paintAtomic(a *lbox) {
 	if p.isDeferred(a) {
 		return
 	}
-	tx := a.hasTransform()
-	if tx {
-		m := a.fullMatrix()
-		p.emit(PushTransform{M: m})
-		saveM, saveHas := p.m, p.hasM
-		p.m = mulM(p.m, m)
-		p.hasM = true
-		defer func() { p.m, p.hasM = saveM, saveHas }()
-	}
+	endFx := p.beginEffects(a)
 	p.paintDecor(a, false)
 	clipped := false
 	if a.clips() {
@@ -417,9 +434,7 @@ func (p *painter) paintAtomic(a *lbox) {
 	if clipped {
 		p.popClip(a)
 	}
-	if tx {
-		p.emit(PopTransform{})
-	}
+	endFx()
 }
 
 // ---- box decoration -----------------------------------------------------------------------------

@@ -1,0 +1,8 @@
+<!doctype html>
+<html dir="rtl"><head><meta charset="utf-8"><title>rtl</title>
+<style>body{margin:16px;font:15px Arial,sans-serif}.box{border:1px solid #888;padding:8px;margin-bottom:10px;width:320px}.fl{float:left;width:60px;height:30px;background:#cde;margin:4px}.fr{float:right;width:60px;height:30px;background:#fdc;margin:4px}.f{display:flex;gap:8px}.f>div{background:#eee;padding:4px 8px}ul{padding-inline-start:30px}.ltr{direction:ltr;text-align:left}</style></head>
+<body><div class="box">Right to left paragraph with a number 12345 and English words mixed inside the line.</div>
+<div class="box"><div class="fl"></div><div class="fr"></div>Text between floats in an rtl container which should flow around them nicely.</div>
+<div class="box f"><div>one</div><div>two</div><div>three</div></div><div class="box ltr">Left to right box inside rtl page</div>
+<div class="box" style="text-align:start">start aligned</div><div class="box" style="text-align:end">end aligned</div><div class="box" style="margin-left:auto;margin-right:0">auto margin left</div>
+<ul><li>item one</li><li>item two</li></ul><table border="1" style="border-collapse:collapse"><tr><td>a</td><td>b</td><td>c</td></tr></table></body></html>

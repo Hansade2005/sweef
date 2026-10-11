@@ -22,5 +22,5 @@ gl.useProgram(p);var data=checker(64,64,4,[240,240,240,255],[40,40,160,255]);tex
 vbo(gl,new Float32Array([-3,0,-1,0,0, 3,0,-1,6,0, -3,0,-12,0,6, 3,0,-12,6,6]));attr(gl,p,'a_pos',3,20,0);attr(gl,p,'a_uv',2,20,12);
 gl.uniformMatrix4fv(gl.getUniformLocation(p,'u_mvp'),false,m4mul(persp(1.0,1,0.1,50),trans(0,-1,0)));
 gl.enable(gl.DEPTH_TEST);gl.clearColor(0.5,0.7,0.9,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

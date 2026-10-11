@@ -20,5 +20,5 @@ var QVS='attribute vec2 a_pos;attribute vec2 a_uv;varying vec2 v_uv;void main(){
 try{var gl=ctx(); var e=gl.getExtension('OES_texture_float');var p=prog(gl,QVS,'precision highp float;varying vec2 v_uv;uniform sampler2D u_t;void main(){vec4 c=texture2D(u_t,v_uv);gl_FragColor=vec4(c.rgb*0.25,1.0);}');
 gl.useProgram(p);var d=new Float32Array(4*4*4);for(var i=0;i<16;i++){d[i*4]=i/3.0;d[i*4+1]=(15-i)/3.0;d[i*4+2]=(i%4);d[i*4+3]=1;}
 tex(gl,4,4,d,{type:gl.FLOAT,min:gl.NEAREST,mag:gl.NEAREST});quad(gl,p,-1,-1,1,1,0,0,1,1);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

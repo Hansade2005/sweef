@@ -51,7 +51,7 @@ func uaParsed() []*Rule {
 // NewEngine builds an engine from author sheets (UA sheet is built in).
 func NewEngine(env *Env, sheets []SheetIn) *Engine { return NewEngineQ(env, sheets, false) }
 
-const quirkCSS = `table { white-space: normal; line-height: normal; font-weight: normal; font-size: medium; font-variant: normal; font-style: normal; text-align: start }`
+const quirkCSS = `form { margin-bottom: 1em } table { white-space: normal; line-height: normal; font-weight: normal; font-size: medium; font-variant: normal; font-style: normal; text-align: start }`
 
 // NewEngineQ is NewEngine with an optional quirks-mode user-agent sheet.
 func NewEngineQ(env *Env, sheets []SheetIn, quirks bool) *Engine {
@@ -418,7 +418,7 @@ func (e *Engine) newComputed(parent *Computed) *Computed {
 
 func isFontGroup(name string) bool {
 	switch name {
-	case "font", "font-family", "font-size", "font-weight", "font-style", "font-variant", "font-variant-caps", "font-stretch", "color", "zoom":
+	case "font", "font-family", "font-size", "font-weight", "font-style", "font-variant", "font-variant-caps", "font-stretch", "color", "zoom", "direction":
 		return true
 	}
 	return false
@@ -474,6 +474,10 @@ func (e *Engine) computeFrom(decls []Decl, parent *Computed, pseudo string) *Com
 		}
 		if pass == 0 {
 			s.fixMonospace()
+			if parent == e.initial && pseudo == "" {
+				e.RootFont = c.FontSize
+				s.uc.rem = c.FontSize
+			}
 			s.uc.em = c.FontSize
 			s.metricsDone = false
 		}
@@ -608,6 +612,9 @@ func (e *Engine) finalize(c, parent *Computed, pseudo string) {
 	}
 	if !c.TextFillSet {
 		c.TextFill = c.Color
+	}
+	if (c.Display == "table" || c.Display == "inline-table") && strings.HasPrefix(c.TextAlign, "-webkit-") && c.TextAlign == parent.TextAlign {
+		c.TextAlign = "start"
 	}
 	c.OrigInline = c.Display == "inline" || strings.HasPrefix(c.Display, "inline-") || c.Display == "contents"
 	// blockification

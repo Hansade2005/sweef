@@ -24,6 +24,8 @@ type laneCo struct {
 	stop     func()
 	syncIn   [4]float32
 	syncN    int
+	site     int
+	hasSync  bool
 	dx, dy   [4]float32
 	finished bool
 	disc     bool
@@ -39,8 +41,10 @@ func newLaneCo(inst *glsl.Instance) *laneCo {
 				}
 			}
 		}()
-		inst.Quad = func(in []float32) ([]float32, []float32) {
+		inst.Quad = func(site int, in []float32) ([]float32, []float32) {
+			lc.site = site
 			lc.syncN = copy(lc.syncIn[:], in)
+			lc.hasSync = true
 			if !yield(struct{}{}) {
 				panic(stopSignal{})
 			}
@@ -398,8 +402,10 @@ func (fw *fragWorker) runQuad() {
 		for k := 0; k < 4; k++ {
 			lc := fw.co[k]
 			if lc.finished {
+				lc.hasSync = false
 				continue
 			}
+			lc.hasSync = false
 			lc.next()
 			if !lc.finished {
 				allDone = false
@@ -408,20 +414,29 @@ func (fw *fragWorker) runQuad() {
 		if allDone {
 			return
 		}
-		// compute derivatives from the sync inputs
+		// derivatives from the lanes that reached this synchronisation
+		// point; lanes that diverged contribute nothing (zero derivative)
 		for k := 0; k < 4; k++ {
 			lc := fw.co[k]
+			if lc.finished || !lc.hasSync {
+				continue
+			}
+			px, py := k^1, k^2
 			for i := 0; i < lc.syncN; i++ {
 				var dx, dy float32
-				if k&1 == 0 {
-					dx = fw.co[k+1].syncIn[i] - fw.co[k].syncIn[i]
-				} else {
-					dx = fw.co[k].syncIn[i] - fw.co[k-1].syncIn[i]
+				if p := fw.co[px]; p.hasSync && p.site == lc.site && p.syncN > i {
+					if k&1 == 0 {
+						dx = p.syncIn[i] - lc.syncIn[i]
+					} else {
+						dx = lc.syncIn[i] - p.syncIn[i]
+					}
 				}
-				if k < 2 {
-					dy = fw.co[k+2].syncIn[i] - fw.co[k].syncIn[i]
-				} else {
-					dy = fw.co[k].syncIn[i] - fw.co[k-2].syncIn[i]
+				if p := fw.co[py]; p.hasSync && p.site == lc.site && p.syncN > i {
+					if k < 2 {
+						dy = p.syncIn[i] - lc.syncIn[i]
+					} else {
+						dy = lc.syncIn[i] - p.syncIn[i]
+					}
 				}
 				lc.dx[i], lc.dy[i] = dx, dy
 			}

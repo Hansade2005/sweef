@@ -68,10 +68,13 @@ type Sampler interface {
 
 // Frame is the execution state of one shader invocation.
 type Frame struct {
-	R         []uint32
-	Tex       []Sampler
-	Quad      func(in []float32) (dx, dy []float32)
+	R   []uint32
+	Tex []Sampler
+	// Quad is called at derivative / implicit-LOD call sites; lanes of a
+	// quad are paired by site id.
+	Quad      func(site int, in []float32) (dx, dy []float32)
 	Discarded bool
+	aborted   bool
 	budget    int32
 	sh        *Shader
 	scratch   [32]float32
@@ -184,10 +187,11 @@ func (in *Instance) Shader() *Shader { return in.sh }
 func (in *Instance) Run() (discarded bool) {
 	f := &in.Frame
 	f.Discarded = false
+	f.aborted = false
 	f.budget = 1 << 23
 	for _, o := range in.sh.globalInit {
 		o(f)
 	}
 	c := in.sh.main(f)
-	return c == ctlDiscard || f.Discarded || c == ctlAbort
+	return c == ctlDiscard || f.Discarded || c == ctlAbort || f.aborted
 }

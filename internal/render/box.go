@@ -131,6 +131,7 @@ type lbox struct {
 	fragsAbs                         []Rect
 	isBtn                            bool
 	contBlocks                       []*lbox
+	hiddenFlow                       bool
 	mcN                              int
 	mcW, mcGap                       float64
 	legend                           *lbox

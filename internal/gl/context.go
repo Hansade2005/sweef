@@ -281,10 +281,6 @@ func New(version int, attrs Attrs, w, h int) *Context {
 		fbs: map[uint32]*Framebuffer{}, vaos: map[uint32]*VAO{}, progs: map[uint32]*Program{}, shaders: map[uint32]*Shader{},
 		queries: map[uint32]*Query{}, samplers: map[uint32]*SamplerObj{}, tfs: map[uint32]*TransformFeedback{}, syncs: map[uint32]*Sync{},
 		activeQ: map[uint32]*Query{}, viewCache: map[*Texture]*texView{}}
-	if version == 1 {
-		c.Lim.MaxDrawBuffers = 1
-		c.Lim.MaxColorAttachments = 1
-	}
 	c.defVAO = &VAO{}
 	c.vao = c.defVAO
 	c.defTF = &TransformFeedback{}
@@ -366,6 +362,14 @@ var _ = glsl.Vertex
 func f32bits(f float32) uint32 { return math.Float32bits(f) }
 
 func f32frombits(u uint32) float32 { return math.Float32frombits(u) }
+
+// maxColorAttach is the number of usable color attachment points.
+func (c *Context) maxColorAttach() int {
+	if c.Version == 1 && !c.Ext["WEBGL_draw_buffers"] {
+		return 1
+	}
+	return c.Lim.MaxColorAttachments
+}
 
 // Lock serialises access from host calls and the compositor.
 func (c *Context) Lock()   { c.mu.Lock() }

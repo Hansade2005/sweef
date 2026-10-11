@@ -8,5 +8,5 @@ c.addEventListener('webglcontextrestored',function(e){out.push('restored isLost=
 var oldBuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,oldBuf);
 ext.loseContext();out.push('after lose isLost='+gl.isContextLost());out.push('createBuffer='+gl.createBuffer());out.push('getError='+gl.getError()+','+gl.getError());out.push('getParameter='+gl.getParameter(gl.VERSION));out.push('attrs='+JSON.stringify(gl.getContextAttributes()));out.push('ext='+gl.getExtension('OES_texture_float'));out.push('supported='+gl.getSupportedExtensions());
 setTimeout(function(){ext.restoreContext();},20);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

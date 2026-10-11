@@ -24,5 +24,5 @@ gl.useProgram(p);var vao=gl.createVertexArray();gl.bindVertexArray(vao);vbo(gl,n
 var off=[],col=[];for(var y=0;y<5;y++)for(var x=0;x<5;x++){off.push(-0.8+x*0.4,-0.8+y*0.4);col.push(x/4,y/4,0.4);}
 vbo(gl,new Float32Array(off));gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,2,gl.FLOAT,false,0,0);gl.vertexAttribDivisor(1,1);vbo(gl,new Float32Array(col));gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,3,gl.FLOAT,false,0,0);gl.vertexAttribDivisor(2,1);
 gl.bindVertexArray(null);gl.clearColor(0.1,0.1,0.1,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.bindVertexArray(vao);gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,25);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

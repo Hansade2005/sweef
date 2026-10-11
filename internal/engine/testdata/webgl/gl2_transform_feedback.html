@@ -31,5 +31,5 @@ gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK,null);gl.bindBufferBase(gl.TRANSF
 var out=new Float32Array(36);gl.bindBuffer(gl.ARRAY_BUFFER,dst);gl.getBufferSubData(gl.ARRAY_BUFFER,0,out);window.__result=Array.from(out).map(function(v){return v.toFixed(3)}).join(',');
 var dp=prog(gl,'#version 300 es\nin vec2 a_pos;in float a_sz;void main(){gl_PointSize=a_sz;gl_Position=vec4(a_pos,0.0,1.0);}','#version 300 es\nprecision mediump float;out vec4 o;void main(){o=vec4(1.0,0.7,0.2,1.0);}');
 gl.useProgram(dp);gl.bindBuffer(gl.ARRAY_BUFFER,dst);attr(gl,dp,'a_pos',2,12,0);attr(gl,dp,'a_sz',1,12,8);gl.clearColor(0.1,0.1,0.1,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.POINTS,0,12);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

@@ -233,6 +233,8 @@ func (c *compiler) textureFn(e *Expr, args []*V, h int) *V {
 	if sp.mode == SampleImplicit && c.stage == Fragment {
 		c.sh.UsesImplicitLod = true
 	}
+	c.sites++
+	site := c.sites
 	mode := sp.mode
 	proj := sp.proj
 	pcs := projSize
@@ -309,7 +311,7 @@ func (c *compiler) textureFn(e *Expr, args []*V, h int) *V {
 				for i := 0; i < nd; i++ {
 					in[i] = rq.Coord[i]
 				}
-				dx, dy := f.Quad(in)
+				dx, dy := f.Quad(site, in)
 				for i := 0; i < nd; i++ {
 					rq.DX[i], rq.DY[i] = dx[i], dy[i]
 				}

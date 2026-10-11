@@ -19,11 +19,12 @@ func (nilEnv) IntrinsicSize(*html.Node) (w, h float64, ok bool) { return 0, 0, f
 func (nilEnv) Focused() *html.Node                              { return nil }
 
 type ctx struct {
-	opts       Options
-	env        Env
-	eng        *style.Engine
-	vw, vh     float64
-	sbViewport float64
+	opts        Options
+	env         Env
+	eng         *style.Engine
+	vw, vh      float64
+	sbViewport  float64
+	sbViewportH float64
 
 	styles      map[*html.Node]*style.Computed
 	byNode      map[*html.Node][]*lbox
@@ -150,17 +151,26 @@ func (c *ctx) layoutRoot(rb *lbox) {
 	if oy == "scroll" {
 		c.sbViewport = sbSize
 	}
-	for pass := 0; pass < 2; pass++ {
+	for pass := 0; pass < 3; pass++ {
 		c.resetKids(rb)
 		cw := c.vw - c.sbViewport
-		in := layoutIn{cbw: cw, cbh: c.vh, fixW: -1, fixH: -1, bfc: &bfcState{}}
+		in := layoutIn{cbw: cw, cbh: c.vh - c.sbViewportH, fixW: -1, fixH: -1, bfc: &bfcState{}}
 		c.cbStack = nil
 		c.layoutBox(rb, in)
 		rb.x, rb.y = rb.mar[3], rb.mar[0]
 		c.place(rb, rb.x, rb.y)
 		docH := math.Max(rb.ovBottom, rb.y+rb.h+rb.mar[2])
-		if pass == 0 && c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh+0.01 {
+		docW := math.Max(rb.ovRight, rb.x+rb.w+rb.mar[1])
+		ox, _ := c.viewportOverflow()
+		if pass == 0 && c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh-c.sbViewportH+0.01 {
 			c.sbViewport = sbSize
+			continue
+		}
+		if c.sbViewportH == 0 && (ox == "auto" || ox == "visible" || ox == "scroll") && docW > c.vw-c.sbViewport+0.01 {
+			c.sbViewportH = sbSize
+			if c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh-c.sbViewportH+0.01 {
+				c.sbViewport = sbSize
+			}
 			continue
 		}
 		break
@@ -172,7 +182,7 @@ func registerFonts(ff []style.FontFace) {}
 func (c *ctx) finishResult(rb *lbox) {
 	res := c.res
 	vw := c.vw - c.sbViewport
-	res.Viewport = Rect{0, 0, vw, c.vh}
+	res.Viewport = Rect{0, 0, vw, c.vh - c.sbViewportH}
 	res.Width = math.Max(vw, math.Max(rb.ovRight, rb.ax+rb.w+rb.mar[1]))
 	res.Height = math.Max(c.vh, math.Max(rb.ovBottom, rb.ay+rb.h+rb.mar[2]))
 	c.buildBoxes()
@@ -242,7 +252,7 @@ func (c *ctx) place(b *lbox, ox, oy float64) {
 			continue
 		}
 		c.place(k, b.ax+k.x, b.ay+k.y)
-		if !b.clips() || true {
+		if !k.hiddenFlow {
 			acc(k)
 		}
 	}
@@ -345,7 +355,7 @@ func (c *ctx) relativeOffset(b *lbox) (float64, float64) {
 func (c *ctx) applySticky(b *lbox) {
 	st := b.st
 	// scrollport: viewport (nearest scroll container approximated by the viewport)
-	var sp Rect = Rect{0, 0, c.vw - c.sbViewport, c.vh}
+	var sp Rect = Rect{0, 0, c.vw - c.sbViewport, c.vh - c.sbViewportH}
 	for p := b.lp; p != nil; p = p.lp {
 		if p.clips() && p != c.rootBox {
 			sp = Rect{p.ax + p.bor[3], p.ay + p.bor[0], p.w - p.bor[1] - p.bor[3], p.h - p.bor[0] - p.bor[2]}
@@ -629,6 +639,9 @@ func (c *ctx) buildBoxes() {
 	}
 	for _, bs := range c.byNode {
 		for _, b := range bs {
+			if b.rep != nil && b.rep.kind == "svg" && b.n.Namespace != "" || b.rep != nil && b.rep.kind == "svg" {
+				c.svgGeometry(b)
+			}
 			if b.rep == nil || b.rep.ctrl != "select" {
 				continue
 			}
@@ -644,7 +657,7 @@ func (c *ctx) buildBoxes() {
 		}
 	}
 	if rb := res.Boxes[c.docEl]; rb != nil {
-		rb.ClientW, rb.ClientH = c.vw-c.sbViewport, c.vh
+		rb.ClientW, rb.ClientH = c.vw-c.sbViewport, c.vh-c.sbViewportH
 		rb.ScrollW, rb.ScrollH = res.Width, res.Height
 	}
 }

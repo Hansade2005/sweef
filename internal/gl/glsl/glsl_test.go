@@ -224,3 +224,161 @@ void main() { v_uv = uv; gl_Position = mvp * vec4(position, 1.0); gl_PointSize =
 		t.Fatalf("position %v", fl(in.R[sh.PositionOff+1]))
 	}
 }
+
+type mockSampler struct{ last SampleReq }
+
+func (m *mockSampler) Sample(r *SampleReq) [4]float32 {
+	m.last = *r
+	return [4]float32{r.Coord[0], r.Coord[1], r.Lod, 1}
+}
+func (m *mockSampler) SampleRaw(r *SampleReq) [4]uint32 { return [4]uint32{1, 2, 3, 4} }
+func (m *mockSampler) Texel(x, y, z, lod int) [4]uint32 {
+	return [4]uint32{math.Float32bits(float32(x)), math.Float32bits(float32(y)), math.Float32bits(float32(lod)), math.Float32bits(1)}
+}
+func (m *mockSampler) Size(lod int) [3]int { return [3]int{16 >> lod, 8 >> lod, 1} }
+
+func TestTextureBuiltins(t *testing.T) {
+	src := `precision mediump float; uniform sampler2D s; varying vec2 uv;
+void main(){ vec4 a = texture2D(s, uv); vec4 b = texture2DLod(s, uv, 2.0); gl_FragColor = vec4(a.x + b.z, a.y, 0.0, 1.0); }`
+	o := fsOpts()
+	sh := Compile(Fragment, src, o)
+	if sh.OK {
+		t.Fatal("texture2DLod must be rejected in a fragment shader without EXT_shader_texture_lod")
+	}
+	src = "#extension GL_EXT_shader_texture_lod : enable\n" + src
+	sh = Compile(Fragment, strings.Replace(src, "texture2DLod", "texture2DLodEXT", 1), o)
+	if !sh.OK {
+		t.Fatal(sh.Log)
+	}
+	in := sh.NewInstance()
+	m := &mockSampler{}
+	in.Tex = []Sampler{m}
+	for _, u := range sh.Uniforms {
+		if u.Name == "s" {
+			in.R[u.Off] = 0
+		}
+	}
+	in.R[sh.Inputs[0].Off] = bf(0.25)
+	in.R[sh.Inputs[0].Off+1] = bf(0.5)
+	in.Run()
+	if got := fl(in.R[sh.FragColorOff]); got != 0.25+2 {
+		t.Fatalf("x = %v", got)
+	}
+	if m.last.Mode != SampleLod || m.last.Lod != 2 {
+		t.Fatalf("last request %+v", m.last)
+	}
+}
+
+func TestDerivativeHookAndSites(t *testing.T) {
+	sh := Compile(Fragment, "#extension GL_OES_standard_derivatives : enable\nprecision mediump float; varying float v; void main(){ gl_FragColor = vec4(dFdx(v), dFdy(v), fwidth(v), 1.0); }", fsOpts())
+	if !sh.OK {
+		t.Fatal(sh.Log)
+	}
+	if !sh.UsesDerivatives {
+		t.Fatal("UsesDerivatives not set")
+	}
+	in := sh.NewInstance()
+	in.Quad = func(site int, v []float32) ([]float32, []float32) { return []float32{0.5}, []float32{-2} }
+	in.Run()
+	r := in.R[sh.FragColorOff:]
+	if fl(r[0]) != 0.5 || fl(r[1]) != -2 || fl(r[2]) != 2.5 {
+		t.Fatalf("derivatives %v %v %v", fl(r[0]), fl(r[1]), fl(r[2]))
+	}
+	// without the extension the built-ins are rejected
+	if Compile(Fragment, "precision mediump float; varying float v; void main(){ gl_FragColor = vec4(dFdx(v)); }", Options{}).OK {
+		t.Fatal("dFdx must require OES_standard_derivatives in ES 1.00")
+	}
+}
+
+func TestUniformBlockLayout(t *testing.T) {
+	sh := Compile(Fragment, `#version 300 es
+precision highp float;
+layout(std140) uniform U { float a; vec3 b; float c[2]; mat2 m; vec2 d; };
+out vec4 o;
+void main(){ o = vec4(a, b.z, c[1], m[1][1] + d.y); }`, fsOpts())
+	if !sh.OK {
+		t.Fatal(sh.Log)
+	}
+	if len(sh.Blocks) != 1 {
+		t.Fatal("no block")
+	}
+	want := map[string]int{"a": 0, "b": 16, "c": 32, "m": 64, "d": 96}
+	for _, m := range sh.Blocks[0].Members {
+		if m.Byte != want[m.Name] {
+			t.Errorf("member %s at byte %d, want %d", m.Name, m.Byte, want[m.Name])
+		}
+	}
+	if sh.Blocks[0].ByteSize != 112 {
+		t.Errorf("block size %d, want 112", sh.Blocks[0].ByteSize)
+	}
+}
+
+func TestDiscardAndFlowControl(t *testing.T) {
+	sh := Compile(Fragment, `precision mediump float; varying float v;
+float f(float x){ for (int i = 0; i < 10; i++) { if (float(i) > x) return float(i); } return -1.0; }
+void main(){ if (v > 0.5) discard; gl_FragColor = vec4(f(3.5)); }`, fsOpts())
+	if !sh.OK {
+		t.Fatal(sh.Log)
+	}
+	in := sh.NewInstance()
+	in.R[sh.Inputs[0].Off] = bf(0.9)
+	if !in.Run() {
+		t.Fatal("expected discard")
+	}
+	in.R[sh.Inputs[0].Off] = bf(0.1)
+	if in.Run() || fl(in.R[sh.FragColorOff]) != 4 {
+		t.Fatalf("got %v", fl(in.R[sh.FragColorOff]))
+	}
+}
+
+func TestInfiniteLoopAborts(t *testing.T) {
+	sh := Compile(Fragment, "precision mediump float; void main(){ for(;;) { } gl_FragColor = vec4(1.0); }", fsOpts())
+	if !sh.OK {
+		t.Fatal(sh.Log)
+	}
+	in := sh.NewInstance()
+	if !in.Run() {
+		t.Fatal("runaway loop should abort the invocation")
+	}
+}
+
+func TestMoreErrorMessages(t *testing.T) {
+	cases := []struct{ src, want string }{
+		{"void main() { vec3 v = vec2(1.0); }", "cannot convert from 'const 2-component vector of float' to 'mediump 3-component vector of float'"},
+		{"void main() { float x = 1.0; x.y = 2.0; }", "field selection out of range"},
+		{"void main() { int i = 1.0 + 1; }", "wrong operand types"},
+		{"void f(); void main() { f(); }\nvoid g(int a){} void g(int b){}", "function already has a body"},
+		{"void main() { if (1.0) {} }", "boolean expression expected"},
+		{"void main() { break; }", "break statement only allowed in loops"},
+		{"uniform float u[2]; void main() { float x = u[5]; }", "out of range"},
+		{"void main() { vec4 a; a = vec4(1.0, 2.0); }", "not enough data provided for construction"},
+		{"int f(){ } void main(){}", "does not return a value"},
+		{"#version 100\n#error stop here\nvoid main(){}", "stop here"},
+		{"void main() { return 1.0; }", "void function cannot return a value"},
+	}
+	for _, c := range cases {
+		sh := Compile(Fragment, "precision mediump float;\n"+c.src, fsOpts())
+		if sh.OK {
+			t.Errorf("%q compiled", c.src)
+			continue
+		}
+		if !strings.Contains(sh.Log, c.want) {
+			t.Errorf("%q: log %q lacks %q", c.src, sh.Log, c.want)
+		}
+	}
+}
+
+func BenchmarkInterpreterLoop(b *testing.B) {
+	sh := Compile(Fragment, `precision highp float; varying vec2 uv;
+void main(){ vec2 z = vec2(0.0); float s = 0.0; for (int i = 0; i < 32; i++) { z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + uv; s += dot(z, z) < 4.0 ? 1.0 : 0.0; } gl_FragColor = vec4(s / 32.0); }`, fsOpts())
+	if !sh.OK {
+		b.Fatal(sh.Log)
+	}
+	in := sh.NewInstance()
+	in.R[sh.Inputs[0].Off] = bf(-0.3)
+	in.R[sh.Inputs[0].Off+1] = bf(0.4)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		in.Run()
+	}
+}

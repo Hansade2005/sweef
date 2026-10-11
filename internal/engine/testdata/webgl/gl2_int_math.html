@@ -24,5 +24,5 @@ uint hash(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;retur
 void main(){ivec2 c=ivec2(v_uv*8.0);int i=c.x+c.y*8;uint h=hash(uint(i));int sh=int(h&7u);int r=(i*7+3)%11;uvec3 u=uvec3(h&255u,(h>>8)&255u,(h>>16)&255u);
 float f=float((h>>5)&15u)/15.0;o=vec4(vec3(u)/255.0*0.8+0.1,1.0);o.b=float(r)/10.0;o.g=float(sh)/7.0*f;o.r+=float(v_id%2)*0.1;}`);
 gl.useProgram(p);quad(gl,p,-1,-1,1,1,0,0,1,1);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

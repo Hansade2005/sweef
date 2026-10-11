@@ -323,7 +323,7 @@ func (c *Context) fbForTarget(target uint32) (*Framebuffer, bool) {
 
 func (c *Context) attachSlot(fb *Framebuffer, att uint32) *Attach {
 	switch {
-	case att >= GL_COLOR_ATTACHMENT0 && att < GL_COLOR_ATTACHMENT0+uint32(c.Lim.MaxColorAttachments):
+	case att >= GL_COLOR_ATTACHMENT0 && att < GL_COLOR_ATTACHMENT0+uint32(c.maxColorAttach()):
 		return &fb.Color[att-GL_COLOR_ATTACHMENT0]
 	case att == GL_DEPTH_ATTACHMENT:
 		return &fb.Depth
@@ -361,7 +361,7 @@ func (c *Context) FramebufferTexture2D(target, att, textarget, id uint32, level 
 			c.setErr(GL_INVALID_ENUM)
 			return
 		}
-		if level < 0 || c.Version == 1 && level != 0 {
+		if level < 0 || c.Version == 1 && level != 0 && !c.Ext["OES_fbo_render_mipmap"] {
 			c.setErr(GL_INVALID_VALUE)
 			return
 		}
@@ -633,7 +633,7 @@ func (c *Context) GetFramebufferAttachmentParameter(target, att, pname uint32) (
 
 func (c *Context) DrawBuffers(bufs []uint32) {
 	fb := c.drawFB
-	if len(bufs) > c.Lim.MaxDrawBuffers {
+	if len(bufs) > c.maxColorAttach() {
 		c.setErr(GL_INVALID_VALUE)
 		return
 	}
@@ -894,7 +894,6 @@ func (c *Context) ReadPixels(x, y, w, h int, format, typ uint32, dst []byte, pbo
 		return
 	}
 	pk := c.pixStore.Pack
-	pb := pixelBytes(format, typ)
 	need := pk.RequiredBytes(uint32(w), uint32(h), 1, format, typ)
 	if c.packBuf != nil && c.Version == 2 {
 		if pboOff < 0 || pboOff+need > len(c.packBuf.Data) {
@@ -941,7 +940,6 @@ func (c *Context) ReadPixels(x, y, w, h int, format, typ uint32, dst []byte, pbo
 			tmp.U8[i] = 255
 		}
 	}
-	_ = pb
 	tmp.Download(0, 0, w, h, format, typ, dst, pk)
 }
 
@@ -1047,4 +1045,26 @@ func (c *Context) Bitmap() *image.RGBA {
 		return p
 	}
 	return c.SnapshotImage()
+}
+
+// ReadExtent returns the size of the read framebuffer's color buffer.
+func (c *Context) ReadExtent() (w, h int, ok bool) {
+	rt, st := c.resolveTarget(c.readFB)
+	if st != GL_FRAMEBUFFER_COMPLETE {
+		return 0, 0, false
+	}
+	src := rt.readColor(c.readFB)
+	if src == nil {
+		return 0, 0, false
+	}
+	return src.W, src.H, true
+}
+
+// PackLayout returns bytes per pixel, row stride and base offset for a read.
+func (c *Context) PackLayout(w int, format, typ uint32) (pb, rowStride, base int) {
+	pk := c.pixStore.Pack
+	pb = pixelBytes(format, typ)
+	rowStride = pk.rowStride(w, pb)
+	base = pk.SkipRows*rowStride + pk.SkipPixels*pb
+	return
 }

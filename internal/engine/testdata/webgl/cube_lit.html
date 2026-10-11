@@ -26,5 +26,5 @@ var model=m4mul(rotX(0.5),rotY(0.7));var mvp=m4mul(persp(0.9,1,0.5,10),m4mul(tra
 gl.uniformMatrix4fv(gl.getUniformLocation(p,'u_mvp'),false,mvp);gl.uniformMatrix4fv(gl.getUniformLocation(p,'u_model'),false,model);
 gl.uniform3f(gl.getUniformLocation(p,'u_light'),0.4,0.8,0.6);gl.uniform3f(gl.getUniformLocation(p,'u_color'),0.9,0.5,0.2);
 gl.enable(gl.DEPTH_TEST);gl.enable(gl.CULL_FACE);gl.clearColor(0.05,0.05,0.1,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.drawElements(gl.TRIANGLES,36,gl.UNSIGNED_SHORT,0);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

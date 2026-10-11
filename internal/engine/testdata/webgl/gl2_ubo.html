@@ -28,5 +28,5 @@ buf.set([1,0.2,0,0],offs[2]/4);buf[offs[2]/4+4]=0.3;buf[offs[2]/4+5]=0.8;buf.set
 var b=gl.createBuffer();gl.bindBuffer(gl.UNIFORM_BUFFER,b);gl.bufferData(gl.UNIFORM_BUFFER,buf,gl.STATIC_DRAW);gl.bindBufferBase(gl.UNIFORM_BUFFER,2,b);
 window.__result=[sz,Array.from(offs).join(',')].join('|');
 vbo(gl,new Float32Array([-1,-1,1,-1,-1,1,1,1]));attr(gl,p,'a_pos',2,0,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

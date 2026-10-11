@@ -15,5 +15,5 @@ var oc=new OffscreenCanvas(8,8);var g3=oc.getContext('webgl');out.push('offscree
 var s=document.createElement('canvas').getContext('webgl',{alpha:false,depth:false,stencil:true,antialias:false});out.push('attrs2='+JSON.stringify(s.getContextAttributes()));out.push('bits='+[s.getParameter(s.DEPTH_BITS),s.getParameter(s.STENCIL_BITS),s.getParameter(s.ALPHA_BITS)].join());
 var s2=document.createElement('canvas').getContext('webgl2',{alpha:true,depth:true,stencil:true,antialias:true});out.push('bits2='+[s2.getParameter(s2.DEPTH_BITS),s2.getParameter(s2.STENCIL_BITS),s2.getParameter(s2.ALPHA_BITS),s2.getParameter(s2.SAMPLES)].join());
 window.__result=out.join('\n');
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

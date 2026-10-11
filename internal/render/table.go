@@ -514,6 +514,7 @@ func (c *ctx) layoutTable(b *lbox, in layoutIn) {
 	}
 	// width available
 	tableFixed := false
+	fixedLayout := st.TableLayout == "fixed" && st.Width.K != style.LAuto
 	var tw float64
 	boxExtra := b.hExtra()
 	_ = tableFixed
@@ -558,10 +559,10 @@ func (c *ctx) layoutTable(b *lbox, in layoutIn) {
 			col := m.cols[tc.col]
 			col.min = math.Max(col.min, tc.minW)
 			col.max = math.Max(col.max, tc.maxW)
-			if tc.hasFixed {
+			if tc.hasFixed && (!fixedLayout || tc.row == 0) {
 				col.fixed, col.hasFixed = math.Max(col.fixed, tc.fixedW), true
 			}
-			if tc.hasPct {
+			if tc.hasPct && (!fixedLayout || tc.row == 0) {
 				col.pct, col.hasPct = math.Max(col.pct, tc.pct), true
 			}
 		}
@@ -635,7 +636,6 @@ func (c *ctx) layoutTable(b *lbox, in layoutIn) {
 	}
 	// table border-box width
 	var bw float64
-	fixedLayout := st.TableLayout == "fixed" && (st.Width.K != style.LAuto)
 	if in.fixW >= 0 {
 		bw = in.fixW
 	} else if wv, ok := c.specW(b, st.Width, cbw); ok && !(st.Width.K == style.LAuto) {
@@ -899,6 +899,9 @@ func (c *ctx) layoutTable(b *lbox, in layoutIn) {
 			cb.h = ch
 			// cell geometry relative to its row
 			cb.x = colX[tc.col] - (rowX0 - b.bor[3] - b.pad[3])
+			if b.st.Direction == "rtl" {
+				cb.x = rowW - (cb.x + cb.w)
+			}
 			cb.y = 0
 			cb.lp = rb
 			cb.mar = [4]float64{}

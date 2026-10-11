@@ -454,6 +454,13 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 			// bottom margin cannot collapse through an explicit height
 			b.mbotOut = b.mar[2]
 		}
+		if b.ifc && len(b.lines) == 0 && h == 0 && b.vExtra() == 0 && !root && !hSpec && b.floatCount() == 0 {
+			s := strut{}
+			s.add(b.mar[0])
+			s.add(b.mar[2])
+			b.through = true
+			b.mtopOut, b.mbotOut = s.val(), s.val()
+		}
 		if b.through && (h != 0 || hSpec && h != 0) {
 			b.through = false
 			b.mbotOut = b.mar[2]
@@ -567,9 +574,10 @@ func (c *ctx) horizontalMargins(b *lbox, in layoutIn, bw float64) {
 	case right:
 		b.mar[1] = math.Max(0, rest)
 	default:
-		ta := ""
+		ta, pdir := "", "ltr"
 		if b.parent != nil {
 			ta = b.parent.st.TextAlign
+			pdir = b.parent.st.Direction
 		}
 		switch {
 		case ta == "-webkit-center" && rest > 0:
@@ -577,7 +585,7 @@ func (c *ctx) horizontalMargins(b *lbox, in layoutIn, bw float64) {
 			b.mar[1] += rest / 2
 		case ta == "-webkit-right" && rest > 0:
 			b.mar[3] += rest
-		case b.st.Direction == "rtl":
+		case pdir == "rtl":
 			b.mar[3] += rest
 		default:
 			b.mar[1] += rest
@@ -673,6 +681,7 @@ func (c *ctx) layoutBlockKids(b *lbox, cw, cx, cy float64, bfc *bfcState, cbh fl
 		shiftX := 0.0
 		pushedPos := math.Inf(-1)
 		if len(bfc.floats) > 0 && k.isBFCRoot() {
+			mSum := k.mar[1] + k.mar[3]
 			// a BFC root must not overlap floats: narrow it or move it down
 			for try := 0; try < 64; try++ {
 				l, r := bfc.band(pos, pos+1, cx, cx+cw)
@@ -684,7 +693,7 @@ func (c *ctx) layoutBlockKids(b *lbox, cw, cx, cy float64, bfc *bfcState, cbh fl
 				in.bx, in.by = l, pos
 				k.hasLast = false
 				c.layoutBox(k, in)
-				if k.w+k.mar[1]+k.mar[3] <= avail+0.01 {
+				if k.w+mSum <= avail+0.01 {
 					shiftX = l - cx
 					break
 				}
@@ -704,6 +713,13 @@ func (c *ctx) layoutBlockKids(b *lbox, cw, cx, cy float64, bfc *bfcState, cbh fl
 			in.by = pos
 		}
 		c.layoutBox(k, in)
+		if k.hiddenFlow {
+			// content-visibility:hidden style content (closed details): laid out in place, takes no space
+			s := st
+			s.add(k.mtopOut)
+			k.x, k.y, k.lp = k.mar[3], y+s.val(), b
+			continue
+		}
 		if k.hasFloat || k.touchesBFC {
 			b.touchesBFC = true
 		}
@@ -923,9 +939,9 @@ func (c *ctx) layoutAbs(k, cb *lbox) {
 	var cbW, cbH float64
 	var ox, oy float64 // origin of the padding box relative to cb's border box
 	if cb == c.rootBox || cb.parent == nil && cb.n != nil && !cb.isContainingBlockForAbs() {
-		cbW, cbH = c.vw-c.sbViewport, c.vh
+		cbW, cbH = c.vw-c.sbViewport, c.vh-c.sbViewportH
 		if st.Position == "fixed" {
-			cbW, cbH = c.vw-c.sbViewport, c.vh
+			cbW, cbH = c.vw-c.sbViewport, c.vh-c.sbViewportH
 		}
 		ox, oy = 0, 0
 		if cb == c.rootBox && cb.isContainingBlockForAbs() {
@@ -1099,4 +1115,14 @@ func (c *ctx) staticInCB(k, cb *lbox, ox, oy float64) (float64, float64) {
 		}
 	}
 	return x - ox, y - oy
+}
+
+func (b *lbox) floatCount() int {
+	n := 0
+	for _, k := range b.kids {
+		if k.floated {
+			n++
+		}
+	}
+	return n
 }

@@ -24,5 +24,5 @@ function t(flip,pre,sub){gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,flip);gl.pixelSto
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,4,4,0,gl.RGBA,gl.UNSIGNED_BYTE,sub?null:d);if(sub)gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,4,4,gl.RGBA,gl.UNSIGNED_BYTE,d);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);}
 [[0,0,0],[1,0,0],[0,1,0],[1,1,1]].forEach(function(c,i){t(c[0],c[1],c[2]);var x=-1+(i%2)*1.0,y=i<2?0:-1;quad(gl,p,x+0.05,y+0.05,x+0.95,y+0.95,0,0,1,1);});
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

@@ -1,0 +1,27 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>tables2</title>
+<style>
+body { margin: 16px; font: 14px Arial, sans-serif; } table { margin-bottom: 18px; } td, th { padding: 4px 8px; }
+.b td, .b th { border: 1px solid #666; } .cl { border-collapse: collapse; } .cl td, .cl th { border: 2px solid #369; } .sp { border-spacing: 8px 3px; } .sp td { background: #eee; }
+.w100 { width: 100%; } .fixed { table-layout: fixed; width: 500px; } .fixed td { border: 1px solid #999; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+caption { padding: 6px; font-weight: bold; } .va td { height: 60px; border: 1px solid #999; } .va td:nth-child(1) { vertical-align: top; } .va td:nth-child(2) { vertical-align: middle; } .va td:nth-child(3) { vertical-align: bottom; } .va td:nth-child(4) { vertical-align: baseline; }
+.span td, .span th { border: 1px solid #999; text-align: center; } .pct td { border: 1px solid #999; } .nest td { vertical-align: top; border: 1px solid #aaa; }
+.zebra tr:nth-child(even) td { background: #f2f2f2; } .zebra { border-collapse: collapse; } .zebra th { background: #333; color: #fff; text-align: left; }
+.empty td { border: 1px solid #999; } .hid { border-collapse: collapse; } .hid td { border: 1px solid; } .hid td.n { border: none; }
+.tf { display: table; border: 1px solid #999; } .tf .r { display: table-row; } .tf .cell { display: table-cell; padding: 4px 10px; border: 1px solid #ccc; }
+</style></head><body>
+<table class="b"><caption>Caption on top</caption><thead><tr><th>Name</th><th>Qty</th></tr></thead><tbody><tr><td>Alpha</td><td>1</td></tr><tr><td>Bravo bravo</td><td>22</td></tr></tbody><tfoot><tr><td>Total</td><td>23</td></tr></tfoot></table>
+<table class="b cl"><tr><th>A</th><th>B</th><th>C</th></tr><tr><td>1</td><td>2</td><td>3</td></tr></table>
+<table class="sp"><tr><td>s1</td><td>s2</td></tr><tr><td>s3</td><td>s4 wider</td></tr></table>
+<table class="b w100"><tr><td>full width auto columns</td><td>short</td><td>another cell with more text in it</td></tr></table>
+<table class="fixed"><tr><td>fixed layout cell with long overflowing text</td><td>second</td><td>third cell</td></tr><tr><td style="width:100px">w100</td><td>x</td><td>y</td></tr></table>
+<table class="va"><tr><td>top</td><td>middle</td><td>bottom</td><td>baseline</td></tr></table>
+<table class="span"><tr><th colspan="2">Span 2</th><th rowspan="2">Rowspan 2</th></tr><tr><td>a</td><td>b</td></tr><tr><td colspan="3">Full row span three columns</td></tr></table>
+<table class="pct" style="width:400px"><tr><td style="width:30%">30%</td><td style="width:20%">20%</td><td>rest</td></tr></table>
+<table class="nest" style="border:1px solid #444"><tr><td>outer cell<br>two lines<table class="b" style="margin:4px"><tr><td>in1</td><td>in2</td></tr></table></td><td>right</td></tr></table>
+<table class="zebra"><tr><th>Item</th><th>Price</th></tr><tr><td>Pen</td><td>$1.20</td></tr><tr><td>Notebook</td><td>$4.50</td></tr><tr><td>Bag</td><td>$24.00</td></tr></table>
+<table class="empty"><tr><td></td><td>x</td></tr><tr><td colspan="2"></td></tr></table>
+<table class="hid"><tr><td>1</td><td class="n">2</td><td>3</td></tr></table>
+<div class="tf"><div class="r"><div class="cell">div cell 1</div><div class="cell">cell 2</div></div><div class="r"><div class="cell">row 2</div><div class="cell">more text</div></div></div>
+<table border="1" cellpadding="6" cellspacing="0" width="300" bgcolor="#eeeeee"><tr><td align="center">attr</td><td align="right">table</td></tr></table>
+</body></html>

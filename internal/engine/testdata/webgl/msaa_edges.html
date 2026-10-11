@@ -19,5 +19,5 @@ function quad(gl,p,x0,y0,x1,y1,u0,v0,u1,v1){var d=new Float32Array([x0,y0,u0,v0,
 var QVS='attribute vec2 a_pos;attribute vec2 a_uv;varying vec2 v_uv;void main(){v_uv=a_uv;gl_Position=vec4(a_pos,0.0,1.0);}';
 try{var gl=ctx({antialias:true}); var p=prog(gl,'attribute vec2 a_pos;uniform float u_a;void main(){float c=cos(u_a),s=sin(u_a);gl_Position=vec4(mat2(c,s,-s,c)*a_pos,0.0,1.0);}','precision mediump float;void main(){gl_FragColor=vec4(1.0,0.8,0.2,1.0);}');
 gl.useProgram(p);vbo(gl,new Float32Array([-0.7,-0.6,0.7,-0.6,0.0,0.8]));attr(gl,p,'a_pos',2,0,0);gl.clearColor(0.1,0.1,0.3,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.uniform1f(gl.getUniformLocation(p,'u_a'),0.35);gl.drawArrays(gl.TRIANGLES,0,3);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

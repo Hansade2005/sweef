@@ -30,5 +30,5 @@ var s1=gl.createShader(gl.VERTEX_SHADER);gl.shaderSource(s1,'attribute vec4 p;va
 var s2=gl.createShader(gl.FRAGMENT_SHADER);gl.shaderSource(s2,'precision mediump float;varying vec4 v;void main(){gl_FragColor=v;}');gl.compileShader(s2);
 var pr=gl.createProgram();gl.attachShader(pr,s1);gl.attachShader(pr,s2);gl.linkProgram(pr);out.push(String(gl.getProgramParameter(pr,gl.LINK_STATUS)));
 window.__result=out.join('\n');
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

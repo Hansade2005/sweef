@@ -1,8 +1,10 @@
 package gl
 
 import (
+	"bytes"
 	"encoding/binary"
 	"math"
+	"runtime"
 	"testing"
 )
 
@@ -412,5 +414,135 @@ func TestBitmapPresent(t *testing.T) {
 	}
 	if px := readPx(c, 0, 0); px != [4]byte{0, 0, 0, 0} {
 		t.Fatalf("drawing buffer should be cleared: %v", px)
+	}
+}
+
+func BenchmarkMipmappedTexture512(b *testing.B) {
+	c := New(1, Attrs{Alpha: true, PremultipliedAlpha: true}, 512, 512)
+	p := mkProg(b, c, `attribute vec2 a; varying vec2 uv; void main(){ uv = a*0.5+0.5; gl_Position = vec4(a,0.0,1.0); }`,
+		`precision mediump float; varying vec2 uv; uniform sampler2D s; void main(){ gl_FragColor = texture2D(s, uv*4.0); }`)
+	c.UseProgram(p)
+	tex := c.CreateTexture()
+	c.BindTexture(GL_TEXTURE_2D, tex)
+	data := make([]byte, 256*256*4)
+	for i := range data {
+		data[i] = byte(i * 7)
+	}
+	c.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, data, 0, false)
+	c.GenerateMipmap(GL_TEXTURE_2D)
+	c.TexParameter(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
+	buf := c.CreateBuffer()
+	c.BindBuffer(GL_ARRAY_BUFFER, buf)
+	d := f32bytes(-1, -1, 1, -1, -1, 1, 1, 1)
+	c.BufferData(GL_ARRAY_BUFFER, len(d), d, GL_STATIC_DRAW)
+	c.VertexAttribPointer(0, 2, GL_FLOAT, false, 0, 0, false)
+	c.EnableVertexAttribArray(0, true)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.DrawArrays(GL_TRIANGLE_STRIP, 0, 4, 1)
+	}
+}
+
+func BenchmarkOverdrawBlend512(b *testing.B) {
+	c := New(1, Attrs{Alpha: true, PremultipliedAlpha: true}, 512, 512)
+	p := mkProg(b, c, `attribute vec2 a; void main(){ gl_Position = vec4(a,0.0,1.0); }`,
+		`precision mediump float; void main(){ gl_FragColor = vec4(0.2,0.4,0.6,0.3); }`)
+	c.UseProgram(p)
+	c.Enable(GL_BLEND, true)
+	c.BlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
+	buf := c.CreateBuffer()
+	c.BindBuffer(GL_ARRAY_BUFFER, buf)
+	d := f32bytes(-1, -1, 1, -1, -1, 1, 1, 1)
+	c.BufferData(GL_ARRAY_BUFFER, len(d), d, GL_STATIC_DRAW)
+	c.VertexAttribPointer(0, 2, GL_FLOAT, false, 0, 0, false)
+	c.EnableVertexAttribArray(0, true)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for k := 0; k < 8; k++ {
+			c.DrawArrays(GL_TRIANGLE_STRIP, 0, 4, 1)
+		}
+	}
+}
+
+func BenchmarkMSAATriangles(b *testing.B) {
+	c := New(1, Attrs{Alpha: true, Antialias: true, PremultipliedAlpha: true}, 512, 512)
+	setupTri(b, c, []float32{-1, -1, 1, 0, 0, 1, -1, 0, 1, 0, 0, 1, 0, 0, 1, -1, 1, 1, 1, 1, 1, 1, 0, 0, 1}, true)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.DrawArrays(GL_TRIANGLES, 0, 3, 1)
+	}
+}
+
+// A shared edge must be rasterized exactly once (top-left rule): additive
+// blending of two triangles forming a quad leaves no seam and no double hits.
+func TestFillRuleSharedEdge(t *testing.T) {
+	for _, aa := range []bool{false, true} {
+		c := New(1, Attrs{Alpha: true, Antialias: aa, PremultipliedAlpha: true}, 32, 32)
+		p := mkProg(t, c, flatVS, `precision mediump float; void main(){ gl_FragColor = vec4(0.25, 0.25, 0.25, 0.25); }`)
+		c.UseProgram(p)
+		c.Enable(GL_BLEND, true)
+		c.BlendFuncSeparate(GL_ONE, GL_ONE, GL_ONE, GL_ONE)
+		// a quad with a diagonal that passes through pixel corners and centers
+		drawQuad(t, c, p, -0.7, -0.7, 0.8, 0.9, 0)
+		var lo, hi byte = 255, 0
+		for y := 8; y < 24; y++ {
+			for x := 8; x < 24; x++ {
+				v := readPx(c, x, y)[0]
+				if v < lo {
+					lo = v
+				}
+				if v > hi {
+					hi = v
+				}
+			}
+		}
+		if lo != hi || lo == 0 {
+			t.Fatalf("aa=%v: interior pixel values range %d..%d (seam or double blend)", aa, lo, hi)
+		}
+	}
+}
+
+// Results must not depend on how the rasterizer tiles are scheduled.
+func TestDeterministicAcrossProcs(t *testing.T) {
+	render := func() []byte {
+		c := New(1, Attrs{Alpha: true, Depth: true, Antialias: true, PremultipliedAlpha: true}, 130, 97)
+		p := mkProg(t, c, triVS, `precision mediump float; varying vec3 v; void main(){ gl_FragColor = vec4(v, 0.5); }`)
+		c.UseProgram(p)
+		c.Enable(GL_BLEND, true)
+		c.BlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+		buf := c.CreateBuffer()
+		c.BindBuffer(GL_ARRAY_BUFFER, buf)
+		var d []float32
+		r := uint32(7)
+		rnd := func() float32 { r = r*1664525 + 1013904223; return float32(r>>8) / float32(1<<24) }
+		for i := 0; i < 400; i++ {
+			cx, cy := rnd()*2-1, rnd()*2-1
+			for k := 0; k < 3; k++ {
+				d = append(d, cx+(rnd()-0.5)*0.5, cy+(rnd()-0.5)*0.5, rnd(), rnd(), rnd())
+			}
+		}
+		data := f32bytes(d...)
+		c.BufferData(GL_ARRAY_BUFFER, len(data), data, GL_STATIC_DRAW)
+		l := c.GetAttribLocation(p, "p")
+		cl := c.GetAttribLocation(p, "col")
+		c.VertexAttribPointer(l, 2, GL_FLOAT, false, 20, 0, false)
+		c.VertexAttribPointer(cl, 3, GL_FLOAT, false, 20, 8, false)
+		c.EnableVertexAttribArray(l, true)
+		c.EnableVertexAttribArray(cl, true)
+		c.ClearColor(0, 0, 0, 1)
+		c.Clear(GL_COLOR_BUFFER_BIT)
+		c.DrawArrays(GL_TRIANGLES, 0, 1200, 1)
+		out := make([]byte, 130*97*4)
+		c.ReadPixels(0, 0, 130, 97, GL_RGBA, GL_UNSIGNED_BYTE, out, 0)
+		return out
+	}
+	old := runtime.GOMAXPROCS(1)
+	a := render()
+	runtime.GOMAXPROCS(7)
+	b := render()
+	c := render()
+	runtime.GOMAXPROCS(old)
+	if !bytes.Equal(a, b) || !bytes.Equal(b, c) {
+		t.Fatal("rendering differs between scheduling configurations")
 	}
 }

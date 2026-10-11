@@ -199,6 +199,13 @@ func (c *Context) draw(mode uint32, first, count int, indexed bool, itype uint32
 		c.setErr(GL_INVALID_FRAMEBUFFER_OPERATION)
 		return
 	}
+	if c.enStencil && rt.stencil != nil && rt.stencil.St != nil {
+		f, b := &c.stencilF, &c.stencilB
+		if f.Ref != b.Ref || f.Mask != b.Mask || f.WMask != b.WMask {
+			c.setErr(GL_INVALID_OPERATION)
+			return
+		}
+	}
 	// element buffer
 	var idxBuf []byte
 	if indexed {
@@ -1193,8 +1200,8 @@ func (dc *drawCtx) setupLine(set *vtxSet, si int32, a, b int32, out *[]tri) {
 
 func (dc *drawCtx) setupPoint(set *vtxSet, si int32, a int32, out *[]tri) {
 	s := set.scr[a]
-	if s.code&0xFF != 0 {
-		return
+	if s.code&(cNearBit|cFarBit|0x40|0x80) != 0 {
+		return // the centre is clipped by the near/far planes; x/y overflow is handled by scissoring the square
 	}
 	size := float64(set.psz[a])
 	if size < 1 {

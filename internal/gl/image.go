@@ -585,7 +585,7 @@ func downsample(src *Image) *Image {
 							for _, p := range pts {
 								s += int(src.U8[p+k])
 							}
-							dst.U8[di+k] = uint8((s + 2) / 4)
+							dst.U8[di+k] = unormToByte(float32(s) / 1020)
 						}
 					}
 				case ClsF32:

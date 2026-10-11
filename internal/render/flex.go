@@ -52,9 +52,9 @@ func flexDir(b *lbox) (column, reverse bool) {
 	case "column-reverse":
 		return true, true
 	case "row-reverse":
-		return false, true
+		return false, st.Direction != "rtl"
 	}
-	return false, false
+	return false, st.Direction == "rtl"
 }
 
 func (c *ctx) flexItems(b *lbox) []*fitem {
@@ -663,9 +663,13 @@ func (c *ctx) layoutFlexContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 				f = lines[0][len(lines[0])-1]
 			}
 		}
-		if f != nil && f.b.hasBase {
+		if f != nil {
 			b.hasBase = true
-			b.baseline = f.b.y + f.b.baseline
+			if f.b.hasBase {
+				b.baseline = f.b.y + f.b.baseline
+			} else {
+				b.baseline = f.b.y + f.b.h
+			}
 			b.lastBase = b.baseline
 		}
 	}
@@ -768,7 +772,7 @@ func (c *ctx) resolveFlex(ln []*fitem, innerMain, gap float64, outer func(*fitem
 				if grow {
 					totalFactor += it.grow
 				} else {
-					totalFactor += it.shrink * it.base
+					totalFactor += it.shrink * math.Max(it.base-it.pbMain, 0)
 				}
 			}
 		}
@@ -806,7 +810,7 @@ func (c *ctx) resolveFlex(ln []*fitem, innerMain, gap float64, outer func(*fitem
 				if grow {
 					it.target = it.base + free*it.grow/totalFactor
 				} else {
-					it.target = it.base + free*(it.shrink*it.base)/totalFactor
+					it.target = it.base + free*(it.shrink*math.Max(it.base-it.pbMain, 0))/totalFactor
 				}
 			} else {
 				it.target = it.base

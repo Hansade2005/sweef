@@ -241,7 +241,11 @@ func (c *Context) glslOptions() glsl.Options {
 	if c.Ext["WEBGL_draw_buffers"] {
 		ex["GL_EXT_draw_buffers"] = true
 	}
-	return glsl.Options{WebGL2: c.Version == 2, Extensions: ex, MaxDrawBuffers: c.Lim.MaxDrawBuffers}
+	mdb := c.Lim.MaxDrawBuffers
+	if c.Version == 1 && !c.Ext["WEBGL_draw_buffers"] {
+		mdb = 1
+	}
+	return glsl.Options{WebGL2: c.Version == 2, Extensions: ex, MaxDrawBuffers: mdb}
 }
 
 func (c *Context) CompileShader(id uint32) {

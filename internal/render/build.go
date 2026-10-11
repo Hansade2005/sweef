@@ -287,6 +287,18 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 	for _, k := range kids {
 		b.addKid(k)
 	}
+	if n.Data == "details" && !hasAttr(n, "open") {
+		seenSummary := false
+		for _, k := range b.kids {
+			if k.n != nil && k.n.Data == "summary" && !seenSummary {
+				seenSummary = true
+				continue
+			}
+			if k.kind == kBlock || k.kind == kAtomic {
+				k.hiddenFlow = true
+			}
+		}
+	}
 	c.finishCommon(b)
 	c.fixupChildren(b)
 	if b.kind == kInline && !b.floated && !b.oof {
@@ -656,6 +668,10 @@ func (c *ctx) splitInline(b *lbox) []*lbox {
 		}
 	}
 	if len(cur) > 0 {
+		p := mk()
+		p.lastPart = true
+		out = append(out, p)
+	} else if piece == 0 {
 		p := mk()
 		p.lastPart = true
 		out = append(out, p)

@@ -37,5 +37,5 @@ gl.uniform3fv(U('directionalLights[0].direction'),[0.5,0.7,0.5]);gl.uniform3fv(U
 gl.uniform3f(U('diffuse'),0.8,0.8,0.8);gl.uniform3f(U('emissive'),0.02,0.02,0.04);gl.uniform3f(U('specular'),0.5,0.5,0.5);gl.uniform1f(U('shininess'),40);gl.uniform3f(U('fogColor'),0.6,0.7,0.8);gl.uniform1f(U('fogNear'),2.5);gl.uniform1f(U('fogFar'),4.5);
 tex(gl,8,8,checker(8,8,2,[255,255,255,255],[120,160,255,255]),{min:gl.LINEAR,mag:gl.LINEAR,ws:gl.REPEAT,wt:gl.REPEAT});gl.uniform1i(U('map'),0);
 gl.enable(gl.DEPTH_TEST);gl.enable(gl.CULL_FACE);gl.clearColor(0.6,0.7,0.8,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.drawElements(gl.TRIANGLES,I.length,gl.UNSIGNED_SHORT,0);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

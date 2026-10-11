@@ -22,5 +22,5 @@ gl.useProgram(p);var cl=gl.getUniformLocation(p,'u_c');gl.enable(gl.DEPTH_TEST);
 function rect(x0,y0,x1,y1,z,c){vbo(gl,new Float32Array([x0,y0,z,x1,y0,z,x0,y1,z,x1,y1,z]));attr(gl,p,'a_pos',3,0,0);gl.uniform3fv(cl,c);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);}
 var fns=[gl.LESS,gl.LEQUAL,gl.GREATER,gl.GEQUAL,gl.EQUAL,gl.NOTEQUAL,gl.ALWAYS,gl.NEVER];
 fns.forEach(function(f,i){var x=-1+(i%4)*0.5,y=i<4?0:-1;gl.depthFunc(gl.ALWAYS);rect(x+0.02,y+0.02,x+0.48,y+0.98,0.0,[0.3,0.3,0.3]);gl.depthFunc(f);rect(x+0.1,y+0.1,x+0.4,y+0.9,i==4?0.0:(i%2?0.2:-0.2),[1,0.6-i*0.05,i*0.12]);});
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

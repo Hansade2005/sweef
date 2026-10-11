@@ -21,11 +21,10 @@ p, dl, multicol { margin: 1em 0 }
 blockquote, figure { margin: 1em 40px }
 center { text-align: -webkit-center }
 hr { overflow: hidden; margin: 0.5em auto; border-style: inset; border-width: 1px; color: gray }
-legend { padding-left: 2px; padding-right: 2px }
+legend { padding-inline: 2px }
 fieldset { margin: 0 2px; padding: 0.35em 0.75em 0.625em; border: 2px groove rgb(192,192,192); min-width: min-content }
 details > summary:first-of-type { display: list-item; list-style-type: disclosure-closed; list-style-position: inside }
 details[open] > summary:first-of-type { list-style-type: disclosure-open }
-details:not([open]) > :not(summary):not(slot) { display: none }
 h1 { display: block; font-size: 2em; margin: 0.67em 0; font-weight: bold }
 h2 { display: block; font-size: 1.5em; margin: 0.83em 0; font-weight: bold }
 h3 { display: block; font-size: 1.17em; margin: 1em 0; font-weight: bold }
@@ -37,9 +36,9 @@ h6 { display: block; font-size: 0.67em; margin: 2.33em 0; font-weight: bold }
 :is(article, aside, nav, section) :is(article, aside, nav, section) :is(article, aside, nav, section) h1 { font-size: 1em; margin: 1.33em 0 }
 :is(article, aside, nav, section) :is(article, aside, nav, section) :is(article, aside, nav, section) :is(article, aside, nav, section) h1 { font-size: 0.83em; margin: 1.67em 0 }
 :is(article, aside, nav, section) :is(article, aside, nav, section) :is(article, aside, nav, section) :is(article, aside, nav, section) :is(article, aside, nav, section) h1 { font-size: 0.67em; margin: 2.33em 0 }
-dd { margin-left: 40px }
-dir, menu, ul { list-style-type: disc; margin: 1em 0; padding-left: 40px }
-ol { list-style-type: decimal; margin: 1em 0; padding-left: 40px }
+dd { margin-inline-start: 40px }
+dir, menu, ul { list-style-type: disc; margin: 1em 0; padding-inline-start: 40px }
+ol { list-style-type: decimal; margin: 1em 0; padding-inline-start: 40px }
 :is(dir, dl, menu, ol, ul) :is(dir, dl, menu, ol, ul) { margin: 0 }
 :is(dir, menu, ul) :is(dir, menu, ul) { list-style-type: circle }
 :is(dir, menu, ul) :is(dir, menu, ul) :is(dir, menu, ul) { list-style-type: square }

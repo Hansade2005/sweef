@@ -23,5 +23,5 @@ var t=tex(gl,64,64,null,{min:gl.LINEAR,mag:gl.LINEAR});var fb=gl.createFramebuff
 if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('fb');
 gl.viewport(0,0,64,64);gl.clearColor(0.9,0.8,0.1,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(tp);vbo(gl,new Float32Array([-0.8,-0.8,1,0,0, 0.8,-0.7,0,1,0, 0.0,0.8,0,0,1]));attr(gl,tp,'a_pos',2,20,0);attr(gl,tp,'a_col',3,20,8);gl.drawArrays(gl.TRIANGLES,0,3);
 gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,128,128);gl.useProgram(pp);gl.bindTexture(gl.TEXTURE_2D,t);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);quad(gl,pp,-1,-1,1,1,0,0,1,1);
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

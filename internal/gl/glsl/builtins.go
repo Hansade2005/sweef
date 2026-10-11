@@ -34,7 +34,7 @@ var unaryF = map[string]func(float32) float32{
 	"ceil":        func(x float32) float32 { return f32(math.Ceil(float64(x))) },
 	"fract":       func(x float32) float32 { return x - f32(math.Floor(float64(x))) },
 	"trunc":       func(x float32) float32 { return f32(math.Trunc(float64(x))) },
-	"round":       func(x float32) float32 { return f32(math.Floor(float64(x) + 0.5)) },
+	"round":       func(x float32) float32 { return f32(math.RoundToEven(float64(x))) },
 	"roundEven":   func(x float32) float32 { return f32(math.RoundToEven(float64(x))) },
 	"abs":         func(x float32) float32 { return f32(math.Abs(float64(x))) },
 	"sign": func(x float32) float32 {
@@ -712,6 +712,8 @@ func (c *compiler) builtin(e *Expr, h int) *V {
 		d := c.dst(h, n)
 		s := args[0].Off
 		kind := name
+		c.sites++
+		site := c.sites
 		o := func(f *Frame) {
 			r := f.R
 			if f.Quad == nil {
@@ -724,7 +726,7 @@ func (c *compiler) builtin(e *Expr, h int) *V {
 			for i := 0; i < n; i++ {
 				in[i] = fl(r[s+i])
 			}
-			dx, dy := f.Quad(in)
+			dx, dy := f.Quad(site, in)
 			for i := 0; i < n; i++ {
 				switch kind {
 				case "dFdx":

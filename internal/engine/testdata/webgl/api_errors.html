@@ -103,5 +103,5 @@ chk('getError twice',function(){return gl.getError()});
 chk('isXxx',function(){return [gl.isBuffer(b),gl.isTexture(t),gl.isProgram(p),gl.isShader(s),gl.isFramebuffer(fb),gl.isRenderbuffer(rb),gl.isBuffer(null)].join()});
 chk('getContextAttributes',function(){return JSON.stringify(gl.getContextAttributes())});
 window.__result=out.join('\n');
-}catch(e){window.__error=String(e&&e.stack||e);}
+}catch(e){window.__error=String(e&&(e.message+"\n"+e.stack)||e);}
 </script>

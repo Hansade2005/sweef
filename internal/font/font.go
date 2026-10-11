@@ -58,7 +58,22 @@ type Metrics struct {
 }
 
 func newFace(family string, st Style, data []byte, mono bool) (*Face, error) {
-	f, err := sfnt.Parse(data)
+	return newFaceIdx(family, st, data, mono, -1)
+}
+
+func newFaceIdx(family string, st Style, data []byte, mono bool, idx int) (*Face, error) {
+	var f *sfnt.Font
+	var err error
+	if idx >= 0 {
+		var c *sfnt.Collection
+		c, err = sfnt.ParseCollection(data)
+		if err != nil {
+			return nil, err
+		}
+		f, err = c.Font(idx)
+	} else {
+		f, err = sfnt.Parse(data)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -291,6 +306,7 @@ type entry struct {
 	face   *Face
 	mono   bool
 	embed  []byte
+	idx    int // font index within a .ttc, -1 otherwise
 }
 
 var (
@@ -302,14 +318,14 @@ var (
 
 func embedded() []*entry {
 	return []*entry{
-		{family: "go", style: Style{400, false}, embed: goregular.TTF},
-		{family: "go", style: Style{700, false}, embed: gobold.TTF},
-		{family: "go", style: Style{400, true}, embed: goitalic.TTF},
-		{family: "go", style: Style{700, true}, embed: gobolditalic.TTF},
-		{family: "go mono", style: Style{400, false}, embed: gomono.TTF, mono: true},
-		{family: "go mono", style: Style{700, false}, embed: gomonobold.TTF, mono: true},
-		{family: "go mono", style: Style{400, true}, embed: gomonoitalic.TTF, mono: true},
-		{family: "go mono", style: Style{700, true}, embed: gomonobolditalic.TTF, mono: true},
+		{family: "go", style: Style{400, false}, embed: goregular.TTF, idx: -1},
+		{family: "go", style: Style{700, false}, embed: gobold.TTF, idx: -1},
+		{family: "go", style: Style{400, true}, embed: goitalic.TTF, idx: -1},
+		{family: "go", style: Style{700, true}, embed: gobolditalic.TTF, idx: -1},
+		{family: "go mono", style: Style{400, false}, embed: gomono.TTF, mono: true, idx: -1},
+		{family: "go mono", style: Style{700, false}, embed: gomonobold.TTF, mono: true, idx: -1},
+		{family: "go mono", style: Style{400, true}, embed: gomonoitalic.TTF, mono: true, idx: -1},
+		{family: "go mono", style: Style{700, true}, embed: gomonobolditalic.TTF, mono: true, idx: -1},
 	}
 }
 
@@ -338,12 +354,10 @@ func load() {
 					return nil
 				}
 				ext := strings.ToLower(filepath.Ext(p))
-				if ext != ".ttf" && ext != ".otf" {
+				if ext != ".ttf" && ext != ".otf" && ext != ".ttc" {
 					return nil
 				}
-				if e := probe(p); e != nil {
-					entries = append(entries, e)
-				}
+				entries = append(entries, probeAll(p, ext == ".ttc")...)
 				return nil
 			})
 		}
@@ -353,15 +367,52 @@ func load() {
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].embed == nil && entries[j].embed != nil })
 }
 
-// probe reads just enough of a font file to learn family and style.
-func probe(path string) *entry {
+// probeAll lists the fonts of a file (several for a .ttc collection).
+func probeAll(path string, coll bool) []*entry {
+	if !coll {
+		if e := probe(path, -1); e != nil {
+			return []*entry{e}
+		}
+		return nil
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
-	f, err := sfnt.Parse(data)
+	c, err := sfnt.ParseCollection(data)
 	if err != nil {
 		return nil
+	}
+	var out []*entry
+	for i := 0; i < c.NumFonts(); i++ {
+		if e := probe(path, i); e != nil {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// probe reads just enough of a font file to learn family and style.
+func probe(path string, idx int) *entry {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var f *sfnt.Font
+	if idx >= 0 {
+		c, err := sfnt.ParseCollection(data)
+		if err != nil {
+			return nil
+		}
+		f, err = c.Font(idx)
+		if err != nil {
+			return nil
+		}
+	} else {
+		f, err = sfnt.Parse(data)
+		if err != nil {
+			return nil
+		}
 	}
 	var b sfnt.Buffer
 	fam, _ := f.Name(&b, sfnt.NameIDTypographicFamily)
@@ -402,7 +453,7 @@ func probe(path string) *entry {
 	if p := f.PostTable(); p != nil {
 		mono = p.IsFixedPitch
 	}
-	return &entry{family: strings.ToLower(fam), style: st, path: path, mono: mono}
+	return &entry{family: strings.ToLower(fam), style: st, path: path, mono: mono, idx: idx}
 }
 
 func (e *entry) get() *Face {
@@ -420,7 +471,7 @@ func (e *entry) get() *Face {
 			return nil
 		}
 	}
-	f, err := newFace(e.family, e.style, data, e.mono)
+	f, err := newFaceIdx(e.family, e.style, data, e.mono, e.idx)
 	if err != nil {
 		return nil
 	}
@@ -435,7 +486,7 @@ func RegisterWeb(family string, st Style, data []byte) error {
 		return err
 	}
 	mu.Lock()
-	web = append(web, &entry{family: strings.ToLower(family), style: st, face: f})
+	web = append(web, &entry{family: strings.ToLower(family), style: st, face: f, idx: -1})
 	mu.Unlock()
 	return nil
 }
@@ -530,7 +581,23 @@ func Resolve(families []string, st Style) *Face {
 	return Lookup("serif", st)
 }
 
-// Fallback finds any face that has a glyph for r, preferring the given list.
+// fallback preference orders (what fontconfig's configuration on the reference
+// machine yields for characters the requested families lack).
+var (
+	fbLatin = []string{"inter", "dejavu sans", "liberation sans", "dejavu serif", "liberation serif", "dejavu sans mono"}
+	fbCJK   = []string{"wenquanyi zen hei", "wenquanyi zen hei mono", "ipagothic", "ipapgothic", "inter", "dejavu sans"}
+	fbEmoji = []string{"noto color emoji", "dejavu sans", "inter"}
+)
+
+func isCJKRune(r rune) bool {
+	return r >= 0x2e80 && r <= 0xa4cf || r >= 0xac00 && r <= 0xd7a3 || r >= 0xf900 && r <= 0xfaff || r >= 0xfe30 && r <= 0xfe4f || r >= 0xff00 && r <= 0xffef || r >= 0x20000 && r <= 0x2fa1f || r >= 0x3000 && r <= 0x30ff
+}
+
+func isEmojiRune(r rune) bool {
+	return r >= 0x1f300 && r <= 0x1faff || r >= 0x2600 && r <= 0x27bf && r != 0x2713 && r != 0x2605
+}
+
+// Fallback finds a face that has a glyph for r, preferring the given list.
 func Fallback(r rune, families []string, st Style) *Face {
 	for _, f := range families {
 		if face := Lookup(f, st); face != nil && face.HasGlyph(r) {
@@ -538,6 +605,18 @@ func Fallback(r rune, families []string, st Style) *Face {
 		}
 	}
 	load()
+	order := fbLatin
+	switch {
+	case isEmojiRune(r):
+		order = fbEmoji
+	case isCJKRune(r):
+		order = fbCJK
+	}
+	for _, name := range order {
+		if face := Lookup(name, st); face != nil && face.HasGlyph(r) {
+			return face
+		}
+	}
 	for _, e := range entries {
 		if e.style.Weight == st.Weight && e.style.Italic == st.Italic {
 			if f := e.get(); f != nil && f.HasGlyph(r) {
