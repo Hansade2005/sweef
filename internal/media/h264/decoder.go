@@ -92,7 +92,10 @@ type Decoder struct {
 }
 
 // NewDecoder returns an empty decoder.
-func NewDecoder() *Decoder { return &Decoder{lenSize: 0} }
+func NewDecoder() *Decoder {
+	vlcOnce.Do(initVLC)
+	return &Decoder{lenSize: 0}
+}
 
 // Reset drops all reference pictures (used when seeking).
 func (d *Decoder) Reset() {

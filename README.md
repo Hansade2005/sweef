@@ -22,19 +22,19 @@ Same 11-step agent flow (open a landing page, snapshot, click through to a login
 
 | step | Sweef | agent-browser | ratio |
 |---|---|---|---|
-| open page (cold daemon) | 20 ms | 560 ms | 28.0x |
-| snapshot, interactive only | 7 ms | 236 ms | 33.7x |
-| click that navigates | 7 ms | 253 ms | 36.1x |
-| snapshot, full | 6 ms | 221 ms | 36.8x |
-| fill | 5 ms | 220 ms | 44.0x |
-| press Enter that submits | 6 ms | 229 ms | 38.2x |
-| get title | 5 ms | 218 ms | 43.6x |
-| open React 18 app | 22 ms | 255 ms | 11.6x |
-| click in React | 8 ms | 226 ms | 28.2x |
-| eval | 6 ms | 219 ms | 36.5x |
-| whole flow, one command at a time | 121 ms | 2904 ms | 24.0x |
-| **whole flow as one `sweef batch`** | **56 ms** | 2904 ms | **51.9x** |
-| daemon memory | 26 MB | 1149 MB | 45x less |
+| open page (cold daemon) | 24 ms | 591 ms | 24.6x |
+| snapshot, interactive only | 8 ms | 244 ms | 30.5x |
+| click that navigates | 8 ms | 264 ms | 33.0x |
+| snapshot, full | 8 ms | 229 ms | 28.6x |
+| fill | 7 ms | 228 ms | 32.6x |
+| press Enter that submits | 8 ms | 235 ms | 29.4x |
+| get title | 7 ms | 230 ms | 32.9x |
+| open React 18 app | 24 ms | 255 ms | 10.6x |
+| click in React | 11 ms | 227 ms | 20.6x |
+| eval | 8 ms | 223 ms | 27.9x |
+| whole flow, one command at a time | 150 ms | 2994 ms | 20.0x |
+| **whole flow as one `sweef batch`** | **84 ms** | 2994 ms | **35.6x** |
+| daemon memory | 37 MB | 1192 MB | 32x less |
 
 Every step is over 20x except opening the React app, which executes 140 KB of React in a pure-Go JavaScript engine (about 10 ms) plus the process spawn every CLI call pays. Snapshots are equal or smaller (466 vs 480 bytes on the landing page, 68 vs 137 on the React app).
 

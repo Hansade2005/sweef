@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sync"
 )
 
 // Pure-Go AAC-LC decoder (ISO/IEC 14496-3, 1024-sample frames): ADTS and
@@ -359,15 +360,20 @@ func (d *aacDecoder) readPulse(r *aacBits, c *aacChan) error {
 	return nil
 }
 
-var aacPow43 [8192]float64
+var (
+	aacPow43     [8192]float64
+	aacPow43Once sync.Once
+)
 
-func init() {
+// initPow43 fills the table on first use rather than at process start.
+func initPow43() {
 	for i := range aacPow43 {
 		aacPow43[i] = math.Pow(float64(i), 4.0/3.0)
 	}
 }
 
 func pow43(v int) float64 {
+	aacPow43Once.Do(initPow43)
 	if v < len(aacPow43) {
 		return aacPow43[v]
 	}

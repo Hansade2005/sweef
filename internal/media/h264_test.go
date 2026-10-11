@@ -351,3 +351,22 @@ func TestNativeFramesVsFFmpeg(t *testing.T) {
 		})
 	}
 }
+
+// A stream outside the native decoder's scope (4:2:2) must not be played
+// natively: without ffmpeg OpenFrames reports it unsupported.
+func TestH264UnsupportedProfileNeedsFFmpeg(t *testing.T) {
+	data, err := os.ReadFile("testdata/h264_422.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := ProbeBytes(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	SetFFmpegEnabled(false)
+	defer SetFFmpegEnabled(true)
+	if fs, err := OpenFrames(BytesSource(data), info, ""); err == nil {
+		fs.Close()
+		t.Fatal("4:2:2 H.264 opened without ffmpeg")
+	}
+}

@@ -100,6 +100,11 @@ func newNativeFrames(src Source, info *Info) (*nativeFrames, error) {
 	if len(nf.keys) == 0 || nf.keys[0] != 0 {
 		nf.keys = append([]int{0}, nf.keys...)
 	}
+	// Probe the first picture so unsupported streams (e.g. 4:2:2) fall back to
+	// ffmpeg, or fail cleanly, at open time rather than on every frame.
+	if _, err := nf.Frame(0); err != nil {
+		return nil, err
+	}
 	return nf, nil
 }
 

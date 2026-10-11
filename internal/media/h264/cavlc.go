@@ -1,5 +1,7 @@
 package h264
 
+import "sync"
+
 import "math/bits"
 
 // CAVLC residual block decoding (9.2).
@@ -34,7 +36,10 @@ var (
 	runBeforeVLC     [8]*vlcTable
 )
 
-func init() {
+var vlcOnce sync.Once
+
+// initVLC builds the CAVLC tables on first decoder use rather than at process start.
+func initVLC() {
 	for k := 0; k < 3; k++ {
 		maxLen := uint(0)
 		for _, l := range coeffTokenLen[k] {
