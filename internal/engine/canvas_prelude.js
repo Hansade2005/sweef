@@ -483,6 +483,12 @@ Object.defineProperty(globalThis, '__swCanvasFactories', { enumerable: false });
     for (var i = 0; i < n; i++) u[i] = str.charCodeAt(i);
     return u;
   }
+  // two bytes per code point (value + 0x10000): half the loop iterations of fromBin
+  function fromPacked(str, n) {
+    var u = new Uint8ClampedArray(n), u16 = new Uint16Array(u.buffer), m = n >> 1;
+    for (var i = 0, j = 0; i < m; i++, j += 2) u16[i] = str.codePointAt(j) - 0x10000;
+    return u;
+  }
   var toB64 = toBin, fromB64 = fromBin;
 
   /* ------------------------------------------------------------- colors/fonts */
@@ -770,7 +776,7 @@ Object.defineProperty(globalThis, '__swCanvasFactories', { enumerable: false });
       x = Math.floor(x); y = Math.floor(y); w = Math.max(1, Math.trunc(w)); h = Math.max(1, Math.trunc(h));
       if (w * h * 4 > 536870912) throw new RangeError("Failed to execute 'getImageData' on 'CanvasRenderingContext2D': Out of memory at ImageData creation");
       var data;
-      if (!this._id) data = new Uint8ClampedArray(w * h * 4); else data = fromB64(sw.cvGetImageData(this._id, x, y, w, h));
+      if (!this._id) data = new Uint8ClampedArray(w * h * 4); else data = fromPacked(sw.cvGetImageData16(this._id, x, y, w, h), w * h * 4);
       return new ImageData(data, w, h, settings);
     },
     putImageData: function (img, dx, dy, ix, iy, iw, ih) {

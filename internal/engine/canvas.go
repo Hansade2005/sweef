@@ -446,6 +446,34 @@ func (h *cvHost) fns() map[string]hostFn {
 			}
 			return latin1(d), nil
 		},
+		"cvGetImageData16": func(a []any) (any, error) {
+			// same pixels as cvGetImageData packed two bytes per code point
+			// (value + 0x10000, always a valid non-surrogate code point), so the
+			// VM decodes with half as many loop iterations
+			c := h.get(cvI(a, 0))
+			if c == nil || c.ctx == nil {
+				return "", nil
+			}
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			x, y, w, hh := cvI(a, 1), cvI(a, 2), cvI(a, 3), cvI(a, 4)
+			if w < 0 || hh < 0 || w*hh > cvMaxPixels/4 {
+				return nil, fmt.Errorf("out of memory")
+			}
+			d := c.ctx.GetImageData(x, y, w, hh)
+			if c.opaque {
+				for i := 0; i+3 < len(d); i += 4 {
+					a := uint32(d[i+3])
+					d[i], d[i+1], d[i+2], d[i+3] = uint8(uint32(d[i])*a/255), uint8(uint32(d[i+1])*a/255), uint8(uint32(d[i+2])*a/255), 255
+				}
+			}
+			var sb strings.Builder
+			sb.Grow(len(d) * 2)
+			for i := 0; i+1 < len(d); i += 2 {
+				sb.WriteRune(rune(uint32(d[i])|uint32(d[i+1])<<8) + 0x10000)
+			}
+			return sb.String(), nil
+		},
 		"cvPutImageData": func(a []any) (any, error) {
 			b := unlatin1(cvS(a, 1))
 			w, hh := cvI(a, 2), cvI(a, 3)
