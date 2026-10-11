@@ -102,6 +102,8 @@ type Tab struct {
 	// renderGen counts rendering changes outside the DOM (canvas draws,
 	// video frames) so cached frames can be invalidated.
 	renderGen atomic.Uint64
+	// window scroll position (CSS px), guarded by mu
+	scrollX, scrollY float64
 	mu      sync.RWMutex
 	eng     *Engine
 	ctx     *BrowserContext // isolation context (nil = engine default)

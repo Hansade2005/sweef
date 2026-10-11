@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -732,6 +733,24 @@ func argI(a []any, i int) int64 {
 	return 0
 }
 
+func argF(a []any, i int) float64 {
+	if i >= len(a) {
+		return 0
+	}
+	switch v := a[i].(type) {
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case float64:
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return 0
+		}
+		return v
+	}
+	return 0
+}
+
 func argS(a []any, i int) string {
 	if i >= len(a) || a[i] == nil {
 		return ""
@@ -894,6 +913,27 @@ func (j *jsVM) registerHost() error {
 				return map[string]any{"x": 0, "y": 0, "width": 0, "height": 0}, nil
 			}
 			return map[string]any{"x": b[0], "y": b[1], "width": b[2], "height": b[3]}, nil
+		})},
+		{"geom", doc(func(d *fnet.Doc, a []any) (any, error) { return j.tab.geomOf(d, argI(a, 0)), nil })},
+		{"scrollWindow", func(a []any) (any, error) {
+			x, y := j.tab.scrollWindow(argF(a, 0), argF(a, 1))
+			return []any{x, y}, nil
+		}},
+		{"windowScroll", func(a []any) (any, error) {
+			x, y := j.tab.WindowScroll()
+			return []any{x, y}, nil
+		}},
+		{"scrollElement", doc(func(d *fnet.Doc, a []any) (any, error) {
+			x, y := j.tab.scrollElement(d, argI(a, 0), argF(a, 1), argF(a, 2))
+			return []any{x, y}, nil
+		})},
+		{"elementScroll", doc(func(d *fnet.Doc, a []any) (any, error) {
+			n := d.NodeByID(argI(a, 0))
+			if n == nil {
+				return []any{0.0, 0.0}, nil
+			}
+			x, y := d.ScrollOffset(n)
+			return []any{x, y}, nil
 		})},
 		{"elementFromPoint", func(a []any) (any, error) {
 			id, err := j.tab.hitTest(int(argI(a, 0)), int(argI(a, 1)))

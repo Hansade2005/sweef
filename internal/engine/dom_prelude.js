@@ -41,6 +41,14 @@
     if (host('box')) { var b = sw.box(id); if (b) return b; }
     return { x: 0, y: 0, width: 0, height: 0 };
   }
+  // CSSOM View geometry from the layout engine (see engine/geometry.go):
+  // page-space border box, fragment rects, client/scroll/offset metrics.
+  function geom(el) {
+    if (host('geom')) { try { var g = sw.geom(el[ID]); if (g) return g; } catch (e) { /* ignore */ } }
+    var b = hostBox(el[ID]);
+    return { x: b.x, y: b.y, w: b.width, h: b.height, rects: [[b.x, b.y, b.width, b.height]], cl: 0, ct: 0, cw: b.width, ch: b.height, sw: b.width, sh: b.height, ox: b.x, oy: b.y, op: 0, rendered: true };
+  }
+  function winScroll() { if (host('windowScroll')) { try { var s = sw.windowScroll(); if (s) return s; } catch (e) { /* ignore */ } } return [0, 0]; }
   function hostMutation(op, id) { if (host('mutation')) { try { sw.mutation(op, id); } catch (e) { /* ignore */ } } }
   function hostLog(level, text) { try { sw.log(level, text); } catch (e) { /* ignore */ } }
 
@@ -964,13 +972,14 @@
     shadowRoot: { get: function () { return slots(this).shadowRoot || null; } },
     assignedSlot: { get: function () { return null; } },
     // geometry from the Go side
-    clientWidth: { get: function () { return hostBox(this[ID]).width | 0; } },
-    clientHeight: { get: function () { return hostBox(this[ID]).height | 0; } },
-    clientTop: { get: function () { return 0; } }, clientLeft: { get: function () { return 0; } },
-    scrollWidth: { get: function () { return hostBox(this[ID]).width | 0; } },
-    scrollHeight: { get: function () { return hostBox(this[ID]).height | 0; } },
-    scrollTop: { get: function () { return slots(this).scrollTop || 0; }, set: function (v) { slots(this).scrollTop = +v || 0; } },
-    scrollLeft: { get: function () { return slots(this).scrollLeft || 0; }, set: function (v) { slots(this).scrollLeft = +v || 0; } }
+    clientWidth: { get: function () { if (isRootEl(this)) return viewport().width; var g = geom(this); return g.rendered ? Math.floor(g.cw) : 0; } },
+    clientHeight: { get: function () { if (isRootEl(this)) return viewport().height; var g = geom(this); return g.rendered ? Math.floor(g.ch) : 0; } },
+    clientTop: { get: function () { var g = geom(this); return g.rendered ? Math.round(g.ct || 0) : 0; } },
+    clientLeft: { get: function () { var g = geom(this); return g.rendered ? Math.round(g.cl || 0) : 0; } },
+    scrollWidth: { get: function () { var g = geom(this); var v = Math.round(g.sw || 0); return isRootEl(this) ? Math.max(v, viewport().width) : v; } },
+    scrollHeight: { get: function () { var g = geom(this); var v = Math.round(g.sh || 0); return isRootEl(this) ? Math.max(v, viewport().height) : v; } },
+    scrollTop: { get: function () { return isScroller(this) ? winScroll()[1] : elScroll(this)[1]; }, set: function (v) { setElScroll(this, null, +v || 0); } },
+    scrollLeft: { get: function () { return isScroller(this) ? winScroll()[0] : elScroll(this)[0]; }, set: function (v) { setElScroll(this, +v || 0, null); } }
   });
   methods(Element.prototype, {
     getAttribute: function (name) { var v = sw.getAttr(this[ID], attrName(this, name)); return v === undefined ? null : v; },
@@ -1026,9 +1035,10 @@
     },
     insertAdjacentElement: function (position, el) { return insertAdjacent(this, position, el); },
     insertAdjacentText: function (position, text) { insertAdjacent(this, position, documentWrapper.createTextNode(toStr(text))); },
-    getBoundingClientRect: function () { return domRect(hostBox(this[ID])); },
-    getClientRects: function () { var r = this.getBoundingClientRect(); var list = [r]; list.item = function (i) { return list[i] || null; }; return list; },
-    scrollIntoView: function () { }, scrollIntoViewIfNeeded: function () { }, scroll: function () { }, scrollTo: function () { }, scrollBy: function () { },
+    getBoundingClientRect: function () { var g = geom(this); if (!g.rendered) return new DOMRect(0, 0, 0, 0); var s = g.fixed ? [0, 0] : winScroll(); return new DOMRect(g.x - s[0], g.y - s[1], g.w, g.h); },
+    getClientRects: function () { var g = geom(this); var s = g.fixed ? [0, 0] : winScroll(); var list = (g.rects || []).map(function (r) { return new DOMRect(r[0] - s[0], r[1] - s[1], r[2], r[3]); }); list.item = function (i) { return list[i] || null; }; return list; },
+    scrollIntoView: function (arg) { scrollIntoViewImpl(this, arg); }, scrollIntoViewIfNeeded: function (center) { scrollIntoViewImpl(this, { block: center === false ? 'nearest' : 'center', ifNeeded: true }); },
+    scroll: function (a, b) { elementScrollTo(this, a, b, false); }, scrollTo: function (a, b) { elementScrollTo(this, a, b, false); }, scrollBy: function (a, b) { elementScrollTo(this, a, b, true); },
     attachShadow: function (init) { var s = slots(this); if (s.shadowRoot) throw DOMException('Shadow root cannot be created on a host which already hosts a shadow tree.', 'NotSupportedError'); s.shadowRoot = this; return this; },
     requestFullscreen: function () { return Promise.resolve(); },
     requestPointerLock: function () { }, setPointerCapture: function () { }, releasePointerCapture: function () { }, hasPointerCapture: function () { return false; },
@@ -1058,6 +1068,49 @@
   method(DOMRect.prototype, 'toJSON', function () { return { x: this.x, y: this.y, width: this.width, height: this.height, top: this.top, right: this.right, bottom: this.bottom, left: this.left }; });
   DOMRect.fromRect = function (r) { r = r || {}; return new DOMRect(r.x, r.y, r.width, r.height); };
   setTag(DOMRect, 'DOMRect'); global.DOMRect = DOMRect; global.DOMRectReadOnly = DOMRect;
+  function isRootEl(el) { return el.localName === 'html' && el.parentNode === documentWrapper; }
+  // The root scroller: documentElement, or body when it is the root's body.
+  function isScroller(el) { return isRootEl(el) || (el.localName === 'body' && el.parentNode && isRootEl(el.parentNode)); }
+  function elScroll(el) { if (host('elementScroll')) { try { return sw.elementScroll(el[ID]) || [0, 0]; } catch (e) { /* ignore */ } } return [0, 0]; }
+  function scrollEvent(target) { setTimeoutImpl(function () { fire(target, 'scroll', { bubbles: target === documentWrapper, cancelable: false }); if (target === documentWrapper) fire(global, 'scroll', { bubbles: false, cancelable: false }); }, [], 0, false); }
+  function setWindowScroll(x, y) {
+    var cur = winScroll(); if (x === null) x = cur[0]; if (y === null) y = cur[1];
+    if (!host('scrollWindow')) return;
+    var r = sw.scrollWindow(+x || 0, +y || 0);
+    if (r && (r[0] !== cur[0] || r[1] !== cur[1])) scrollEvent(documentWrapper);
+  }
+  function setElScroll(el, x, y) {
+    if (isScroller(el)) { setWindowScroll(x, y); return; }
+    var cur = elScroll(el); if (x === null) x = cur[0]; if (y === null) y = cur[1];
+    if (!host('scrollElement')) return;
+    var r = sw.scrollElement(el[ID], +x || 0, +y || 0);
+    if (r && (r[0] !== cur[0] || r[1] !== cur[1])) scrollEvent(el);
+  }
+  function scrollArgs(a, b, cur, rel) {
+    var x, y;
+    if (a !== null && typeof a === 'object') { x = a.left !== undefined ? +a.left : (rel ? 0 : cur[0]); y = a.top !== undefined ? +a.top : (rel ? 0 : cur[1]); }
+    else { x = +a || 0; y = +b || 0; }
+    if (rel) { x += cur[0]; y += cur[1]; }
+    return [x, y];
+  }
+  function windowScrollTo(a, b, rel) { var p = scrollArgs(a, b, winScroll(), rel); setWindowScroll(p[0], p[1]); }
+  function elementScrollTo(el, a, b, rel) { var cur = isScroller(el) ? winScroll() : elScroll(el); var p = scrollArgs(a, b, cur, rel); setElScroll(el, p[0], p[1]); }
+  function scrollIntoViewImpl(el, arg) {
+    var block = 'start', inline = 'nearest';
+    if (arg === false) block = 'end';
+    else if (arg && typeof arg === 'object') { block = arg.block || 'start'; inline = arg.inline || 'nearest'; }
+    var g = geom(el); if (!g.rendered) return;
+    var vp = viewport(), s = winScroll();
+    var pos = function (mode, start, size, view, cur) {
+      if (mode === 'start') return start;
+      if (mode === 'end') return start + size - view;
+      if (mode === 'center') return start + size / 2 - view / 2;
+      if (start >= cur && start + size <= cur + view) return cur;
+      return start < cur || size > view ? start : start + size - view;
+    };
+    if (arg && arg.ifNeeded && g.y >= s[1] && g.y + g.h <= s[1] + vp.height) return;
+    setWindowScroll(pos(inline, g.x, g.w, vp.width, s[0]), pos(block, g.y, g.h, vp.height, s[1]));
+  }
   function domRect(b) { return new DOMRect(b.x, b.y, b.width, b.height); }
   function ceAttributeChanged(el, name, oldV, newV) {
     var d = ceDefinitions.get(el.localName);
@@ -1082,11 +1135,11 @@
   getters(HTMLElement.prototype, {
     style: { get: function () { var s = slots(this); return s.style || (s.style = styleDecl(this)); }, set: function (v) { this.style.cssText = toStr(v); } },
     dataset: { get: function () { var s = slots(this); return s.dataset || (s.dataset = dataset(this)); } },
-    offsetWidth: { get: function () { return hostBox(this[ID]).width | 0; } },
-    offsetHeight: { get: function () { return hostBox(this[ID]).height | 0; } },
-    offsetTop: { get: function () { return hostBox(this[ID]).y | 0; } },
-    offsetLeft: { get: function () { return hostBox(this[ID]).x | 0; } },
-    offsetParent: { get: function () { return this.isConnected && this.localName !== 'body' && this.localName !== 'html' ? (this.parentElement && this.parentElement.closest('body') ? documentWrapper.body : null) : null; } },
+    offsetWidth: { get: function () { var g = geom(this); return g.rendered ? Math.round(g.w) : 0; } },
+    offsetHeight: { get: function () { var g = geom(this); return g.rendered ? Math.round(g.h) : 0; } },
+    offsetTop: { get: function () { var g = geom(this); return g.rendered ? Math.round(g.oy) : 0; } },
+    offsetLeft: { get: function () { var g = geom(this); return g.rendered ? Math.round(g.ox) : 0; } },
+    offsetParent: { get: function () { var g = geom(this); return g.rendered && g.op ? wrap(g.op) : null; } },
     isContentEditable: { get: function () { var v = this.getAttribute('contenteditable'); return v === '' || v === 'true' || v === 'plaintext-only'; } },
     nonce: { get: function () { return this.getAttribute('nonce') || ''; }, set: function (v) { this.setAttribute('nonce', toStr(v)); } },
     form: { get: function () { return this.closest('form'); } },
@@ -1924,10 +1977,11 @@
     innerWidth: { get: function () { return viewport().width; }, set: function () { } }, innerHeight: { get: function () { return viewport().height; }, set: function () { } },
     outerWidth: { get: function () { return viewport().width; }, set: function () { } }, outerHeight: { get: function () { return viewport().height; }, set: function () { } },
     devicePixelRatio: { get: function () { return viewport().dsf; }, set: function () { } },
-    scrollX: { get: function () { return 0; } }, scrollY: { get: function () { return 0; } }, pageXOffset: { get: function () { return 0; } }, pageYOffset: { get: function () { return 0; } },
+    scrollX: { get: function () { return winScroll()[0]; } }, scrollY: { get: function () { return winScroll()[1]; } }, pageXOffset: { get: function () { return winScroll()[0]; } }, pageYOffset: { get: function () { return winScroll()[1]; } },
     screenX: { get: function () { return 0; } }, screenY: { get: function () { return 0; } }, screenLeft: { get: function () { return 0; } }, screenTop: { get: function () { return 0; } }
   });
-  global.scrollTo = global.scroll = global.scrollBy = function () { };
+  global.scrollTo = global.scroll = function (a, b) { windowScrollTo(a, b, false); };
+  global.scrollBy = function (a, b) { windowScrollTo(a, b, true); };
   global.moveTo = global.moveBy = global.resizeTo = global.resizeBy = global.focus = global.blur = global.print = global.stop = function () { };
   global.close = function () { };
   global.open = function (url) { if (url) sw.navigate(String(new global.URL(url, currentURL()))); return null; };

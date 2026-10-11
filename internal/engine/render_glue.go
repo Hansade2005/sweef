@@ -164,6 +164,7 @@ var (
 // attachRenderer gives a newly installed document its image loader and
 // drops the previous document's.
 func (t *Tab) attachRenderer(old, doc *fnet.Doc) {
+	t.scrollX, t.scrollY = 0, 0 // caller holds t.mu
 	if !useRenderPipeline {
 		return
 	}
@@ -200,7 +201,10 @@ func (t *Tab) renderPixels(width, height int, dsf float64, full bool) *image.RGB
 	loadersMu.Lock()
 	l := loadersBy[dom]
 	loadersMu.Unlock()
-	o := render.Options{Width: width, Height: height, DPR: dsf, FullPage: full}
+	t.mu.RLock()
+	sx, sy := t.scrollX, t.scrollY
+	t.mu.RUnlock()
+	o := render.Options{Width: width, Height: height, DPR: dsf, FullPage: full, ScrollX: sx, ScrollY: sy}
 	if l != nil {
 		// Layout and paint request every image they meet; wait for those,
 		// then repeat in case newly sized images revealed more.

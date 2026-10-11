@@ -99,6 +99,7 @@ func Prepare(d *fnet.Doc, o Options) {
 	if r == nil {
 		r = LayoutDoc(d, float64(o.Width), float64(o.Height))
 	}
+	applyScroll(d, r)
 	paint.Paint(r, loaderFor(d), paint.Options{ScrollX: o.ScrollX, ScrollY: o.ScrollY})
 }
 
@@ -120,6 +121,7 @@ func Render(d *fnet.Doc, o Options) *image.RGBA {
 	if r == nil {
 		r = LayoutDoc(d, float64(o.Width), float64(o.Height))
 	}
+	applyScroll(d, r)
 	dl := paint.Paint(r, loaderFor(d), paint.Options{ScrollX: o.ScrollX, ScrollY: o.ScrollY})
 	x, y, w, h := o.ScrollX, o.ScrollY, float64(o.Width), float64(o.Height)
 	if o.FullPage {
@@ -131,4 +133,15 @@ func Render(d *fnet.Doc, o Options) *image.RGBA {
 	}
 	pw, ph := int(math.Ceil(w*o.DPR)), int(math.Ceil(h*o.DPR))
 	return dl.Replay(pw, ph, x, y, o.DPR).Img
+}
+
+// applyScroll copies element scroll positions (scrollTop/scrollLeft set by
+// script) onto the scroll containers' boxes for painting.
+func applyScroll(d *fnet.Doc, r *layout.Result) {
+	for n, fs := range r.Fragments {
+		x, y := d.ScrollOffset(n)
+		for _, f := range fs {
+			f.ScrollX, f.ScrollY = x, y
+		}
+	}
 }

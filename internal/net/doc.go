@@ -43,6 +43,9 @@ type Doc struct {
 	// layoutExtra is bumped by the engine when something layout depends
 	// on changes outside the tree (images decoded, canvas resized).
 	layoutExtra atomic.Uint64
+
+	scrollMu sync.Mutex
+	scrolls  map[*html.Node][2]float64
 }
 
 func (d *Doc) layoutGen() uint64 { return d.mutGen.Load() + d.layoutExtra.Load()<<20 }
@@ -1212,4 +1215,31 @@ func (d *Doc) ElementFromPoint(x, y int) int64 {
 		return 0
 	}
 	return d.idOf(best)
+}
+
+// SetScrollOffset records a scroll container's scroll position (element
+// scrollTop/scrollLeft); layout results pick it up for painting.
+func (d *Doc) SetScrollOffset(id int64, x, y float64) {
+	n := d.find(id)
+	if n == nil {
+		return
+	}
+	d.scrollMu.Lock()
+	if d.scrolls == nil {
+		d.scrolls = map[*html.Node][2]float64{}
+	}
+	if x == 0 && y == 0 {
+		delete(d.scrolls, n)
+	} else {
+		d.scrolls[n] = [2]float64{x, y}
+	}
+	d.scrollMu.Unlock()
+}
+
+// ScrollOffset returns n's scroll position (0, 0 when never scrolled).
+func (d *Doc) ScrollOffset(n *html.Node) (x, y float64) {
+	d.scrollMu.Lock()
+	v := d.scrolls[n]
+	d.scrollMu.Unlock()
+	return v[0], v[1]
 }
