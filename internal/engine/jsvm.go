@@ -32,6 +32,28 @@ import (
 //go:embed dom_prelude.js
 var domPrelude string
 
+// The prelude is compiled to QuickJS bytecode once per process; loading
+// bytecode into a fresh VM takes ~3 ms against ~40 ms to parse the source,
+// which is most of the cost of a navigation.
+var (
+	preludeOnce     sync.Once
+	preludeBytecode []byte
+)
+
+func compiledPrelude() []byte {
+	preludeOnce.Do(func() {
+		vm, err := quickjs.NewVM()
+		if err != nil {
+			return
+		}
+		defer vm.Close()
+		if bc, err := vm.Compile(domPrelude, quickjs.EvalGlobal); err == nil {
+			preludeBytecode = bc
+		}
+	})
+	return preludeBytecode
+}
+
 type jsVM struct {
 	mu     sync.Mutex
 	vm     *quickjs.VM
@@ -72,8 +94,16 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 		t.LogConsole("error", "sweef: host registration failed: "+err.Error())
 	}
 	j.installModuleLoader(docURL)
-	if _, err := vm.Eval(domPrelude, quickjs.EvalGlobal); err != nil {
-		t.LogConsole("error", "sweef: prelude failed: "+err.Error())
+	loaded := false
+	if bc := compiledPrelude(); bc != nil {
+		if _, err := vm.EvalBytecode(bc); err == nil {
+			loaded = true
+		}
+	}
+	if !loaded {
+		if _, err := vm.Eval(domPrelude, quickjs.EvalGlobal); err != nil {
+			t.LogConsole("error", "sweef: prelude failed: "+err.Error())
+		}
 	}
 	if _, err := vm.Call("__swSetDocument", docURL, "loading"); err != nil {
 		t.LogConsole("error", "sweef: __swSetDocument failed: "+err.Error())
