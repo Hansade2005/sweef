@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>bidi</title>
+<style>body{margin:16px;font:17px/1.5 "DejaVu Sans",sans-serif}.box{border:1px solid #888;padding:6px 8px;margin-bottom:8px;width:520px}.r{direction:rtl}.emb{unicode-bidi:embed;direction:rtl}.iso{unicode-bidi:isolate;direction:rtl}.ovr{unicode-bidi:bidi-override;direction:rtl}.pl{unicode-bidi:plaintext}.hl{background:#cde}.ta{text-align:right}.wide{width:260px}.pd{padding:0 10px;background:#cde;border:2px solid #36a;margin:0 4px}</style></head>
+<body>
+<div class="box">LTR paragraph with <span class="emb">embedded RTL אבגד הוז</span> and more English after it.</div>
+<div class="box">LTR with <span class="iso">isolated עברית 123</span> continuing text (1 + 2) = 3.</div>
+<div class="box">Override: <span class="ovr">abc def 123 override</span> then normal text.</div>
+<div class="box">Using bdo: <bdo dir="rtl">drawkcab ecnetnes</bdo> and bdi: <bdi>إيان</bdi> - <bdi>John</bdi> done.</div>
+<div class="box r">RTL paragraph with <span class="emb" style="direction:ltr">embedded LTR text</span> then עברית ending, and (parens) [brackets].</div>
+<div class="box r">מספרים: 1,234.56 ו-100% ואז $45 ועוד 7/8 ותאריך 12-03-2024.</div>
+<div class="box pl">plaintext אבג starts with latin so ltr אבגד</div>
+<div class="box pl">אבגד starts with hebrew so rtl in plaintext latin</div>
+<div class="box">Neutrals: "quoted אבג" - dash — (אבג) [שלום] and אבג, comma; semi: colon! end?</div>
+<div class="box wide">Wrapping long mixed paragraph: English words and עברית מילים רבות כדי להצטלב בשורות אחדות ואז more English text at the end.</div>
+<div class="box wide r">פסקה ארוכה בעברית עם English words inside that wrap around several lines and then back to עברית.</div>
+<div class="box ta">Right aligned LTR with עברית.</div>
+<div class="box"><span class="hl">Highlighted</span> <span class="hl r">עברית מודגשת</span> <span class="hl">Back</span>.</div>
+<div class="box">Inline-block: <span style="display:inline-block;width:40px;height:16px;background:#fa8"></span> אבג <span style="display:inline-block;width:40px;height:16px;background:#8af"></span> end</div>
+<div class="box">LTR page, Hebrew span: before <span class="pd">אבגד הוז</span> after, and mixed <span class="pd">abc אבג def</span> end.</div>
+<div class="box r">RTL page, Latin span: לפני <span class="pd">Latin run</span> אחרי, ומעורב <span class="pd">אבג abc דהו</span> סוף.</div>
+<div class="box r">RTL embed: לפני <span class="pd emb" style="direction:ltr">LTR embed</span> אחרי and <span class="pd iso" style="direction:ltr">LTR isolate</span> end.</div>
+<div class="box">LTR embed: before <span class="pd emb">עברית embed</span> after <span class="pd iso">עברית isolate</span> end.</div>
+</body></html>

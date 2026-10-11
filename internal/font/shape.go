@@ -23,11 +23,77 @@ type ShapeOptions struct {
 func (f *Face) gid(r rune) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	gi, err := f.font.GlyphIndex(&f.buf, r)
-	if err != nil {
-		return 0
+	return f.gidLocked(r)
+}
+
+func (f *Face) gidLocked(r rune) int {
+	if g, ok := f.gids[r]; ok {
+		return g
 	}
-	return int(gi)
+	g := 0
+	if gi, err := f.font.GlyphIndex(&f.buf, r); err == nil {
+		g = int(gi)
+	}
+	if f.gids == nil {
+		f.gids = map[rune]int{}
+	}
+	f.gids[r] = g
+	return g
+}
+
+// GID is the glyph id of r in the face (0 when absent).
+func (f *Face) GID(r rune) int { return f.gid(r) }
+
+// HasLigatures reports whether the face has GSUB standard ligature lookups.
+func (f *Face) HasLigatures() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.loadOT().liga != nil
+}
+
+// Ligature looks for a standard ligature (liga, clig, rlig) at the start of
+// rs, which must all be in this face. It returns the ligature glyph id and
+// the number of runes it replaces (0 when there is none). rs may be longer
+// than the ligature; at most four runes are examined.
+func (f *Face) Ligature(rs []rune) (gid, n int) {
+	if len(rs) < 2 {
+		return 0, 0
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	lig := f.loadOT().liga
+	if lig == nil {
+		return 0, 0
+	}
+	if len(rs) > 4 {
+		rs = rs[:4]
+	}
+	var gs [4]int
+	for i, r := range rs {
+		gs[i] = f.gidLocked(r)
+		if gs[i] == 0 {
+			rs = rs[:i]
+			break
+		}
+	}
+	if len(rs) < 2 {
+		return 0, 0
+	}
+	g, cc := lig.ligature(gs[:len(rs)])
+	if cc < 2 {
+		return 0, 0
+	}
+	return g, cc
+}
+
+// AdvanceGID is the advance of glyph gid at size px (FreeType-quantized).
+func (f *Face) AdvanceGID(gid int, size float64) float64 {
+	return f.AdvanceGIDUnits(gid) * FTSize(size) / float64(f.upm)
+}
+
+// KernGIDs is the pair adjustment between two glyph ids at size px.
+func (f *Face) KernGIDs(a, b int, size float64) float64 {
+	return f.kernGID(a, b) * FTSize(size) / float64(f.upm)
 }
 
 // AdvanceGIDUnits is the advance of glyph gid in font units.

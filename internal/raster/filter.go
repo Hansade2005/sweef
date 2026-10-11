@@ -26,7 +26,7 @@ func filterPad(fl []Filter) int {
 		case "blur":
 			p += int(math.Ceil(3 * math.Max(0, f.arg(0, 0))))
 		case "drop-shadow":
-			p += int(math.Ceil(math.Max(math.Abs(f.arg(0, 0)), math.Abs(f.arg(1, 0))))) + int(math.Ceil(3*math.Max(0, f.arg(2, 0))/2))
+			p += int(math.Ceil(math.Max(math.Abs(f.arg(0, 0)), math.Abs(f.arg(1, 0))))) + int(math.Ceil(3*math.Max(0, f.arg(2, 0))))
 		}
 	}
 	return p
@@ -162,7 +162,9 @@ func transferFilter(s *Surface, f Filter) {
 
 func dropShadow(s *Surface, f Filter) {
 	dx, dy := int(math.Round(f.arg(0, 0))), int(math.Round(f.arg(1, 0)))
-	sigma := math.Max(0, f.arg(2, 0)) / 2
+	// CSS filter drop-shadow's blur argument is the standard deviation itself
+	// (unlike box-shadow, whose blur radius is twice sigma)
+	sigma := math.Max(0, f.arg(2, 0))
 	w, h := s.W(), s.H()
 	sh := newMask(s.R)
 	for y := 0; y < h; y++ {

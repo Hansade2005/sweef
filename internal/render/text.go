@@ -118,6 +118,10 @@ type shaped struct {
 	faces []*font.Face
 	x     []float64 // cumulative advance; x[i] = start of rune i; len = n+1
 	kn    []float64 // kerning applied before rune i (glyph origin offset); may be nil
+	// Optional OpenType/Arabic shaping results (nil for plain text):
+	form []rune  // Arabic presentation form shown for rune i; 0 = consumed (lam-alef tail)
+	gid  []int32 // ligature glyph id when rune i heads a ligature
+	nlig []uint8 // runes covered by the ligature headed at rune i (0/1 = none)
 }
 
 func (sh *shaped) kernAt(i int) float64 {
@@ -132,16 +136,48 @@ func (c *ctx) shape(fs *fontSpec, st *style.Computed, rs []rune) *shaped {
 	return c.shapeWith(fs, st, rs, 0, nil)
 }
 
+func isArabicRune(r rune) bool { return r >= 0x0600 && r <= 0x06ff }
+
 // shapeWith shapes rs continuing a text run whose previous glyph was prev in face prevFace.
 func (c *ctx) shapeWith(fs *fontSpec, st *style.Computed, rs []rune, prev rune, prevFace *font.Face) *shaped {
-	sh := &shaped{r: rs, faces: make([]*font.Face, len(rs)), x: make([]float64, len(rs)+1), kn: make([]float64, len(rs))}
+	n := len(rs)
+	sh := &shaped{r: rs, faces: make([]*font.Face, n), x: make([]float64, n+1), kn: make([]float64, n)}
 	kern := st.FontKerning != "none" && st.TextRendering != "optimizespeed"
-	x := 0.0
+	liga := !st.FontLigOff && st.LetterSpacing == 0 && st.TextRendering != "optimizespeed"
+	// Arabic letters take their contextual forms
+	forms := rs
+	for _, r := range rs {
+		if isArabicRune(r) {
+			forms = font.ShapeArabicKeep(rs)
+			sh.form = forms
+			break
+		}
+	}
 	for i, r := range rs {
-		f := fs.faceFor(r)
+		fr := forms[i]
+		if fr == 0 {
+			sh.faces[i] = fs.faceFor(r)
+			continue
+		}
+		f := fs.faceFor(fr)
+		if fr != r && (f == nil || !f.HasGlyph(fr)) {
+			// the face lacks the presentation form: show the plain letter
+			forms[i] = r
+			f = fs.faceFor(r)
+		}
 		sh.faces[i] = f
+	}
+	x := 0.0
+	prevG := -1 // glyph id of the previous glyph when it was a ligature (else -1)
+	for i := 0; i < n; i++ {
+		r := rs[i]
+		f := sh.faces[i]
 		adv := 0.0
+		cells := 1
+		curG := -1
 		switch {
+		case forms[i] == 0:
+			adv = 0
 		case r == '\t':
 			adv = fs.spaceW
 		case isZeroWidth(r) && r != 0xad:
@@ -149,18 +185,55 @@ func (c *ctx) shapeWith(fs *fontSpec, st *style.Computed, rs []rune, prev rune, 
 		case r == 0xad:
 			adv = 0
 		case f != nil:
-			a := f.AdvanceF(r, fs.size)
-			if a < 0 {
-				a = fs.size * 0.5
+			dr := forms[i]
+			// standard ligatures (fi, fl, ...) within one face
+			if liga && i+1 < n && f.HasLigatures() && !isArabicRune(r) {
+				j := i + 1
+				for j < n && j < i+4 && sh.faces[j] == f && forms[j] != ' ' && !isZeroWidth(rs[j]) {
+					j++
+				}
+				if j-i >= 2 && r != ' ' {
+					if g, cc := f.Ligature(forms[i:j]); cc >= 2 {
+						if sh.gid == nil {
+							sh.gid = make([]int32, n)
+							sh.nlig = make([]uint8, n)
+						}
+						sh.gid[i], sh.nlig[i] = int32(g), uint8(cc)
+						adv = f.AdvanceGID(g, fs.size)
+						if kern && prev != 0 && prevFace == f {
+							var kv float64
+							if prevG >= 0 {
+								kv = f.KernGIDs(prevG, g, fs.size)
+							} else {
+								kv = f.KernGIDs(f.GID(prev), g, fs.size)
+							}
+							adv += kv
+							sh.kn[i] = kv
+						}
+						cells = cc
+						curG = g
+					}
+				}
 			}
-			adv = a
-			if st.VertFrame != 0 && st.TextOrientation == "upright" {
-				adv = fs.size // upright glyphs advance by an em in vertical text
-			}
-			if kern && prev != 0 && prevFace == f {
-				kv := f.KernF(prev, r, fs.size)
-				adv += kv
-				sh.kn[i] = kv
+			if cells == 1 {
+				a := f.AdvanceF(dr, fs.size)
+				if a < 0 {
+					a = fs.size * 0.5
+				}
+				adv = a
+				if st.VertFrame != 0 && st.TextOrientation == "upright" {
+					adv = fs.size // upright glyphs advance by an em in vertical text
+				}
+				if kern && prev != 0 && prevFace == f {
+					var kv float64
+					if prevG >= 0 {
+						kv = f.KernGIDs(prevG, f.GID(dr), fs.size)
+					} else {
+						kv = f.KernF(prev, dr, fs.size)
+					}
+					adv += kv
+					sh.kn[i] = kv
+				}
 			}
 		default:
 			adv = fs.size * 0.5
@@ -171,9 +244,19 @@ func (c *ctx) shapeWith(fs *fontSpec, st *style.Computed, rs []rune, prev rune, 
 			adv += st.WordSpacing
 		}
 		adv += st.LetterSpacing
-		x += adv
-		sh.x[i+1] = x
-		prev, prevFace = r, f
+		for k := 0; k < cells; k++ {
+			x += adv / float64(cells)
+			sh.x[i+k+1] = x
+			if k > 0 {
+				sh.faces[i+k] = f
+			}
+		}
+		last := i + cells - 1
+		if forms[last] != 0 {
+			prev, prevFace = forms[last], sh.faces[last]
+		}
+		prevG = curG
+		i = last
 	}
 	return sh
 }
@@ -250,6 +333,9 @@ func breakAfter(rs []rune, i int, st *style.Computed) bool {
 		}
 		if i > 0 && (unicode.IsSpace(rs[i-1])) {
 			return false
+		}
+		if i > 0 && rs[i-1] >= 0x5d0 && rs[i-1] <= 0x5ea {
+			return false // LB21a: no break after a Hebrew letter and hyphen
 		}
 		return unicode.IsLetter(nx) || unicode.IsDigit(nx) && false
 	case 0x2014:

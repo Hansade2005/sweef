@@ -216,6 +216,7 @@ func (c *ctx) buildAtomsFL(b *lbox) []atom {
 	fl := &flatState{c: c, root: b, prevSpace: true, flRoot: b}
 	fl.walk(b, b)
 	b.atomsFL = fl.atoms
+	c.assignBidi(b, b.atomsFL)
 	return b.atomsFL
 }
 

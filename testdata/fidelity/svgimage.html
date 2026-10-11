@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>svgimage</title>
+<style>
+body{margin:10px;font:12px Arial,sans-serif;color:#234}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-start}
+img,svg.b{border:1px solid #ccd;background:#f8f8fc}
+.bg{width:140px;height:70px;border:1px solid #ccd;background:url(svgassets/adaptive.svg) 0 0/70px 35px repeat}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs><symbol id="face2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#8cf" stroke="#06a"/><path d="M8 9h2M14 9h2M8 15h8" stroke="#06a" fill="none"/></symbol><linearGradient id="spriteG" x2="1"><stop offset="0" stop-color="#f60"/><stop offset="1" stop-color="#60f"/></linearGradient></defs></svg>
+<div class="row">
+<img src="svgassets/badge.svg">
+<img src="svgassets/badge.svg" width="120" height="40">
+<img src="svgassets/adaptive.svg" width="120" height="60">
+<img src="svgassets/adaptive.svg" width="90" height="45">
+<img src="svgassets/nested.svg" width="200">
+<div class="bg"></div>
+</div>
+<div class="row">
+<svg class="b" width="200" height="90" viewBox="0 0 200 90">
+<image href="svgassets/badge.svg" x="5" y="5" width="80" height="60"/>
+<image href="svgassets/badge.svg" x="95" y="5" width="100" height="40" preserveAspectRatio="xMinYMin slice"/>
+<image href="data:image/svg+xml;utf8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2040%2040'%3E%3Ccircle%20cx='20'%20cy='20'%20r='18'%20fill='%2339c'/%3E%3Cimage%20href='data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCI%2BPHJlY3Qgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiBmaWxsPSIjZmMwIi8%2BPC9zdmc%2B'%20x='14'%20y='14'%20width='12'%20height='12'/%3E%3C/svg%3E" x="100" y="48" width="40" height="40"/>
+<use href="svgassets/sprite.svg#star" x="165" y="68"/>
+</svg>
+<svg class="b" width="200" height="90" viewBox="0 0 200 90">
+<use href="#face2" x="10" y="10" width="40" height="40"/>
+<use href="#face2" x="60" y="10" width="30" height="30" style="opacity:.6"/>
+<rect x="110" y="10" width="80" height="40" fill="url(#spriteG)"/>
+<use href="svgassets/sprite.svg#face" x="10" y="50" width="30" height="30"/>
+<image href="svgassets/nested.svg" x="60" y="48" width="100" height="40"/>
+</svg>
+</div>
+</body></html>

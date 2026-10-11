@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+<defs>
+<g id="star"><path d="M0-12 3.5-4 12-3 5.5 3 7.5 12 0 7.5-7.5 12-5.5 3-12-3-3.5-4z" fill="#e8b"/></g>
+<symbol id="face" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#fd5" stroke="#a60"/><circle cx="8.5" cy="10" r="1.5"/><circle cx="15.5" cy="10" r="1.5"/><path d="M7 15q5 4 10 0" fill="none" stroke="#a60" stroke-width="1.5"/></symbol>
+</defs>
+</svg>

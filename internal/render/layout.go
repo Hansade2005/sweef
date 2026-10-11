@@ -49,6 +49,10 @@ type ctx struct {
 	vIntrinsic bool
 	curFL      *lbox // IFC root whose first line is being finished
 	all        []*lbox
+	fo         map[*lbox][]*lbox // foreignObject wrappers per inline <svg> box
+	// CSS filter: url(#id) support (svgfilterref.go)
+	urlFilterHint int
+	filterEls     map[*html.Node]*style.Computed
 }
 
 // Layout lays out the document rooted at root (a document or html element).
@@ -235,6 +239,8 @@ func (c *ctx) finishResult(rb *lbox) {
 	res.Viewport = Rect{0, 0, vw, c.vh - c.sbViewportH}
 	res.Width = math.Max(vw, math.Max(rb.ovRight, rb.ax+rb.w+rb.mar[1]))
 	res.Height = math.Max(c.vh, math.Max(rb.ovBottom, rb.ay+rb.h+rb.mar[2]))
+	c.layoutForeignObjects()
+	c.finishFilterRefs()
 	c.buildBoxes()
 	c.paintAll(rb)
 	c.installHit(rb)
@@ -639,6 +645,10 @@ func (c *ctx) buildBoxes() {
 				if b.kind == kAtomic || b.kind == kBlock {
 					bx.Margin = b.mar
 				}
+				if b.kind == kBlock && len(b.mcFrags) > 1 {
+					// a block split over columns reports one rectangle per column
+					bx.Frags = append(bx.Frags, b.colFrags()...)
+				}
 			}
 			if first {
 				border = r
@@ -706,6 +716,7 @@ func (c *ctx) buildBoxes() {
 			}
 		}
 	}
+	c.zeroNonRenderedSVG()
 	if rb := res.Boxes[c.docEl]; rb != nil {
 		rb.ClientW, rb.ClientH = c.vw-c.sbViewport, c.vh-c.sbViewportH
 		rb.ScrollW, rb.ScrollH = res.Width, res.Height

@@ -151,9 +151,11 @@ func (p *Painter) op(op render.Op) {
 				}
 			}
 		}
+		var steps []layerStep
+		b, fl, steps = p.svgRefLayer(fl, b)
 		c.SetTransformStash()
 		c.BeginLayer(b, fl)
-		c.layerMeta = append(c.layerMeta, layerMeta{opacity: o.Opacity, blend: o.Blend})
+		c.layerMeta = append(c.layerMeta, layerMeta{opacity: o.Opacity, blend: o.Blend, steps: steps})
 	case render.PopLayer:
 		if n := len(c.layerMeta); n > 0 && c.LayerDepth() > 0 {
 			lm := c.layerMeta[n-1]
@@ -163,6 +165,9 @@ func (p *Painter) op(op render.Op) {
 				op = SourceOver
 			}
 			a := lm.opacity
+			if lm.steps != nil {
+				p.runLayerSteps(lm.steps)
+			}
 			c.EndLayer(a, op)
 			c.Restore()
 		}
@@ -181,6 +186,8 @@ func (p *Painter) op(op render.Op) {
 		p.scrollCorner(o)
 	case render.BackdropFilter:
 		p.backdrop(o)
+	case render.PushClipPath, render.PopClipPath, render.PushMask, render.PopMask:
+		p.clipOp(op)
 	}
 }
 
@@ -533,7 +540,7 @@ func (p *Painter) text(o render.TextRun) {
 		if g.Face == nil {
 			continue
 		}
-		sh.Glyphs = append(sh.Glyphs, Glyph{R: g.R, X: g.X, Face: g.Face})
+		sh.Glyphs = append(sh.Glyphs, Glyph{R: g.R, X: g.X, Face: g.Face, GID: g.GID})
 	}
 	c.Save()
 	defer c.Restore()
@@ -814,7 +821,12 @@ func (p *Painter) gradient(o render.Gradient) {
 			tdef.X1 -= geom.X
 			tdef.Y1 -= geom.Y
 			tm := Scale(float64(tw)/t.Size[0], float64(th)/t.Size[1])
-			tsh := NewGradientShader(tdef, tm.Mul(m), 1)
+			mt := m
+			if o.Kind == "radial" {
+				// the ellipse stretch pivots on the centre in tile coordinates
+				mt = Translate(tdef.X0, tdef.Y0).Mul(Scale(1, math.Max(o.RY, 1e-6)/def.R1)).Mul(Translate(-tdef.X0, -tdef.Y0))
+			}
+			tsh := NewGradientShader(tdef, tm.Mul(mt), 1)
 			tc.FillRectShader(0, 0, float64(tw), float64(th), tsh)
 			pat := NewImageShader(tc.Surface(), sc.Mul(Translate(t.Origin[0], t.Origin[1])).Mul(Scale(t.Size[0]/float64(tw), t.Size[1]/float64(th))), o.Tile.RepeatX, o.Tile.RepeatY, FilterBilinear, 1)
 			c.FillPathShader(path, NonZero, pat)

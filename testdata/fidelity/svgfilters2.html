@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>svgfilters2</title>
+<style>
+body{margin:10px;font:12px Arial,sans-serif;color:#234}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+svg{background:#fff;border:1px solid #ccd}
+.h{width:150px;height:110px;background:linear-gradient(135deg,#e55,#58e);color:#fff;padding:8px;box-sizing:border-box;font-weight:bold}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<filter id="hf1"><feGaussianBlur stdDeviation="2"/></filter>
+<filter id="hf2" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 1 0 0  0 1 0 0 0  1 0 0 0 0  0 0 0 1 0"/></filter>
+<filter id="hf3"><feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="3"/><feDisplacementMap in="SourceGraphic" scale="14" xChannelSelector="R" yChannelSelector="G"/></filter>
+</defs></svg>
+<div class="row">
+<svg width="150" height="110"><filter id="t1" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" seed="1"/></filter><rect width="150" height="110" filter="url(#t1)"/></svg>
+<svg width="150" height="110"><filter id="t2" x="0" y="0" width="100%" height="100%"><feTurbulence type="turbulence" baseFrequency="0.03 0.08" numOctaves="2" seed="7"/></filter><rect width="150" height="110" filter="url(#t2)"/></svg>
+<svg width="150" height="110"><filter id="t3" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.1" numOctaves="1" seed="0" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="150" height="110" filter="url(#t3)"/></svg>
+<svg width="150" height="110"><filter id="d1" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="turbulence" baseFrequency="0.05" numOctaves="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="20" xChannelSelector="R" yChannelSelector="B"/></filter>
+<g filter="url(#d1)"><rect x="20" y="20" width="110" height="70" fill="#38a"/><circle cx="75" cy="55" r="22" fill="#fc3"/></g></svg>
+<svg width="150" height="110"><filter id="d2"><feImage href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Ccircle cx='20' cy='20' r='18' fill='%23c33'/%3E%3C/svg%3E" x="10" y="10" width="60" height="60"/></filter><rect width="150" height="110" fill="#eef" filter="url(#d2)"/></svg>
+</div>
+<div class="row">
+<svg width="150" height="110"><filter id="c1"><feConvolveMatrix order="3" kernelMatrix="-1 -1 -1  -1 8 -1  -1 -1 -1" preserveAlpha="true"/></filter>
+<rect x="15" y="15" width="70" height="50" fill="#36c" filter="url(#c1)"/><circle cx="105" cy="60" r="28" fill="#c63" filter="url(#c1)"/></svg>
+<svg width="150" height="110"><filter id="c2"><feConvolveMatrix order="3" kernelMatrix="2 0 0  0 -1 0  0 0 -1" divisor="1" bias="0.5" edgeMode="duplicate"/></filter>
+<rect x="15" y="15" width="70" height="50" fill="#6a3" filter="url(#c2)"/><circle cx="105" cy="70" r="28" fill="#a36" filter="url(#c2)"/></svg>
+<svg width="150" height="110"><filter id="c3" x="0" y="0" width="100%" height="100%"><feConvolveMatrix order="5 3" kernelMatrix="1 1 1 1 1  1 1 1 1 1  1 1 1 1 1" targetX="2" targetY="1" edgeMode="wrap"/></filter>
+<rect x="30" y="30" width="60" height="40" fill="#e83" filter="url(#c3)"/></svg>
+<svg width="150" height="110"><filter id="tl" x="0" y="0" width="100%" height="100%"><feFlood flood-color="#e33" x="0" y="0" width="12" height="12" result="a"/><feFlood flood-color="#33e" x="12" y="0" width="12" height="12" result="b"/><feMerge result="m"><feMergeNode in="a"/><feMergeNode in="b"/></feMerge><feOffset in="m" dx="0" dy="0" x="0" y="0" width="24" height="12" result="tile"/><feTile in="tile"/></filter><rect width="150" height="110" filter="url(#tl)"/></svg>
+<svg width="150" height="110"><filter id="tl2" x="0" y="0" width="100%" height="100%"><feImage href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Crect width='10' height='10' fill='%23c33'/%3E%3Crect x='10' y='10' width='10' height='10' fill='%2333c'/%3E%3C/svg%3E" x="5" y="5" width="20" height="20" result="im"/><feTile in="im"/></filter><rect width="150" height="110" filter="url(#tl2)"/></svg>
+</div>
+<div class="row">
+<svg width="150" height="110"><filter id="l1"><feDiffuseLighting in="SourceGraphic" surfaceScale="4" diffuseConstant="1" lighting-color="#fff"><feDistantLight azimuth="225" elevation="40"/></feDiffuseLighting></filter>
+<rect x="15" y="15" width="120" height="80" rx="20" fill="#9ab" filter="url(#l1)"/></svg>
+<svg width="150" height="110"><filter id="l2" color-interpolation-filters="sRGB"><feSpecularLighting in="SourceAlpha" surfaceScale="5" specularConstant="1.2" specularExponent="20" lighting-color="#ffe"><fePointLight x="40" y="30" z="40"/></feSpecularLighting><feComposite in2="SourceGraphic" operator="arithmetic" k1="0" k2="1" k3="1" k4="0"/></filter>
+<circle cx="75" cy="55" r="40" fill="#468" filter="url(#l2)"/></svg>
+<svg width="150" height="110"><filter id="l3"><feDiffuseLighting surfaceScale="3" diffuseConstant="1.1" lighting-color="#fda"><feSpotLight x="30" y="20" z="50" pointsAtX="90" pointsAtY="70" pointsAtZ="0" specularExponent="2" limitingConeAngle="40"/></feDiffuseLighting></filter>
+<g filter="url(#l3)"><rect x="10" y="10" width="130" height="90" fill="#777"/><circle cx="75" cy="55" r="25" fill="#ccc"/></g></svg>
+<svg width="150" height="110"><filter id="l4" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" result="t"/><feDiffuseLighting in="t" surfaceScale="8" diffuseConstant="1" lighting-color="#d9a066"><feDistantLight azimuth="45" elevation="55"/></feDiffuseLighting></filter><rect width="150" height="110" filter="url(#l4)"/></svg>
+</div>
+<div class="row">
+<svg width="150" height="110"><filter id="ct1"><feComponentTransfer><feFuncR type="table" tableValues="1"/><feFuncG type="discrete" tableValues="0 1 0.5"/><feFuncB type="linear" slope="2" intercept="-0.3"/></feComponentTransfer></filter>
+<rect x="10" y="10" width="130" height="90" fill="url(#gg)" filter="url(#ct1)"/><linearGradient id="gg" x2="1"><stop offset="0" stop-color="#f00"/><stop offset=".5" stop-color="#0f0"/><stop offset="1" stop-color="#00f"/></linearGradient></svg>
+<svg width="150" height="110"><filter id="ct2"><feComponentTransfer><feFuncR type="gamma" amplitude="1.5" exponent="2" offset="0.1"/><feFuncA type="table" tableValues="0 0.5 1"/><feFuncB type="identity"/></feComponentTransfer></filter>
+<rect x="10" y="10" width="130" height="90" fill="url(#gg)" filter="url(#ct2)"/></svg>
+<svg width="150" height="110" viewBox="0 0 150 110"><filter id="pu" primitiveUnits="objectBoundingBox" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="0.05"/><feOffset dx="0.1" dy="0.1"/></filter>
+<rect x="30" y="20" width="60" height="50" fill="#c36" filter="url(#pu)"/></svg>
+<svg width="150" height="110"><filter id="ci1" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%"><feFlood flood-color="#808080" flood-opacity="1" result="f"/><feBlend in="SourceGraphic" in2="f" mode="multiply"/></filter>
+<filter id="ci2" x="0" y="0" width="100%" height="100%"><feFlood flood-color="#808080" flood-opacity="1" result="f"/><feBlend in="SourceGraphic" in2="f" mode="multiply"/></filter>
+<rect x="5" y="10" width="65" height="90" fill="#f93" filter="url(#ci1)"/><rect x="80" y="10" width="65" height="90" fill="#f93" filter="url(#ci2)"/></svg>
+</div>
+<div class="row">
+<div class="h" style="filter:url(#hf1)">Blur via url()</div>
+<div class="h" style="filter:url(#hf2)">Swap RB</div>
+<div class="h" style="filter:url(#hf3)">Turbulent displacement</div>
+<div class="h" style="filter:url(#hf1) drop-shadow(4px 4px 3px #000a)">Chain</div>
+<svg width="150" height="110"><filter id="mo"><feMorphology operator="dilate" radius="3"/></filter><filter id="mo2"><feMorphology operator="erode" radius="2 1"/></filter><text x="10" y="40" font-size="30" font-weight="bold" filter="url(#mo)" fill="#369">Dil</text><text x="10" y="90" font-size="30" font-weight="bold" filter="url(#mo2)" fill="#963">Ero</text></svg>
+</div>
+<div class="row">
+<svg width="150" height="110"><filter id="ra" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="10" dy="0" stdDeviation="2" flood-color="#000"/></filter><rect x="40" y="25" width="60" height="40" fill="#39c" transform="rotate(30 70 45)" filter="url(#ra)"/></svg>
+<svg width="150" height="110"><filter id="rb" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="6 0"/></filter><rect x="40" y="25" width="60" height="40" fill="#c33" transform="rotate(45 70 45)" filter="url(#rb)"/></svg>
+<svg width="150" height="110"><filter id="rc" x="-30%" y="-30%" width="160%" height="160%"><feOffset dx="12" dy="6"/></filter><rect x="40" y="25" width="60" height="40" fill="#3a6" transform="skewX(25)" filter="url(#rc)"/></svg>
+<svg width="150" height="110"><filter id="rd" x="-30%" y="-30%" width="160%" height="160%"><feMorphology operator="dilate" radius="6 1"/></filter><rect x="50" y="30" width="40" height="30" fill="#a3c" transform="rotate(25 70 45)" filter="url(#rd)"/></svg>
+</div>
+</body></html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>clip-path url and nesting</title>
+<style>
+body { margin: 16px; font: 12px Arial, sans-serif; background: #fff; }
+.g { display: grid; grid-template-columns: repeat(7, 170px); gap: 8px; }
+.c { width: 120px; height: 90px; background: linear-gradient(135deg, #e44 0%, #fa0 50%, #26c 100%); border: 4px solid #333; padding: 8px; position: relative; }
+.c b { display: block; background: rgba(255,255,255,.8); padding: 2px; }
+.t { font: bold 40px Arial; color: #036; background: #fe8; }
+.u { clip-path: url(#cu); }
+.w { background: #cde; padding: 10px; }
+</style></head><body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <clipPath id="cu"><circle cx="70" cy="50" r="40"/><rect x="100" y="60" width="50" height="40"/></clipPath>
+    <clipPath id="cb" clipPathUnits="objectBoundingBox"><path d="M0.5 0 L1 1 L0 1 Z"/></clipPath>
+    <clipPath id="ct" clipPathUnits="objectBoundingBox"><ellipse cx="0.5" cy="0.5" rx="0.5" ry="0.3"/><rect x="0.1" y="0.6" width="0.3" height="0.4"/></clipPath>
+    <clipPath id="ce"><polygon points="70,5 130,95 10,40 130,40 10,95" clip-rule="evenodd"/></clipPath>
+    <clipPath id="cx"><rect x="10" y="10" width="100" height="70" transform="rotate(10 60 45)" rx="14"/></clipPath>
+    <clipPath id="cn" clip-path="url(#cu)"><rect x="0" y="0" width="90" height="100"/></clipPath>
+  </defs>
+</svg>
+<div class="g">
+<div class="c" style="clip-path: url(#cu)"><b>url user</b></div>
+<div class="c" style="clip-path: url(#cb)"><b>url bbox</b></div>
+<div class="c" style="clip-path: url(#ct)"><b>url bbox 2</b></div>
+<div class="c" style="clip-path: url(#ce)"><b>evenodd</b></div>
+<div class="c" style="clip-path: url(#cx)"><b>transform</b></div>
+<div class="c" style="clip-path: url(#cn)"><b>nested</b></div>
+<div class="c" style="clip-path: url(#nothing)"><b>missing</b></div>
+<div class="c" style="margin-left: 20px; clip-path: url(#cu)"><b>url margin</b></div>
+<div class="c" style="transform: scale(.8) rotate(-6deg); clip-path: url(#cu)"><b>url+transform</b></div>
+<div class="w" style="width: 150px; clip-path: circle(60px at 50% 50%)"><div class="c" style="width: 100px; height: 60px">child overflow</div></div>
+<div class="w" style="width: 150px; clip-path: inset(10px); overflow: hidden; border-radius: 20px"><div class="c" style="width: 100px; height: 60px">overflow</div></div>
+<div class="w" style="width: 150px; position: relative; clip-path: polygon(0 0, 100% 0, 50% 100%)"><div class="c" style="position: absolute; left: 100px; top: 40px; width: 90px; height: 60px">abs child</div>text</div>
+<div class="t" style="clip-path: polygon(0 0, 100% 0, 100% 50%, 0 100%); width: 150px">Clip text</div>
+<div style="width: 150px"><span class="t" style="clip-path: circle(30px)">inline</span></div>
+<div class="c" style="clip-path: circle(50% at 50% 50%); border-radius: 20px"><b>circle+radius</b></div>
+<div class="c" style="clip-path: ellipse(50% 30%); mix-blend-mode: multiply; background-color: #8cf"><b>blend</b></div>
+<div class="c" style="clip-path: inset(0 round 50%); opacity: .5"><b>round 50%</b></div>
+<div class="c" style="clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%) ; transform: rotate(20deg) translate(10px, 10px)"><b>rotated diamond</b></div>
+<div class="c" style="clip-path: circle(0)"><b>empty</b></div>
+<div class="c" style="clip-path: inset(50px 50px 50px 50px)"><b>negative</b></div>
+</div>
+</body></html>

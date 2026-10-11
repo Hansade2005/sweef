@@ -15,6 +15,10 @@ import (
 // unhinted and sit on FreeType's 26.6 grid, translated by the 1/4 pixel
 // subpixel position.
 
+// textFxLegacy selects the older float-polygon glyph scan converter (kept
+// for A/B tests; the fixed-point one in text_fx.go is the default).
+var textFxLegacy = false
+
 func aaaSnapY(y float64) float64 {
 	y = math.Floor(y*256+0.5) / 256
 	return math.Floor(y*4+0.5) / 4
@@ -320,10 +324,10 @@ func ftDivFix(a, b int) int {
 	return s * int((int64(a)<<16+int64(b)/2)/int64(b))
 }
 
-// skiaGlyph rasterizes glyph r of f at size px with the given quarter-pixel
-// subpixel offset. It returns the mask positioned relative to the glyph
-// origin (baseline-left), or nil for glyphs without outline.
-func skiaGlyph(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Mask {
+// fxGlyphPath builds the outline of g as FreeType hands it to Skia: scaled on
+// the 26.6 grid, skewed for synthetic italic, translated by the quarter-pixel
+// subpixel offset (device pixels, y down). Nil for glyphs without outline.
+func fxGlyphPath(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Path {
 	f := g.Face
 	segs := glyphUnits(g)
 	if len(segs) == 0 {
@@ -336,42 +340,126 @@ func skiaGlyph(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Mask {
 	if skew {
 		skewFix = -0x4000 // -0.25 in 16.16: x' = x - 0.25*y(down)
 	}
-	conv := func(x, y float64) (float64, float64) {
+	if !textFxLegacy {
+		gid := g.GID
+		if gid == 0 {
+			gid = f.GID(g.R)
+		}
+		if p, ok := fxGlyphPathTT(f, gid, scaleX, scaleY, skewFix, sub); ok {
+			return p
+		}
+	}
+	// FreeType scales and transforms every outline point to 26.6 first;
+	// the on-curve points implied between two off-curve points are then
+	// the integer midpoints (FT_Outline_Decompose), not rounded midpoints
+	// of the unscaled outline.
+	type ipt struct{ x, y int }
+	conv := func(x, y float64) ipt {
 		X := ftMulFix(int(math.Round(x)), scaleX)
 		Y := ftMulFix(int(math.Round(y)), scaleY)
 		if skew {
 			X += ftMulFix(Y, skewFix)
 		}
-		X += sub * 16
-		return float64(X) / 64, float64(Y) / 64
+		return ipt{X, Y}
+	}
+	mid := func(a, b ipt) ipt {
+		// C integer division in FreeType's y-up space
+		return ipt{(a.x + b.x) / 2, -((-a.y - b.y) / 2)}
+	}
+	out := func(p ipt) (float64, float64) {
+		return float64(p.x+sub*16) / 64, float64(p.y) / 64
 	}
 	p := NewPath()
-	started := false
-	for _, s := range segs {
-		switch s.Op {
-		case 'M':
-			if started {
-				p.Close()
+	// split into contours
+	for i := 0; i < len(segs); {
+		j := i + 1
+		for j < len(segs) && segs[j].Op != 'M' {
+			j++
+		}
+		fxContour(p, segs[i:j], conv, mid, out)
+		i = j
+	}
+	return p
+}
+
+func fxContour[P any](p *Path, seg []font.Segment, conv func(x, y float64) P, mid func(a, b P) P, out func(P) (float64, float64)) {
+	n := len(seg) - 1 // drawing ops after the M
+	ops := seg[1:]
+	p0 := [2]float64{seg[0].X0, seg[0].Y0}
+	// which quadratic ends are implied midpoints of their control and the
+	// next control
+	implied := make([]bool, n)
+	// the font package keeps whole units, so an implied midpoint that falls
+	// on a half unit arrives rounded by up to half a unit
+	near := func(a, b, c, d float64) bool { return math.Abs(a-c) <= 0.5 && math.Abs(b-d) <= 0.5 }
+	nextCtrl := func(i int) (float64, float64, bool) {
+		if i+1 < n && ops[i+1].Op == 'Q' {
+			return ops[i+1].X0, ops[i+1].Y0, true
+		}
+		if i+1 == n && n > 0 && ops[0].Op == 'Q' {
+			return ops[0].X0, ops[0].Y0, true
+		}
+		return 0, 0, false
+	}
+	startImplied := false
+	for i, o := range ops {
+		if o.Op != 'Q' {
+			continue
+		}
+		if cx, cy, ok := nextCtrl(i); ok {
+			if i+1 < n && near(o.X1, o.Y1, (o.X0+cx)/2, (o.Y0+cy)/2) {
+				implied[i] = true
 			}
-			x, y := conv(s.X0, s.Y0)
-			p.MoveTo(x, y)
-			started = true
+			if i+1 == n && near(o.X1, o.Y1, p0[0], p0[1]) && near(p0[0], p0[1], (o.X0+cx)/2, (o.Y0+cy)/2) {
+				startImplied = true
+			}
+		}
+	}
+	// scaled points
+	ctrl := func(i int) P { return conv(ops[i].X0, ops[i].Y0) }
+	var start P
+	if startImplied {
+		start = mid(conv(ops[n-1].X0, ops[n-1].Y0), conv(ops[0].X0, ops[0].Y0))
+	} else {
+		start = conv(p0[0], p0[1])
+	}
+	x, y := out(start)
+	p.MoveTo(x, y)
+	for i, o := range ops {
+		switch o.Op {
 		case 'L':
-			x, y := conv(s.X0, s.Y0)
+			x, y := out(conv(o.X0, o.Y0))
 			p.LineTo(x, y)
 		case 'Q':
-			x1, y1 := conv(s.X0, s.Y0)
-			x2, y2 := conv(s.X1, s.Y1)
-			p.QuadTo(x1, y1, x2, y2)
+			cx, cy := out(ctrl(i))
+			var e P
+			switch {
+			case implied[i]:
+				e = mid(ctrl(i), ctrl(i+1))
+			case i == n-1 && startImplied:
+				e = start
+			default:
+				e = conv(o.X1, o.Y1)
+			}
+			ex, ey := out(e)
+			p.QuadTo(cx, cy, ex, ey)
 		case 'C':
-			x1, y1 := conv(s.X0, s.Y0)
-			x2, y2 := conv(s.X1, s.Y1)
-			x3, y3 := conv(s.X2, s.Y2)
+			x1, y1 := out(conv(o.X0, o.Y0))
+			x2, y2 := out(conv(o.X1, o.Y1))
+			x3, y3 := out(conv(o.X2, o.Y2))
 			p.CubicTo(x1, y1, x2, y2, x3, y3)
 		}
 	}
-	if started {
-		p.Close()
+	p.Close()
+}
+
+// skiaGlyph rasterizes glyph r of f at size px with the given quarter-pixel
+// subpixel offset. It returns the mask positioned relative to the glyph
+// origin (baseline-left), or nil for glyphs without outline.
+func skiaGlyph(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Mask {
+	p := fxGlyphPath(g, sizeX, sizeY, sub, skew)
+	if p == nil {
+		return nil
 	}
 	// bounds
 	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
@@ -390,6 +478,8 @@ func skiaGlyph(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Mask {
 	if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
 		return nil
 	}
-	m := RasterizePolys(aaaFlatten(p), NonZero, IRect{ox, oy, ox + w, oy + h})
-	return m
+	if textFxLegacy {
+		return RasterizePolys(aaaFlatten(p), NonZero, IRect{ox, oy, ox + w, oy + h})
+	}
+	return fxTrim(fxFillPath(p, IRect{ox, oy, ox + w, oy + h}))
 }

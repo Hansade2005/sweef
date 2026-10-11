@@ -2,9 +2,11 @@ package render
 
 import (
 	"encoding/base64"
+	"image"
 	"math"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -24,6 +26,16 @@ type SVGNode struct {
 	Kids []*SVGNode
 	Text string
 	dom  *html.Node
+	// External resolution done at layout time through the Env: Img is the
+	// decoded raster of an <image>/<feImage> href, Sub the parsed SVG of an
+	// external .svg (SubID is the fragment of <use href="other.svg#id">).
+	Img   image.Image
+	Sub   *SVGDoc
+	SubID string
+	// Ops is the display list of a <foreignObject>'s HTML content in the
+	// object's user space; the rasterizer plays it where the element sits in
+	// the SVG paint order, under the ancestors' transforms, clips and effects.
+	Ops []Op
 }
 
 // SVGDoc is a resolved SVG scene.
@@ -38,6 +50,15 @@ type SVGDoc struct {
 	IntrW, IntrH, Ratio float64
 	dom                 map[*html.Node]*SVGNode
 	base                *style.Computed
+	// Base is the URL relative references of this scene resolve against; Src
+	// the markup of a standalone image (kept to re-evaluate @media for the
+	// size it is painted at); depth the nesting level of external documents.
+	Base     string
+	Src      string
+	HasMedia bool
+	depth    int
+	extDone  bool
+	merged   bool
 }
 
 // SVGDraw paints an SVG scene. The root's viewBox / preserveAspectRatio map
@@ -354,16 +375,20 @@ func parseFontShorthand(v string, a map[string]string) {
 
 var svgShared struct {
 	sync.Mutex
-	c    *ctx
-	sc   *svgCascade
-	docs map[*html.Node]*SVGDoc
-	imgs map[string]*SVGDoc
+	c        *ctx
+	sc       *svgCascade
+	docs     map[*html.Node]*SVGDoc
+	imgs     map[string]*SVGDoc
+	sized    map[string]*SVGDoc
+	roots    []*html.Node
+	extDepth int
 }
 
 // svgDocFor returns the (cached) resolved scene of an inline <svg> element.
+// Ids defined in the page's other inline <svg> elements (icon sprites) resolve
+// too, as they do in a browser.
 func (c *ctx) svgDocFor(n *html.Node, st *style.Computed) *SVGDoc {
 	svgShared.Lock()
-	defer svgShared.Unlock()
 	if svgShared.c != c || svgShared.sc == nil {
 		scheme := c.opts.ColorScheme
 		if scheme == "" {
@@ -371,18 +396,67 @@ func (c *ctx) svgDocFor(n *html.Node, st *style.Computed) *SVGDoc {
 		}
 		env := &style.Env{Width: c.opts.Width, Height: c.opts.Height, DPR: c.opts.DPR, ColorScheme: scheme, Print: c.opts.Print}
 		if svgShared.c != c {
-			svgShared.imgs = nil
+			svgShared.imgs, svgShared.sized = nil, nil
 		}
 		svgShared.c = c
 		svgShared.sc = newSVGCascade(c.opts.Sheets, env, nil)
 		svgShared.docs = map[*html.Node]*SVGDoc{}
+		svgShared.roots = nil
 	}
+	doc := c.svgBuildLocked(n, st)
+	if doc != nil && !doc.merged {
+		doc.merged = true
+		if svgShared.roots == nil {
+			top := n
+			for top.Parent != nil {
+				top = top.Parent
+			}
+			svgShared.roots = []*html.Node{}
+			var walk func(x *html.Node)
+			walk = func(x *html.Node) {
+				if x.Type == html.ElementNode && strings.EqualFold(x.Data, "svg") {
+					svgShared.roots = append(svgShared.roots, x)
+					return
+				}
+				for ch := x.FirstChild; ch != nil; ch = ch.NextSibling {
+					walk(ch)
+				}
+			}
+			walk(top)
+		}
+		if len(svgShared.roots) > 1 && len(svgShared.roots) <= 400 {
+			for _, o := range svgShared.roots {
+				if o == n {
+					continue
+				}
+				d2 := c.svgBuildLocked(o, c.styles[o])
+				if d2 == nil {
+					continue
+				}
+				for id, nd := range d2.ByID {
+					if _, ok := doc.ByID[id]; !ok {
+						doc.ByID[id] = nd
+					}
+				}
+			}
+		}
+	}
+	svgShared.Unlock()
+	c.svgEnsureExt(doc)
+	return doc
+}
+
+// svgBuildLocked builds and caches the scene of n (the caller holds
+// svgShared).
+func (c *ctx) svgBuildLocked(n *html.Node, st *style.Computed) *SVGDoc {
 	if d, ok := svgShared.docs[n]; ok {
 		return d
 	}
 	sc := svgShared.sc
 	if st != nil {
 		sc.custom = st.Custom
+	} else {
+		sc.custom = nil
 	}
 	doc := buildSVGScene(n, sc)
 	if doc != nil {
@@ -403,9 +477,8 @@ func (c *ctx) svgDocFor(n *html.Node, st *style.Computed) *SVGDoc {
 			}
 		}
 		doc.Inherit = inh
-	}
-	if doc != nil {
 		doc.base = st
+		doc.Base = c.opts.BaseURL
 	}
 	svgShared.docs[n] = doc
 	return doc
@@ -416,22 +489,109 @@ func (p *painter) inlineSVGDoc(n *html.Node, st *style.Computed) *SVGDoc {
 	return p.c.svgDocFor(n, st)
 }
 
+// svgResolveURL resolves href against base ("" when it cannot be resolved).
+func svgResolveURL(base, href string) string {
+	href = strings.TrimSpace(href)
+	if href == "" {
+		return ""
+	}
+	r, err := url.Parse(href)
+	if err != nil {
+		return ""
+	}
+	if r.IsAbs() {
+		return r.String()
+	}
+	if base == "" {
+		return ""
+	}
+	b, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+	return b.ResolveReference(r).String()
+}
+
+// svgEnsureExt resolves external references of a scene through the Env: the
+// decoded bitmap of <image>/<feImage> (Env.Image) and external SVG documents
+// of <image>, <feImage> and <use href="other.svg#id"> (SVGSourcer).
+func (c *ctx) svgEnsureExt(doc *SVGDoc) {
+	if doc == nil || doc.extDone || c.env == nil {
+		return
+	}
+	doc.extDone = true
+	svgShared.Lock()
+	svgShared.extDepth++
+	d := svgShared.extDepth
+	svgShared.Unlock()
+	defer func() {
+		svgShared.Lock()
+		svgShared.extDepth--
+		svgShared.Unlock()
+	}()
+	if d > 4 {
+		return
+	}
+	var walk func(n *SVGNode)
+	walk = func(n *SVGNode) {
+		switch n.Tag {
+		case "image", "use", "feimage":
+			href := strings.TrimSpace(n.A["href"])
+			if href == "" || href[0] == '#' || strings.HasPrefix(href, "data:") {
+				break
+			}
+			abs := svgResolveURL(doc.Base, href)
+			if abs == "" {
+				break
+			}
+			frag := ""
+			if i := strings.IndexByte(abs, '#'); i >= 0 {
+				abs, frag = abs[:i], abs[i+1:]
+			}
+			isSVG := strings.HasSuffix(strings.ToLower(strings.SplitN(strings.SplitN(abs, "?", 2)[0], "#", 2)[0]), ".svg")
+			if n.Tag != "use" && !isSVG {
+				if im := c.env.Image(abs); im != nil {
+					n.Img = im
+					break
+				}
+			}
+			if sub := c.svgImageDocFor(abs); sub != nil {
+				n.Sub, n.SubID = sub, frag
+			}
+		}
+		for _, k := range n.Kids {
+			walk(k)
+		}
+	}
+	if doc.Root != nil {
+		walk(doc.Root)
+	}
+}
+
 // svgImageDocFor resolves a url to an SVG scene (data: URIs, or the Env's
 // SVGSourcer), cached per layout pass. nil when the url is not an SVG
 // resource.
 func (c *ctx) svgImageDocFor(u string) *SVGDoc {
+	if !strings.HasPrefix(u, "data:") {
+		if ru := svgResolveURL(c.opts.BaseURL, u); ru != "" {
+			u = ru
+		}
+	}
 	svgShared.Lock()
-	defer svgShared.Unlock()
 	if svgShared.c != c {
 		svgShared.c, svgShared.sc, svgShared.docs = c, nil, map[*html.Node]*SVGDoc{}
-		svgShared.imgs = nil
+		svgShared.imgs, svgShared.sized = nil, nil
 	}
 	if d, ok := svgShared.imgs[u]; ok {
+		svgShared.Unlock()
 		return d
 	}
 	if svgShared.imgs == nil {
 		svgShared.imgs = map[string]*SVGDoc{}
 	}
+	// reserve the slot so reference cycles between documents terminate
+	svgShared.imgs[u] = nil
+	svgShared.Unlock()
 	var markup string
 	found := false
 	if strings.HasPrefix(u, "data:") {
@@ -452,10 +612,47 @@ func (c *ctx) svgImageDocFor(u string) *SVGDoc {
 	}
 	var doc *SVGDoc
 	if found {
-		doc = parseStandaloneSVG(markup, nil, c)
+		doc = parseStandaloneSVGEnv(markup, c, 0, 0, u)
 	}
-	svgShared.imgs[u] = doc
+	svgShared.Lock()
+	if svgShared.c == c {
+		svgShared.imgs[u] = doc
+	}
+	svgShared.Unlock()
+	// SVG used as an image cannot load external resources (browser rule), so
+	// its references to other files stay unresolved
+	if doc != nil {
+		doc.extDone = true
+	}
 	return doc
+}
+
+// svgImageDocSized is svgImageDocFor with the scene's media queries (width,
+// height, prefers-color-scheme) evaluated for the size it is painted at, the
+// way a browser sizes the viewport of an SVG image.
+func (c *ctx) svgImageDocSized(u string, w, h float64) *SVGDoc {
+	d := c.svgImageDocFor(u)
+	if d == nil || !d.HasMedia || w <= 0 || h <= 0 {
+		return d
+	}
+	key := u + "|" + strconv.FormatFloat(math.Round(w), 'f', 0, 64) + "x" + strconv.FormatFloat(math.Round(h), 'f', 0, 64)
+	svgShared.Lock()
+	if sd, ok := svgShared.sized[key]; ok {
+		svgShared.Unlock()
+		return sd
+	}
+	if svgShared.sized == nil {
+		svgShared.sized = map[string]*SVGDoc{}
+	}
+	svgShared.Unlock()
+	sd := parseStandaloneSVGEnv(d.Src, c, math.Round(w), math.Round(h), u)
+	if sd != nil {
+		sd.extDone = true
+	}
+	svgShared.Lock()
+	svgShared.sized[key] = sd
+	svgShared.Unlock()
+	return sd
 }
 
 // svgImageIntrinsic reports the intrinsic dimensions of an SVG image for
@@ -491,6 +688,13 @@ func ParseSVG(markup string) *SVGDoc {
 func (d *SVGDoc) IntrinsicSize() (w, h float64) { return svgImageSize(d) }
 
 func parseStandaloneSVG(markup string, outer *svgCascade, c *ctx) *SVGDoc {
+	return parseStandaloneSVGEnv(markup, c, 0, 0, "")
+}
+
+// parseStandaloneSVGEnv parses an SVG image. Its <style> media queries see a
+// viewport of w x h (the page viewport when zero) and the page's color
+// scheme; base resolves its relative references.
+func parseStandaloneSVGEnv(markup string, c *ctx, w, h float64, base string) *SVGDoc {
 	dn, err := html.Parse(strings.NewReader(markup))
 	if err != nil {
 		return nil
@@ -521,12 +725,34 @@ func parseStandaloneSVG(markup string, outer *svgCascade, c *ctx) *SVGDoc {
 	}
 	env := &style.Env{Width: 1280, Height: 800, DPR: 1, ColorScheme: "light"}
 	if c != nil {
-		env = &style.Env{Width: c.opts.Width, Height: c.opts.Height, DPR: c.opts.DPR, ColorScheme: "light"}
+		scheme := c.opts.ColorScheme
+		if scheme == "" {
+			scheme = "light"
+		}
+		env = &style.Env{Width: c.opts.Width, Height: c.opts.Height, DPR: c.opts.DPR, ColorScheme: scheme}
+		if env.DPR <= 0 {
+			env.DPR = 1
+		}
+	}
+	if w > 0 && h > 0 {
+		env.Width, env.Height = w, h
+	}
+	hasMedia := false
+	for _, s := range styles {
+		if strings.Contains(s, "@media") || strings.Contains(s, "prefers-") {
+			hasMedia = true
+		}
 	}
 	// standalone SVG images do not see the embedding page's rules
 	sc := newSVGCascade(nil, env, styles)
 	sc.custom = map[string]string{}
-	return buildSVGScene(root, sc)
+	doc := buildSVGScene(root, sc)
+	if doc != nil {
+		doc.Base = base
+		doc.Src = markup
+		doc.HasMedia = hasMedia
+	}
+	return doc
 }
 
 // svgIntrinsic returns the intrinsic size of an SVG image the way <img>

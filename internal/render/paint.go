@@ -16,6 +16,7 @@ type paintInfo struct{}
 type clipRec struct {
 	r     Rect
 	radii Radii
+	shape *ClipSub // clip-path shape (hit testing); r is its bounding box
 }
 
 type hitRec struct {
@@ -37,6 +38,8 @@ type painter struct {
 	outl    []*lbox
 	active  map[*lbox]bool
 	svgdocs map[string]*SVGDoc
+	// fragShift is non-zero while painting a continuing fragment of a sliced box
+	fragShift float64
 }
 
 var identity = [6]float64{1, 0, 0, 1, 0, 0}
@@ -93,7 +96,7 @@ func rectOf(b *lbox) Rect { return Rect{b.ax, b.ay, b.w, b.h} }
 
 func (p *painter) pushClip(r Rect, radii Radii, owner *lbox) {
 	p.emit(PushClip{Rect: r, Radii: radii})
-	p.clips = append(append([]clipRec(nil), p.clips...), clipRec{r, radii})
+	p.clips = append(append([]clipRec(nil), p.clips...), clipRec{r: r, radii: radii})
 	if owner != nil {
 		p.active[owner] = true
 	}
@@ -124,13 +127,16 @@ func (p *painter) overflowClip(b *lbox) (Rect, Radii) {
 	return r, in
 }
 
-func (p *painter) radii(b *lbox) Radii {
+func (p *painter) radii(b *lbox) Radii { return p.radiiWH(b, b.w, b.h) }
+
+// radiiWH resolves the border radii for a box of the given border-box size.
+func (p *painter) radiiWH(b *lbox, bw, bh float64) Radii {
 	st := b.st
 	var r Radii
 	any := false
 	for i := 0; i < 4; i++ {
-		h := rl(st.Radius[i][0], b.w)
-		v := rl(st.Radius[i][1], b.h)
+		h := rl(st.Radius[i][0], bw)
+		v := rl(st.Radius[i][1], bh)
 		if h > 0 && v > 0 {
 			any = true
 			r[i] = [2]float64{h, v}
@@ -145,10 +151,10 @@ func (p *painter) radii(b *lbox) Radii {
 			f = lim / sum
 		}
 	}
-	chk(r[0][0]+r[1][0], b.w)
-	chk(r[3][0]+r[2][0], b.w)
-	chk(r[0][1]+r[3][1], b.h)
-	chk(r[1][1]+r[2][1], b.h)
+	chk(r[0][0]+r[1][0], bw)
+	chk(r[3][0]+r[2][0], bw)
+	chk(r[0][1]+r[3][1], bh)
+	chk(r[1][1]+r[2][1], bh)
 	if f < 1 {
 		for i := range r {
 			r[i][0] *= f
@@ -233,18 +239,46 @@ func (p *painter) beginEffects(b *lbox) func() {
 		}
 		p.emit(bf)
 	}
-	if layer {
-		pl := PushLayer{Opacity: 1, Blend: st.MixBlend, Bounds: Rect{b.ovLeft, b.ovTop, b.ovRight - b.ovLeft, b.ovBottom - b.ovTop}}
+	// clip-path and mask apply after the filter and before opacity/blending:
+	// [opacity layer [clip/mask [filter layer ...]]]
+	cm := st.ClipPath || st.MaskImage
+	outer, inner := layer, false
+	if cm {
+		outer = st.OpacitySet && st.Opacity < 1 || st.MixBlend != "normal" && st.MixBlend != ""
+		inner = len(st.Filter) > 0
+	}
+	layerBounds := Rect{b.ovLeft, b.ovTop, b.ovRight - b.ovLeft, b.ovBottom - b.ovTop}
+	filters := func() (out []Filter) {
+		for _, f := range st.Filter {
+			out = append(out, Filter{Name: f.Name, Args: f.Args, Color: f.Color})
+		}
+		return
+	}
+	if outer {
+		pl := PushLayer{Opacity: 1, Blend: st.MixBlend, Bounds: layerBounds}
 		if st.OpacitySet {
 			pl.Opacity = st.Opacity
 		}
-		for _, f := range st.Filter {
-			pl.Filter = append(pl.Filter, Filter{Name: f.Name, Args: f.Args, Color: f.Color})
+		if !cm {
+			pl.Filter = filters()
 		}
 		p.emit(pl)
 	}
+	var endCM func()
+	if cm {
+		endCM = p.clipMaskBegin(b)
+		if inner {
+			p.emit(PushLayer{Opacity: 1, Filter: filters(), Bounds: layerBounds})
+		}
+	}
 	return func() {
-		if layer {
+		if inner {
+			p.emit(PopLayer{})
+		}
+		if endCM != nil {
+			endCM()
+		}
+		if outer {
 			p.emit(PopLayer{})
 		}
 		if tx {
@@ -328,7 +362,7 @@ func (p *painter) isDeferred(k *lbox) bool {
 	if k.kind == kText || k.kind == kMarker || k.kind == kBreak || k.kind == kInline {
 		return false
 	}
-	return k.createsSC() && k.st.Position != "static" || k.createsSC() && !k.floated && !k.inlineLv && k.kind != kAtomic && k.st.Position == "static" && (k.hasTransform() || !k.st.ZAuto || k.st.OpacitySet && k.st.Opacity < 1 || len(k.st.Filter) > 0 || k.st.MixBlend != "normal" && k.st.MixBlend != "") ||
+	return k.createsSC() && k.st.Position != "static" || k.createsSC() && !k.floated && !k.inlineLv && k.kind != kAtomic && k.st.Position == "static" && (k.hasTransform() || !k.st.ZAuto || k.st.OpacitySet && k.st.Opacity < 1 || len(k.st.Filter) > 0 || k.st.MixBlend != "normal" && k.st.MixBlend != "" || k.st.ClipPath || k.st.MaskImage) ||
 		k.createsSC() && k.floated && k.st.Position == "static" && false
 }
 
@@ -467,6 +501,10 @@ func (p *painter) paintDecor(b *lbox, isRoot bool) {
 		return
 	}
 	vis := st.Visibility == "visible" || st.Visibility == ""
+	if len(b.mcFrags) > 1 && b.kind == kBlock && !isRoot && b.inner != iTable {
+		p.paintFragDecor(b, vis)
+		return
+	}
 	if vis {
 		radii := p.radii(b)
 		// outer shadows
@@ -500,21 +538,7 @@ func (p *painter) paintDecor(b *lbox, isRoot bool) {
 		if b.inner == iTable && b.cl != nil {
 			p.paintCollapsed(b)
 		}
-		if b.mcN > 1 && st.ColumnRuleW > 0 && st.ColumnRuleStyle != "none" {
-			cr := Rect{b.ax + b.bor[3] + b.pad[3], b.ay + b.bor[0] + b.pad[0], b.w - b.hExtra(), b.h - b.vExtra()}
-			for i := 1; i < b.mcN; i++ {
-				x := cr.X + float64(i)*(b.mcW+b.mcGap) - b.mcGap/2 - st.ColumnRuleW/2
-				switch st.ColumnRuleStyle {
-				case "dashed", "dotted", "double", "groove", "ridge", "inset", "outset":
-					// painted like a one-sided border (additive: reuses the Border op)
-					c := st.ColumnRuleColor
-					p.emit(Border{Rect: Rect{x, cr.Y, st.ColumnRuleW, cr.H}, Widths: [4]float64{0, 0, 0, st.ColumnRuleW},
-						Colors: [4]Color{c, c, c, c}, Styles: [4]string{"none", "none", "none", st.ColumnRuleStyle}})
-				default:
-					p.emit(FillRect{Rect: Rect{x, cr.Y, st.ColumnRuleW, cr.H}, Color: st.ColumnRuleColor})
-				}
-			}
-		}
+		p.paintColumnRules(b)
 		if st.OutlineWidth > 0 && st.OutlineStyle != "none" {
 			p.outl = append(p.outl, b)
 			p.paintOutline(b)
@@ -614,6 +638,15 @@ func (p *painter) paintBackgroundArea(b *lbox, border Rect, radii Radii, originB
 			pa = originBox
 		} else {
 			pa, _ = boxFor(ly.Origin)
+			if p.fragShift != 0 && ly.Origin != "border-box" {
+				// continuing fragment of a sliced box: Blink insets the positioning area by
+				// the fragment's own (absent) top border and padding
+				sh := b.bor[0]
+				if ly.Origin == "content-box" {
+					sh += b.pad[0]
+				}
+				pa.Y -= sh
+			}
 		}
 		bl := blended && ly.Blend != "" && ly.Blend != "normal"
 		if bl {
@@ -943,11 +976,13 @@ func (p *painter) gradientOp(b *lbox, g *style.Gradient, rect Rect, rad Radii, t
 	return out
 }
 
-func (p *painter) paintOutline(b *lbox) {
+func (p *painter) paintOutline(b *lbox) { p.paintOutlineRect(b, rectOf(b)) }
+
+// paintOutlineRect draws b's outline around r (one fragment of a split block).
+func (p *painter) paintOutlineRect(b *lbox, r Rect) {
 	st := b.st
 	w := st.OutlineWidth
 	off := st.OutlineOffset
-	r := rectOf(b)
 	e := w + off
 	rr := Rect{r.X - e, r.Y - e, r.W + 2*e, r.H + 2*e}
 	styl := st.OutlineStyle
@@ -959,7 +994,7 @@ func (p *painter) paintOutline(b *lbox) {
 		e = w + off
 		rr = Rect{r.X - e, r.Y - e, r.W + 2*e, r.H + 2*e}
 	}
-	rad := p.radii(b)
+	rad := p.radiiWH(b, r.W, r.H)
 	for i := range rad {
 		if rad[i][0] > 0 {
 			rad[i][0] += e

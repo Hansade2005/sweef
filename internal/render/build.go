@@ -175,6 +175,7 @@ func (c *ctx) buildNode(n *html.Node, pst *style.Computed, out *[]*lbox) {
 
 func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 	st := c.eng.Compute(n, pst, "")
+	st = c.svgFilterRefs(n, st)
 	c.styles[n] = st
 	if st.Display == "none" {
 		return

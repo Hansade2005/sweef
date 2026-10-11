@@ -142,27 +142,7 @@ func (p *painter) paintTextFrag(b *lbox, ln *line, fr *frag) {
 			e--
 		}
 	}
-	var gl []Glyph
-	sh := it.sh
-	extra := 0.0
-	for k := fr.a; k < e; k++ {
-		r := it.runes[k]
-		if r == '\n' || r == '\t' || isZeroWidth(r) && r != 0xad {
-			if r == ' ' {
-				extra += fr.justSp
-			}
-			continue
-		}
-		if r == 0xad {
-			continue
-		}
-		if r != ' ' && r != 0xa0 {
-			gl = append(gl, Glyph{R: r, X: sh.x[k] - sh.x[fr.a] + extra + sh.kernAt(k), Face: sh.faces[k]})
-		}
-		if r == ' ' {
-			extra += fr.justSp
-		}
-	}
+	gl := fragGlyphs(fr, e)
 	w := fr.w
 	if len(gl) == 0 && st.TextDecorLine == 0 {
 		return
@@ -394,11 +374,17 @@ func (p *painter) emitSimpleText(st *style.Computed, fs *fontSpec, txt string, x
 	rs := []rune(txt)
 	sh := p.c.shape(fs, st, rs)
 	var gl []Glyph
-	for i, r := range rs {
+	for i := 0; i < len(rs); i++ {
+		r := rs[i]
 		if r == ' ' {
 			continue
 		}
-		gl = append(gl, Glyph{R: r, X: sh.x[i] + sh.kernAt(i), Face: sh.faces[i]})
+		g := Glyph{R: r, X: sh.x[i] + sh.kernAt(i), Face: sh.faces[i]}
+		if sh.nlig != nil && sh.nlig[i] > 1 {
+			g.GID = int(sh.gid[i])
+			i += int(sh.nlig[i]) - 1
+		}
+		gl = append(gl, g)
 	}
 	p.emit(TextRun{X: x, Y: y, Size: fs.size, Color: col, Glyphs: gl, Width: sh.x[len(rs)], Bold: fs.synthBold})
 }
@@ -661,6 +647,10 @@ func (c *ctx) installHit(rb *lbox) {
 					ok = false
 					break
 				}
+				if cl.shape != nil && !clipShapeContains(cl.shape, px, py) {
+					ok = false
+					break
+				}
 			}
 			if ok {
 				return h.n
@@ -671,3 +661,56 @@ func (c *ctx) installHit(rb *lbox) {
 }
 
 var _ = image.Rect
+
+// fragGlyphs builds the positioned glyphs of text fragment fr up to rune e:
+// ligature glyph ids, Arabic presentation forms and, for right-to-left
+// fragments, mirrored positions and bracket mirroring.
+func fragGlyphs(fr *frag, e int) []Glyph {
+	it := fr.it
+	sh := it.sh
+	var gl []Glyph
+	extra := 0.0
+	wtot := 0.0
+	if fr.rtl {
+		nsp := 0
+		if fr.justSp != 0 {
+			for k := fr.a; k < e; k++ {
+				if it.runes[k] == ' ' {
+					nsp++
+				}
+			}
+		}
+		wtot = sh.x[e] - sh.x[fr.a] + fr.justSp*float64(nsp)
+	}
+	for k := fr.a; k < e; k++ {
+		r := it.runes[k]
+		if r == ' ' {
+			extra += fr.justSp
+			continue
+		}
+		if r == '\n' || r == '\t' || isZeroWidth(r) && r != 0xad || r == 0xad || r == 0xa0 {
+			continue
+		}
+		draw := r
+		if sh.form != nil {
+			draw = sh.form[k]
+			if draw == 0 {
+				continue
+			}
+		}
+		n, gid := 1, 0
+		if sh.nlig != nil && sh.nlig[k] > 1 && k+int(sh.nlig[k]) <= e {
+			n, gid = int(sh.nlig[k]), int(sh.gid[k])
+		}
+		var x float64
+		if fr.rtl {
+			x = wtot - (sh.x[k+n] - sh.x[fr.a]) - extra
+			draw = mirrorRune(draw)
+		} else {
+			x = sh.x[k] - sh.x[fr.a] + extra + sh.kernAt(k)
+		}
+		gl = append(gl, Glyph{R: draw, X: x, Face: sh.faces[k], GID: gid})
+		k += n - 1
+	}
+	return gl
+}

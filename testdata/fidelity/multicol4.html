@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>multicol decoration break</title>
+<style>
+body { margin: 20px; font: 14px/1.4 Arial, sans-serif; }
+.cols { column-count: 3; column-gap: 24px; width: 700px; height: 150px; background: #f4f4f4; padding: 8px; column-fill: auto; margin-bottom: 24px; }
+.box { margin: 4px 0; padding: 6px; }
+.img { background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAALElEQVR4nGN4FmXzHxnb5D1DwYTkGYaBAaRqQJcfDgYMfCwMvAEDHwsDbgAAvUOFHxOtgJ0AAAAASUVORK5CYII=) 0 0 / 32px 32px; border: 4px solid #333; }
+.grad { background: linear-gradient(180deg, #fc0, #06c); border: 3px dotted #900; border-radius: 14px; }
+.cl { box-decoration-break: clone; -webkit-box-decoration-break: clone; background: #dfd; border: 3px solid #060; border-radius: 10px; padding: 0 6px; }
+.nest { background: #eee; border: 2px solid #666; padding: 4px; }
+.nest > p { margin: 0 0 6px; background: #fed; border-left: 5px solid #c60; }
+.nest > p.b { background: radial-gradient(circle at 20px 20px, #fff, #9cf); box-shadow: 3px 3px 6px #888; }
+</style></head><body>
+<div class="cols"><div class="box img">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</div></div>
+<div class="cols"><div class="box grad">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</div></div>
+<div class="cols"><div class="box cl">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</div></div>
+<div class="cols"><div class="nest"><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p><p class="b">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p></div></div>
+</body></html>

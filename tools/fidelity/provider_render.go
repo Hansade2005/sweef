@@ -60,6 +60,24 @@ func (e *httpEnv) Image(u string) image.Image {
 	e.cache[u] = im
 	return im
 }
+
+// SVGSource lets layout resolve <img src=*.svg>, <use href=x.svg#id> and
+// <image href=x.svg> through the same fetch.
+func (e *httpEnv) SVGSource(u string) (string, bool) {
+	base := strings.ToLower(u)
+	if i := strings.IndexAny(base, "?#"); i >= 0 {
+		base = base[:i]
+	}
+	if !strings.HasSuffix(base, ".svg") || !strings.HasPrefix(u, "http") {
+		return "", false
+	}
+	body, err := fetch(u)
+	if err != nil || !strings.Contains(body, "<svg") {
+		return "", false
+	}
+	return body, true
+}
+
 func (e *httpEnv) Bitmap(*html.Node) image.Image                    { return nil }
 func (e *httpEnv) IntrinsicSize(*html.Node) (w, h float64, ok bool) { return 0, 0, false }
 func (e *httpEnv) Focused() *html.Node                              { return nil }
@@ -137,7 +155,7 @@ func (renderProvider) Run(url string, w, h int) ([]ElemBox, image.Image, error) 
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode {
-			eb := ElemBox{Tag: n.Data}
+			eb := ElemBox{Tag: strings.ToLower(n.Data)}
 			if r, ok := res.ClientRect(n); ok {
 				eb.X, eb.Y, eb.W, eb.H, eb.Has = r.X, r.Y, r.W, r.H, true
 			}

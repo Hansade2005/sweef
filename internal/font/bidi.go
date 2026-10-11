@@ -53,6 +53,10 @@ func BidiRuns(text []rune, baseRTL bool) []BidiRun {
 	return out
 }
 
+// ReorderVisual returns the logical index shown at each visual position for
+// per-element embedding levels (rule L2).
+func ReorderVisual(levels []uint8) []int { return reorderVisual(levels) }
+
 // reorderVisual returns the logical index shown at each visual position
 // (rule L2).
 func reorderVisual(levels []uint8) []int {
@@ -644,6 +648,19 @@ func joinsPrev(r rune) bool {
 // lam-alef into the mandatory ligature. The result is still in logical
 // order and may be shorter than the input; non-Arabic runes pass through.
 func ShapeArabic(rs []rune) []rune {
+	out, _ := shapeArabic(rs, false)
+	return out
+}
+
+// ShapeArabicKeep is ShapeArabic that preserves the rune count: a lam-alef
+// ligature takes the lam's place and the alef position becomes 0 (a rune the
+// caller skips), so indexes into the input stay valid.
+func ShapeArabicKeep(rs []rune) []rune {
+	out, _ := shapeArabic(rs, true)
+	return out
+}
+
+func shapeArabic(rs []rune, keep bool) ([]rune, bool) {
 	has := false
 	for _, r := range rs {
 		if r >= 0x0600 && r <= 0x06ff {
@@ -652,7 +669,7 @@ func ShapeArabic(rs []rune) []rune {
 		}
 	}
 	if !has {
-		return rs
+		return rs, false
 	}
 	out := make([]rune, 0, len(rs))
 	prevJoins := func(i int) bool { // does the previous non-transparent letter join forward?
@@ -695,6 +712,9 @@ func ShapeArabic(rs []rune) []rune {
 						out = append(out, lig[0])
 					}
 					out = append(out, rs[i+1:j]...) // marks between stay after the ligature
+					if keep {
+						out = append(out, 0)
+					}
 					i = j
 					continue
 				}
@@ -717,5 +737,5 @@ func ShapeArabic(rs []rune) []rune {
 		}
 		out = append(out, f)
 	}
-	return out
+	return out, true
 }

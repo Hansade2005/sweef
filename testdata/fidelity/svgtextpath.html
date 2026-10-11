@@ -1,0 +1,70 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>svgtextpath</title>
+<style>
+body{margin:12px;font:13px Arial,sans-serif;color:#234}
+.row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+svg{background:#f8f8fc;border:1px solid #ccd}
+text{font-family:Liberation Sans,Arial,sans-serif;font-size:16px}
+.g{fill:none;stroke:#bbb;stroke-width:1}
+</style></head><body>
+<div class="row">
+<svg width="300" height="160" viewBox="0 0 300 160">
+<path id="p1" class="g" d="M10 120 C 60 20, 140 20, 190 100 S 260 140 290 60"/>
+<text fill="#c23"><textPath href="#p1">Text along a curved path in SVG</textPath></text>
+<path id="p2" class="g" d="M20 150 L 280 150"/>
+<text fill="#05a" font-size="12"><textPath href="#p2" startOffset="50%" text-anchor="middle">centered at 50%</textPath></text>
+</svg>
+<svg width="300" height="160" viewBox="0 0 300 160">
+<path id="p3" class="g" d="M150 20 a 60 60 0 1 1 -0.1 0z"/>
+<text fill="#080" font-size="14"><textPath xlink:href="#p3" startOffset="10">Circular text around a circle path, offset 10</textPath></text>
+<path id="p4" class="g" d="M10 150 Q 80 90 150 150 T 290 150"/>
+<text fill="#a50" font-size="13" letter-spacing="2"><textPath href="#p4" startOffset="20">Wave with letter spacing</textPath></text>
+</svg>
+<svg width="300" height="160" viewBox="0 0 300 160">
+<path id="p5" class="g" d="M20 40 L 280 40 L 280 100 L 20 100"/>
+<text fill="#609" font-size="15"><textPath href="#p5" startOffset="30">Corner turns and tspan <tspan fill="#c00" dy="-6">raised</tspan> text</textPath></text>
+<text x="20" y="140" fill="#333" font-size="13"><textPath href="#nonexist">missing target</textPath>never</text>
+</svg>
+</div>
+<div class="row">
+<svg width="300" height="150" viewBox="0 0 300 150">
+<text x="10 30 50 70 90 110 130" y="30 34 28 36 30 33 29" fill="#c23" font-size="20">ABCDEFG</text>
+<text x="10" y="70" rotate="0 10 20 30 40 50 60 70" fill="#05a" font-size="20">Rotated chars</text>
+<text x="10" y="110" dx="4 8 12 4" dy="0 -4 4 -4 4" fill="#080" font-size="18">dx dy lists</text>
+<text x="150" y="130" rotate="15" fill="#a50" font-size="18">All 15deg</text>
+</svg>
+<svg width="300" height="150" viewBox="0 0 300 150">
+<line x1="150" y1="0" x2="150" y2="150" stroke="#ccc"/><line x1="0" y1="30" x2="300" y2="30" stroke="#ccc"/><line x1="0" y1="70" x2="300" y2="70" stroke="#ccc"/><line x1="0" y1="110" x2="300" y2="110" stroke="#ccc"/>
+<text x="150" y="30" text-anchor="start" font-size="16" fill="#c23">start anchor</text>
+<text x="150" y="70" text-anchor="middle" font-size="16" fill="#05a">middle anchor</text>
+<text x="150" y="110" text-anchor="end" font-size="16" fill="#080">end anchor</text>
+<text x="150" y="140" text-anchor="middle" font-size="14" fill="#333">multi <tspan x="150" dy="0" fill="#a50">chunk</tspan> anchor</text>
+</svg>
+<svg width="300" height="150" viewBox="0 0 300 150">
+<line x1="0" y1="40" x2="300" y2="40" stroke="#f99"/><line x1="0" y1="110" x2="300" y2="110" stroke="#f99"/>
+<text x="5" y="40" font-size="16" dominant-baseline="alphabetic" fill="#333">alpha</text>
+<text x="55" y="40" font-size="16" dominant-baseline="middle" fill="#333">middle</text>
+<text x="115" y="40" font-size="16" dominant-baseline="central" fill="#333">central</text>
+<text x="175" y="40" font-size="16" dominant-baseline="hanging" fill="#333">hanging</text>
+<text x="240" y="40" font-size="16" dominant-baseline="text-before-edge" fill="#333">tbe</text>
+<text x="5" y="110" font-size="16" dominant-baseline="text-after-edge" fill="#333">tae</text>
+<text x="45" y="110" font-size="16" dominant-baseline="ideographic" fill="#333">ideo</text>
+<text x="90" y="110" font-size="16" dominant-baseline="mathematical" fill="#333">math</text>
+<text x="140" y="110" font-size="16" alignment-baseline="middle" fill="#333">a-mid <tspan alignment-baseline="hanging" fill="#c00">hang</tspan></text>
+</svg>
+</div>
+<div class="row">
+<svg width="300" height="150" viewBox="0 0 300 150">
+<text x="10" y="40" font-size="20" fill="#333">base<tspan baseline-shift="super" font-size="12" fill="#c00">super</tspan> <tspan baseline-shift="sub" font-size="12" fill="#00c">sub</tspan> <tspan baseline-shift="10" fill="#080">+10</tspan> <tspan baseline-shift="-30%" fill="#a50">-30%</tspan></text>
+<text x="10" y="80" font-size="16" textLength="250" lengthAdjust="spacing" fill="#609">spacing adjusted text</text>
+<text x="10" y="110" font-size="16" textLength="250" lengthAdjust="spacingAndGlyphs" fill="#c23">glyph stretched text</text>
+<text x="10" y="140" font-size="16" textLength="100" lengthAdjust="spacing" fill="#05a">squeezed text length</text>
+</svg>
+<svg width="300" height="150" viewBox="0 0 300 150">
+<text x="10" y="30" font-size="14" fill="#333" word-spacing="10" letter-spacing="1">word spacing here</text>
+<text x="10" y="60" font-size="22" font-weight="bold" font-style="italic" font-family="serif" fill="#a05">Bold italic serif</text>
+<text x="10" y="90" font-size="18" fill="none" stroke="#06c" stroke-width="1">Stroked text</text>
+<text x="10" y="125" font-size="18" fill="#333" text-decoration="underline">Underlined <tspan text-decoration="line-through">strike</tspan></text>
+</svg>
+</div>
+</body></html>

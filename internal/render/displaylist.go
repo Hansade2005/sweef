@@ -72,6 +72,7 @@ type Glyph struct {
 	R    rune
 	X    float64
 	Face *font.Face // face that has the glyph (fallback may differ per glyph)
+	GID  int        // additive: glyph id to draw instead of R's glyph (ligatures); 0 = use R
 }
 
 // TextRun draws shaped text. X, Y is the baseline origin.
@@ -217,7 +218,7 @@ type Box struct {
 	Padding Rect       // padding box
 	Content Rect       // content box
 	Margin  [4]float64 // top, right, bottom, left
-	Frags   []Rect     // one border-box fragment per line box for inline elements (getClientRects)
+	Frags   []Rect     // one border-box fragment per line box for inline elements, per column for blocks split across columns (getClientRects)
 	// Scroll sizes for overflow containers and the viewport.
 	ScrollW, ScrollH float64
 	ClientW, ClientH float64 // padding box minus scrollbars

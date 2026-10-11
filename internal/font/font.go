@@ -36,6 +36,10 @@ type Style struct {
 }
 
 // Face is one loaded font file.
+// Data returns the raw sfnt bytes this face reads glyph tables from. The slice
+// is shared; callers must not modify it.
+func (f *Face) Data() []byte { return f.data }
+
 type Face struct {
 	Family string
 	Style  Style
@@ -47,6 +51,7 @@ type Face struct {
 	data   []byte
 	adv    map[rune]float64 // advance in font units (-1 = no glyph)
 	kern   map[[2]rune]float64
+	gids   map[rune]int
 	idx    int
 	ot     otCache
 	mOK    bool
@@ -65,23 +70,29 @@ func newFace(family string, st Style, data []byte, mono bool) (*Face, error) {
 }
 
 func newFaceIdx(family string, st Style, data []byte, mono bool, idx int) (*Face, error) {
-	var f *sfnt.Font
-	var err error
-	if idx >= 0 {
-		var c *sfnt.Collection
-		c, err = sfnt.ParseCollection(data)
-		if err != nil {
-			return nil, err
-		}
-		f, err = c.Font(idx)
-	} else {
-		f, err = sfnt.Parse(data)
-	}
+	f, data, err := parseSFNT(data, idx)
 	if err != nil {
 		return nil, err
 	}
 	return &Face{Family: family, Style: st, Mono: mono, font: f, upm: int(f.UnitsPerEm()), data: data,
-		adv: map[rune]float64{}, kern: map[[2]rune]float64{}, idx: idx}, nil
+		adv: map[rune]float64{}, kern: map[[2]rune]float64{}, idx: -1}, nil
+}
+
+// parseSFNT parses font idx of data (idx < 0: a single font file). Collections
+// and fonts with unaligned tables are rewritten into a standalone sfnt first;
+// the returned bytes are the ones the font reads from.
+func parseSFNT(data []byte, idx int) (*sfnt.Font, []byte, error) {
+	if idx < 0 && !(len(data) >= 4 && string(data[:4]) == "ttcf") {
+		if f, err := sfnt.Parse(data); err == nil {
+			return f, data, nil
+		}
+	}
+	if d, ok := extractSFNT(data, idx); ok {
+		f, err := sfnt.Parse(d)
+		return f, d, err
+	}
+	f, err := sfnt.Parse(data)
+	return f, data, err
 }
 
 // UnitsPerEm of the face.
@@ -415,21 +426,9 @@ func probe(path string, idx int) *entry {
 	if err != nil {
 		return nil
 	}
-	var f *sfnt.Font
-	if idx >= 0 {
-		c, err := sfnt.ParseCollection(data)
-		if err != nil {
-			return nil
-		}
-		f, err = c.Font(idx)
-		if err != nil {
-			return nil
-		}
-	} else {
-		f, err = sfnt.Parse(data)
-		if err != nil {
-			return nil
-		}
+	f, _, err := parseSFNT(data, idx)
+	if err != nil {
+		return nil
 	}
 	var b sfnt.Buffer
 	fam, _ := f.Name(&b, sfnt.NameIDTypographicFamily)

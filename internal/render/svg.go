@@ -134,14 +134,26 @@ func (c *ctx) svgGeometry(b *lbox) {
 	if doc == nil {
 		doc = &SVGDoc{dom: map[*html.Node]*SVGNode{}}
 	}
+	base, vbw, vbh := c.svgBaseMatrix(b)
+	for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
+		c.svgElem(ch, base, vbw, vbh, doc)
+	}
+}
+
+// svgBaseMatrix maps the user space of an inline <svg> (viewBox and
+// preserveAspectRatio applied) to page coordinates; vbw/vbh are the user-space
+// viewport dimensions.
+func (c *ctx) svgBaseMatrix(b *lbox) (base m6, vbw, vbh float64) {
+	n := b.n
 	cr := c.contentRect0(b)
 	w, h := cr.W, cr.H
-	vbx, vby, vbw, vbh := 0.0, 0.0, w, h
+	vbx, vby := 0.0, 0.0
+	vbw, vbh = w, h
 	if vb := strings.Fields(strings.ReplaceAll(attr(n, "viewBox"), ",", " ")); len(vb) == 4 {
 		vbx, vby = svgNum(vb[0], 0), svgNum(vb[1], 0)
 		vbw, vbh = svgNum(vb[2], w), svgNum(vb[3], h)
 	}
-	base := m6{1, 0, 0, 1, cr.X, cr.Y}
+	base = m6{1, 0, 0, 1, cr.X, cr.Y}
 	if vbw > 0 && vbh > 0 {
 		sx, sy := w/vbw, h/vbh
 		par := strings.Fields(attr(n, "preserveAspectRatio"))
@@ -171,9 +183,7 @@ func (c *ctx) svgGeometry(b *lbox) {
 			base = mmul(base, m6{s, 0, 0, s, ox - vbx*s, oy - vby*s})
 		}
 	}
-	for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
-		c.svgElem(ch, base, vbw, vbh, doc)
-	}
+	return base, vbw, vbh
 }
 
 func (c *ctx) contentRect0(b *lbox) Rect {
@@ -190,8 +200,17 @@ func (c *ctx) svgElem(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 		m = mmul(m, parseSVGTransform(t))
 	}
 	g := func(k string) float64 { return svgLen(attr(n, k), vw, 0) }
-	switch n.Data {
-	case "rect", "image", "foreignobject":
+	tag := strings.ToLower(n.Data)
+	switch tag {
+	case "foreignobject":
+		x, y := g("x"), svgLen(attr(n, "y"), vh, 0)
+		w, h := g("width"), svgLen(attr(n, "height"), vh, 0)
+		bb.addRect(m, x, y, x+w, y+h)
+		if _, laid := c.styles[n]; !laid {
+			c.setSVGBox(n, bb)
+		}
+		return bb
+	case "rect", "image":
 		x, y := g("x"), svgLen(attr(n, "y"), vh, 0)
 		w, h := g("width"), svgLen(attr(n, "height"), vh, 0)
 		bb.addRect(m, x, y, x+w, y+h)
@@ -235,7 +254,7 @@ func (c *ctx) svgElem(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 		c.setSVGBox(n, bb)
 		return bb
 	case "g", "a", "switch", "symbol", "marker", "defs", "clippath", "mask", "pattern", "lineargradient", "radialgradient":
-		if n.Data == "defs" || n.Data == "clippath" || n.Data == "mask" || n.Data == "pattern" || n.Data == "lineargradient" || n.Data == "radialgradient" || n.Data == "marker" || n.Data == "symbol" {
+		if tag == "defs" || tag == "clippath" || tag == "mask" || tag == "pattern" || tag == "lineargradient" || tag == "radialgradient" || tag == "marker" || tag == "symbol" {
 			for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
 				c.svgElem(ch, m, vw, vh, doc)
 			}
@@ -504,6 +523,11 @@ func tokenizePath(d string) []ptok {
 
 // arcBBox samples an SVG elliptical arc.
 func arcBBox(x1, y1, rx, ry, phi float64, large, sweep bool, x2, y2 float64, tp func(x, y float64)) {
+	arcSample(x1, y1, rx, ry, phi, large, sweep, x2, y2, 64, tp)
+}
+
+// arcSample samples an SVG elliptical arc with the given number of steps.
+func arcSample(x1, y1, rx, ry, phi float64, large, sweep bool, x2, y2 float64, steps int, tp func(x, y float64)) {
 	if rx == 0 || ry == 0 || (x1 == x2 && y1 == y2) {
 		tp(x2, y2)
 		return
@@ -540,9 +564,8 @@ func arcBBox(x1, y1, rx, ry, phi float64, large, sweep bool, x2, y2 float64, tp 
 	} else if sweep && dt < 0 {
 		dt += 2 * math.Pi
 	}
-	const steps = 64
 	for k := 0; k <= steps; k++ {
-		t := t1 + dt*float64(k)/steps
+		t := t1 + dt*float64(k)/float64(steps)
 		x := cx + rx*math.Cos(t)*cp - ry*math.Sin(t)*sp
 		y := cy + rx*math.Cos(t)*sp + ry*math.Sin(t)*cp
 		tp(x, y)

@@ -850,10 +850,13 @@ func (s *cstate) apply(name, v, l string) bool {
 			return false
 		}
 		c.BackdropFilter = f
-	case "clip-path":
-		c.ClipPath = l != "none"
-	case "mask", "mask-image", "-webkit-mask", "-webkit-mask-image":
-		c.MaskImage = l != "none" && l != ""
+	case "clip-path", "-webkit-clip-path":
+		cp, ok := s.clipPathValue(v)
+		if !ok {
+			return false
+		}
+		c.ClipPathV = cp
+		c.ClipPath = cp != nil
 	case "transform":
 		t, ok := s.transform(v)
 		if !ok {
@@ -927,7 +930,21 @@ func (s *cstate) apply(name, v, l string) bool {
 		c.FontKerning = l
 	case "font-variant-numeric":
 		c.FontVariantNum = l
-	case "font-feature-settings", "font-variation-settings", "font-optical-sizing", "font-synthesis", "font-variant-ligatures", "font-variant-east-asian", "font-language-override", "font-size-adjust", "text-size-adjust", "-webkit-text-size-adjust", "-webkit-font-smoothing", "-moz-osx-font-smoothing", "font-smooth", "font-palette", "font-variant-position", "font-variant-alternates":
+	case "font-variant-ligatures":
+		c.FontLigOff = strings.Contains(l, "none") || strings.Contains(l, "no-common-ligatures")
+	case "font-feature-settings":
+		if l == "normal" {
+			c.FontLigOff = false
+		} else {
+			for _, tag := range []string{"liga", "clig"} {
+				for _, off := range []string{"0", "off"} {
+					if strings.Contains(l, "\""+tag+"\" "+off) || strings.Contains(l, "'"+tag+"' "+off) {
+						c.FontLigOff = true
+					}
+				}
+			}
+		}
+	case "font-variation-settings", "font-optical-sizing", "font-synthesis", "font-variant-east-asian", "font-language-override", "font-size-adjust", "text-size-adjust", "-webkit-text-size-adjust", "-webkit-font-smoothing", "-moz-osx-font-smoothing", "font-smooth", "font-palette", "font-variant-position", "font-variant-alternates":
 	case "line-height":
 		return s.lineHeight(v, l)
 	case "letter-spacing":
@@ -1028,6 +1045,7 @@ func (s *cstate) apply(name, v, l string) bool {
 		}
 		c.Direction = l
 	case "unicode-bidi":
+		c.UnicodeBidi = l
 	case "writing-mode", "-webkit-writing-mode":
 		c.WritingMode = l
 	case "tab-size", "-moz-tab-size":
@@ -1440,10 +1458,18 @@ func (s *cstate) apply(name, v, l string) bool {
 		}
 	case "column-fill":
 		c.ColumnFill = l
+	case "box-decoration-break", "-webkit-box-decoration-break":
+		if l != "slice" && l != "clone" {
+			return false
+		}
+		c.BoxDecorationBreak = l
 	case "column-span":
 		c.ColumnSpan = l
 	case "all":
 	default:
+		if handled, ok := s.applyMask(name, v, l); handled {
+			return ok
+		}
 		// unknown or purely visual/irrelevant property (transition, animation, ...)
 		if strings.HasPrefix(name, "transition") || strings.HasPrefix(name, "animation") || strings.HasPrefix(name, "-webkit-") || strings.HasPrefix(name, "-moz-") ||
 			strings.HasPrefix(name, "scroll-") || strings.HasPrefix(name, "overscroll") || strings.HasPrefix(name, "mask-") || strings.HasPrefix(name, "touch-") || strings.HasPrefix(name, "view-") {

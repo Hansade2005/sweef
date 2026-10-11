@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="70" viewBox="0 0 100 70">
+<rect width="100" height="70" fill="#eef" stroke="#99c"/>
+<image href="badge.svg" x="10" y="5" width="50" height="38"/>
+<use href="sprite.svg#star" x="78" y="20"/>
+<use href="sprite.svg#face" x="62" y="40" width="26" height="26"/>
+</svg>
