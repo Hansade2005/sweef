@@ -36,6 +36,10 @@ type Style struct {
 }
 
 // Face is one loaded font file.
+// Data returns the raw sfnt bytes this face reads glyph tables from. The slice
+// is shared; callers must not modify it.
+func (f *Face) Data() []byte { return f.data }
+
 type Face struct {
 	Family string
 	Style  Style

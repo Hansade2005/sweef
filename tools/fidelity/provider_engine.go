@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image"
 	"image/png"
+	"strings"
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/engine"
@@ -31,7 +32,7 @@ func (engineProvider) Run(url string, w, h int) ([]ElemBox, image.Image, error) 
 	tab.Settle(300 * time.Millisecond)
 	var boxes []ElemBox
 	for _, r := range tab.ElementBoxes() {
-		boxes = append(boxes, ElemBox{Tag: r.Tag, X: r.X, Y: r.Y, W: r.W, H: r.H, Has: r.Has})
+		boxes = append(boxes, ElemBox{Tag: strings.ToLower(r.Tag), X: r.X, Y: r.Y, W: r.W, H: r.H, Has: r.Has})
 	}
 	img, err := png.Decode(bytes.NewReader(tab.PNGScreenshot(w, h, 1)))
 	if err != nil {

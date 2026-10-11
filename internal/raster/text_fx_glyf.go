@@ -2,9 +2,7 @@ package raster
 
 import (
 	"encoding/binary"
-	"reflect"
 	"sync"
-	"unsafe"
 
 	"github.com/sweefbrowser/sweef/internal/font"
 )
@@ -34,14 +32,8 @@ var (
 	gfCache = map[*font.Face]*glyfFont{}
 )
 
-// faceBytes returns the sfnt bytes a face reads from (unexported field).
-func faceBytes(f *font.Face) []byte {
-	v := reflect.ValueOf(f).Elem().FieldByName("data")
-	if !v.IsValid() || v.Kind() != reflect.Slice {
-		return nil
-	}
-	return *(*[]byte)(unsafe.Pointer(v.UnsafeAddr()))
-}
+// faceBytes returns the sfnt bytes a face reads from.
+func faceBytes(f *font.Face) []byte { return f.Data() }
 
 func glyfFor(f *font.Face) *glyfFont {
 	gfMu.Lock()

@@ -455,6 +455,10 @@ func (c *Context) FillPath(p *Path, rule FillRule) {
 
 // StrokePath strokes p with the stroke paint and style.
 func (c *Context) StrokePath(p *Path) {
+	if mk, ok := StrokeMaskFx(p, c.st.ctm, c.st.ss, c.drawBounds()); ok {
+		c.draw(mk, c.shaderFor(c.st.stroke, c.st.alpha))
+		return
+	}
 	c.draw(StrokeMask(p, c.st.ctm, c.st.ss, c.drawBounds()), c.shaderFor(c.st.stroke, c.st.alpha))
 }
 

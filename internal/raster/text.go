@@ -593,20 +593,8 @@ func glyphMask(g Glyph, sizeX, sizeY float64, sub int, bold, skew bool) *Mask {
 	var m *Mask
 	if !bold {
 		m = skiaGlyph(g, sizeX, sizeY, sub, skew)
-	} else if p := glyphPath(g); p != nil {
-		sk := 0.0
-		if skew {
-			sk = -0.25
-		}
-		mat := Matrix{sizeX, 0, sk * sizeX, sizeY, float64(sub) / 4, 0}
-		big := IRect{-2048, -2048, 2048, 2048}
-		m = FillMask(p, mat, NonZero, big)
-		if m != nil {
-			ex := fakeBoldExtra(sizeY)
-			sp := p.Transform(mat)
-			sm := StrokeMask(sp, Identity, StrokeStyle{Width: ex, Join: JoinMiter, MiterLimit: 4}, big)
-			m = unionMasks(m, sm)
-		}
+	} else {
+		m = skiaGlyphBold(g, sizeX, sizeY, sub, skew)
 	}
 	gmMu.Lock()
 	if len(gmCache) > 20000 {
@@ -719,7 +707,7 @@ func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 	}
 	// Chromium fills glyph outlines with its analytic AA scan converter even
 	// when the text is rotated or scaled non-uniformly
-	return RasterizePolys(aaaFlatten(p.Transform(m)), NonZero, clip)
+	return fxFillPath(p.Transform(m), clip)
 }
 
 // textPath builds the combined outline of a run (user space).
@@ -791,6 +779,10 @@ func (c *Context) strokeTextMask(p *Path) *Mask {
 	sc := m.MaxScale()
 	if sc == 0 || math.IsNaN(sc) {
 		return nil
+	}
+	if ss := c.st.ss; len(ss.Dash) == 0 {
+		// Skia's stroker, then the analytic scan converter on the device outline
+		return fxFillPath(fxStrokePath(p, ss.Width, ss.Join, ss.Cap, ss.MiterLimit, sc).Transform(m), c.drawBounds())
 	}
 	tol := 0.05 / sc
 	polys := StrokePolys(p.Flatten(tol), c.st.ss, tol)

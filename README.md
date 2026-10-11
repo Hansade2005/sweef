@@ -173,12 +173,14 @@ Measured against Chromium 1194 on this repo's fixtures (`go run ./tools/fidelity
 
 | Area | Result |
 |---|---|
-| Element boxes, 64 pages (basic CSS through shop, dashboard, email, docs, Bootstrap, container queries, subgrid, writing modes, multicol) at 1280x800 | mean IoU 0.996, 98.6% of boxes within 1 px, 99.6% within 4 px |
-| Same pages at 390x844 | mean IoU 0.996, 98.2% within 1 px |
-| Pixels (ink agreement with Chromium screenshots) | 97.7% overall; blog and landing pages 99.6% and 99.9% |
+| Element boxes, 84 pages (basic CSS through shop, dashboard, email, docs, Bootstrap, container queries, subgrid, writing modes, multicol, clip-path, mask, SVG, bidi) at 1280x800 | mean IoU 0.998, 99.6% of boxes within 1 px, 99.7% within 4 px |
+| Same pages at 390x844 and 1920x1080 | mean IoU 0.998 at both |
+| Pixels (ink agreement with Chromium screenshots) | 98.5% overall; blog 99.6%, landing 99.9%, Arabic and bidi pages 93 to 96% |
+| Glyph pixels, 1134 glyphs (9 faces x 14 sizes, 9 to 100 px) | 0.33% of pixels differ by more than 8/255, none by more than 24/255 |
 | Page painter, 8 display-list fixtures | 96% to 100% of pixels within 8/255 (text case 99.9%) |
-| Canvas 2D, 40 fixtures | shapes and gradients 99.1%, text 99.2% within 8/255 |
-| SVG (shapes, gradients, clips and basic-shape clip-path, masks, every filter primitive, markers, text on a path, per-glyph text positioning, `foreignObject`, nested and external images, `filter: url(#id)` on HTML) | 7 SVG pages: element boxes mean IoU 0.999; ink 97.6% to 99.8% |
+| Canvas 2D, 42 fixtures | shapes 99.4%, text 99.7% within 8/255 |
+| SVG (paths, gradients, clips, masks, filters incl. turbulence and lighting, markers, text, `textPath`, `foreignObject`) | feature pages 98.9% to 99.8% ink |
+| CSS `clip-path`, `mask`, multicol fragments | 98% to 99.9% ink |
 | WebGL, 76 fixtures | mean 99.9% of pixels within 4/255 (three.js 99.9%, PixiJS 99.99%, regl 100%) |
 | Web Audio, 26 offline graphs | sample-exact for filters, delay, convolver and panner; oscillators within 6e-4 |
 | Media elements, 21 scenarios | event order identical to Chromium; `canPlayType` matches in 67 of 67 recorded answers |
@@ -187,13 +189,12 @@ A 1280x800 text page paints in about 21 ms. A 100k-triangle WebGL frame at 512x5
 
 What is still different, honestly:
 
-- **Glyph edges.** Text uses Skia's analytic anti-aliasing, its coverage tables and GPOS kerning, so most glyphs match. About 1 to 3% of glyph pixels still differ on curve tops, and strokes and synthetic bold are approximations. HTML text does not yet use ligatures, bidi or Arabic joining (canvas text does).
-- **CSS not done:** `content-visibility: auto` skipping, `@container style()` queries, subgrid line names, CJK fallback metrics (WenQuanYi is not matched), vertical text with RTL or nested orthogonal flows.
-- **SVG not done:** `foreignObject` content is laid out and painted in SVG paint order but is not available inside `<pattern>`, `<mask>`, `<clipPath>` or `<use>`d symbols, and ancestor clip-paths do not clip its hit-testing; SVG text is unkerned, has no vertical writing modes and no ligatures or bidi; filters run in axis-aligned device space (no rotated filter regions), `BackgroundImage`/`FillPaint` inputs are empty, `kernelUnitLength` and `filterRes` are ignored; CSS `mask` image layers on SVG elements.
-- **clip-path / mask / multicol painting not done:** `clip-path` and `mask` on inline (non-atomic) elements, `mask-border`, `path()` and external-document `url()` in hit testing; `box-decoration-break: clone` on inline fragments; fragmented blocks that are tables, flex or grid containers are painted as one box per column fragment without reserving their own repeated edges.
+- **Text.** Glyph edges now match to within 12/255 at 9 to 32 px. Not matched: text inside CSS-transformed elements at fractional offsets (Chromium rounds the paint offset), cubic glyph outlines are less verified than quadratic ones, and Arabic diacritics, Hebrew points and Indic scripts are not positioned.
+- **CSS not done:** `content-visibility: auto` skipping, `@container style()` queries, subgrid line names, `mask-border`, `clip-path` and `mask` on plain inline elements, `box-decoration-break: clone` on wrapped inlines, vertical text with RTL or nested orthogonal flows.
+- **SVG not done:** `foreignObject` inside `pattern`, `mask`, `clipPath` or `use`, CSS `mask` image layers on SVG elements, `kernelUnitLength`, and a few filter inputs (BackgroundImage, FillPaint).
 - **Codecs.** MP3, Vorbis, FLAC and PCM decode in pure Go. AAC, Opus, H.264, VP9 and AV1 need `ffmpeg` on the machine; without it they report unsupported like a browser without the codec. Video without ffmpeg shows VP8 key frames only.
 - **WebGL.** No compressed textures, `EXT_sRGB` or multi-draw; lines are 1 px; `sin` differs from SwiftShader in the last digit.
-- **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.8 s because QuickJS cannot share typed arrays with Go. `MediaRecorder`, EME and picture-in-picture reject.
+- **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.4 s, because QuickJS cannot share typed arrays with Go. `MediaRecorder`, EME and picture-in-picture reject.
 - **Exact pixel identity with Chromium is not a goal.** Screenshots are not byte-identical.
 
 Set `SWEEF_RENDERER=flow` to fall back to the old schematic layout.
