@@ -20,6 +20,9 @@ func addCommonFlags(fs *flag.FlagSet) {
 	fs.Int("max-rss-mib", opts.MaxRSSMiB, "soft resident-memory budget")
 	fs.Bool("no-js", false, "disable JavaScript entirely (fetch+DOM only)")
 	fs.String("user-agent", opts.DefaultUserAgent, "default UA string")
+	fs.Int("settle-ms", opts.SettleMs, "JavaScript event-loop budget after load and after each action")
+	fs.Int("js-mem-mib", opts.JSMemoryMiB, "QuickJS heap cap per tab")
+	fs.Int("js-timeout-ms", opts.JSTimeoutMs, "single script evaluation timeout")
 }
 
 // engineOptsFrom builds Options from the common flags registered by
@@ -37,6 +40,13 @@ func engineOptsFrom(fs *flag.FlagSet) engine.Options {
 	}
 	if f := fs.Lookup("user-agent"); f != nil {
 		opts.DefaultUserAgent = f.Value.String()
+	}
+	for name, dst := range map[string]*int{"settle-ms": &opts.SettleMs, "js-mem-mib": &opts.JSMemoryMiB, "js-timeout-ms": &opts.JSTimeoutMs} {
+		if f := fs.Lookup(name); f != nil {
+			if n, err := strconv.Atoi(f.Value.String()); err == nil {
+				*dst = n
+			}
+		}
 	}
 	return opts
 }

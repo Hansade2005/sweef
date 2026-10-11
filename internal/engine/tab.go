@@ -112,7 +112,7 @@ type Tab struct {
 	stateRing   *Ring
 	dialogRing  *Ring
 
-	jsCtx   any // opaque QuickJS context handle
+	js      *jsVM // per-document JavaScript VM (nil when JS is disabled)
 	history []*url.URL
 	hIdx    int
 
@@ -160,20 +160,8 @@ func newTab(e *Engine, id string) *Tab {
 	if t.vpH == 0 {
 		t.vpH = 720
 	}
-	if !e.opts.DisableJS {
-		t.jsCtx = runtimeCreateContext(id)
-	} else {
-		// Pure-Go DOM bridge: jsCtx stays nil but we still answer the
-		// read-only expression subset (document.title, querySelector…) so
-		// agents can evaluate common expressions even without QuickJS.
-		t.jsCtx = &domBridgeTab{tab: t}
-	}
 	return t
 }
-
-// domBridgeTab is a marker context that routes runtimeEval to the fallback
-// evaluator bound to this tab's live DOM.
-type domBridgeTab struct{ tab *Tab }
 
 // Context returns the tab's browser context (creating the default lazily).
 func (t *Tab) Context() *BrowserContext {
@@ -185,10 +173,11 @@ func (t *Tab) Context() *BrowserContext {
 
 func (t *Tab) close() {
 	if t.closed.CompareAndSwap(false, true) {
-		if t.jsCtx != nil {
-			runtimeDestroyContext(t.jsCtx)
-			t.jsCtx = nil
-		}
+		t.mu.Lock()
+		j := t.js
+		t.js = nil
+		t.mu.Unlock()
+		j.close()
 	}
 }
 
@@ -347,88 +336,36 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 	t.url = u
 	t.scripts = compileScripts(doc.Scripts())
 	initScripts := append([]*CompiledScript(nil), t.initScripts...)
+	old := t.js
+	t.js = nil
 	t.mu.Unlock()
+	old.close()
 
-	// addInitScript sources run BEFORE any page script, on every navigation —
-	// same guarantee Playwright gives agents for hooking timers/fetch.
-	for _, s := range initScripts {
-		out, errs := runtimeEval(t.jsCtx, s.Source, s.Name)
-		for _, e := range errs {
-			t.LogConsole("error", e)
-		}
-		if out != "" {
-			t.applyDomMutations(out)
-		}
-	}
-	if !t.eng.opts.DisableJS && t.jsCtx != nil {
-		t.runScripts()
-	} else if _, ok := t.jsCtx.(*domBridgeTab); ok {
-		// Pure-Go DOM bridge: run page scripts through the read-only
-		// evaluator so console.log/document.* expressions still produce
-		// useful signals even without QuickJS linked in.
-		SetEvalTabHook(func() *Tab { return t })
-		for _, s := range t.snapshotScripts() {
-			out, errs := fallbackEval(s.Source)
-			for _, e := range errs {
-				t.LogConsole("info", e)
+	if !t.eng.opts.DisableJS {
+		j := newJSVM(t, doc, finalURL)
+		t.mu.Lock()
+		t.js = j
+		t.mu.Unlock()
+		if j != nil {
+			// addInitScript sources run BEFORE any page script, on every
+			// navigation — the guarantee Playwright gives for hooking timers/fetch.
+			for _, s := range initScripts {
+				_, _ = j.run(s.Source, s.Name)
 			}
-			if out != "" {
-				t.applyDomMutations(out)
+			t.runPageScripts(j, doc)
+			if t.closed.Load() {
+				return
+			}
+			t.mu.RLock()
+			navigated := t.js != j
+			t.mu.RUnlock()
+			if navigated {
+				return // page code navigated; the new document already fired load
 			}
 		}
 	}
 	t.stateRing.Push(Event{Tab: t.ID, Kind: EvLoad, At: time.Now(), Data: map[string]any{"url": finalURL, "title": t.Title()}})
 	t.emit(EvLoad, map[string]any{"url": finalURL, "title": t.Title()})
-}
-
-// snapshotScripts returns a stable copy of the page's compiled <script> list.
-func (t *Tab) snapshotScripts() []*CompiledScript {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return append([]*CompiledScript(nil), t.scripts...)
-}
-
-func (t *Tab) runScripts() {
-	t.mu.RLock()
-	scripts := append([]*CompiledScript(nil), t.scripts...)
-	t.mu.RUnlock()
-	for _, s := range scripts {
-		out, errs := runtimeEval(t.jsCtx, s.Source, s.Name)
-		for _, e := range errs {
-			t.LogConsole("error", e)
-		}
-		if out != "" {
-			// script may have mutated DOM via Sweef DOM API bridge
-			t.applyDomMutations(out)
-		}
-	}
-}
-
-// applyDomMutations consumes the JSON mutation journal returned by the JS
-// bridge (document.write / innerHTML / createElement paths). Keeping mutations
-// as a journal rather than live pointers makes the tree cheap to reparse.
-func (t *Tab) applyDomMutations(journal string) {
-	type mut struct {
-		Op    string `json:"op"`
-		Sel   string `json:"sel"`
-		Value string `json:"value"`
-	}
-	var ms []mut
-	if err := json.Unmarshal([]byte(journal), &ms); err != nil {
-		return
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	for _, m := range ms {
-		switch m.Op {
-		case "title":
-			t.title = m.Value
-		case "replace-body":
-			if d, err := fnet.ParseDocument("<html><body>"+m.Value+"</body></html>", t.URL()); err == nil {
-				t.dom = d
-			}
-		}
-	}
 }
 
 // ---- public surface used by RPC/MCP handlers -----------------------------
@@ -506,6 +443,19 @@ func (t *Tab) Snapshot() ([]*NodeInfo, error) {
 	return out, nil
 }
 
+// SnapshotOptions mirrors net.SnapshotOptions for callers outside the engine.
+type SnapshotOptions = fnet.SnapshotOptions
+
+// AriaSnapshotV2 renders the Playwright-format accessibility tree with options.
+func (t *Tab) AriaSnapshotV2(o SnapshotOptions) (string, error) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if t.dom == nil {
+		return "", ErrNotFound
+	}
+	return t.dom.AriaSnapshotV2(o)
+}
+
 func (t *Tab) ConsoleLog(sinceSID int64) []Event { return t.consoleRing.Since(sinceSID) }
 func (t *Tab) NetworkLog(sinceSID int64) []Event { return t.netRing.Since(sinceSID) }
 func (t *Tab) StateLog(sinceSID int64) []Event   { return t.stateRing.Since(sinceSID) }
@@ -516,76 +466,75 @@ func (t *Tab) LogConsole(level, text string) {
 	t.emit(EvConsole, e.Data)
 }
 
-// Evaluate runs JS in the tab context and returns a JSON-encoded result.
-// Even in pure-Go / --no-js builds it answers the DOM expression
-// subset (document.title, location.href, querySelector…, console.log,
-// small numeric/string expressions) against the live DOM.
+// Evaluate runs JS in the tab's VM, awaits a returned promise, and returns
+// the JSON-encoded completion value. DOM nodes serialise as {nodeType,
+// tagName, id, ref}.
 func (t *Tab) Evaluate(expr string) (json.RawMessage, error) {
-	if t.eng.opts.DisableJS && t.jsCtx == nil {
-		return nil, fmt.Errorf("js disabled")
-	}
-	if !cgoAvailable() {
-		SetEvalTabHook(func() *Tab { return t })
-		out, errs := fallbackEval(expr)
-		for _, e := range errs {
-			t.LogConsole("info", e)
+	t.mu.RLock()
+	j := t.js
+	t.mu.RUnlock()
+	if j == nil {
+		if t.eng.opts.DisableJS {
+			return nil, fmt.Errorf("javascript is disabled (--no-js)")
 		}
-		if out == "" {
-			return json.RawMessage("null"), nil
-		}
-		return json.RawMessage(out), nil
+		return nil, fmt.Errorf("no document loaded")
 	}
-	out, errs := runtimeEval(t.jsCtx, expr, "<eval>")
-	for _, e := range errs {
-		t.LogConsole("error", e)
-	}
-	if out == "" {
-		return json.RawMessage("null"), nil
-	}
-	return json.RawMessage(out), nil
+	return j.evaluate(expr)
 }
 
 // Click performs a semantic click on selector: focus, dispatch mousedown/up/click,
 // follow link href or submit button form (Playwright actionability minus pixels).
 
-func (t *Tab) Fill(sel, value string) error {
-	ni, err := t.QuerySelector(sel)
-	if err != nil {
-		return err
-	}
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	err = t.dom.SetValue(ni.BackendID, value)
-	if err == nil {
-		t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(),
-			Data: map[string]string{"sel": sel, "value": value}})
-	}
-	return err
-}
+// Fill sets a control's value with auto-wait and dispatches input/change
+// into page JavaScript (Playwright fill semantics).
+func (t *Tab) Fill(sel, value string) error { return t.Fill2(sel, value) }
 
+// SubmitFormFor submits the form enclosing sel (GET navigates with the query,
+// POST sends application/x-www-form-urlencoded) and installs the response.
 func (t *Tab) SubmitFormFor(sel string) error {
 	t.mu.RLock()
-	defer t.mu.RUnlock()
-	if t.dom == nil {
+	d := t.dom
+	t.mu.RUnlock()
+	if d == nil {
 		return ErrNotFound
 	}
-	method, action, values, err := t.dom.FormFor(sel)
+	method, action, values, err := d.FormFor(sel)
 	if err != nil {
 		return err
 	}
+	return t.submitForm(method, action, values)
+}
+
+// SubmitFormBackend submits the form with (or enclosing) the given node id.
+func (t *Tab) SubmitFormBackend(id int64) error {
+	t.mu.RLock()
+	d := t.dom
+	t.mu.RUnlock()
+	if d == nil {
+		return ErrNotFound
+	}
+	method, action, values, err := d.FormForBackend(id)
+	if err != nil {
+		return err
+	}
+	return t.submitForm(method, action, values)
+}
+
+func (t *Tab) submitForm(method, action string, values map[string]string) error {
 	u, _ := url.Parse(t.URL())
 	if action != "" {
-		au, _ := url.Parse(action)
+		au, err := url.Parse(action)
+		if err != nil {
+			return err
+		}
 		u = u.ResolveReference(au)
 	}
-	if strings.EqualFold(method, "get") {
+	if !strings.EqualFold(method, "post") {
 		q := u.Query()
 		for k, v := range values {
 			q.Set(k, v)
 		}
 		u.RawQuery = q.Encode()
-		t.mu.RUnlock()
-		t.mu.RLock()
 		return t.Navigate(u.String(), nil)
 	}
 	return t.postForm(u.String(), values)
@@ -601,16 +550,49 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", t.eng.opts.DefaultUserAgent)
+	req.Header.Set("User-Agent", t.UserAgent())
+	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
+	for k, v := range t.ExtraHeaders() {
+		req.Header.Set(k, v)
+	}
+	if ck := t.Context().JarRef().ForURL(rawurl); ck != "" {
+		req.Header.Set("Cookie", ck)
+	}
+	rec := fnet.RequestRecord{Method: "POST", URL: rawurl, Headers: flattenHeaders(req.Header)}
+	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
+	start := time.Now()
 	res, err := t.eng.client().Do(req)
 	if err != nil {
+		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": rawurl, "error": err.Error()}})
 		return err
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
-	t.mu.Unlock() // caller holds RLock; we intentionally unlock before SetDocument
-	t.SetDocument(string(b), res.Request.URL.String())
+	for _, sc := range res.Header.Values("Set-Cookie") {
+		if c := parseCookie(sc, t.eng.now()); c != nil {
+			if c.Domain == "" {
+				c.Domain = res.Request.URL.Hostname()
+			}
+			t.Context().JarRef().Set(c)
+		}
+	}
+	rec.Status = res.StatusCode
+	rec.FinalURL = res.Request.URL.String()
+	rec.DurationMs = time.Since(start).Milliseconds()
+	rec.ResponseHeaders = flattenHeaders(res.Header)
+	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
+	final := res.Request.URL.String()
+	t.SetDocument(string(b), final)
 	t.mu.Lock()
+	if fu, err := url.Parse(final); err == nil {
+		if t.hIdx+1 < len(t.history) {
+			t.history = t.history[:t.hIdx+1]
+		}
+		t.history = append(t.history, fu)
+		t.hIdx = len(t.history) - 1
+	}
+	t.mu.Unlock()
+	t.emit(EvNavigated, map[string]any{"url": final, "status": res.StatusCode})
 	return nil
 }
 
@@ -757,7 +739,7 @@ func (t *Tab) interceptGet(rawurl string) (int, string, bool) {
 
 // Dialogs records a JS dialog and applies the armed response like Playwright's
 // page.on("dialog"). Returns whether it was accepted.
-func (t *Tab) HandleDialog(d Dialog) bool {
+func (t *Tab) HandleDialog(d Dialog) (bool, string) {
 	t.mu.Lock()
 	acc, txt := t.dialogAccept, t.dialogText
 	t.dialogAccept, t.dialogText = true, ""
@@ -768,7 +750,7 @@ func (t *Tab) HandleDialog(d Dialog) bool {
 	t.dialogRing.Push(Event{Tab: t.ID, Kind: EvDialog, At: time.Now(),
 		Data: map[string]any{"kind": d.Kind, "message": d.Message, "accepted": acc, "reply": txt}})
 	t.emit(EvDialog, map[string]any{"dialog": d, "accepted": acc, "text": txt})
-	return acc
+	return acc, txt
 }
 
 func (t *Tab) ArmDialogResponse(accept bool, promptText string) {

@@ -17,7 +17,7 @@ declare module '@sweef/browser' {
   }
   export class Page {
     info(): Promise<any>; url(): Promise<string>; title(): Promise<string>; content(): Promise<string>;
-    textContent(sel?: string): Promise<string>; ariaSnapshot(): Promise<string>; screenshot(width?: number): Promise<string>;
+    textContent(sel?: string): Promise<string>; ariaSnapshot(opts?: {selector?: string; interactiveOnly?: boolean; maxChars?: number; maxTextLen?: number; maxDepth?: number}): Promise<string>; snapshot(): Promise<any[]>; screenshot(width?: number): Promise<string>;
     goto(url: string): Promise<any>; goBack(): Promise<any>; goForward(): Promise<any>; reload(): Promise<any>;
     locator(sel: string): Locator; click(sel: string): Promise<any>; fill(sel: string, v: string): Promise<any>;
     type(sel: string, t: string, d?: number): Promise<any>; press(sel: string, k?: string): Promise<any>;

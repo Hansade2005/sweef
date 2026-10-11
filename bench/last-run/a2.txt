@@ -1,0 +1,13 @@
+- heading "Sign in to Acme" [level=1, ref=e1]
+- generic
+  - LabelText
+    - StaticText "Email"
+  - textbox "Email" [required, ref=e2]
+  - LabelText
+    - StaticText "Password"
+  - textbox "Password" [ref=e3]
+  - checkbox " Remember me" [checked=false, ref=e4]
+  - button "Sign in" [ref=e5]
+- paragraph
+  - StaticText "New here? "
+  - link "Create an account" [ref=e6]

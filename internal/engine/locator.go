@@ -224,7 +224,7 @@ func (l *Locator) WaitForCondition(kind string, timeout time.Duration) error {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("%w: locator %q never became %s", ErrTimeout, l.sel, kind)
 		}
-		time.Sleep(interval)
+		l.tab.settle(interval)
 		if interval < 200*time.Millisecond {
 			interval *= 2
 		}

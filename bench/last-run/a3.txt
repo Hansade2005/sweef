@@ -1,0 +1,3 @@
+- generic "Count: 1Incrementrow 0" [ref=e1] clickable [onclick]
+  - heading "Count: 1" [level=1, ref=e2]
+  - button "Increment" [ref=e3]

@@ -81,7 +81,8 @@ class Page {
   title() { return this._rpc('Page.info').then(r => r.title); }
   content() { return this._rpc('Page.content').then(r => r.html); }
   textContent(selector = 'body') { return this._rpc('Page.textContent', { selector }).then(r => r.text); }
-  ariaSnapshot() { return this._rpc('Page.snapshot').then(r => r.snapshot); }
+  ariaSnapshot(opts = {}) { return this._rpc('Page.ariaSnapshot', opts).then(r => r.yaml); }
+  snapshot() { return this._rpc('Page.snapshot'); }
   screenshot(width = 80) { return this._rpc('Page.screenshot', { width }).then(r => r.text); }
   pdf() { return this._rpc('Page.pdf'); }
   goto(url) { return this._rpc('Page.navigate', { url }); }

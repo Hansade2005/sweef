@@ -26,21 +26,37 @@ func (t *Tab) withDoc(fn func(*fnet.Doc) error) error {
 	return fn(t.dom)
 }
 
-func (t *Tab) evalAsync(expr string) {
+// fire dispatches a DOM event into page JavaScript and reports whether the
+// default action may proceed (false when a listener called preventDefault).
+// With JS disabled every event is "not prevented".
+func (t *Tab) fire(bid int64, typ string, init map[string]any) bool {
 	t.mu.RLock()
-	ctx := t.jsCtx
+	j := t.js
 	t.mu.RUnlock()
-	if ctx == nil {
-		return
+	if j == nil {
+		return true
 	}
-	// fire-and-forget: page event handlers may mutate the DOM; results are
-	// discarded — agents read state via explicit getters afterwards.
-	if _, errs := runtimeEval(ctx, expr, "action"); len(errs) > 0 {
-		for _, e := range errs {
-			t.LogConsole("error", e)
-		}
-	}
+	return j.dispatch(bid, typ, init)
 }
+
+// jsCall invokes a prelude helper (e.g. __swDispatchKey) and returns its result.
+func (t *Tab) jsCall(fn string, args ...any) (any, bool) {
+	t.mu.RLock()
+	j := t.js
+	t.mu.RUnlock()
+	if j == nil {
+		return nil, false
+	}
+	r, err := j.call(fn, args...)
+	if err != nil {
+		t.LogConsole("error", jsErrorText(err, fn))
+		return nil, false
+	}
+	return r, true
+}
+
+// afterAction lets page scripts react (fetch, re-render) before the tool returns.
+func (t *Tab) afterAction() { t.settle(t.settleBudget() / 3) }
 
 // ---- attribute / html getters by backend id ---------------------------------
 
@@ -129,6 +145,15 @@ func attrKeysOf(d *fnet.Doc, backendID int64) []string {
 // their control.
 func (t *Tab) Click(sel string) error {
 	l := t.Locator(sel)
+	// A ref that resolves to something that can never be clicked fails at
+	// once instead of waiting for it to become visible.
+	if bid, err := l.BackendID(); err == nil {
+		if info := t.infoForBackend(bid); info != nil && nonRenderable[strings.ToLower(info.Name)] {
+			return fmt.Errorf("<%s> is not a visible element; take a new snapshot and use a listed ref", info.Name)
+		}
+	} else if strings.Contains(err.Error(), "snapshot") {
+		return err // unknown or detached ref: no point waiting
+	}
 	if err := l.WaitForCondition("visible", 5*time.Second); err != nil {
 		// fall back to attached-only click (hidden links still navigate)
 		if err2 := l.WaitForCondition("attached", 100*time.Millisecond); err2 != nil {
@@ -142,13 +167,25 @@ func (t *Tab) Click(sel string) error {
 	return t.clickBackend(bid, sel)
 }
 
+var nonRenderable = map[string]bool{"script": true, "style": true, "head": true, "meta": true, "link": true, "title": true, "template": true, "noscript": true}
+
 func (t *Tab) clickBackend(bid int64, sel string) error {
 	info := t.infoForBackend(bid)
-	// synthetic event first (page JS may preventDefault / navigate itself)
-	t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"click")`, bid))
+	// pointer sequence first: page JS may preventDefault or navigate itself
+	t.fire(bid, "pointerdown", nil)
+	t.fire(bid, "mousedown", nil)
+	t.fire(bid, "focus", nil)
+	t.fire(bid, "pointerup", nil)
+	t.fire(bid, "mouseup", nil)
+	proceed := t.fire(bid, "click", nil)
+	if !proceed {
+		t.afterAction()
+		return nil
+	}
 	if info == nil {
 		return nil
 	}
+	defer t.afterAction()
 	switch strings.ToLower(info.Name) {
 	case "a":
 		href := ""
@@ -175,7 +212,8 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 		}
 		if typ == "checkbox" || typ == "radio" {
 			_ = t.withDoc(func(d *fnet.Doc) error { return d.SetChecked(bid, !(info.Checked)) })
-			t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"change")`, bid))
+			t.fire(bid, "input", nil)
+			t.fire(bid, "change", nil)
 			return nil
 		}
 	}
@@ -197,8 +235,10 @@ func (t *Tab) Hover(sel string) error {
 	if err != nil {
 		return err
 	}
-	t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"mouseover")`, bid))
-	t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"mouseenter")`, bid))
+	t.fire(bid, "pointerover", nil)
+	t.fire(bid, "mouseover", nil)
+	t.fire(bid, "mouseenter", nil)
+	t.afterAction()
 	return nil
 }
 
@@ -211,7 +251,7 @@ func (t *Tab) Focus(sel string) error {
 	if err := t.withDoc(func(d *fnet.Doc) error { return d.SetAttribute(bid, "data-sw-focused", "1") }); err != nil {
 		return err
 	}
-	t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"focus")`, bid))
+	t.fire(bid, "focus", nil)
 	return nil
 }
 
@@ -221,6 +261,7 @@ func (t *Tab) Type(sel, text string, delay time.Duration) error {
 	if err != nil {
 		return err
 	}
+	t.fire(bid, "focus", nil)
 	for _, r := range text {
 		if err := t.appendValue(bid, string(r)); err != nil {
 			return err
@@ -229,12 +270,18 @@ func (t *Tab) Type(sel, text string, delay time.Duration) error {
 			time.Sleep(delay)
 		}
 	}
-	t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"change")`, bid))
+	t.fire(bid, "change", nil)
+	t.afterAction()
 	return nil
 }
 
+// appendValue types one character: key events through the prelude (which
+// updates the value and fires input unless prevented), with a Go fallback
+// when JS is disabled.
 func (t *Tab) appendValue(bid int64, s string) error {
-	t.evalAsync(fmt.Sprintf(`__swDispatchKey(%d,%q)`, bid, s))
+	if _, ok := t.jsCall("__swDispatchKey", bid, s); ok {
+		return nil
+	}
 	cur := ""
 	_ = t.withDoc(func(d *fnet.Doc) error {
 		if v, ok, _ := d.GetAttribute(bid, "value"); ok {
@@ -252,23 +299,25 @@ func (t *Tab) Press(sel, keys string) error {
 	if err != nil {
 		return err
 	}
-	for _, combo := range strings.Split(keys, "+") {
-		_ = combo
-	}
 	key := strings.TrimSpace(keys)
-	t.evalAsync(fmt.Sprintf(`__swDispatchKey(%d,%q)`, bid, key))
-	if strings.EqualFold(key, "Enter") {
+	proceed := true
+	if r, ok := t.jsCall("__swDispatchKey", bid, key); ok {
+		proceed = truthyAny(r)
+	}
+	if proceed && strings.EqualFold(key, "Enter") {
 		info := t.infoForBackend(bid)
-		if info != nil && (strings.EqualFold(info.Name, "input") || strings.EqualFold(info.Name, "textarea")) {
+		if info != nil && strings.EqualFold(info.Name, "input") {
 			return t.SubmitFormFor(sel)
 		}
 	}
+	t.afterAction()
 	return nil
 }
 
 // Keyboard sends a raw key sequence to the focused element/body.
 func (t *Tab) Keyboard(keys string) error {
-	t.evalAsync(fmt.Sprintf(`__swDispatchKey(0,%q)`, keys))
+	t.jsCall("__swDispatchKey", 0, keys)
+	t.afterAction()
 	return nil
 }
 
@@ -292,8 +341,12 @@ func (t *Tab) Fill2(sel, value string) error {
 	} else if err := t.withDoc(func(d *fnet.Doc) error { return d.SetValue(bid, value) }); err != nil {
 		return err
 	}
-	t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"input")`, bid))
-	t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"change")`, bid))
+	t.fire(bid, "focus", nil)
+	if _, ok := t.jsCall("__swSetValueFromGo", bid, value); !ok {
+		t.fire(bid, "input", nil)
+		t.fire(bid, "change", nil)
+	}
+	t.afterAction()
 	return nil
 }
 
@@ -309,7 +362,9 @@ func (t *Tab) setChecked(sel string, want bool) error {
 	if err := t.withDoc(func(d *fnet.Doc) error { return d.SetChecked(bid, want) }); err != nil {
 		return err
 	}
-	t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"change")`, bid))
+	t.fire(bid, "input", nil)
+	t.fire(bid, "change", nil)
+	t.afterAction()
 	return nil
 }
 
@@ -322,7 +377,9 @@ func (t *Tab) SelectOption(sel, value string) error {
 	if err := t.withDoc(func(d *fnet.Doc) error { return d.SelectOption(bid, value) }); err != nil {
 		return err
 	}
-	t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"change")`, bid))
+	t.fire(bid, "input", nil)
+	t.fire(bid, "change", nil)
+	t.afterAction()
 	return nil
 }
 
@@ -352,23 +409,17 @@ func (t *Tab) SetValueRaw(sel, value string) error {
 
 // ---- mouse / touch / drag / scroll ------------------------------------------
 
-func (t *Tab) MouseMove(x, y int) {
-	t.evalAsync(fmt.Sprintf(`__swMouse("mousemove",%d,%d)`, x, y))
-}
-func (t *Tab) MouseDown(x, y int) {
-	t.evalAsync(fmt.Sprintf(`__swMouse("mousedown",%d,%d)`, x, y))
-}
-func (t *Tab) MouseUp(x, y int) {
-	t.evalAsync(fmt.Sprintf(`__swMouse("mouseup",%d,%d)`, x, y))
-}
+func (t *Tab) MouseMove(x, y int) { t.jsCall("__swMouse", "mousemove", x, y) }
+func (t *Tab) MouseDown(x, y int) { t.jsCall("__swMouse", "mousedown", x, y) }
+func (t *Tab) MouseUp(x, y int)   { t.jsCall("__swMouse", "mouseup", x, y) }
 
 // MouseClick hit-tests coordinates against deterministic bounding boxes and
 // clicks whatever element covers the point.
 func (t *Tab) MouseClick(x, y int) error {
-	t.evalAsync(fmt.Sprintf(`__swMouse("click",%d,%d)`, x, y))
 	bid, err := t.hitTest(x, y)
 	if err != nil {
-		return err // no element at point — harmless, like clicking whitespace
+		t.jsCall("__swMouse", "click", x, y)
+		return nil // no element at point — harmless, like clicking whitespace
 	}
 	return t.clickBackend(bid, "")
 }
@@ -379,8 +430,8 @@ func (t *Tab) Tap(sel string) error {
 	if err != nil {
 		return err
 	}
-	t.evalAsync(fmt.Sprintf(`__swTouch(%d,"touchstart")`, bid))
-	t.evalAsync(fmt.Sprintf(`__swTouch(%d,"touchend")`, bid))
+	t.jsCall("__swTouch", bid, "touchstart")
+	t.jsCall("__swTouch", bid, "touchend")
 	return t.clickBackend(bid, sel)
 }
 
@@ -394,7 +445,8 @@ func (t *Tab) Drag(source, target string) error {
 	if err != nil {
 		return err
 	}
-	t.evalAsync(fmt.Sprintf(`__swDrag(%d,%d)`, sb, tb))
+	t.jsCall("__swDrag", sb, tb)
+	t.afterAction()
 	return nil
 }
 
@@ -413,39 +465,27 @@ func (t *Tab) ScrollIntoView(sel string) error {
 		return nil
 	})
 	t.stateRing.Push(Event{Kind: EvDomMutated, Data: map[string]any{"scrollTo": box}})
-	t.evalAsync(fmt.Sprintf(`__swDispatch(%d,"scroll")`, bid))
+	t.fire(bid, "scroll", nil)
 	return nil
 }
 
 // MouseWheel accumulates wheel deltas (agents use it to trigger lazy-loaders).
 func (t *Tab) MouseWheel(dx, dy int) error {
-	t.evalAsync(fmt.Sprintf(`__swWheel(%d,%d)`, dx, dy))
+	t.jsCall("__swWheel", dx, dy)
+	t.afterAction()
 	return nil
 }
 
 func (t *Tab) hitTest(x, y int) (int64, error) {
-	var found int64 = -1
+	var found int64
 	_ = t.withDoc(func(d *fnet.Doc) error {
-		for _, i := range mustAria(d) {
-			b, err := d.BoundingBox(i.BackendID)
-			if err != nil {
-				continue
-			}
-			if x >= b[0] && x < b[0]+b[2] && y >= b[1] && y < b[1]+b[3] {
-				found = i.BackendID // last match wins = topmost paint order
-			}
-		}
+		found = d.ElementFromPoint(x, y)
 		return nil
 	})
-	if found < 0 {
+	if found == 0 {
 		return 0, ErrNotFound
 	}
 	return found, nil
-}
-
-func mustAria(d *fnet.Doc) []*fnet.Info {
-	infos, _ := d.AriaSnapshot()
-	return infos
 }
 
 // ---- waits ------------------------------------------------------------------
@@ -502,7 +542,7 @@ func (t *Tab) WaitForFunction(expr string, timeout time.Duration) error {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("%w: waitForFunction timed out", ErrTimeout)
 		}
-		time.Sleep(50 * time.Millisecond)
+		t.settle(50 * time.Millisecond)
 	}
 }
 
