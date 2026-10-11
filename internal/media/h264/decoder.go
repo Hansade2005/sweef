@@ -27,13 +27,13 @@ type sliceParams struct {
 
 // Decoder decodes an H.264 stream access unit by access unit.
 type Decoder struct {
-	sps     [32]*SPS
-	pps     [256]*PPS
-	lenSize int
-	dpb     []*Picture
-	poc     pocState
+	sps        [32]*SPS
+	pps        [256]*PPS
+	lenSize    int
+	dpb        []*Picture
+	poc        pocState
 	maxLongIdx int
-	nextID  int32
+	nextID     int32
 
 	// current picture
 	cur       *Picture

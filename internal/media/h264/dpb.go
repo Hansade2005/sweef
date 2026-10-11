@@ -7,24 +7,24 @@ type mv16 struct{ x, y int16 }
 // Picture is a decoded frame plus the motion data later pictures need for
 // direct prediction.
 type Picture struct {
-	id         int32
-	mbW, mbH   int
-	w, h       int
-	y, cb, cr  []byte
-	ys, cs     int
-	poc        int
-	frameNum   int
-	frameWrap  int
-	shortRef   bool
-	longRef    bool
-	longIdx    int
-	mv         [2][]mv16 // per 4x4 block
-	refIdx     [2][]int8 // per 8x8 block
-	refID      [2][]int32
-	nonExist   bool
-	crop       [4]int
-	colorMtx   int
-	fullRange  bool
+	id        int32
+	mbW, mbH  int
+	w, h      int
+	y, cb, cr []byte
+	ys, cs    int
+	poc       int
+	frameNum  int
+	frameWrap int
+	shortRef  bool
+	longRef   bool
+	longIdx   int
+	mv        [2][]mv16 // per 4x4 block
+	refIdx    [2][]int8 // per 8x8 block
+	refID     [2][]int32
+	nonExist  bool
+	crop      [4]int
+	colorMtx  int
+	fullRange bool
 }
 
 func newPicture(id int32, mbW, mbH int) *Picture {

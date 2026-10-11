@@ -18,37 +18,37 @@ type interMB struct {
 }
 
 var pMBTypes = [5]interMB{
-	{1, 4, 4, [2]uint8{pmL0, 0}, false, false},
-	{2, 4, 2, [2]uint8{pmL0, pmL0}, false, false},
-	{2, 2, 4, [2]uint8{pmL0, pmL0}, false, false},
-	{4, 2, 2, [2]uint8{}, true, false},
+	{1, 4, 4, [2]uint8{pmL0, 0}, false, false, false},
+	{2, 4, 2, [2]uint8{pmL0, pmL0}, false, false, false},
+	{2, 2, 4, [2]uint8{pmL0, pmL0}, false, false, false},
+	{4, 2, 2, [2]uint8{}, true, false, false},
 	{4, 2, 2, [2]uint8{}, true, false, true}, // P_8x8ref0
 }
 
 var bMBTypes = [23]interMB{
-	{4, 2, 2, [2]uint8{}, false, true}, // B_Direct_16x16
-	{1, 4, 4, [2]uint8{pmL0, 0}, false, false},
-	{1, 4, 4, [2]uint8{pmL1, 0}, false, false},
-	{1, 4, 4, [2]uint8{pmBi, 0}, false, false},
-	{2, 4, 2, [2]uint8{pmL0, pmL0}, false, false},
-	{2, 2, 4, [2]uint8{pmL0, pmL0}, false, false},
-	{2, 4, 2, [2]uint8{pmL1, pmL1}, false, false},
-	{2, 2, 4, [2]uint8{pmL1, pmL1}, false, false},
-	{2, 4, 2, [2]uint8{pmL0, pmL1}, false, false},
-	{2, 2, 4, [2]uint8{pmL0, pmL1}, false, false},
-	{2, 4, 2, [2]uint8{pmL1, pmL0}, false, false},
-	{2, 2, 4, [2]uint8{pmL1, pmL0}, false, false},
-	{2, 4, 2, [2]uint8{pmL0, pmBi}, false, false},
-	{2, 2, 4, [2]uint8{pmL0, pmBi}, false, false},
-	{2, 4, 2, [2]uint8{pmL1, pmBi}, false, false},
-	{2, 2, 4, [2]uint8{pmL1, pmBi}, false, false},
-	{2, 4, 2, [2]uint8{pmBi, pmL0}, false, false},
-	{2, 2, 4, [2]uint8{pmBi, pmL0}, false, false},
-	{2, 4, 2, [2]uint8{pmBi, pmL1}, false, false},
-	{2, 2, 4, [2]uint8{pmBi, pmL1}, false, false},
-	{2, 4, 2, [2]uint8{pmBi, pmBi}, false, false},
-	{2, 2, 4, [2]uint8{pmBi, pmBi}, false, false},
-	{4, 2, 2, [2]uint8{}, true, false}, // B_8x8
+	{4, 2, 2, [2]uint8{}, false, true, false}, // B_Direct_16x16
+	{1, 4, 4, [2]uint8{pmL0, 0}, false, false, false},
+	{1, 4, 4, [2]uint8{pmL1, 0}, false, false, false},
+	{1, 4, 4, [2]uint8{pmBi, 0}, false, false, false},
+	{2, 4, 2, [2]uint8{pmL0, pmL0}, false, false, false},
+	{2, 2, 4, [2]uint8{pmL0, pmL0}, false, false, false},
+	{2, 4, 2, [2]uint8{pmL1, pmL1}, false, false, false},
+	{2, 2, 4, [2]uint8{pmL1, pmL1}, false, false, false},
+	{2, 4, 2, [2]uint8{pmL0, pmL1}, false, false, false},
+	{2, 2, 4, [2]uint8{pmL0, pmL1}, false, false, false},
+	{2, 4, 2, [2]uint8{pmL1, pmL0}, false, false, false},
+	{2, 2, 4, [2]uint8{pmL1, pmL0}, false, false, false},
+	{2, 4, 2, [2]uint8{pmL0, pmBi}, false, false, false},
+	{2, 2, 4, [2]uint8{pmL0, pmBi}, false, false, false},
+	{2, 4, 2, [2]uint8{pmL1, pmBi}, false, false, false},
+	{2, 2, 4, [2]uint8{pmL1, pmBi}, false, false, false},
+	{2, 4, 2, [2]uint8{pmBi, pmL0}, false, false, false},
+	{2, 2, 4, [2]uint8{pmBi, pmL0}, false, false, false},
+	{2, 4, 2, [2]uint8{pmBi, pmL1}, false, false, false},
+	{2, 2, 4, [2]uint8{pmBi, pmL1}, false, false, false},
+	{2, 4, 2, [2]uint8{pmBi, pmBi}, false, false, false},
+	{2, 2, 4, [2]uint8{pmBi, pmBi}, false, false, false},
+	{4, 2, 2, [2]uint8{}, true, false, false}, // B_8x8
 }
 
 type subMB struct {

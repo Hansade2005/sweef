@@ -310,7 +310,7 @@ func parseVUI(r *bitReader, s *SPS) {
 	if nal || vcl {
 		r.u1()
 	}
-	r.u1() // pic_struct_present
+	r.u1()        // pic_struct_present
 	if r.flag() { // bitstream_restriction
 		r.u1()
 		r.ue()
