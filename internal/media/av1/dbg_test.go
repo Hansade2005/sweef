@@ -1,32 +1,14 @@
 package av1
-
-import (
-	"fmt"
-	"os"
-	"testing"
-)
-
-func TestDbg(t *testing.T) {
-	for _, f := range []string{"base", "ss"} {
-		data, _ := os.ReadFile(os.Getenv("W") + "/" + f + ".obu")
-		d := NewDecoder()
-		for pos := 0; pos < len(data); {
-			b := &bitReader{buf: data[pos:]}
-			b.f(1)
-			typ := b.f(4)
-			ext := b.flag()
-			b.flag()
-			b.f(1)
-			if ext {
-				b.f(8)
-			}
-			size := b.leb128()
-			hl := b.pos / 8
-			d.Decode(data[pos : pos+hl+size])
-			if typ == obuFrame && d.fh != nil {
-				fmt.Println(f, "type", d.fh.frameType, "show", d.fh.showFrame, "oh", d.fh.orderHint, "refs", d.fh.refFrameIdx, "refresh", d.fh.refreshFlags, "roh", d.refOrderHint)
-			}
-			pos += hl + size
-		}
+import ("testing";"os")
+func TestDbgLS(t *testing.T){
+	W:=os.Getenv("W")
+	data,_:=os.ReadFile(W+"/big2.tl.ivf")
+	want,_:=os.ReadFile(W+"/big2.tl.yuv")
+	pics:=decodeTileListFile(t,data,4)
+	p:=pics[0]; b:=picBytes(p)
+	for _,tl:=range []int{32,42,51} {
+		tx,ty:=(tl%8)*64,(tl/8)*64
+		n:=0
+		for y:=0;y<64;y++{ for x:=0;x<64;x++{ i:=(ty+y)*p.Width+tx+x; if b[i]!=want[i]{ if n<12 {t.Logf("tile %d (%d,%d) ours %d ref %d",tl,x,y,b[i],want[i])}; n++ } } }
 	}
 }

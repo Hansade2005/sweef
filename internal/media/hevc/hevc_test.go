@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/sweefbrowser/sweef/internal/media/yuv"
@@ -186,21 +185,57 @@ func runVariants(t *testing.T, vs []variant) {
 	}
 }
 
-func TestIntraBasic(t *testing.T) {
+func TestStructure(t *testing.T) {
 	runVariants(t, []variant{
-		{"intra", genOpts{x265: "keyint=1:ctu=64", frames: 3}},
+		{"intra64", genOpts{x265: "keyint=1:ctu=64", frames: 3}},
 		{"intra32", genOpts{x265: "keyint=1:ctu=32", frames: 3}},
 		{"intra16", genOpts{x265: "keyint=1:ctu=16", frames: 3}},
-	})
-}
-
-func TestInterBasic(t *testing.T) {
-	runVariants(t, []variant{
 		{"default", genOpts{x265: ""}},
 		{"nobframes", genOpts{x265: "bframes=0"}},
+		{"bframes8-ref5", genOpts{x265: "bframes=8:ref=5:b-pyramid=1", frames: 20}},
+		{"ctu16", genOpts{x265: "ctu=16"}},
+		{"ctu32", genOpts{x265: "ctu=32"}},
+		{"ctu64", genOpts{x265: "ctu=64"}},
+		{"mincu16-ctu32", genOpts{x265: "ctu=32:min-cu-size=16"}},
+		{"mincu16-ctu64", genOpts{x265: "ctu=64:min-cu-size=16"}},
+		{"mincu32-ctu64", genOpts{x265: "ctu=64:min-cu-size=32"}},
+		{"amp-rect", genOpts{x265: "amp=1:rect=1:rd=4"}},
+		{"rd1", genOpts{x265: "rd=1"}},
+		{"rd2", genOpts{x265: "rd=2"}},
+		{"rd3", genOpts{x265: "rd=3"}},
+		{"rd5", genOpts{x265: "rd=5"}},
+		{"rd6", genOpts{x265: "rd=6"}},
+		{"nosao", genOpts{x265: "sao=0"}},
+		{"nodeblock", genOpts{x265: "deblock=false"}},
+		{"nosao-nodeblock", genOpts{x265: "sao=0:deblock=false"}},
+		{"deblock-offsets", genOpts{x265: "deblock=3:-3"}},
+		{"tskip", genOpts{x265: "tskip=1:tskip-fast=0"}},
+		{"nosignhide", genOpts{x265: "signhide=0"}},
+		{"nostrong", genOpts{x265: "strong-intra-smoothing=0"}},
+		{"constrained-intra", genOpts{x265: "constrained-intra=1"}},
+		{"scaling-default", genOpts{x265: "scaling-list=default"}},
+		{"lossless", genOpts{x265: "lossless=1", frames: 6}},
+		{"cu-lossless", genOpts{x265: "cu-lossless=1:rd=4", frames: 6}},
+		{"aq", genOpts{x265: "aq-mode=3:qg-size=16:ctu=32"}},
+		{"aq-qg8", genOpts{x265: "aq-mode=2:qg-size=8:ctu=32:min-cu-size=8"}},
+		{"cbqp", genOpts{x265: "cbqpoffs=3:crqpoffs=-4"}},
+		{"slices", genOpts{x265: "slices=4:wpp=0"}},
+		{"slices-wpp", genOpts{x265: "slices=3:wpp=1:ctu=32"}},
+		{"nowpp", genOpts{x265: "wpp=0:ctu=32"}},
+		{"tu-depth", genOpts{x265: "tu-intra-depth=4:tu-inter-depth=4:rd=4"}},
+		{"merge", genOpts{x265: "max-merge=2:merge-level=3"}},
+		{"temporal-off", genOpts{x265: "temporal-mvp=0"}},
+		{"weightp", genOpts{src: "testsrc2=size=320x180:rate=24,fade=t=in:st=0:d=1.5,noise=alls=8:allf=t", x265: "weightp=1:weightb=1:bframes=3:rd=4", frames: 16}},
+		{"weightp-p", genOpts{src: "testsrc2=size=320x180:rate=24,fade=t=in:st=0:d=1.5,noise=alls=8:allf=t", x265: "weightp=1:bframes=0", frames: 16}},
+		{"open-gop", genOpts{x265: "open-gop=1:keyint=8:bframes=3", frames: 20}},
+		{"closed-gop", genOpts{x265: "open-gop=0:keyint=8:bframes=3", frames: 20}},
+		{"sao-edge", genOpts{x265: "limit-sao=0:selective-sao=0"}},
+		{"cutree-off", genOpts{x265: "cutree=0:rc-lookahead=5"}},
+		{"crf10", genOpts{x265: "crf=10"}},
+		{"crf40", genOpts{x265: "crf=40"}},
+		{"qp0", genOpts{x265: "qp=0"}},
+		{"qp51", genOpts{x265: "qp=51"}},
+		{"odd-size", genOpts{src: defaultSrc("226x138"), x265: "ctu=32"}},
+		{"tiny", genOpts{src: defaultSrc("72x40"), x265: "ctu=16"}},
 	})
-}
-
-func init() {
-	_ = strings.TrimSpace
 }
