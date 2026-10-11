@@ -144,6 +144,13 @@
       return { buf: b, extra: { len: b.length, rate: b.sampleRate, ch: b.numberOfChannels, dur: b.duration } };
     });
   };
+  S.decode_file = function () {
+    var f = /[?&]f=([^&]+)/.exec(location.search)[1];
+    var c = off(1, 128); var x = new XMLHttpRequest(); x.open('GET', f); x.responseType = 'arraybuffer';
+    return new Promise(function (res) { x.onload = function () { res(x.response); }; x.send(); }).then(function (ab) { return c.decodeAudioData(ab); }).then(function (b) {
+      return { buf: b, extra: { len: b.length, rate: b.sampleRate, ch: b.numberOfChannels, dur: b.duration } };
+    });
+  };
   S.decode_mp3 = function () {
     var c = off(1, 128); var x = new XMLHttpRequest(); x.open('GET', 'tone.mp3'); x.responseType = 'arraybuffer';
     return new Promise(function (res) { x.onload = function () { res(x.response); }; x.send(); }).then(function (ab) { return c.decodeAudioData(ab); }).then(function (b) {

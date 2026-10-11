@@ -1,0 +1,12 @@
+
+AAC Huffman tables
+------------------
+internal/media/aac_tables_gen.go contains the AAC (ISO/IEC 14496-3) spectral and
+scalefactor Huffman codebooks, extracted from the read-only data of FFmpeg's
+libavcodec 6.0 (libavcodec.so.60.31.102). FFmpeg's libavcodec is licensed under
+the GNU Lesser General Public License, version 2.1 or later. The repository
+owner accepted this licensing for these tables. See https://ffmpeg.org/legal.html.
+
+Opus decoding
+-------------
+Opus decoding uses github.com/thesyncim/gopus (BSD-3-Clause).

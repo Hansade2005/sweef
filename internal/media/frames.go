@@ -34,7 +34,7 @@ func (b BytesSource) Size() int64                             { return int64(len
 
 // FrameSource produces the video frame to show at a presentation time.
 type FrameSource interface {
-	// Mode names the tier: "ffmpeg", "keyframes" (VP8 stills), "mjpeg", "anim".
+	// Mode names the tier: "native" (pure-Go decoder), "ffmpeg", "mjpeg", "anim".
 	Mode() string
 	// Frame returns the frame displayed at t seconds. It may block (ffmpeg).
 	Frame(t float64) (image.Image, error)
@@ -55,14 +55,21 @@ func OpenFrames(src Source, info *Info, path string) (FrameSource, error) {
 		return newAnimGIF(src)
 	}
 	var native FrameSource
-	switch {
-	case info.Container == "webm" && v.CodecName == "vp8":
-		native = &vp8Frames{src: src, info: info}
-	case (info.Container == "avi" || info.Container == "mp4") && v.CodecName == "mjpeg":
-		mf, err := newMJPEG(src, info)
-		if err == nil {
+	if HasNativeVideo(v.CodecName) && os.Getenv("SWEEF_NO_NATIVE_VIDEO") == "" {
+		if nf, err := newNativeFrames(src, info); err == nil {
+			native = nf
+		}
+	}
+	if native == nil && (info.Container == "avi" || info.Container == "mp4") && v.CodecName == "mjpeg" {
+		if mf, err := newMJPEG(src, info); err == nil {
 			native = mf
 		}
+	}
+	if native != nil && native.Mode() == "native" {
+		if FFmpegPath() != "" {
+			return &chainFrames{first: native, second: &ffmpegFrames{src: src, info: info, path: path, cache: map[int]image.Image{}}}, nil
+		}
+		return native, nil
 	}
 	if FFmpegPath() != "" {
 		ff := &ffmpegFrames{src: src, info: info, path: path, native: native, cache: map[int]image.Image{}}
@@ -73,6 +80,22 @@ func OpenFrames(src Source, info *Info, path string) (FrameSource, error) {
 	}
 	return nil, ErrUnsupported
 }
+
+// chainFrames asks first and falls back to second when it fails.
+type chainFrames struct{ first, second FrameSource }
+
+func (c *chainFrames) Mode() string { return c.first.Mode() }
+func (c *chainFrames) Frame(t float64) (image.Image, error) {
+	img, err := c.first.Frame(t)
+	if err == nil && img != nil {
+		return img, nil
+	}
+	if img2, err2 := c.second.Frame(t); err2 == nil {
+		return img2, nil
+	}
+	return img, err
+}
+func (c *chainFrames) Close() { c.first.Close(); c.second.Close() }
 
 // ---- ffmpeg tier ---------------------------------------------------------------
 

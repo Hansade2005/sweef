@@ -943,12 +943,12 @@ func (r *svgR) drawUseTarget(n, t *svgNode, st sStyle, m Matrix) {
 		w, h := r.vw, r.vh
 		if v, ok := n.A["width"]; ok {
 			w = r.length(v, r.vw, st.fontSize, w)
-		} else if v, ok := t.A["width"]; ok && t.Tag == "svg" {
+		} else if v, ok := t.A["width"]; ok {
 			w = r.length(v, r.vw, st.fontSize, w)
 		}
 		if v, ok := n.A["height"]; ok {
 			h = r.length(v, r.vh, st.fontSize, h)
-		} else if v, ok := t.A["height"]; ok && t.Tag == "svg" {
+		} else if v, ok := t.A["height"]; ok {
 			h = r.length(v, r.vh, st.fontSize, h)
 		}
 		if t.A["display"] == "none" {

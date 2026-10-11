@@ -56,6 +56,18 @@ func paintSVGCases() []paintCase {
 		svgCell{5, 105, svgCellMarkup(`<text x="8" y="22" font-family="Liberation Sans" font-size="14" textLength="120" fill="#609">spacing adjusted</text><text x="8" y="46" font-family="Liberation Sans" font-size="14" textLength="120" lengthAdjust="spacingAndGlyphs" fill="#c23">glyphs stretched</text><text x="8" y="72" font-family="Liberation Sans" font-size="16" fill="#333">base<tspan baseline-shift="super" font-size="10" fill="#c00">sup</tspan><tspan baseline-shift="sub" font-size="10" fill="#00c">sub</tspan></text>`)},
 		svgCell{155, 105, svgCellMarkup(`<line x1="70" y1="0" x2="70" y2="90" stroke="#ccc"/><text x="70" y="20" text-anchor="start" font-family="Liberation Sans" font-size="13" fill="#c23">start anchor</text><text x="70" y="45" text-anchor="middle" font-family="Liberation Sans" font-size="13" fill="#05a">middle anchor</text><text x="70" y="70" text-anchor="end" font-family="Liberation Sans" font-size="13" fill="#080">end anchor</text>`)},
 	))
+	// foreignObject inside pattern, mask, clipPath and use'd symbols/elements:
+	// Chromium paints no HTML content in these contexts (a pattern tile or mask
+	// from HTML is empty, a clipPath ignores foreignObject, use never
+	// instantiates it), so only the SVG shapes appear; the symbol's own
+	// width/height size the use.
+	const fo = `<foreignObject x="0" y="0" width="40" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;background:#fc6"></div></foreignObject>`
+	cases = append(cases, svgPaintCase("svg_foreign_ctx",
+		svgCell{5, 5, svgCellMarkup(`<defs><pattern id="p" width="40" height="30" patternUnits="userSpaceOnUse">` + fo + `</pattern></defs><rect x="10" y="10" width="120" height="70" fill="url(#p)" stroke="#333"/>`)},
+		svgCell{155, 5, svgCellMarkup(`<defs><mask id="m"><foreignObject x="0" y="0" width="140" height="90"><div xmlns="http://www.w3.org/1999/xhtml" style="width:140px;height:90px;background:#fff"></div></foreignObject></mask></defs><rect x="10" y="10" width="120" height="70" fill="#c33" mask="url(#m)"/><circle cx="70" cy="45" r="12" fill="#36c"/>`)},
+		svgCell{5, 105, svgCellMarkup(`<defs><clipPath id="c"><circle cx="45" cy="45" r="35"/><foreignObject x="80" y="10" width="50" height="60"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;background:#000"></div></foreignObject></clipPath></defs><rect width="140" height="90" fill="#e90" clip-path="url(#c)"/>`)},
+		svgCell{155, 105, svgCellMarkup(`<defs><symbol id="s" viewBox="0 0 50 30" width="80" height="48"><rect width="50" height="30" fill="#dfd" stroke="#070"/>` + fo + `</symbol><foreignObject id="f" width="40" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;background:#fc6"></div></foreignObject></defs><use href="#s" x="5" y="5"/><use href="#s" x="90" y="40" width="40" height="40"/><use href="#f" x="5" y="60"/>`)},
+	))
 	cases = append(cases, svgPaintCase("svg_clipshape",
 		svgCell{5, 5, svgCellMarkup(`<rect x="15" y="10" width="110" height="70" fill="#36c" stroke="#c33" stroke-width="10" style="clip-path:circle(28px at 50% 50%)"/>`)},
 		svgCell{155, 5, svgCellMarkup(`<rect x="15" y="10" width="110" height="70" fill="#6a3" stroke="#222" stroke-width="8" style="clip-path:inset(8px 16px round 10px)"/>`)},

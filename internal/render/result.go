@@ -16,16 +16,35 @@ func (r *Result) ClientRect(n *html.Node) (Rect, bool) {
 		return Rect{}, false
 	}
 	rc := bx.Border
+	// the four corners go through every transform of the ancestor chain; the
+	// bounding box is taken once at the end (rotations of rotations compose)
+	pts := [4][2]float64{{rc.X, rc.Y}, {rc.Right(), rc.Y}, {rc.X, rc.Bottom()}, {rc.Right(), rc.Bottom()}}
+	moved := false
+	apply := func(m [6]float64) {
+		for i := range pts {
+			x, y := pts[i][0], pts[i][1]
+			pts[i] = [2]float64{m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]}
+		}
+		moved = true
+	}
 	if bx.HasTransform {
-		rc = transformRect(rc, bx.Transform)
+		apply(bx.Transform)
 	}
 	for p := n.Parent; p != nil; p = p.Parent {
 		pb := r.Boxes[p]
 		if pb != nil && pb.HasTransform {
-			rc = transformRect(rc, pb.Transform)
+			apply(pb.Transform)
 		}
 	}
-	return rc, true
+	if !moved {
+		return rc, true
+	}
+	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+	for _, q := range pts {
+		x0, x1 = math.Min(x0, q[0]), math.Max(x1, q[0])
+		y0, y1 = math.Min(y0, q[1]), math.Max(y1, q[1])
+	}
+	return Rect{x0, y0, x1 - x0, y1 - y0}, true
 }
 
 func transformRect(rc Rect, m [6]float64) Rect {

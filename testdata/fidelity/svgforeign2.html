@@ -1,0 +1,60 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>svgforeign2</title>
+<style>
+body{margin:10px;font:12px Arial,sans-serif;color:#234}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+svg{background:#f4f4f8;border:1px solid #ccd}
+.tile{width:100%;height:100%;box-sizing:border-box;background:#fc6;border:2px solid #a40;font:bold 12px Arial;padding:3px}
+</style></head><body>
+<div class="row">
+<!-- pattern tiles from HTML -->
+<svg width="260" height="130">
+<defs>
+<pattern id="p1" width="50" height="30" patternUnits="userSpaceOnUse"><foreignObject x="0" y="0" width="50" height="30"><div xmlns="http://www.w3.org/1999/xhtml" class="tile">tile</div></foreignObject></pattern>
+<pattern id="p2" width="0.25" height="0.5" patternContentUnits="objectBoundingBox"><foreignObject x="0" y="0" width="0.25" height="0.5"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;background:linear-gradient(135deg,#3a7,#8cf)"></div></foreignObject></pattern>
+</defs>
+<rect x="5" y="5" width="120" height="120" fill="url(#p1)"/>
+<rect x="135" y="5" width="120" height="120" fill="url(#p2)" stroke="#000"/>
+</svg>
+<!-- mask from HTML content: alpha and luminance -->
+<svg width="260" height="130">
+<defs>
+<mask id="m1"><foreignObject x="0" y="0" width="120" height="120"><div xmlns="http://www.w3.org/1999/xhtml" style="width:120px;height:120px;background:linear-gradient(90deg,#000,#fff)"></div></foreignObject></mask>
+<mask id="m2" style="mask-type:alpha"><foreignObject x="130" y="0" width="120" height="120"><div xmlns="http://www.w3.org/1999/xhtml" style="width:120px;height:120px;background:radial-gradient(#000 40%,transparent 41%)"></div></foreignObject></mask>
+</defs>
+<rect x="5" y="5" width="120" height="120" fill="#c33" mask="url(#m1)"/>
+<rect x="130" y="5" width="120" height="120" fill="#36c" mask="url(#m2)"/>
+</svg>
+</div>
+<div class="row">
+<!-- clipPath: foreignObject is not valid clipPath content -->
+<svg width="260" height="130">
+<defs><clipPath id="c1"><foreignObject x="10" y="10" width="100" height="60"><div xmlns="http://www.w3.org/1999/xhtml" style="background:#000;width:100%;height:100%"></div></foreignObject></clipPath>
+<clipPath id="c2"><circle cx="190" cy="60" r="40"/><foreignObject x="150" y="10" width="40" height="40"><div xmlns="http://www.w3.org/1999/xhtml" style="background:#000;width:100%;height:100%"></div></foreignObject></clipPath></defs>
+<rect x="0" y="0" width="120" height="120" fill="#e90" clip-path="url(#c1)"/>
+<rect x="130" y="0" width="120" height="120" fill="#09e" clip-path="url(#c2)"/>
+</svg>
+<!-- use of foreignObject, symbol and g with foreignObject -->
+<svg width="260" height="130">
+<defs>
+<foreignObject id="fo1" width="70" height="40"><div xmlns="http://www.w3.org/1999/xhtml" class="tile">use fo</div></foreignObject>
+<symbol id="sy" viewBox="0 0 50 30" width="80" height="48"><rect width="50" height="30" fill="#dfd"/><foreignObject x="2" y="2" width="46" height="26"><div xmlns="http://www.w3.org/1999/xhtml" style="font:10px Arial;background:#fff;border:1px solid #070">symbol</div></foreignObject></symbol>
+<g id="gg"><foreignObject width="60" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="background:#c9f;height:100%">in g</div></foreignObject></g>
+</defs>
+<use href="#fo1" x="5" y="5"/>
+<use href="#fo1" x="100" y="20" transform="rotate(10 100 20) scale(1.2)"/>
+<use href="#sy" x="5" y="60"/>
+<use href="#sy" x="100" y="70" width="140" height="42"/>
+<use href="#gg" x="180" y="5" transform="skewX(-15)"/>
+</svg>
+</div>
+<div class="row">
+<!-- fixed/absolute inside foreignObject, nested transforms -->
+<svg width="260" height="140">
+<g transform="translate(20 10) rotate(5)"><foreignObject x="0" y="0" width="150" height="100" style="overflow:visible"><div xmlns="http://www.w3.org/1999/xhtml" style="position:relative;background:#eef;height:100%"><span style="position:fixed;left:10px;top:60px;background:#fc0;padding:2px">fixed</span><span style="position:absolute;right:4px;top:4px;background:#9cf">abs</span><div style="transform:rotate(-8deg);margin:30px 20px;background:#cfc;width:60px">nested</div></div></foreignObject></g>
+</svg>
+<svg width="260" height="140" viewBox="0 0 130 70">
+<g transform="scale(0.8) translate(10 8)"><g transform="rotate(10 40 30)"><foreignObject x="5" y="5" width="90" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="background:#fed;border:1px solid #a60;font-size:9px;height:100%;box-sizing:border-box">scaled <b>and</b> rotated <span style="display:inline-block;transform:scale(1.5);transform-origin:0 0;background:#fc9">inner</span></div></foreignObject></g></g>
+</svg>
+</div>
+</body></html>

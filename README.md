@@ -8,7 +8,7 @@ Sweef is not a fork of Chromium. It has its own CSS layout engine, rasterizer, s
 
 | | Playwright + Chromium | Sweef |
 |---|---|---|
-| Install | ~250 MB browser download | **11 MB static binary** |
+| Install | ~250 MB browser download | **19 MB static binary** |
 | Memory | ~90 to 150 MB idle, 1.1 GB process tree under agent-browser | **13 MB idle, 22 MB typical page, 52 MB peak on a script-heavy Wikipedia article** |
 | CPU | 2 to 4 cores wanted | **1 core** |
 | Agent interface | CDP + language bindings | **MCP native**, plus a framed JSON-RPC socket and a Node SDK |
@@ -22,19 +22,19 @@ Same 11-step agent flow (open a landing page, snapshot, click through to a login
 
 | step | Sweef | agent-browser | ratio |
 |---|---|---|---|
-| open page (cold daemon) | 20 ms | 560 ms | 28.0x |
-| snapshot, interactive only | 7 ms | 236 ms | 33.7x |
-| click that navigates | 7 ms | 253 ms | 36.1x |
-| snapshot, full | 6 ms | 221 ms | 36.8x |
-| fill | 5 ms | 220 ms | 44.0x |
-| press Enter that submits | 6 ms | 229 ms | 38.2x |
-| get title | 5 ms | 218 ms | 43.6x |
-| open React 18 app | 22 ms | 255 ms | 11.6x |
-| click in React | 8 ms | 226 ms | 28.2x |
-| eval | 6 ms | 219 ms | 36.5x |
-| whole flow, one command at a time | 121 ms | 2904 ms | 24.0x |
-| **whole flow as one `sweef batch`** | **56 ms** | 2904 ms | **51.9x** |
-| daemon memory | 26 MB | 1149 MB | 45x less |
+| open page (cold daemon) | 24 ms | 591 ms | 24.6x |
+| snapshot, interactive only | 8 ms | 244 ms | 30.5x |
+| click that navigates | 8 ms | 264 ms | 33.0x |
+| snapshot, full | 8 ms | 229 ms | 28.6x |
+| fill | 7 ms | 228 ms | 32.6x |
+| press Enter that submits | 8 ms | 235 ms | 29.4x |
+| get title | 7 ms | 230 ms | 32.9x |
+| open React 18 app | 24 ms | 255 ms | 10.6x |
+| click in React | 11 ms | 227 ms | 20.6x |
+| eval | 8 ms | 223 ms | 27.9x |
+| whole flow, one command at a time | 150 ms | 2994 ms | 20.0x |
+| **whole flow as one `sweef batch`** | **84 ms** | 2994 ms | **35.6x** |
+| daemon memory | 37 MB | 1192 MB | 32x less |
 
 Every step is over 20x except opening the React app, which executes 140 KB of React in a pure-Go JavaScript engine (about 10 ms) plus the process spawn every CLI call pays. Snapshots are equal or smaller (466 vs 480 bytes on the landing page, 68 vs 137 on the React app).
 
@@ -181,6 +181,7 @@ Measured against Chromium 1194 on this repo's fixtures (`go run ./tools/fidelity
 | Canvas 2D, 42 fixtures | shapes 99.4%, text 99.7% within 8/255 |
 | SVG (paths, gradients, clips, masks, filters incl. turbulence and lighting, markers, text, `textPath`, `foreignObject`) | feature pages 98.9% to 99.8% ink |
 | CSS `clip-path`, `mask`, multicol fragments | 98% to 99.9% ink |
+| Transformed elements at fractional offsets, `content-visibility: auto`, `position: fixed` containing blocks, `foreignObject` contexts | boxes IoU 1.000, ink 97.9% to 100% on 5 fixtures |
 | WebGL, 76 fixtures | mean 99.9% of pixels within 4/255 (three.js 99.9%, PixiJS 99.99%, regl 100%) |
 | Web Audio, 26 offline graphs | sample-exact for filters, delay, convolver and panner; oscillators within 6e-4 |
 | Media elements, 21 scenarios | event order identical to Chromium; `canPlayType` matches in 67 of 67 recorded answers |
@@ -189,10 +190,10 @@ A 1280x800 text page paints in about 21 ms. A 100k-triangle WebGL frame at 512x5
 
 What is still different, honestly:
 
-- **Text.** Glyph edges now match to within 12/255 at 9 to 32 px. Not matched: text inside CSS-transformed elements at fractional offsets (Chromium rounds the paint offset), cubic glyph outlines are less verified than quadratic ones, and Arabic diacritics, Hebrew points and Indic scripts are not positioned.
-- **CSS not done:** `content-visibility: auto` skipping, `@container style()` queries, subgrid line names, `mask-border`, `clip-path` and `mask` on plain inline elements, `box-decoration-break: clone` on wrapped inlines, vertical text with RTL or nested orthogonal flows.
-- **SVG not done:** `foreignObject` inside `pattern`, `mask`, `clipPath` or `use`, CSS `mask` image layers on SVG elements, `kernelUnitLength`, and a few filter inputs (BackgroundImage, FillPaint).
-- **Codecs.** MP3, Vorbis, FLAC and PCM decode in pure Go. AAC, Opus, H.264, VP9 and AV1 need `ffmpeg` on the machine; without it they report unsupported like a browser without the codec. Video without ffmpeg shows VP8 key frames only.
+- **Text.** Glyph edges now match to within 12/255 at 9 to 32 px. Rotated and skewed text differs in anti-aliasing (positions match: transformed elements round their paint offset like Chromium), cubic glyph outlines are less verified than quadratic ones, and Arabic diacritics, Hebrew points and Indic scripts are not positioned.
+- **CSS not done:** `content-visibility: auto` reopening on scroll, find-in-page and anchors (a static load skips and opens exactly like Chromium), `@container style()` queries, subgrid line names, `mask-border`, `clip-path` and `mask` on plain inline elements, `box-decoration-break: clone` on wrapped inlines, vertical text with RTL or nested orthogonal flows.
+- **SVG not done:** CSS `mask` image layers on SVG elements, `kernelUnitLength`, and a few filter inputs (BackgroundImage, FillPaint).
+- **Codecs.** MP3, Vorbis, FLAC, Opus (Ogg, WebM, MP4; SILK, CELT, hybrid), AAC-LC (ADTS and MP4, up to 7.1; not HE-AAC/SBR) and PCM decode in pure Go. HE-AAC and AV1 need `ffmpeg` on the machine; without it they report unsupported like a browser without the codec. Video decodes in pure Go, bit-exact with ffmpeg's decoders on the test corpus and well above 30 fps at 640x360 on one core: VP8 (all frame types), VP9 (profile 0, 8-bit 4:2:0, all inter and intra tools, scaled references, tiles, superframes) and H.264 (Baseline, Main and High, 8-bit 4:2:0 progressive, CAVLC and CABAC, I/P/B slices, multiple references, weighted prediction, 8x8 transform, deblocking; interlaced/MBAFF streams, 4:2:2/4:4:4 and high bit depth still need ffmpeg). Frames are decoded on demand from the nearest preceding sync sample, so seeking and `drawImage(video)` work without ffmpeg (`SWEEF_NO_FFMPEG=1` proves it); ffmpeg is only the fallback for streams the native decoders reject.
 - **WebGL.** No compressed textures, `EXT_sRGB` or multi-draw; lines are 1 px; `sin` differs from SwiftShader in the last digit.
 - **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.4 s, because QuickJS cannot share typed arrays with Go. `MediaRecorder`, EME and picture-in-picture reject.
 - **Exact pixel identity with Chromium is not a goal.** Screenshots are not byte-identical.

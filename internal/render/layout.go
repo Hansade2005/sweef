@@ -19,6 +19,8 @@ func (nilEnv) IntrinsicSize(*html.Node) (w, h float64, ok bool) { return 0, 0, f
 func (nilEnv) Focused() *html.Node                              { return nil }
 
 type ctx struct {
+	cv          *cvState
+	cvDepth     int // > 0 while building inside a skipped content-visibility subtree
 	opts        Options
 	env         Env
 	eng         *style.Engine
@@ -49,7 +51,8 @@ type ctx struct {
 	vIntrinsic bool
 	curFL      *lbox // IFC root whose first line is being finished
 	all        []*lbox
-	fo         map[*lbox][]*lbox // foreignObject wrappers per inline <svg> box
+	fo         map[*lbox][]*lbox                   // foreignObject wrappers per inline <svg> box
+	foClip     map[*lbox][]func(x, y float64) bool // clip-path hit tests of the SVG ancestors of a foreignObject wrapper
 	// CSS filter: url(#id) support (svgfilterref.go)
 	urlFilterHint int
 	filterEls     map[*html.Node]*style.Computed
@@ -61,16 +64,35 @@ type ctx struct {
 // evaluates the queries against the container sizes measured in the previous
 // pass until the sizes stop changing.
 func Layout(root *html.Node, o Options) *Result {
-	res, obs, has := layoutPass(root, o, nil)
-	if !has {
+	cv := &cvState{open: map[*html.Node]bool{}}
+	run := func() *Result {
+		res, obs, has := layoutPass(root, o, nil, cv)
+		if has {
+			var used map[*html.Node]style.ContSize
+			for pass := 0; pass < 5 && !sameContSizes(used, obs); pass++ {
+				used = obs
+				res, obs, _ = layoutPass(root, o, used, cv)
+			}
+		}
 		return res
 	}
-	used := map[*html.Node]style.ContSize(nil)
-	for pass := 0; pass < 5 && !sameContSizes(used, obs); pass++ {
-		used = obs
-		res, obs, _ = layoutPass(root, o, used)
+	res := run()
+	if len(cv.cands) == 0 {
+		return res
 	}
-	return res
+	// content-visibility:auto: every auto subtree starts skipped; the ones whose
+	// box reaches the viewport (plus margin) are opened and the page is laid out
+	// again, until nothing new opens (see contentvis.go). The sizing rounds do
+	// not build skipped contents; the last pass does.
+	cv.fast = true
+	for round := 0; round < 200; round++ {
+		res = run()
+		if !cv.openRelevant(res, o) {
+			break
+		}
+	}
+	cv.fast = false
+	return run()
 }
 
 func sameContSizes(a, b map[*html.Node]style.ContSize) bool {
@@ -89,7 +111,7 @@ func sameContSizes(a, b map[*html.Node]style.ContSize) bool {
 // layoutPass is one full layout. It returns the sizes of the document's query
 // containers as laid out, and whether the style engine saw any @container
 // rule (a re-run is only needed then).
-func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize) (*Result, map[*html.Node]style.ContSize, bool) {
+func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv *cvState) (*Result, map[*html.Node]style.ContSize, bool) {
 	if o.Width <= 0 {
 		o.Width = 1280
 	}
@@ -99,7 +121,8 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize) (*
 	if o.DPR <= 0 {
 		o.DPR = 1
 	}
-	c := &ctx{opts: o, env: o.Env, vw: o.Width, vh: o.Height,
+	cv.cands = cv.cands[:0]
+	c := &ctx{cv: cv, opts: o, env: o.Env, vw: o.Width, vh: o.Height,
 		styles: map[*html.Node]*style.Computed{}, byNode: map[*html.Node][]*lbox{}, pseudoBoxes: map[*html.Node][]*lbox{},
 		counters: map[string][]int{}, specs: map[string]*fontSpec{}, specPtr: map[*style.Computed]*fontSpec{}}
 	if c.env == nil {

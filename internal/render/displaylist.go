@@ -183,7 +183,19 @@ type Filter struct {
 type PopLayer struct{}
 
 // PushTransform applies an affine matrix [a b c d e f] (CSS matrix()) until PopTransform.
-type PushTransform struct{ M [6]float64 }
+//
+// Lattice, when set, says the rasterizer must snap rectangles (backgrounds,
+// borders, images, clips) to a whole-pixel grid anchored at (LatX, LatY) in the
+// coordinates of the ops that follow, instead of snapping in device space.
+// Chromium snaps in the local space of the nearest paint-offset container and
+// transforms the snapped geometry afterwards, so a scaled or translated frame
+// keeps its box edges on its own pixel grid. Without Lattice the old
+// device-space snapping applies.
+type PushTransform struct {
+	M          [6]float64
+	Lattice    bool
+	LatX, LatY float64
+}
 
 // PopTransform ends the innermost transform.
 type PopTransform struct{}
@@ -274,4 +286,11 @@ type Options struct {
 	Env           Env
 	ReducedMotion bool
 	Print         bool // media type print instead of screen
+	// ScrollX, ScrollY is the viewport's scroll position, used to decide which
+	// content-visibility:auto subtrees are on screen.
+	ScrollX, ScrollY float64
+	// CVRelevant, when set, reports content-visibility:auto elements that are
+	// relevant to the user for another reason (they contain focus or the
+	// selection); those are never skipped.
+	CVRelevant func(n *html.Node) bool
 }

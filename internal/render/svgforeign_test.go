@@ -174,3 +174,52 @@ func TestSVGImageHrefResolvedThroughEnv(t *testing.T) {
 	}
 	t.Fatal("no image node in the scene")
 }
+
+// position:fixed inside a foreignObject is placed against the foreignObject,
+// like inside any transformed box.
+func TestForeignObjectFixedContainingBlock(t *testing.T) {
+	doc := parseHTML(t, `<body style="margin:0"><svg width="300" height="200" style="display:block"><g transform="translate(20 10)">
+<foreignObject id="fo" x="30" y="40" width="150" height="100"><div xmlns="http://www.w3.org/1999/xhtml" style="height:100%"><span id="f" style="position:fixed;left:10px;top:12px;width:20px;height:8px;display:block"></span></div></foreignObject></g></svg></body>`)
+	res := Layout(doc, Options{Width: 800, Height: 600})
+	r, ok := res.ClientRect(findByID(doc, "f"))
+	if !ok || math.Abs(r.X-60) > 0.01 || math.Abs(r.Y-62) > 0.01 || r.W != 20 || r.H != 8 {
+		t.Fatalf("fixed box in foreignObject: %v ok=%v, want (60,62,20,8)", r, ok)
+	}
+}
+
+// Ancestor clip-paths (url(#clipPath) with units and transforms, CSS shapes)
+// clip hit testing of foreignObject content; masks do not.
+func TestForeignObjectHitClipPath(t *testing.T) {
+	doc := parseHTML(t, `<body style="margin:0"><svg width="400" height="300" style="display:block">
+<defs><clipPath id="c"><circle cx="60" cy="60" r="40"/></clipPath><clipPath id="o" clipPathUnits="objectBoundingBox"><circle cx=".5" cy=".5" r=".3"/></clipPath>
+<mask id="m"><rect x="0" y="0" width="30" height="300" fill="#fff"/></mask></defs>
+<g clip-path="url(#c)"><foreignObject x="10" y="10" width="100" height="100"><div id="d1" xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%"></div></foreignObject></g>
+<g clip-path="url(#o)" transform="translate(200 120) rotate(30)"><foreignObject x="0" y="0" width="100" height="100"><div id="d2" xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%"></div></foreignObject></g>
+<g style="clip-path:inset(0 50px 0 0)" transform="translate(20 150)"><foreignObject x="0" y="0" width="100" height="60"><div id="d3" xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%"></div></foreignObject></g>
+<foreignObject x="290" y="10" width="100" height="100" mask="url(#m)"><div id="d4" xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%"></div></foreignObject>
+</svg></body>`)
+	res := Layout(doc, Options{Width: 800, Height: 600})
+	hit := func(x, y float64) string {
+		if n := res.Hit(x, y); n != nil {
+			if id := attr(n, "id"); id != "" {
+				return id
+			}
+			return n.Data
+		}
+		return "null"
+	}
+	// Chromium 1194: elementFromPoint on the same page
+	for _, c := range []struct {
+		x, y float64
+		want string
+	}{
+		{60, 60, "d1"}, {15, 15, "svg"}, {90, 90, "svg"}, {100, 100, "svg"},
+		{40, 175, "d3"}, {80, 190, "svg"}, {100, 190, "svg"},
+		{200, 230, "svg"}, {218, 188, "d2"}, // rotated circle of the bounding box
+		{300, 20, "d4"}, {380, 100, "d4"}, // a mask does not clip hit testing
+	} {
+		if got := hit(c.x, c.y); got != c.want {
+			t.Errorf("hit(%g,%g) = %s, want %s", c.x, c.y, got, c.want)
+		}
+	}
+}

@@ -89,8 +89,8 @@ func TestFFmpegAudioFallback(t *testing.T) {
 	}
 	SetFFmpegEnabled(false)
 	defer SetFFmpegEnabled(true)
-	if _, err := DecodeAudio(load(t, "tone.m4a")); err != ErrUnsupported {
-		t.Errorf("without ffmpeg m4a must be unsupported, got %v", err)
+	if _, err := DecodeAudio(load(t, "tone.m4a")); err != nil {
+		t.Errorf("AAC must decode natively without ffmpeg: %v", err)
 	}
 	if _, err := DecodeAudio(load(t, "tone.mp3")); err != nil {
 		t.Errorf("mp3 must stay native: %v", err)

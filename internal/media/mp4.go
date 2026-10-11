@@ -80,6 +80,10 @@ type mp4Track struct {
 	mdhdDur   uint64
 	samples   []mp4Sample
 	fourcc    string
+	editDur   int    // elst segment duration (movie timescale), -1 none
+	editStart int    // elst media_time of the first non-empty edit (-1 none)
+	cfg       []byte // esds payload (AAC) or dOps (Opus) of the first sample entry
+	vcfg      []byte // avcC / vpcC / av1C payload of a video sample entry
 	// fragmented
 	trex struct{ dur, size, flags uint32 }
 }
@@ -212,6 +216,36 @@ func parseTrak(b []byte) (*mp4Track, error) {
 			t.Name = n
 		}
 	}
+	t.editStart, t.editDur = -1, -1
+	if edts := findBox(kids, "edts"); edts != nil {
+		if el := findBox(parseBoxes(edts.data), "elst"); el != nil && len(el.data) >= 8 {
+			n := int(be32(el.data[4:]))
+			ver := el.data[0]
+			p := 8
+			for i := 0; i < n; i++ {
+				var mt, sd int64
+				if ver == 1 {
+					if p+20 > len(el.data) {
+						break
+					}
+					mt = int64(be64(el.data[p+8:]))
+					sd = int64(be64(el.data[p:]))
+					p += 20
+				} else {
+					if p+12 > len(el.data) {
+						break
+					}
+					mt = int64(int32(be32(el.data[p+4:])))
+					sd = int64(be32(el.data[p:]))
+					p += 12
+				}
+				if mt >= 0 {
+					t.editStart, t.editDur = int(mt), int(sd)
+					break
+				}
+			}
+		}
+	}
 	minf := findBox(mk, "minf")
 	if minf == nil {
 		return t, nil
@@ -301,6 +335,7 @@ func (t *mp4Track) parseVideoConfig(typ string, kids []mp4box) {
 		t.Codec = typ
 		if c := findBox(kids, "avcC"); c != nil && len(c.data) >= 4 {
 			t.Codec = fmt.Sprintf("%s.%02x%02x%02x", typ, c.data[1], c.data[2], c.data[3])
+			t.vcfg = c.data
 		}
 	case "hvc1", "hev1":
 		t.CodecName = "hevc"
@@ -313,11 +348,13 @@ func (t *mp4Track) parseVideoConfig(typ string, kids []mp4box) {
 	case "vp09":
 		t.CodecName, t.Codec = "vp9", "vp09"
 		if c := findBox(kids, "vpcC"); c != nil && len(c.data) >= 8 {
+			t.vcfg = c.data
 			t.Codec = fmt.Sprintf("vp09.%02d.%02d.%02d", c.data[4], c.data[5], c.data[6]>>4)
 		}
 	case "av01":
 		t.CodecName, t.Codec = "av1", "av01"
 		if c := findBox(kids, "av1C"); c != nil && len(c.data) >= 4 {
+			t.vcfg = c.data
 			prof := c.data[1] >> 5
 			lvl := c.data[1] & 31
 			tier := "M"
@@ -392,6 +429,7 @@ func (t *mp4Track) parseAudioConfig(typ string, kids []mp4box) {
 		t.CodecName = "aac"
 		t.Codec = "mp4a.40.2"
 		if e := findBox(kids, "esds"); e != nil && len(e.data) > 4 {
+			t.cfg = e.data[4:]
 			oti, aot := parseEsds(e.data[4:])
 			switch oti {
 			case 0x40:
@@ -418,6 +456,7 @@ func (t *mp4Track) parseAudioConfig(typ string, kids []mp4box) {
 	case "Opus":
 		t.CodecName, t.Codec = "opus", "opus"
 		if d := findBox(kids, "dOps"); d != nil && len(d.data) >= 4 {
+			t.cfg = d.data
 			t.Channels = int(d.data[1])
 			t.SampleRate = 48000
 		}

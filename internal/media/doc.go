@@ -11,7 +11,7 @@ package media
 //
 // Audio decoded in pure Go: PCM WAV (8/16/24/32-bit int, float32/64, A-law,
 // mu-law), MP3 (go-mp3, trimmed like ffmpeg), Ogg Vorbis, FLAC. Everything else
-// (AAC, Opus, WebM/MP4 audio, ...) is decoded only when ffmpeg is installed;
+// (HE-AAC/SBR, ...) is decoded only when ffmpeg is installed; Opus and AAC-LC decode natively;
 // without it decodeAudioData rejects with EncodingError.
 //
 // Video frames (shown through the engine bitmap registry):
@@ -24,7 +24,7 @@ package media
 //	              shows its key frame, and VP9/AV1/H.264/HEVC are refused
 //	              (MEDIA_ERR_SRC_NOT_SUPPORTED, canPlayType "").
 //
-// canPlayType claims H.264/AAC only when ffmpeg exists. The element clock does
+// canPlayType claims H.264 and HE-AAC only with a decoder (AAC-LC is native). The element clock does
 // not need decoded audio: currentTime, ended, timeupdate and seeking work for
 // every container above; audio is decoded only when connected to Web Audio
 // (MediaElementAudioSourceNode) or captured.

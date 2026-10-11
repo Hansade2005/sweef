@@ -180,6 +180,13 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 	if st.Display == "none" {
 		return
 	}
+	if st.ContentVisibility == "auto" {
+		st = c.cvDecide(n, st)
+	}
+	if st.CVSkipped() {
+		c.cvDepth++
+		defer func() { c.cvDepth-- }()
+	}
 	var scope counterScope
 	defer c.popScope(&scope)
 	isLI := st.Display == "list-item"
@@ -280,12 +287,17 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 		c.addMarker(b, st)
 	}
 	var kids []*lbox
-	if bf := c.makePseudo(n, st, "before"); bf != nil {
-		kids = append(kids, bf...)
-	}
-	c.buildChildrenInto(n, st, &kids, nil)
-	if af := c.makePseudo(n, st, "after"); af != nil {
-		kids = append(kids, af...)
+	if c.cv != nil && c.cv.fast && st.CVSkipped() {
+		// sizing pass of a content-visibility:auto page: skipped contents are
+		// not built at all (the final pass builds them for geometry queries)
+	} else {
+		if bf := c.makePseudo(n, st, "before"); bf != nil {
+			kids = append(kids, bf...)
+		}
+		c.buildChildrenInto(n, st, &kids, nil)
+		if af := c.makePseudo(n, st, "after"); af != nil {
+			kids = append(kids, af...)
+		}
 	}
 	for _, k := range kids {
 		b.addKid(k)
@@ -293,16 +305,10 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 	if kind == kBlock || st.Display == "inline-block" || st.Display == "list-item" {
 		c.applyFirstLetter(b, n, st)
 	}
-	if st.ContentVisibility == "hidden" {
-		// skipped contents: laid out (for geometry) but neither take space nor paint
-		var keep []*lbox
-		for _, k := range b.kids {
-			if k.kind == kBlock && !k.oof && !k.floated {
-				k.hiddenFlow = true
-				keep = append(keep, k)
-			}
-		}
-		b.kids = keep
+	if st.CVSkipped() {
+		// skipped contents are laid out (geometry queries see their normal flow
+		// positions) but do not paint, hit-test or size their container
+		b.cvSkip = true
 	}
 	if n.Data == "details" && !hasAttr(n, "open") {
 		seenSummary := false

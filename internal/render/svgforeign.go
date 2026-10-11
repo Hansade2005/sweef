@@ -70,6 +70,7 @@ func (c *ctx) foreignFor(b *lbox) {
 		return
 	}
 	base, vw, vh := c.svgBaseMatrix(b)
+	var anc []foAnc
 	var walk func(n *html.Node, m m6, vw, vh float64, pst *style.Computed, depth int)
 	walk = func(n *html.Node, m m6, vw, vh float64, pst *style.Computed, depth int) {
 		if n.Type != html.ElementNode || depth > 64 {
@@ -90,9 +91,21 @@ func (c *ctx) foreignFor(b *lbox) {
 		if st == nil {
 			return
 		}
+		if v, _ := svgProp(doc, n, "clip-path"); v != "" && v != "none" {
+			anc = append(anc, foAnc{n: n, m: m, vw: vw, vh: vh})
+			defer func() { anc = anc[:len(anc)-1] }()
+		}
 		switch tag {
 		case "foreignobject":
-			c.layoutForeign(b, n, m, vw, vh, st, pst, doc)
+			wb := c.layoutForeign(b, n, m, vw, vh, st, pst, doc)
+			if wb != nil && len(anc) > 0 {
+				if tests := c.foreignHitClips(doc, anc, m); len(tests) > 0 {
+					if c.foClip == nil {
+						c.foClip = map[*lbox][]func(x, y float64) bool{}
+					}
+					c.foClip[wb] = tests
+				}
+			}
 			return
 		case "svg":
 			x, y := svgLen(attr(n, "x"), vw, 0), svgLen(attr(n, "y"), vh, 0)
@@ -118,14 +131,14 @@ func (c *ctx) foreignFor(b *lbox) {
 	}
 }
 
-func (c *ctx) layoutForeign(owner *lbox, n *html.Node, m m6, vw, vh float64, st, pst *style.Computed, doc *SVGDoc) {
+func (c *ctx) layoutForeign(owner *lbox, n *html.Node, m m6, vw, vh float64, st, pst *style.Computed, doc *SVGDoc) *lbox {
 	num := func(k string, ref float64) float64 {
 		v, _ := svgProp(doc, n, k)
 		return svgLen(v, ref, 0)
 	}
 	x, y, w, h := num("x", vw), num("y", vh), num("width", vw), num("height", vh)
 	if w <= 0 || h <= 0 {
-		return
+		return nil
 	}
 	cp := *st
 	cp.Display = "block"
@@ -172,6 +185,7 @@ func (c *ctx) layoutForeign(owner *lbox, n *html.Node, m m6, vw, vh float64, st,
 	c.styles[n] = &cp
 	wb := newBox(n, &cp, kBlock)
 	wb.inner = iFlow
+	wb.fixedCB = true // position:fixed content is positioned against the foreignObject
 	var kids []*lbox
 	c.buildChildrenInto(n, &cp, &kids, nil)
 	for _, k := range kids {
@@ -188,6 +202,7 @@ func (c *ctx) layoutForeign(owner *lbox, n *html.Node, m m6, vw, vh float64, st,
 		c.fo = map[*lbox][]*lbox{}
 	}
 	c.fo[owner] = append(c.fo[owner], wb)
+	return wb
 }
 
 // paintForeign captures the display list of each foreignObject of an inline
@@ -198,7 +213,9 @@ func (p *painter) paintForeign(b *lbox, doc *SVGDoc) {
 		return
 	}
 	for _, w := range ws {
+		p.hitExt = p.c.foClip[w]
 		ops := p.capture(func() { p.paintSC(w, false) })
+		p.hitExt = nil
 		// the wrapper's own matrix is the user-space matrix the scene already
 		// applies: drop it
 		if len(ops) >= 2 {

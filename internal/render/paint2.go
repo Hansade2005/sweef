@@ -188,9 +188,9 @@ func (p *painter) paintTextFrag(b *lbox, ln *line, fr *frag) {
 			Overline: d.lines&style.DecoOverline != 0, LineThrough: d.lines&style.DecoLineThrough != 0, DecoStyle: d.style, DecoColor: d.color, DecoThick: d.thick})
 	}
 	if owner.n != nil {
-		p.hits = append(p.hits, hitRec{n: owner.n, rects: []Rect{{x, y - fs.asc, w, fs.asc + fs.desc}}, clips: p.clips, m: p.m, hasM: p.hasM, noPE: owner.st.PointerEvents == "none"})
+		p.hits = append(p.hits, hitRec{n: owner.n, rects: []Rect{{x, y - fs.asc, w, fs.asc + fs.desc}}, clips: p.clips, m: p.m, hasM: p.hasM, noPE: owner.st.PointerEvents == "none", ext: p.hitExt})
 	} else if b.n != nil {
-		p.hits = append(p.hits, hitRec{n: b.n, rects: []Rect{{x, y - fs.asc, w, fs.asc + fs.desc}}, clips: p.clips, m: p.m, hasM: p.hasM, noPE: b.st.PointerEvents == "none"})
+		p.hits = append(p.hits, hitRec{n: b.n, rects: []Rect{{x, y - fs.asc, w, fs.asc + fs.desc}}, clips: p.clips, m: p.m, hasM: p.hasM, noPE: b.st.PointerEvents == "none", ext: p.hitExt})
 	}
 }
 
@@ -650,6 +650,11 @@ func (c *ctx) installHit(rb *lbox) {
 				if cl.shape != nil && !clipShapeContains(cl.shape, px, py) {
 					ok = false
 					break
+				}
+			}
+			for _, f := range h.ext {
+				if ok && !f(px, py) {
+					ok = false
 				}
 			}
 			if ok {

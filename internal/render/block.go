@@ -648,12 +648,28 @@ func (c *ctx) popCB(b *lbox, pushed bool) {
 	}
 }
 
-func (b *lbox) isContainingBlockForAbs() bool {
+// isContainingBlockForFixed reports whether b is the containing block of its
+// position:fixed descendants (instead of the viewport).
+func (b *lbox) isContainingBlockForFixed() bool {
 	st := b.st
-	if st.Position != "static" || len(st.Transform) > 0 || len(st.Translate) > 0 || len(st.Rotate) > 0 || len(st.Scale) > 0 || len(st.Filter) > 0 || st.Perspective != 0 {
+	if len(st.Transform) > 0 || len(st.Translate) > 0 || len(st.Rotate) > 0 || len(st.Scale) > 0 || len(st.Filter) > 0 || len(st.BackdropFilter) > 0 || st.Perspective != 0 {
 		return true
 	}
-	if st.WillChange != "" && (contains(st.WillChange, "transform") || contains(st.WillChange, "perspective")) {
+	if st.WillChange != "" && (contains(st.WillChange, "transform") || contains(st.WillChange, "perspective") || contains(st.WillChange, "filter")) {
+		return true
+	}
+	if st.ContainsLayout() || b.fixedCB {
+		return true
+	}
+	return st.ContainerType == "size" || st.ContainerType == "inline-size"
+}
+
+func (b *lbox) isContainingBlockForAbs() bool {
+	st := b.st
+	if st.Position != "static" || len(st.Transform) > 0 || len(st.Translate) > 0 || len(st.Rotate) > 0 || len(st.Scale) > 0 || len(st.Filter) > 0 || len(st.BackdropFilter) > 0 || st.Perspective != 0 {
+		return true
+	}
+	if st.WillChange != "" && (contains(st.WillChange, "transform") || contains(st.WillChange, "perspective") || contains(st.WillChange, "filter")) {
 		return true
 	}
 	if st.ContainsLayout() {
@@ -938,6 +954,16 @@ func (c *ctx) registerOOF(b, k *lbox, cx, y float64, st strut, leading bool, cw 
 func (c *ctx) addOOF(k *lbox) {
 	k.oofDone = false
 	if k.st.Position == "fixed" {
+		// the containing block of a fixed box is the viewport unless an ancestor
+		// transforms, filters or contains layout/paint (a foreignObject wrapper
+		// counts too)
+		for i := len(c.cbStack) - 1; i >= 0; i-- {
+			if cb := c.cbStack[i]; cb.isContainingBlockForFixed() {
+				cb.oofKids = appendOnce(cb.oofKids, k)
+				k.cbBox = cb
+				return
+			}
+		}
 		c.rootBox.oofKids = appendOnce(c.rootBox.oofKids, k)
 		k.cbBox = c.rootBox
 		return
