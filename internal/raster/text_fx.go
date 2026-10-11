@@ -18,6 +18,18 @@ const fxOne = 1 << 16
 
 var fxBigThresh = fxOne * 2
 var fxBigVariant = 0
+var fxSmallRound = 0
+var fxMidOv = map[[2]int]float64{}
+var fxExactSet = map[int]bool{}
+var fxShiftOv func(idx int) int
+var fxSmallSlide = false
+var fxVTrace func(idx, count int, nx, ny, sx, sy float64)
+var fxQuadIdx, fxQuadOverride int
+var fxQInfo func(idx, shift, y0, y2, wind, qy int)
+var fxStartMode = 0
+var fxRMode = 0
+var fxShiftMap []int
+var fxQOffMode = 0
 var fxQSnap = true
 var fxQNoSnapMid = false
 var fxDS = 5
@@ -54,6 +66,9 @@ func fxDiffToShift(dx, dy int) int {
 	n := 0
 	for v := dist; v > 0; v >>= 1 {
 		n++
+	}
+	if fxShiftMap != nil {
+		return fxShiftMap[min(n, len(fxShiftMap)-1)]
 	}
 	return n >> 1
 }
@@ -173,6 +188,9 @@ func (b *fxBuilder) monoQuad(q [3]fpt) {
 	if shift > 0 {
 		shift += fxShiftBias
 	}
+	if fxShiftOv != nil && fxShiftOv(fxQuadIdx+1) != 0 {
+		shift += fxShiftOv(fxQuadIdx + 1)
+	}
 	if shift == 0 {
 		shift = 1
 	} else if shift > 6 {
@@ -186,11 +204,36 @@ func (b *fxBuilder) monoQuad(q [3]fpt) {
 	qddx, qddy := (ax>>(shift-1))>>2, (ay>>(shift-1))>>2
 	lastX, lastY := (x2<<10)>>2, (y2<<10)>>2
 	cshift := shift - 1
+	fxQuadIdx++
+	if fxExactSet[fxQuadIdx] {
+		fx0, fy0, fx1, fy1, fx2, fy2 := float64(x0)/256, float64(y0)/256, float64(x1)/256, float64(y1)/256, float64(x2)/256, float64(y2)/256
+		px, py := fx0, fy0
+		for k := 1; k <= 32; k++ {
+			t := float64(k) / 32
+			mt := 1 - t
+			nx := mt*mt*fx0 + 2*mt*t*fx1 + t*t*fx2
+			ny := mt*mt*fy0 + 2*mt*t*fy1 + t*t*fy2
+			b.edges = append(b.edges, fxEdge{int(px * fxOne), int(py * fxOne), int(ny * fxOne), int((nx - px) / (ny - py) * fxOne), wind})
+			px, py = nx, ny
+		}
+		return
+	}
 	oldx, oldy := qx, qy
+	if fxQInfo != nil {
+		fxQInfo(fxQuadIdx, shift, y0, y2, wind, qy)
+	}
+	switch fxStartMode {
+	case 1:
+		oldy = (qy >> 14) << 14 // floor
+	case 2:
+		oldy = ((qy + (1<<14 - 1)) >> 14) << 14 // ceil
+	}
 	qy = fxSnapY(qy)
 	lastY = fxSnapY(lastY)
 	sx, sy := qx, qy
-	if !fxQuadOffset {
+	if fxQuadOverride == fxQuadIdx || fxQuadOffset || (fxQOffMode == 1 && wind > 0) || (fxQOffMode == 2 && wind < 0) {
+		oldy = oldy // true start
+	} else if fxStartMode == 0 {
 		oldy = qy
 	}
 	for count > 0 {
@@ -227,6 +270,14 @@ func (b *fxBuilder) monoQuad(q [3]fpt) {
 				}
 			} else {
 				nsy = fxMin(lastY, fxSnapY(newy))
+				switch fxSmallRound {
+				case 1:
+					nsy = fxMin(lastY, ((newy+(1<<14-1))>>14)<<14)
+				case 2:
+					nsy = fxMin(lastY, (newy>>14)<<14)
+				case 3:
+					nsy = fxMin(lastY, ((newy+(1<<13)-1)>>14)<<14)
+				}
 				if fxQNoSnapMid {
 					nsy = fxMin(lastY, newy)
 				}
@@ -235,6 +286,15 @@ func (b *fxBuilder) monoQuad(q [3]fpt) {
 				slope = math.MaxInt32
 				if diffY != 0 {
 					slope = fxQuickDiv((newx-sx)>>10, diffY)
+				}
+				if fxSmallSlide {
+					if dY := (newy - sy) >> 10; dY != 0 {
+						sl := fxQuickDiv((newx-sx)>>10, dY)
+						nsx = newx - fxMul(sl, newy-nsy)
+						if diffY != 0 {
+							slope = fxQuickDiv((nsx-sx)>>10, diffY)
+						}
+					}
 				}
 			}
 			qdx += qddx
@@ -248,10 +308,19 @@ func (b *fxBuilder) monoQuad(q [3]fpt) {
 				slope = fxQuickDiv((newx-sx)>>10, diffY)
 			}
 		}
+		if v, ok := fxMidOv[[2]int{fxQuadIdx, count}]; ok {
+			nsy = int(v * fxOne)
+		}
+		if fxVTrace != nil {
+			fxVTrace(fxQuadIdx, count, float64(newx)/65536, float64(newy)/65536, float64(nsx)/65536, float64(nsy)/65536)
+		}
 		if slope < math.MaxInt32 && b.seg(sx, sy, nsx, nsy, slope, wind) {
 			sx, sy = nsx, nsy
 		}
 		oldx, oldy = newx, newy
+		if fxRMode == 1 && count > 0 {
+			oldy = nsy
+		}
 	}
 }
 

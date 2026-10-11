@@ -38,6 +38,8 @@ type painter struct {
 	outl    []*lbox
 	active  map[*lbox]bool
 	svgdocs map[string]*SVGDoc
+	// fragShift is non-zero while painting a continuing fragment of a sliced box
+	fragShift float64
 }
 
 var identity = [6]float64{1, 0, 0, 1, 0, 0}
@@ -636,6 +638,15 @@ func (p *painter) paintBackgroundArea(b *lbox, border Rect, radii Radii, originB
 			pa = originBox
 		} else {
 			pa, _ = boxFor(ly.Origin)
+			if p.fragShift != 0 && ly.Origin != "border-box" {
+				// continuing fragment of a sliced box: Blink insets the positioning area by
+				// the fragment's own (absent) top border and padding
+				sh := b.bor[0]
+				if ly.Origin == "content-box" {
+					sh += b.pad[0]
+				}
+				pa.Y -= sh
+			}
 		}
 		bl := blended && ly.Blend != "" && ly.Blend != "normal"
 		if bl {

@@ -781,6 +781,8 @@ func (r *svgR) drawNode(n *svgNode, st sStyle, m Matrix, isRoot bool) {
 					return
 				}
 			}
+		} else if !r.applyShapeClip(clipS, n, &st) {
+			return
 		}
 	}
 	if !needLayer {
@@ -890,11 +892,31 @@ func (r *svgR) drawViewport(n *svgNode, st sStyle, m Matrix, x, y, w, h float64)
 }
 
 func (r *svgR) drawUse(n *svgNode, st sStyle, m Matrix) {
+	if n.Sub != nil {
+		// <use href="other.svg#id">: the target lives in another scene
+		t := n.Sub.Root
+		if n.SubID != "" {
+			t = n.Sub.ByID[n.SubID]
+		}
+		if t == nil || r.active[n] {
+			return
+		}
+		r2 := *r
+		r2.doc = n.Sub
+		r2.active = map[*svgNode]bool{n: true}
+		r2.drawUseTarget(n, t, st, m)
+		r.nodes = r2.nodes
+		return
+	}
 	id := strings.TrimPrefix(strings.TrimSpace(n.A["href"]), "#")
 	t := r.doc.ByID[id]
 	if t == nil || r.active[t] || r.active[n] {
 		return
 	}
+	r.drawUseTarget(n, t, st, m)
+}
+
+func (r *svgR) drawUseTarget(n, t *svgNode, st sStyle, m Matrix) {
 	r.active[n] = true
 	defer delete(r.active, n)
 	x, y := r.attrLen(n, "x", 'x', &st, 0), r.attrLen(n, "y", 'y', &st, 0)

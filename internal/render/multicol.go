@@ -134,7 +134,11 @@ func (c *ctx) layoutMulticolContent(b *lbox, cw, cx, cy float64, bfc *bfcState, 
 				}
 			}
 			if colH > 0 || n > 1 {
-				b.mcSegs = append(b.mcSegs, mcSeg{y0, y0 + colH, used})
+				rh := colH
+				if fixedH > rh {
+					rh = fixedH // the rules span the container's definite height
+				}
+				b.mcSegs = append(b.mcSegs, mcSeg{y0, y0 + rh, used})
 				if used > maxUsed {
 					maxUsed = used
 				}
@@ -221,20 +225,26 @@ func (c *ctx) mcFragment(b *lbox, kids []*lbox, n int, colW, gap, Y0, fixedH, h 
 		for _, u := range units {
 			lo = math.Max(lo, u.bot-u.top)
 		}
-		if len(mcBreaks(units, lo)) <= n {
+		// a height is feasible when the content fits in n columns without
+		// leaving fewer than `orphans` lines of a paragraph at a column bottom
+		fits := func(H float64) bool {
+			st, bad := mcBreaksChk(units, H)
+			return len(st) <= n && !bad
+		}
+		if fits(lo) {
 			H = lo
 		} else {
 			hi := math.Max(h, lo)
-			if len(mcBreaks(units, hi)) > n {
+			if !fits(hi) {
 				hi = units[len(units)-1].bot - units[0].top
-				if len(mcBreaks(units, hi)) > n {
+				if !fits(hi) {
 					hi = lo * float64(n+1)
 				}
 			}
 			best := hi
 			for it := 0; it < 40 && hi-lo > 0.01; it++ {
 				mid := (lo + hi) / 2
-				if len(mcBreaks(units, mid)) <= n {
+				if fits(mid) {
 					best = mid
 					hi = mid
 				} else {
@@ -367,6 +377,14 @@ func (c *ctx) mcFragment(b *lbox, kids []*lbox, n int, colW, gap, Y0, fixedH, h 
 // mcBreaks greedily fills columns of height H and returns the index of the
 // first unit of every column.
 func mcBreaks(units []*mcUnit, H float64) []int {
+	st, _ := mcBreaksChk(units, H)
+	return st
+}
+
+// mcBreaksChk is mcBreaks that also reports whether some break had to leave
+// fewer than `orphans` lines of a paragraph at the bottom of a column.
+func mcBreaksChk(units []*mcUnit, H float64) ([]int, bool) {
+	anyBad := false
 	starts := []int{0}
 	y0 := 0.0 // the first column starts at the top of the segment: its first margin counts
 	i := 0
@@ -383,9 +401,12 @@ func mcBreaks(units []*mcUnit, H float64) []int {
 			res = units[i+1].cRes
 		}
 		if i > colStart && u.bot+res-y0 > H+0.01 {
-			b := mcAdjustBreak(units, colStart, i)
+			b, bad := mcAdjustBreak(units, colStart, i)
 			if b <= colStart {
 				b = i
+			}
+			if bad {
+				anyBad = true
 			}
 			starts = append(starts, b)
 			y0 = units[b].top - units[b].cPush
@@ -394,16 +415,19 @@ func mcBreaks(units []*mcUnit, H float64) []int {
 		}
 		i++
 	}
-	return starts
+	return starts, anyBad
 }
 
 // mcAdjustBreak moves a break before unit b earlier to satisfy orphans,
 // widows and break-inside: avoid; it returns colStart when that is
-// impossible without emptying the column.
-func mcAdjustBreak(units []*mcUnit, colStart, b int) int {
+// impossible without emptying the column. bad reports that the final break
+// leaves fewer than `orphans` lines of a paragraph in the column.
+func mcAdjustBreak(units []*mcUnit, colStart, b int) (int, bool) {
+	bad := false
 	for guard := 0; guard < 64; guard++ {
 		ub, up := units[b], units[b-1]
 		moved := false
+		bad = false
 		if ub.ln != nil && ub.blk == up.blk {
 			L := ub.blk
 			// first unit of L within this column
@@ -427,15 +451,22 @@ func mcAdjustBreak(units []*mcUnit, colStart, b int) int {
 			if nb < f {
 				nb = f
 			}
-			if first && nb-f < orphans {
-				nb = f
+			if nb-f < orphans {
+				if first {
+					nb = f // move the whole fragment to the next column
+				} else {
+					nb = b // cannot satisfy widows without breaking orphans
+				}
+			}
+			if nb != b && nb <= colStart {
+				// cannot empty the column: keep the break (widows give way, orphans cannot)
+				return b, b-f < orphans
 			}
 			if nb != b {
-				if nb <= colStart {
-					return colStart
-				}
 				b = nb
 				moved = true
+			} else if b-f < orphans {
+				bad = true
 			}
 		}
 		// break-inside: avoid on an ancestor holding both neighbours
@@ -461,10 +492,10 @@ func mcAdjustBreak(units []*mcUnit, colStart, b int) int {
 			}
 		}
 		if !moved {
-			return b
+			return b, bad
 		}
 	}
-	return b
+	return b, bad
 }
 
 // mcMarkForced flags the units that must start a new column.

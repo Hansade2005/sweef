@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60">
+<style>
+ rect { fill: #3a7; }
+ circle { fill: #fff; }
+ @media (prefers-color-scheme: dark) { rect { fill: #206; } circle { fill: #fc0; } }
+ @media (max-width: 100px) { rect { fill: #c33; } text { display: none } }
+ @media (min-width: 101px) { text { fill: #000; font: 12px Liberation Sans } }
+</style>
+<rect width="120" height="60" rx="8"/><circle cx="30" cy="30" r="16"/><text x="55" y="35">media</text>
+</svg>

@@ -265,6 +265,14 @@ func (c *ctx) svgUse(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 		href = attr(n, "xlink:href")
 	}
 	t := doc.ByID[strings.TrimPrefix(strings.TrimSpace(href), "#")]
+	if sn := doc.dom[n]; sn != nil && sn.Sub != nil {
+		// <use href="other.svg#id">: the target lives in another scene
+		t = sn.Sub.Root
+		if sn.SubID != "" {
+			t = sn.Sub.ByID[sn.SubID]
+		}
+		doc = sn.Sub
+	}
 	if t == nil || t.dom == nil {
 		return bb
 	}

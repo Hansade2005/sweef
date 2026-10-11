@@ -413,3 +413,33 @@ func clipShapeContains(s *ClipSub, x, y float64) bool {
 	}
 	return true
 }
+
+// zeroNonRenderedSVG gives the descendants of <defs>, <clipPath>, <mask>,
+// <pattern>, <marker> and <symbol> empty boxes, as Chromium does: they are
+// never rendered in place, so getBoundingClientRect reports zeros.
+func (c *ctx) zeroNonRenderedSVG() {
+	var walk func(n *html.Node, hidden bool)
+	walk = func(n *html.Node, hidden bool) {
+		if n.Type == html.ElementNode {
+			if hidden {
+				if b := c.res.Boxes[n]; b != nil && b.Display != "none" {
+					b.Border, b.Padding, b.Content = Rect{}, Rect{}, Rect{}
+					b.ClientW, b.ClientH, b.ScrollW, b.ScrollH = 0, 0, 0, 0
+					b.Frags = nil
+				}
+			}
+			switch strings.ToLower(n.Data) {
+			case "defs", "clippath", "mask", "pattern", "marker", "symbol":
+				if n.Namespace == "svg" || n.Namespace == "" {
+					hidden = true
+				}
+			}
+		}
+		for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
+			walk(ch, hidden)
+		}
+	}
+	if c.docEl != nil {
+		walk(c.docEl, false)
+	}
+}

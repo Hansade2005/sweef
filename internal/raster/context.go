@@ -59,7 +59,8 @@ type layerRec struct {
 type layerMeta struct {
 	opacity float64
 	blend   string
-	mask    *maskJob // set for layers opened by PushMask
+	mask    *maskJob    // set for layers opened by PushMask
+	steps   []layerStep // CSS filter list with SVG filter references
 }
 
 type Context struct {

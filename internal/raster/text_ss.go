@@ -18,6 +18,7 @@ import (
 // textFxMode selects the glyph scan converter: 0 fixed-point Skia edges,
 // 1 float snapped polygons, 2 exact curves (experiments only).
 var textFxMode = 0
+var textFxYOff = 0
 
 func aaaSnapY(y float64) float64 {
 	y = math.Floor(y*256+0.5) / 256
@@ -347,6 +348,7 @@ func skiaGlyph(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Mask {
 			X += ftMulFix(Y, skewFix)
 		}
 		X += sub * 16
+		Y += textFxYOff
 		return float64(X) / 64, float64(Y) / 64
 	}
 	p := NewPath()

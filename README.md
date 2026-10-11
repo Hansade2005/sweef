@@ -188,8 +188,9 @@ A 1280x800 text page paints in about 21 ms. A 100k-triangle WebGL frame at 512x5
 What is still different, honestly:
 
 - **Glyph edges.** Text uses Skia's analytic anti-aliasing, its coverage tables and GPOS kerning, so most glyphs match. About 1 to 3% of glyph pixels still differ on curve tops, and strokes and synthetic bold are approximations. HTML text does not yet use ligatures, bidi or Arabic joining (canvas text does).
-- **CSS not done:** per-column multicol backgrounds and borders, `content-visibility: auto` skipping, `@container style()` queries, subgrid line names, CJK fallback metrics (WenQuanYi is not matched), vertical text with RTL or nested orthogonal flows.
-- **SVG not done:** `foreignObject`, `textPath`, `feTurbulence`, lighting and a few other filters, CSS `clip-path` and `mask` on HTML elements.
+- **CSS not done:** `content-visibility: auto` skipping, `@container style()` queries, subgrid line names, CJK fallback metrics (WenQuanYi is not matched), vertical text with RTL or nested orthogonal flows.
+- **SVG not done:** `foreignObject`, `textPath`, `feTurbulence`, lighting and a few other filters.
+- **clip-path / mask / multicol painting not done:** `clip-path` and `mask` on inline (non-atomic) elements, `mask-border`, `path()` and external-document `url()` in hit testing; `box-decoration-break: clone` on inline fragments; fragmented blocks that are tables, flex or grid containers are painted as one box per column fragment without reserving their own repeated edges.
 - **Codecs.** MP3, Vorbis, FLAC and PCM decode in pure Go. AAC, Opus, H.264, VP9 and AV1 need `ffmpeg` on the machine; without it they report unsupported like a browser without the codec. Video without ffmpeg shows VP8 key frames only.
 - **WebGL.** No compressed textures, `EXT_sRGB` or multi-draw; lines are 1 px; `sin` differs from SwiftShader in the last digit.
 - **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.8 s because QuickJS cannot share typed arrays with Go. `MediaRecorder`, EME and picture-in-picture reject.

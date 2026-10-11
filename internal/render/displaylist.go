@@ -218,7 +218,7 @@ type Box struct {
 	Padding Rect       // padding box
 	Content Rect       // content box
 	Margin  [4]float64 // top, right, bottom, left
-	Frags   []Rect     // one border-box fragment per line box for inline elements (getClientRects)
+	Frags   []Rect     // one border-box fragment per line box for inline elements, per column for blocks split across columns (getClientRects)
 	// Scroll sizes for overflow containers and the viewport.
 	ScrollW, ScrollH float64
 	ClientW, ClientH float64 // padding box minus scrollbars

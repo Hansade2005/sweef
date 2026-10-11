@@ -60,33 +60,6 @@ func decodeDataImage(href string) image.Image {
 	return im
 }
 
-func (r *svgR) drawImage(n *svgNode, st sStyle, m Matrix) {
-	if !st.visible {
-		return
-	}
-	im := decodeDataImage(strings.TrimSpace(n.A["href"]))
-	if im == nil {
-		return
-	}
-	x, y := r.attrLen(n, "x", 'x', &st, 0), r.attrLen(n, "y", 'y', &st, 0)
-	iw, ih := float64(im.Bounds().Dx()), float64(im.Bounds().Dy())
-	w, h := r.attrLen(n, "width", 'x', &st, iw), r.attrLen(n, "height", 'y', &st, ih)
-	if w <= 0 || h <= 0 || iw <= 0 || ih <= 0 {
-		return
-	}
-	c := r.c
-	c.Save()
-	defer c.Restore()
-	c.SetTransform(m)
-	c.ClipRect(x, y, w, h)
-	vm, _ := viewBoxMatrix([]float64{0, 0, iw, ih}, n.A["preserveaspectratio"], w, h)
-	surf := FromImage(im)
-	pix := st.imageRendering == "pixelated" || st.imageRendering == "crisp-edges"
-	c.SetSmoothing(!pix, QualityLow)
-	c.Concat(Translate(x, y).Mul(vm))
-	c.DrawImage(surf, 0, 0, iw, ih, 0, 0, iw, ih)
-}
-
 // ---- markers ----------------------------------------------------------------------------
 
 type mvert struct {

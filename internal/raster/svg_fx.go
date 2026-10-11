@@ -227,6 +227,13 @@ func (r *svgR) prepareFilter(n *svgNode, st *sStyle, f string, m Matrix) *svgFil
 	if fn == nil || fn.Tag != "filter" {
 		return nil
 	}
+	bb, hasBB := r.bbox(n, st)
+	return r.prepareFilterNode(fn, bb, hasBB, st, m)
+}
+
+// prepareFilterNode resolves filter element fn for an element whose object
+// bounding box is bb (user space of m).
+func (r *svgR) prepareFilterNode(fn *svgNode, bb Rect, hasBB bool, st *sStyle, m Matrix) *svgFilterSpec {
 	spec := &svgFilterSpec{node: fn}
 	// primitives (follow href if the filter has none)
 	src := fn
@@ -241,7 +248,7 @@ func (r *svgR) prepareFilter(n *svgNode, st *sStyle, f string, m Matrix) *svgFil
 		}
 		src = r.doc.ByID[strings.TrimPrefix(strings.TrimSpace(src.A["href"]), "#")]
 	}
-	spec.bb, spec.hasBB = r.bbox(n, st)
+	spec.bb, spec.hasBB = bb, hasBB
 	fa := func(k string) (string, bool) { return r.chainAttr(fn, k) }
 	units, _ := fa("filterunits")
 	obb := units != "userSpaceOnUse"
@@ -331,252 +338,6 @@ func clearOutside(s *Surface, keep IRect) {
 			clear(row[(x-s.R.X0)*4 : (x-s.R.X0)*4+4])
 		}
 	}
-}
-
-func (r *svgR) runFilter(f *svgFilterSpec, n *svgNode, st *sStyle, m Matrix) {
-	c := r.c
-	layer := c.surf
-	if f.region.Empty() || len(f.prims) == 0 {
-		layer.Clear()
-		return
-	}
-	src := cloneSurface(layer)
-	clearOutside(src, f.region)
-	if f.linear {
-		convertSurface(src, &s2lin)
-	}
-	results := map[string]*Surface{}
-	var last *Surface
-	scx, scy := math.Hypot(m[0], m[1]), math.Hypot(m[2], m[3])
-	region := f.region
-	getIn := func(p *svgNode, key string) *Surface {
-		name := strings.TrimSpace(p.A[key])
-		switch name {
-		case "SourceGraphic":
-			return src
-		case "SourceAlpha":
-			s := cloneSurface(src)
-			for i := 0; i+3 < len(s.Pix); i += 4 {
-				s.Pix[i], s.Pix[i+1], s.Pix[i+2] = 0, 0, 0
-			}
-			return s
-		case "BackgroundImage", "BackgroundAlpha", "FillPaint", "StrokePaint":
-			return NewSurfaceRect(layer.R)
-		case "":
-			if last != nil {
-				return last
-			}
-			return src
-		}
-		if s, ok := results[name]; ok {
-			return s
-		}
-		if last != nil {
-			return last
-		}
-		return src
-	}
-	num := func(p *svgNode, k string, d float64) float64 {
-		if v, ok := svgNumber(p.A[k]); ok {
-			return v
-		}
-		return d
-	}
-	pairs := func(p *svgNode, k string, d float64) (float64, float64) {
-		v := splitNums(p.A[k])
-		switch len(v) {
-		case 0:
-			return d, d
-		case 1:
-			return v[0], v[0]
-		}
-		return v[0], v[1]
-	}
-	// primitiveUnits=objectBoundingBox scales numbers by the bbox size
-	pux, puy := 1.0, 1.0
-	if f.primObb && f.hasBB {
-		pux, puy = f.bb.W, f.bb.H
-	}
-	flood := func(p *svgNode) Color {
-		col := RGBA8(0, 0, 0, 255)
-		if v, ok := p.A["flood-color"]; ok {
-			if cc, ok := ParseColor(v, st.color); ok {
-				col = cc
-			}
-		}
-		if v, ok := p.A["flood-opacity"]; ok {
-			col.A *= parseOpacity(v, 1)
-		}
-		if f.linear {
-			col.R, col.G, col.B = srgbToLinear(col.R), srgbToLinear(col.G), srgbToLinear(col.B)
-		}
-		return col
-	}
-	for _, p := range f.prims {
-		var out *Surface
-		switch p.Tag {
-		case "fegaussianblur":
-			sx, sy := pairs(p, "stddeviation", 0)
-			in := getIn(p, "in")
-			out = cloneSurface(in)
-			if sx < 0 || sy < 0 {
-				out.Clear()
-			} else if sx > 0 || sy > 0 {
-				blurPlane(out.Pix, out.R.W(), out.R.H(), out.Stride, 4, sx*pux*scx, sy*puy*scy)
-			}
-		case "feoffset":
-			in := getIn(p, "in")
-			dx, dy := num(p, "dx", 0)*pux*scx, num(p, "dy", 0)*puy*scy
-			out = offsetSurface(in, dx, dy)
-		case "fedropshadow":
-			in := getIn(p, "in")
-			sx, sy := pairs(p, "stddeviation", 2)
-			dx, dy := num(p, "dx", 2)*pux*scx, num(p, "dy", 2)*puy*scy
-			sh := cloneSurface(in)
-			col := flood(p)
-			if _, ok := p.A["flood-color"]; !ok {
-				col = RGBA8(0, 0, 0, 255)
-				if f.linear {
-					col = RGBA8(0, 0, 0, 255)
-				}
-				if v, ok := p.A["flood-opacity"]; ok {
-					col.A *= parseOpacity(v, 1)
-				}
-			}
-			tintAlpha(sh, col)
-			if sx > 0 || sy > 0 {
-				blurPlane(sh.Pix, sh.R.W(), sh.R.H(), sh.Stride, 4, sx*pux*scx, sy*puy*scy)
-			}
-			sh = offsetSurface(sh, dx, dy)
-			composite(sh, nil, surfShader{in, 256}, SourceOver, &clipState{R: sh.R})
-			out = sh
-		case "feflood":
-			out = NewSurfaceRect(layer.R)
-			col := flood(p)
-			composite(out, nil, Solid(col), SourceOver, &clipState{R: region.Intersect(out.R)})
-		case "fecolormatrix":
-			out = cloneSurface(getIn(p, "in"))
-			colorMatrixPrim(out, p)
-		case "feblend":
-			in, in2 := getIn(p, "in"), getIn(p, "in2")
-			out = cloneSurface(in2)
-			op := SourceOver
-			if o, ok := ParseOp(p.A["mode"]); ok && p.A["mode"] != "" {
-				op = o
-			}
-			composite(out, nil, surfShader{in, 256}, op, &clipState{R: out.R})
-		case "femerge":
-			out = NewSurfaceRect(layer.R)
-			for _, k := range p.Kids {
-				if k.Tag == "femergenode" {
-					composite(out, nil, surfShader{getIn(k, "in"), 256}, SourceOver, &clipState{R: out.R})
-				}
-			}
-		case "fecomposite":
-			in, in2 := getIn(p, "in"), getIn(p, "in2")
-			op := p.A["operator"]
-			if op == "arithmetic" {
-				out = arithmetic(in, in2, num(p, "k1", 0), num(p, "k2", 0), num(p, "k3", 0), num(p, "k4", 0))
-			} else {
-				out = cloneSurface(in2)
-				o := SourceOver
-				switch op {
-				case "in":
-					o = SourceIn
-				case "out":
-					o = SourceOut
-				case "atop":
-					o = SourceAtop
-				case "xor":
-					o = Xor
-				}
-				composite(out, nil, surfShader{in, 256}, o, &clipState{R: out.R})
-			}
-		case "fecomponenttransfer":
-			out = cloneSurface(getIn(p, "in"))
-			componentTransfer(out, p)
-		case "femorphology":
-			rx, ry := pairs(p, "radius", 0)
-			out = morphology(getIn(p, "in"), int(math.Round(rx*pux*scx)), int(math.Round(ry*puy*scy)), p.A["operator"] == "dilate")
-		case "feimage", "feturbulence", "fetile", "fediffuselighting", "fespecularlighting", "fedisplacementmap", "feconvolvematrix":
-			out = cloneSurface(getIn(p, "in"))
-			if p.Tag != "fetile" && p.Tag != "feconvolvematrix" && p.Tag != "fedisplacementmap" {
-				out = NewSurfaceRect(layer.R)
-			}
-		default:
-			continue
-		}
-		// primitive subregion
-		sub := region
-		hasSub := false
-		for _, k := range []string{"x", "y", "width", "height"} {
-			if _, ok := p.A[k]; ok {
-				hasSub = true
-			}
-		}
-		if hasSub {
-			u := f.user
-			get := func(k string, d float64, axis byte) float64 {
-				v, ok := p.A[k]
-				if !ok {
-					return d
-				}
-				if f.primObb && f.hasBB {
-					vv := strings.TrimSpace(v)
-					if strings.HasSuffix(vv, "%") {
-						fv, _ := svgNumber(vv[:len(vv)-1])
-						fv /= 100
-						if axis == 'x' {
-							return fv
-						}
-						return fv
-					}
-					fv, _ := svgNumber(vv)
-					return fv
-				}
-				return r.length(v, r.refFor(axis), st.fontSize, d)
-			}
-			x, y, w, h := get("x", u.X, 'x'), get("y", u.Y, 'y'), get("width", u.W, 'x'), get("height", u.H, 'y')
-			if f.primObb && f.hasBB {
-				if _, ok := p.A["x"]; ok {
-					x = f.bb.X + x*f.bb.W
-				}
-				if _, ok := p.A["y"]; ok {
-					y = f.bb.Y + y*f.bb.H
-				}
-				if _, ok := p.A["width"]; ok {
-					w *= f.bb.W
-				} else {
-					w = u.W
-				}
-				if _, ok := p.A["height"]; ok {
-					h *= f.bb.H
-				} else {
-					h = u.H
-				}
-			}
-			dr, _ := transformRect(Rect{x, y, w, h}, m)
-			sub = IRect{int(math.Floor(dr.X + 1e-6)), int(math.Floor(dr.Y + 1e-6)), int(math.Ceil(dr.X + dr.W - 1e-6)), int(math.Ceil(dr.Y + dr.H - 1e-6))}.Intersect(region)
-		}
-		clearOutside(out, sub)
-		if name := p.A["result"]; name != "" {
-			results[name] = out
-		}
-		last = out
-	}
-	if last == nil {
-		layer.Clear()
-		return
-	}
-	res := last
-	if res == src {
-		res = cloneSurface(src)
-	}
-	if f.linear {
-		convertSurface(res, &lin2s)
-	}
-	clearOutside(res, region)
-	copy(layer.Pix, res.Pix)
 }
 
 func tintAlpha(s *Surface, col Color) {

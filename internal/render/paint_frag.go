@@ -58,7 +58,11 @@ func (p *painter) paintFragDecor(b *lbox, vis bool) {
 				}
 			}
 			if !skipBG {
+				if !clone && i > 0 {
+					p.fragShift = 1
+				}
 				p.paintBackground(b, r, radii)
+				p.fragShift = 0
 			}
 			for _, sh := range st.BoxShadow {
 				if sh.Inset {

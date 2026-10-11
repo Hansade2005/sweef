@@ -46,6 +46,7 @@ func (p *painter) paintSVGImg(b *lbox, r *replacedInfo, cr Rect, rad Radii) {
 		// whole image rect (unclipped) so the scene maps onto it; clip to the box
 		dst = fitDst(b.st.ObjectFit, b.st.ObjectPos, cr, iw, ih)
 	}
+	doc = p.c.svgImageDocSized(r.url, dst.W, dst.H)
 	p.emit(PushClip{Rect: cr, Radii: rad})
 	p.emit(SVGDraw{Dst: dst, Doc: doc, Color: b.st.Color, FontSize: 16, Family: "serif", Weight: 400})
 	p.emit(PopClip{})
@@ -155,6 +156,11 @@ func (p *painter) paintViewportScrollbars() {
 // emitSVGTiles paints a tiled SVG background image: one SVGDraw per tile,
 // clipped to the layer's clip box.
 func (p *painter) emitSVGTiles(b *lbox, doc *SVGDoc, clip Rect, rad Radii, t *Tile) {
+	if doc != nil && doc.Base != "" {
+		if sd := p.c.svgImageDocSized(doc.Base, t.Size[0], t.Size[1]); sd != nil {
+			doc = sd
+		}
+	}
 	p.emit(PushClip{Rect: clip, Radii: rad})
 	starts := func(origin, step, size, lo, hi float64, repeat bool) []float64 {
 		if !repeat {
