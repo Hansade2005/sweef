@@ -651,7 +651,7 @@ func (d *Decoder) decodeMB() error {
 			return err
 		}
 		if dpTrace != nil {
-			dpTrace(dpSpan{start: rs, end: d.resBr.pos, intra: isIntraT(mbType)})
+			dpTrace(dpSpan{start: rs, end: d.resBr.pos, intra: isIntraT(mbType), mbx: d.mbx, mby: d.mby, cbp: cbp, i16: mbType&mbIntra16x16 != 0})
 		}
 	} else {
 		d.lastDQ = false
@@ -738,7 +738,7 @@ func (d *Decoder) decodePCM(mbType uint32) error {
 		d.cab.start(r.pos)
 	}
 	if dpTrace != nil {
-		dpTrace(dpSpan{start: r.pos - need, end: r.pos, intra: true, pcm: true, pre: pcmPre})
+		dpTrace(dpSpan{start: r.pos - need, end: r.pos, intra: true, pcm: true, pre: pcmPre, mbx: d.mbx, mby: d.mby})
 	}
 	d.finishPCM(mbType)
 	return nil

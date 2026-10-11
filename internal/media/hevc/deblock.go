@@ -3,6 +3,9 @@ package hevc
 // In-loop deblocking filter (8.7.2), applied to a whole picture after all of
 // its slices have been decoded.
 
+var dbgEdge func(d *Decoder, pic *Picture, vertical bool, xq, yq int, e uint8)
+var dbgDeblock func(pic *Picture, ci int, vertical bool, cx, cy, bs, qpL, tc int, noP, noQ bool)
+
 func absInt(v int) int {
 	if v < 0 {
 		return -v
@@ -117,6 +120,9 @@ func (d *Decoder) deblockPass(pic *Picture, vertical bool) {
 			}
 			ctbQ := (yq>>l2c)*s.wCtb + xq>>l2c
 			ctbP := (yp>>l2c)*s.wCtb + xp>>l2c
+			if dbgEdge != nil {
+				dbgEdge(d, pic, vertical, xq, yq, e)
+			}
 			sl := d.sliceOfCtb(ctbQ)
 			if sl == nil || sl.deblockDisabled {
 				continue
@@ -169,11 +175,14 @@ func (d *Decoder) deblockPass(pic *Picture, vertical bool) {
 			// chroma
 			var cx, cy int
 			cx, cy = xq>>s.subW, yq>>s.subH
+			// chroma edges lie on an 8 sample chroma grid and are filtered in
+			// segments of 4 chroma samples that use the strength and QPs of the
+			// luma position of their first sample.
 			if vertical {
-				if cx&7 != 0 {
+				if cx&7 != 0 || yq&((4<<s.subH)-1) != 0 {
 					continue
 				}
-			} else if cy&7 != 0 {
+			} else if cy&7 != 0 || xq&((4<<s.subW)-1) != 0 {
 				continue
 			}
 			for ci := 1; ci <= 2; ci++ {
@@ -201,12 +210,13 @@ func (d *Decoder) deblockPass(pic *Picture, vertical bool) {
 				tq := clip3(0, 53, qpc+2*(int(bs)-1)+(sl.tcOffsetDiv2<<1))
 				tc := int(tcTable[tq]) << uint(s.bitDepthC-8)
 				stride := pic.stride[ci]
+				if dbgDeblock != nil {
+					dbgDeblock(pic, ci, vertical, cx, cy, int(bs), qpL, tc, noP, noQ)
+				}
 				if vertical {
-					n := 4 >> s.subH
-					filterChroma(pic.planes[ci], cy*stride+cx, 1, stride, n, tc, noP, noQ, s.bitDepthC)
+					filterChroma(pic.planes[ci], cy*stride+cx, 1, stride, 4, tc, noP, noQ, s.bitDepthC)
 				} else {
-					n := 4 >> s.subW
-					filterChroma(pic.planes[ci], cy*stride+cx, stride, 1, n, tc, noP, noQ, s.bitDepthC)
+					filterChroma(pic.planes[ci], cy*stride+cx, stride, 1, 4, tc, noP, noQ, s.bitDepthC)
 				}
 			}
 		}

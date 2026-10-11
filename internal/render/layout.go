@@ -529,7 +529,7 @@ func (b *lbox) hasTransform() bool {
 // ignored (the 2D approximation used where only an affine map is needed).
 func planeAffine6(m Mat4) [6]float64 {
 	w := m[3][3]
-	if w == 0 {
+	if w == 0 || m[3][0] != 0 || m[3][1] != 0 {
 		w = 1
 	}
 	return [6]float64{m[0][0] / w, m[1][0] / w, m[0][1] / w, m[1][1] / w, m[0][3] / w, m[1][3] / w}
@@ -632,6 +632,17 @@ func (b *lbox) fullMatrix() [6]float64 {
 }
 
 func (b *lbox) transformedBounds(l, t, r, bt float64) (float64, float64, float64, float64) {
+	if b.use4() {
+		// projective: map the corners through the full matrix
+		m4 := b.own4(0, 0)
+		x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+		for _, c := range [][2]float64{{l, t}, {r, t}, {l, bt}, {r, bt}} {
+			x, y := m4.project(c[0], c[1])
+			x0, x1 = math.Min(x0, x), math.Max(x1, x)
+			y0, y1 = math.Min(y0, y), math.Max(y1, y)
+		}
+		return x0, y0, x1, y1
+	}
 	m := b.fullMatrix()
 	xs := []float64{l, r, l, r}
 	ys := []float64{t, t, bt, bt}

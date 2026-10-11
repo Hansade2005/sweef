@@ -89,6 +89,9 @@ func (d *Decoder) dpConstrainedNC(intra bool) bool {
 // test, which rewrites ordinary slices into partitioned ones).
 type dpSpan struct {
 	start, end int
+	mbx, mby   int
+	cbp        int
+	i16        bool
 	pre        int // PCM: position before the alignment bits
 	intra, pcm bool
 }
@@ -108,3 +111,12 @@ func (d *Decoder) dpContaminated(intra bool) bool {
 	}
 	return lost(nb.topType, nb.topXY) || lost(nb.leftType[0], nb.leftXY[0]) || lost(nb.leftType[1], nb.leftXY[1])
 }
+
+// dpBlock describes the coeff_token of one CAVLC residual block.
+type dpBlock struct {
+	start, tokEnd int
+	nC, maxNum    int
+	total, t1     int
+}
+
+var dpBlockTrace func(dpBlock)

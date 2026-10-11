@@ -1,9 +1,12 @@
 // Package av1 is a pure-Go AV1 video decoder (AV1 Bitstream & Decoding
-// Process Specification v1.0.0 errata 1). It decodes Main profile streams
-// (8 and 10 bit, 4:2:0 and monochrome; other chroma formats are decoded by
-// the same code paths but are not part of the tested feature set) and
-// reproduces the normative output of the reference decoders sample for
-// sample.
+// Process Specification v1.0.0 errata 1). It decodes 8, 10 and 12 bit streams
+// in all chroma formats, both low-overhead (section 5) and Annex B
+// length-delimited streams (detected automatically), scalable streams
+// (operating point selection; by default the highest spatial layer of each
+// temporal unit is output, like dav1d) and, in LargeScale mode, tile list OBUs
+// with anchor frames (large scale tile decoding, spec 7.3). The output is
+// the normative one: bit-exact with libdav1d (and, for large scale tile
+// decoding, libaom) on the test corpus.
 package av1
 
 import (
@@ -221,6 +224,14 @@ func (d *Decoder) decodeOBU(data []byte) (int, error) {
 		}
 	}
 	d.temporalID, d.spatialID = temporalID, spatialID
+	if extFlag && obuType == obuFrame {
+		if temporalID > 0 {
+			cov(covTemporalLayers)
+		}
+		if spatialID > 0 {
+			cov(covSpatialLayers)
+		}
+	}
 	switch obuType {
 	case obuSequenceHeader:
 		s := &seqHdr{}

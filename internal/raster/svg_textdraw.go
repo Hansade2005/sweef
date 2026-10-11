@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -54,7 +55,7 @@ type fragXf struct {
 
 // frag builds the matrix of a fragment whose origin is (x, y) in scaled
 // space and that is painted rotated by angle and scaled by sx.
-func (t svgTextXf) frag(x, y, angle, sx float64) fragXf {
+func (t svgTextXf) frag(x, y, angle, sx, pivX float64) fragXf {
 	a, b, c, d := t.a, t.b, t.c, t.d
 	tx0, ty0 := float32(t.m[4]), float32(t.m[5])
 	// the fragment origin is a LayoutUnit: floored to 1/64
@@ -65,7 +66,7 @@ func (t svgTextXf) frag(x, y, angle, sx float64) fragXf {
 		// Blink keeps the angle as a float in degrees
 		rad := float64(float32(angle*180/math.Pi)) * math.Pi / 180
 		s, cs := math.Sincos(rad)
-		Px, Py := float64(float32(x)), float64(float32(y))
+		Px, Py := float64(float32(pivX)), float64(float32(y))
 		ra, rb, rc, rd := cs*sx, s*sx, -s, cs
 		e := Px - (ra*Px + rc*Py)
 		f := Py - (rb*Px + rd*Py)
@@ -77,6 +78,10 @@ func (t svgTextXf) frag(x, y, angle, sx float64) fragXf {
 	}
 	px := tx0 + (a*X + c*Y)
 	py := ty0 + (b*X + d*Y)
+	if angle != 0 {
+		px += float32(dbgDX)
+		py += float32(dbgDY)
+	}
 	axis := xfAxis(float64(a), float64(b), float64(c), float64(d))
 	hx, hy := float32(0.125), float32(0.125)
 	switch axis {
@@ -259,17 +264,17 @@ func (r *svgR) drawText(n *svgNode, st sStyle, m Matrix) {
 func fragmentPGs(fr fragment, xf svgTextXf) []svgPG {
 	out := make([]svgPG, 0, len(fr.gl))
 	var fx fragXf
-	var x0 float64
+	var off float64 // exact pen offset from the fragment start
 	for i := range fr.gl {
 		p := &fr.gl[i]
 		if i == 0 || !p.plain() {
-			fx = xf.frag(p.x, p.y, p.angle, p.sx)
-			x0 = p.x
+			fx = xf.frag(p.x, p.y, p.angle, p.sx, p.pivX)
+			off = 0
 		}
-		if p.skip || strings.TrimSpace(string(p.r)) == "" {
-			continue
+		if !(p.skip || strings.TrimSpace(string(p.r)) == "") {
+			out = append(out, fx.glyph(p.g, float32(off), 0))
 		}
-		out = append(out, fx.glyph(p.g, float32(p.x-x0), 0))
+		off += p.ex
 	}
 	return out
 }
@@ -392,3 +397,10 @@ func (r *svgR) decorateFragment(c *Context, fr fragment, k float64) {
 
 // lu64 floors v to 1/64 (Blink's LayoutUnit) in single precision.
 func lu64(v float64) float32 { return float32(math.Floor(float64(float32(v))*64)) / 64 }
+
+var dbgDX, dbgDY = envF("SVG_DX"), envF("SVG_DY")
+
+func envF(k string) float64 {
+	v, _ := strconv.ParseFloat(os.Getenv(k), 64)
+	return v
+}

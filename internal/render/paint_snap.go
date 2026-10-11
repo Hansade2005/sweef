@@ -60,8 +60,9 @@ func (p *painter) frameMatrix(b *lbox, drop bool) (M [6]float64, latX, latY floa
 		return [6]float64{1, 0, 0, 1, rx - b.ax, ry - b.ay}, latX, latY
 	}
 	m := b.matrixFor(b.w, b.h)
-	ox := b.st.TransformOrigin[0].Resolve(b.w)
-	oy := b.st.TransformOrigin[1].Resolve(b.h)
+	bx, by, bw, bh := b.refBox()
+	ox := b.st.TransformOrigin[0].Resolve(bw) + bx - b.ax
+	oy := b.st.TransformOrigin[1].Resolve(bh) + by - b.ay
 	px, py := b.ax+ox, b.ay+oy
 	qx, qy := rx+ox, ry+oy
 	e := m[4] + qx - (m[0]*px + m[2]*py)

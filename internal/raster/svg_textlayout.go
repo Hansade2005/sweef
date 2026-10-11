@@ -2,6 +2,7 @@ package raster
 
 import (
 	"math"
+	"os"
 	"strings"
 
 	"github.com/sweefbrowser/sweef/internal/font"
@@ -31,11 +32,13 @@ type textGlyph struct {
 	sx        float64
 	w         float64 // laid out advance
 	nat       float64 // natural advance (font + letter/word spacing)
+	ex        float64 // exact advance
 	asc, desc float64
 	size      float64 // scaled font size
 	fake      bool    // synthetic bold
 	skew      bool    // synthetic italic
 	nom       int     // index of the addressable character
+	pivX      float64 // rotation pivot (x)
 }
 
 func (g *textGlyph) plain() bool { return g.angle == 0 && g.sx == 1 }
@@ -82,7 +85,8 @@ func baselineOffset(kind string, asc, desc, fs float64) float64 {
 
 // svgRun is the shaping of one run of characters sharing a font.
 type svgRun struct {
-	adv        []float64 // per character, including kerning and spacing
+	adv        []float64 // per character, including kerning and spacing, (layout)
+	ex         []float64 // exact per-character advance (glyph offsets inside a fragment)
 	glyph      []Glyph
 	skip       []bool
 	asc, desc  float64
@@ -97,7 +101,7 @@ type svgRun struct {
 // 1/64-floored cumulative pen positions.
 func shapeSVGRun(spec FontSpec, rs []rune, letterSp, wordSp float64) svgRun {
 	fs := resolveFaces(spec.Families, spec.Weight, spec.Italic)
-	out := svgRun{adv: make([]float64, len(rs)), glyph: make([]Glyph, len(rs)), skip: make([]bool, len(rs)), size: spec.Size}
+	out := svgRun{adv: make([]float64, len(rs)), ex: make([]float64, len(rs)), glyph: make([]Glyph, len(rs)), skip: make([]bool, len(rs)), size: spec.Size}
 	if len(fs.faces) > 0 {
 		f0 := fs.faces[0]
 		out.fake = spec.Weight >= 600 && f0.Style.Weight < 600
@@ -153,6 +157,10 @@ func shapeSVGRun(spec FontSpec, rs []rune, letterSp, wordSp float64) svgRun {
 		pen += raw[i] + letterSp
 		if r == ' ' {
 			pen += wordSp
+		}
+		out.ex[i] = raw[i] + letterSp
+		if r == ' ' {
+			out.ex[i] += wordSp
 		}
 		fl := pen
 		out.adv[i] = fl - prev
@@ -250,7 +258,7 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 		}
 		sr := shapeSVGRun(spec, rs, key.ls, key.ws)
 		for q := i; q < j; q++ {
-			shaped[q] = svgRun{adv: sr.adv[q-i : q-i+1], glyph: sr.glyph[q-i : q-i+1], skip: sr.skip[q-i : q-i+1],
+			shaped[q] = svgRun{adv: sr.adv[q-i : q-i+1], ex: sr.ex[q-i : q-i+1], glyph: sr.glyph[q-i : q-i+1], skip: sr.skip[q-i : q-i+1],
 				asc: sr.asc, desc: sr.desc, size: sr.size, fake: sr.fake, skew: sr.skew}
 			runOf[q] = i
 		}
@@ -312,8 +320,21 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 		}
 		sr := &shaped[i]
 		out = append(out, textGlyph{r: chars[i].R, g: sr.glyph[0], skip: sr.skip[0], st: sty, node: chars[i].Node,
-			x: p.X, y: p.Y, angle: p.Angle, sx: p.ScaleX, w: p.Adv, nat: nats[i], asc: sr.asc, desc: sr.desc,
+			x: p.X, y: p.Y, angle: p.Angle, sx: p.ScaleX, w: p.Adv, nat: nats[i], ex: sr.ex[0], asc: sr.asc, desc: sr.desc,
 			size: sr.size, fake: sr.fake, skew: sr.skew, nom: i})
+	}
+	for i := range out {
+		g := &out[i]
+		g.pivX = g.x
+		if os.Getenv("SVG_PIV") == "3" {
+			// the char positions Blink reports: run start plus the floored offset
+			for j := range out {
+				if out[j].nom == runOf[g.nom] {
+					x0 := out[j].x
+					g.pivX = x0 + float64(lu64(g.x)-lu64(x0))
+				}
+			}
+		}
 	}
 	return out
 }

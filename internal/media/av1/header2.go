@@ -59,6 +59,11 @@ func (d *Decoder) parseFrameHeader(b *bitReader, temporalID, spatialID int) (*fr
 			fh.showable = b.flag()
 		}
 		fh.posErrorRes = b.pos
+		defer func() {
+			if fh.errorRes {
+				cov(covErrorRes)
+			}
+		}()
 		if fh.frameType == switchFrame || (fh.frameType == keyFrame && fh.showFrame) {
 			fh.errorRes = true
 		} else {

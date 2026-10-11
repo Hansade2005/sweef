@@ -175,19 +175,43 @@ func drawProjected(dst, layer *Surface, rec projRec, cl *clipState) {
 	if !ok {
 		return
 	}
-	// polygon in layer pixels: the clip polygon (or the whole layer) inside the layer rect
-	poly := [][2]float64{{float64(layer.R.X0), float64(layer.R.Y0)}, {float64(layer.R.X1), float64(layer.R.Y0)}, {float64(layer.R.X1), float64(layer.R.Y1)}, {float64(layer.R.X0), float64(layer.R.Y1)}}
+	rect := [][2]float64{{float64(layer.R.X0), float64(layer.R.Y0)}, {float64(layer.R.X1), float64(layer.R.Y0)}, {float64(layer.R.X1), float64(layer.R.Y1)}, {float64(layer.R.X0), float64(layer.R.Y1)}}
+	area := cl.R.Intersect(dst.R)
+	pts := devicePoly(q, rect)
+	if len(pts) < 3 {
+		return
+	}
+	mask := RasterizePolys([]Subpath{{P: pts, Closed: true}}, NonZero, area)
+	if mask == nil {
+		return
+	}
 	if len(rec.clipPoly) >= 3 {
+		// The two halves of a layer cut by a plane share an edge. Each piece
+		// is drawn with that edge pushed out by half a pixel so no seam of
+		// uncovered pixels remains (the compositor draws split quads without
+		// edge anti-aliasing on the cut).
 		cp := make([][2]float64, len(rec.clipPoly))
 		for i, v := range rec.clipPoly {
 			cp[i] = [2]float64{(v[0] - rec.ox) * rec.rs, (v[1] - rec.oy) * rec.rs}
 		}
-		poly = clipPolyToRect(cp, layer.R)
-		if len(poly) < 3 {
+		cpts := devicePoly(q, cp)
+		if len(cpts) < 3 {
+			return
+		}
+		cpts = offsetConvex(cpts, 0.6)
+		cm := RasterizePolys([]Subpath{{P: cpts, Closed: true}}, NonZero, area)
+		mask = maskMul(mask, cm)
+		if mask == nil {
 			return
 		}
 	}
-	// to device, clipping to the half space in front of the camera
+	sh := &projShader{s: layer, inv: inv}
+	composite(dst, mask, sh, SourceOver, cl)
+}
+
+// devicePoly maps a polygon in layer pixels to device space, clipping it to the
+// half space in front of the camera first.
+func devicePoly(q Mat3, poly [][2]float64) []Pt {
 	type hv struct{ x, y, w float64 }
 	hs := make([]hv, len(poly))
 	for i, v := range poly {
@@ -195,76 +219,62 @@ func drawProjected(dst, layer *Surface, rec projRec, cl *clipState) {
 		hs[i] = hv{x, y, w}
 	}
 	const nearW = 1e-6
-	var cl2 []hv
+	var out []hv
 	for i := range hs {
 		a, b := hs[i], hs[(i+1)%len(hs)]
 		ain, bin := a.w > nearW, b.w > nearW
 		if ain {
-			cl2 = append(cl2, a)
+			out = append(out, a)
 		}
 		if ain != bin {
 			t := (nearW - a.w) / (b.w - a.w)
-			cl2 = append(cl2, hv{a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t, a.w + (b.w-a.w)*t})
+			out = append(out, hv{a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t, a.w + (b.w-a.w)*t})
 		}
 	}
-	if len(cl2) < 3 {
-		return
-	}
-	pts := make([]Pt, len(cl2))
-	for i, v := range cl2 {
+	pts := make([]Pt, len(out))
+	for i, v := range out {
 		pts[i] = Pt{v.x / v.w, v.y / v.w}
 	}
-	area := cl.R.Intersect(dst.R)
-	mask := RasterizePolys([]Subpath{{P: pts, Closed: true}}, NonZero, area)
-	if mask == nil {
-		return
-	}
-	sh := &projShader{s: layer, inv: inv}
-	composite(dst, mask, sh, SourceOver, cl)
+	return pts
 }
 
-// clipPolyToRect clips the convex polygon to a pixel rect (Sutherland-Hodgman).
-func clipPolyToRect(poly [][2]float64, r IRect) [][2]float64 {
-	edges := []struct {
-		in  func(p [2]float64) bool
-		cut func(a, b [2]float64) [2]float64
-	}{
-		{func(p [2]float64) bool { return p[0] >= float64(r.X0) }, func(a, b [2]float64) [2]float64 {
-			t := (float64(r.X0) - a[0]) / (b[0] - a[0])
-			return [2]float64{float64(r.X0), a[1] + (b[1]-a[1])*t}
-		}},
-		{func(p [2]float64) bool { return p[0] <= float64(r.X1) }, func(a, b [2]float64) [2]float64 {
-			t := (float64(r.X1) - a[0]) / (b[0] - a[0])
-			return [2]float64{float64(r.X1), a[1] + (b[1]-a[1])*t}
-		}},
-		{func(p [2]float64) bool { return p[1] >= float64(r.Y0) }, func(a, b [2]float64) [2]float64 {
-			t := (float64(r.Y0) - a[1]) / (b[1] - a[1])
-			return [2]float64{a[0] + (b[0]-a[0])*t, float64(r.Y0)}
-		}},
-		{func(p [2]float64) bool { return p[1] <= float64(r.Y1) }, func(a, b [2]float64) [2]float64 {
-			t := (float64(r.Y1) - a[1]) / (b[1] - a[1])
-			return [2]float64{a[0] + (b[0]-a[0])*t, float64(r.Y1)}
-		}},
+// offsetConvex pushes every edge of a convex polygon outward by d.
+func offsetConvex(p []Pt, d float64) []Pt {
+	n := len(p)
+	var area float64
+	for i := 0; i < n; i++ {
+		j := (i + 1) % n
+		area += p[i].X*p[j].Y - p[j].X*p[i].Y
 	}
-	for _, e := range edges {
-		var out [][2]float64
-		n := len(poly)
-		for i := 0; i < n; i++ {
-			a, b := poly[i], poly[(i+1)%n]
-			ain, bin := e.in(a), e.in(b)
-			if ain {
-				out = append(out, a)
-			}
-			if ain != bin {
-				out = append(out, e.cut(a, b))
-			}
-		}
-		poly = out
-		if len(poly) == 0 {
-			return nil
-		}
+	sg := 1.0
+	if area < 0 {
+		sg = -1
 	}
-	return poly
+	type ln struct{ ax, ay, dx, dy float64 }
+	ls := make([]ln, n)
+	for i := 0; i < n; i++ {
+		j := (i + 1) % n
+		dx, dy := p[j].X-p[i].X, p[j].Y-p[i].Y
+		l := math.Hypot(dx, dy)
+		if l == 0 {
+			return p
+		}
+		// outward normal for a polygon of the given orientation
+		nx, ny := sg*dy/l, -sg*dx/l
+		ls[i] = ln{p[i].X + nx*d, p[i].Y + ny*d, dx, dy}
+	}
+	out := make([]Pt, n)
+	for i := 0; i < n; i++ {
+		a, b := ls[(i+n-1)%n], ls[i]
+		den := a.dx*b.dy - a.dy*b.dx
+		if math.Abs(den) < 1e-12 {
+			out[i] = p[i]
+			continue
+		}
+		t := ((b.ax-a.ax)*b.dy - (b.ay-a.ay)*b.dx) / den
+		out[i] = Pt{a.ax + a.dx*t, a.ay + a.dy*t}
+	}
+	return out
 }
 
 // projShader samples a layer surface through the inverse homography with

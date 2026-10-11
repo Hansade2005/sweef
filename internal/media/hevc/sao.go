@@ -2,6 +2,8 @@ package hevc
 
 // Sample adaptive offset (8.7.3).
 
+var dbgSAOHook func(d *Decoder, pic *Picture)
+
 func (d *Decoder) saoPicture(pic *Picture) {
 	s := pic.sps
 	pp := d.apps
@@ -9,6 +11,9 @@ func (d *Decoder) saoPicture(pic *Picture) {
 		return
 	}
 	d.sp, d.pp = s, pp
+	if dbgSAOHook != nil {
+		dbgSAOHook(d, pic)
+	}
 	nc := 3
 	if s.chromaArrayType == 0 {
 		nc = 1

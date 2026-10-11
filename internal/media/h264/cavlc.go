@@ -82,6 +82,7 @@ func (t *vlcTable) read(r *bitReader) (int, bool) {
 // It returns TotalCoeff, or -1 on a bitstream error.
 func (d *Decoder) cavlcBlock(nC, maxNum int, lv *[64]int32) int {
 	r := d.resBr
+	startPos := r.pos
 	for i := 0; i < maxNum; i++ {
 		lv[i] = 0
 	}
@@ -113,6 +114,9 @@ func (d *Decoder) cavlcBlock(nC, maxNum int, lv *[64]int32) int {
 		return -1
 	}
 	total, t1 := sym>>2, sym&3
+	if dpBlockTrace != nil {
+		dpBlockTrace(dpBlock{start: startPos, tokEnd: r.pos, nC: nC, maxNum: maxNum, total: total, t1: t1})
+	}
 	if total == 0 {
 		return 0
 	}
