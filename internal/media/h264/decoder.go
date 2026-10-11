@@ -2,7 +2,11 @@ package h264
 
 import (
 	"errors"
+	"fmt"
 	"image"
+	"runtime/debug"
+
+	"github.com/sweefbrowser/sweef/internal/media/yuv"
 )
 
 // MB type classes stored per macroblock.
@@ -25,8 +29,50 @@ type sliceParams struct {
 	chromaOffCount int
 }
 
+// DebugPanic, when set, receives the value and stack of a recovered decoder panic.
+var DebugPanic func(v any, stack []byte)
+
+// DebugSlice, when set, receives a summary of every parsed slice header.
+var DebugSlice func(string)
+
+// fmtInfo caches the sample format of the active sequence.
+type fmtInfo struct {
+	cat          int // ChromaArrayType
+	cf           int // chroma_format_idc
+	sep          bool
+	bdY, bdC     int
+	qpBdY, qpBdC int
+	maxY, maxC   int32
+	mbWC, mbHC   int // chroma macroblock size (0 when not coded)
+	nBlkC        int // 4x4 chroma blocks per plane (cat 1: 4, cat 2: 8)
+	bypass       bool
+}
+
+func newFmtInfo(s *SPS) fmtInfo {
+	f := fmtInfo{cat: s.ChromaArrayType(), cf: s.ChromaFormat, sep: s.SeparatePlanes, bdY: s.BitDepthLuma, bdC: s.BitDepthChroma, bypass: s.Bypass}
+	f.qpBdY, f.qpBdC = 6*(f.bdY-8), 6*(f.bdC-8)
+	f.maxY, f.maxC = int32(1)<<uint(f.bdY)-1, int32(1)<<uint(f.bdC)-1
+	switch f.cat {
+	case 1:
+		f.mbWC, f.mbHC, f.nBlkC = 8, 8, 4
+	case 2:
+		f.mbWC, f.mbHC, f.nBlkC = 8, 16, 8
+	case 3:
+		f.mbWC, f.mbHC, f.nBlkC = 16, 16, 16
+	}
+	return f
+}
+
 // Decoder decodes an H.264 stream access unit by access unit.
 type Decoder struct {
+	// OutPOC and OutSeq describe the picture returned by the last
+	// DecodeFrame call: pictures of one sequence (OutSeq) are displayed in
+	// ascending OutPOC order; a new sequence starts at each IDR picture and
+	// after each memory_management_control_operation 5.
+	OutPOC, OutSeq int
+	seqNo          int
+
+	f          fmtInfo
 	sps        [32]*SPS
 	pps        [256]*PPS
 	lenSize    int
@@ -76,19 +122,23 @@ type Decoder struct {
 	implicitW [32][32]int16
 
 	// reconstruction scratch
-	coef  [384]int32
+	coef  [768]int32
 	lv    [64]int32
-	dcY   [16]int32
-	pred  [2][256 + 128]byte
-	tmpMC [(16 + 5) * (16 + 5)]byte
+	dcY   [3][16]int32
+	pred  [2][3 * 256]uint16
+	tmpMC [(16 + 5) * (16 + 5)]uint16
 	tmpI  [(16 + 5) * 16]int32
 
 	// colocated data for direct prediction
 	col *Picture
 
 	curDirect uint8 // direct-predicted 8x8 blocks of the current MB
-	blkNZ     [24]bool
+	blkNZ     [48]bool
 	i16DC     bool
+	bypassMB  bool // transform bypass (lossless) macroblock
+	fieldMB   bool // field macroblock (field scans, field CABAC contexts)
+	scan4     *[16]uint8
+	scan8     *[64]uint8
 }
 
 // NewDecoder returns an empty decoder.
@@ -147,11 +197,30 @@ func (d *Decoder) SetAVCC(avcc []byte) error {
 	return nil
 }
 
-// Decode decodes one access unit and returns its picture (in decoding order,
-// not display order), cropped to the SPS frame cropping rectangle.
-func (d *Decoder) Decode(data []byte) (img *image.YCbCr, err error) {
+// Decode decodes one access unit and returns its picture as an 8-bit
+// image.YCbCr (in decoding order, not display order), cropped to the SPS
+// frame cropping rectangle. Streams with other sample depths must use
+// DecodeFrame.
+func (d *Decoder) Decode(data []byte) (*image.YCbCr, error) {
+	fr, err := d.DecodeFrame(data)
+	if fr == nil {
+		return nil, err
+	}
+	img, ok := fr.ToYCbCr()
+	if !ok {
+		return nil, ErrUnsupported
+	}
+	return img, err
+}
+
+// DecodeFrame decodes one access unit and returns its picture in any sample
+// format, in decoding order, cropped to the SPS frame cropping rectangle.
+func (d *Decoder) DecodeFrame(data []byte) (img *yuv.Frame, err error) {
 	defer func() {
 		if r := recover(); r != nil {
+			if DebugPanic != nil {
+				DebugPanic(r, debug.Stack())
+			}
 			d.cur = nil
 			img, err = nil, errBitstream
 		}
@@ -178,14 +247,34 @@ func (d *Decoder) Decode(data []byte) (img *image.YCbCr, err error) {
 		}
 		return nil, nil
 	}
-	return pictureImage(pic), firstErr
+	d.OutPOC, d.OutSeq = pic.poc, pic.seq
+	return d.pictureFrame(pic), firstErr
 }
 
-func pictureImage(p *Picture) *image.YCbCr {
-	img := &image.YCbCr{Y: p.y, Cb: p.cb, Cr: p.cr, YStride: p.ys, CStride: p.cs, SubsampleRatio: image.YCbCrSubsampleRatio420}
-	r := image.Rect(p.crop[0], p.crop[2], p.w-p.crop[1], p.h-p.crop[3])
-	img.Rect = image.Rect(0, 0, p.w, p.h)
-	return img.SubImage(r).(*image.YCbCr)
+// pictureFrame wraps a decoded picture as a cropped output frame.
+func (d *Decoder) pictureFrame(p *Picture) *yuv.Frame {
+	f := &yuv.Frame{Depth: p.bdY, Matrix: p.colorMtx, FullRange: p.fullRange}
+	cl, cr, ct, cb := p.crop[0], p.crop[1], p.crop[2], p.crop[3]
+	f.Width, f.Height = p.w-cl-cr, p.h-ct-cb
+	f.Planes[0] = p.y[ct*p.ys+cl:]
+	f.Stride[0] = p.ys
+	switch p.cf {
+	case 0:
+		f.Format = yuv.F400
+		return f
+	case 1:
+		f.Format = yuv.F420
+	case 2:
+		f.Format = yuv.F422
+	default:
+		f.Format = yuv.F444
+	}
+	sx, sy := f.Format.Subsampling()
+	f.CWidth, f.CHeight = f.Width>>sx, f.Height>>sy
+	co := (ct>>sy)*p.cs + cl>>sx
+	f.Planes[1], f.Planes[2] = p.cb[co:], p.cr[co:]
+	f.Stride[1], f.Stride[2] = p.cs, p.cs
+	return f
 }
 
 func (d *Decoder) handleNAL(n []byte) error {
@@ -218,6 +307,9 @@ func (d *Decoder) handleSlice(n []byte, typ, refIdc int) error {
 	if err != nil {
 		return err
 	}
+	if DebugSlice != nil {
+		DebugSlice(fmt.Sprintf("nal=%d ref=%d first=%d type=%d fn=%d field=%v/%v poc=%d numRef=%v mods=%v mmco=%v adaptive=%v idr=%v long=%v", typ, refIdc, h.firstMB, h.sliceType, h.frameNum, h.fieldPic, h.bottom, h.pocLsb, h.numRef, h.refMods, h.mmcos, h.adaptiveMarking, h.idr, h.longTermRef))
+	}
 	if h.redundantPicCnt > 0 {
 		return nil
 	}
@@ -233,10 +325,13 @@ func (d *Decoder) startPicture(h *sliceHeader) error {
 	sps := h.sps
 	if h.idr {
 		d.poc.prevPOCMsb, d.poc.prevPOCLsb = 0, 0
+		d.seqNo++
 	}
 	d.mbW, d.mbH = sps.MbW, sps.MbH
 	d.nextID++
-	pic := newPicture(d.nextID, d.mbW, d.mbH)
+	d.f = newFmtInfo(sps)
+	pic := newPicture(d.nextID, d.mbW, d.mbH, sps)
+	pic.cf, pic.bdY, pic.bdC = sps.ChromaFormat, sps.BitDepthLuma, sps.BitDepthChroma
 	pic.frameNum = h.frameNum
 	pic.poc = d.computePOC(h)
 	pic.crop = [4]int{sps.CropL, sps.CropR, sps.CropT, sps.CropB}
@@ -267,7 +362,7 @@ func (d *Decoder) startPicture(h *sliceHeader) error {
 	d.mbChroma = resizeU8(d.mbChroma, n)
 	d.mbDirect = resizeU8(d.mbDirect, n)
 	d.mbDC = resizeU8(d.mbDC, n)
-	d.nz = resizeU8(d.nz, n*24)
+	d.nz = resizeU8(d.nz, n*48)
 	if cap(d.ipm) >= n*16 {
 		d.ipm = d.ipm[:n*16]
 		for i := range d.ipm {
@@ -342,9 +437,13 @@ func (d *Decoder) finishPicture() *Picture {
 	d.deblockPicture(pic)
 	// POC / frame_num state for the next picture
 	mm5 := d.markCurrent(h, pic)
-	pic.frameWrap = pic.frameNum
+	if mm5 {
+		d.seqNo++
+	}
+	pic.seq = d.seqNo
 	st := &d.poc
 	if mm5 {
+		pic.frameNum = 0
 		pic.poc = 0
 		st.prevFrameNum, st.prevFrameNumOffset = 0, 0
 		st.prevPOCMsb, st.prevPOCLsb = 0, 0
@@ -356,9 +455,7 @@ func (d *Decoder) finishPicture() *Picture {
 			st.prevPOCLsb = h.pocLsb
 		}
 	}
-	if h.nalRefIdc == 0 {
-		// non-reference pictures are not kept
-	}
+	pic.frameWrap = pic.frameNum
 	return pic
 }
 
@@ -371,6 +468,8 @@ func (d *Decoder) conceal(pic *Picture) {
 			break
 		}
 	}
+	neutralY := uint16(1) << uint(d.f.bdY-1)
+	neutralC := uint16(1) << uint(d.f.bdC-1)
 	for mby := 0; mby < d.mbH; mby++ {
 		for mbx := 0; mbx < d.mbW; mbx++ {
 			if d.mbSlice[mby*d.mbW+mbx] >= 0 {
@@ -382,17 +481,17 @@ func (d *Decoder) conceal(pic *Picture) {
 					copy(pic.y[o:o+16], src.y[o:o+16])
 				} else {
 					for i := 0; i < 16; i++ {
-						pic.y[o+i] = 128
+						pic.y[o+i] = neutralY
 					}
 				}
 			}
-			for y := 0; y < 8; y++ {
-				o := (mby*8+y)*pic.cs + mbx*8
-				for i := 0; i < 8; i++ {
+			for y := 0; y < d.f.mbHC && pic.cw > 0; y++ {
+				o := (mby*d.f.mbHC+y)*pic.cs + mbx*d.f.mbWC
+				for i := 0; i < d.f.mbWC; i++ {
 					if src != nil {
 						pic.cb[o+i], pic.cr[o+i] = src.cb[o+i], src.cr[o+i]
 					} else {
-						pic.cb[o+i], pic.cr[o+i] = 128, 128
+						pic.cb[o+i], pic.cr[o+i] = neutralC, neutralC
 					}
 				}
 			}

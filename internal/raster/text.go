@@ -336,6 +336,10 @@ type Shaped struct {
 	Size   float64
 	Set    *faceSet
 	Lum    uint8 // text color luminance, selects the coverage preblend table
+	// ScreenScale, when not zero, is Blink's SVG text scaling factor: SVG
+	// text is shaped and rasterized with the font size multiplied by it and
+	// the device matrix divided by it.
+	ScreenScale float64
 }
 
 func normalizeText(s string) string {
@@ -557,54 +561,6 @@ func (c *Context) alignOffset(sh *Shaped, t *textState) (float64, float64) {
 
 // ---- drawing ---------------------------------------------------------------------------
 
-type gmKey struct {
-	f      *font.Face
-	r      rune
-	gid    int
-	sx, sy int32 // FreeType's 26.6 pixel sizes along x and y
-	sub    uint8
-	bold   bool
-	skew   bool
-}
-
-var (
-	gmMu    sync.Mutex
-	gmCache = map[gmKey]*Mask{}
-)
-
-func fakeBoldExtra(size float64) float64 {
-	switch {
-	case size <= 9:
-		return size / 24
-	case size >= 36:
-		return size / 32
-	}
-	return size * (1/24 + (size-9)/(36-9)*(1.0/32-1.0/24))
-}
-
-func glyphMask(g Glyph, sizeX, sizeY float64, sub int, bold, skew bool) *Mask {
-	k := gmKey{g.Face, g.R, g.GID, int32(sizeX * 64), int32(sizeY * 64), uint8(sub), bold, skew}
-	gmMu.Lock()
-	if m, ok := gmCache[k]; ok {
-		gmMu.Unlock()
-		return m
-	}
-	gmMu.Unlock()
-	var m *Mask
-	if !bold {
-		m = skiaGlyph(g, sizeX, sizeY, sub, skew)
-	} else {
-		m = skiaGlyphBold(g, sizeX, sizeY, sub, skew)
-	}
-	gmMu.Lock()
-	if len(gmCache) > 20000 {
-		gmCache = map[gmKey]*Mask{}
-	}
-	gmCache[k] = m
-	gmMu.Unlock()
-	return m
-}
-
 func unionMasks(a, b *Mask) *Mask {
 	if a == nil {
 		return b
@@ -630,99 +586,142 @@ func unionMasks(a, b *Mask) *Mask {
 	return o
 }
 
-// textMaskFor assembles a coverage mask for a shaped run placed at (x,y) in
-// user space. Returns nil if nothing visible.
+// textMask assembles a coverage mask for a shaped run placed at (x,y) in
+// user space. Returns nil if nothing visible. Glyphs whose text matrix has a
+// column longer than 256 px are drawn as paths (no preblend table, no
+// subpixel quantization); all others are cached masks placed on the quarter
+// pixel grid, whatever the transform (text_xf.go).
 func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 	m := c.st.ctm
-	dsizeX, dsizeY := sh.Size*m[0]*sx, sh.Size*m[3]
-	// glyphs up to 256px are cached masks placed on the quarter-pixel grid;
-	// bigger ones, and rotated or skewed text, are drawn as paths
-	simple := m[1] == 0 && m[2] == 0 && m[0] > 0 && m[3] > 0 && sx > 0 && dsizeX <= 256 && dsizeY <= 256
+	for _, v := range m {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return nil
+		}
+	}
+	size := sh.Size
+	a, b, cc, d := m[0]*sx, m[1]*sx, m[2], m[3]
+	if k := sh.ScreenScale; k > 0 && k != 1 {
+		size *= k
+		a, b, cc, d = a/k, b/k, cc/k, d/k
+	}
 	clip := c.drawBounds()
-	if simple {
-		scale := m[0]
+	if math.Hypot(a*size, b*size) > 256 || math.Hypot(cc*size, d*size) > 256 {
 		var out *Mask
-		type placed struct {
-			m      *Mask
-			ox, oy int
-		}
-		var ps []placed
-		bb := IRect{}
 		for _, g := range sh.Glyphs {
-			gx := (x+g.X*sx)*scale + m[4]
-			gy := math.Round(y*m[3] + m[5])
-			gx += 0.125 // Skia rounds to the nearest quarter pixel
-			ix := math.Floor(gx)
-			sub := int(math.Floor((gx - ix) * 4))
-			gm := glyphMask(g, dsizeX, dsizeY, sub, sh.Fake, sh.Skew)
-			if gm == nil {
-				continue
-			}
-			ox, oy := int(ix), int(gy)
-			r := IRect{gm.B.X0 + ox, gm.B.Y0 + oy, gm.B.X1 + ox, gm.B.Y1 + oy}
-			if r.Intersect(clip).Empty() {
-				continue
-			}
-			ps = append(ps, placed{gm, ox, oy})
-			bb = bb.Union(r)
-		}
-		if len(ps) == 0 {
-			return nil
-		}
-		bb = bb.Intersect(clip)
-		if bb.Empty() {
-			return nil
-		}
-		out = newMask(bb)
-		lut := lutForLum(sh.Lum)
-		for _, p := range ps {
-			for yy := max(p.m.B.Y0+p.oy, bb.Y0); yy < min(p.m.B.Y1+p.oy, bb.Y1); yy++ {
-				src := p.m.Row(yy - p.oy)
-				x0 := max(p.m.B.X0+p.ox, bb.X0)
-				x1 := min(p.m.B.X1+p.ox, bb.X1)
-				if x1 <= x0 {
+			px := x + g.X*sx
+			ex, ey := m[0]*px+m[2]*y+m[4], m[1]*px+m[3]*y+m[5]
+			var mk *Mask
+			if sh.Fake {
+				p := xfPathGlyph(g, size, Matrix{a, b, cc, d, 0, 0}, sh.Skew, 0, 0)
+				if p == nil {
 					continue
 				}
-				srow := src[x0-p.ox-p.m.B.X0 : x1-p.ox-p.m.B.X0]
-				drow := out.Row(yy)[x0-bb.X0 : x1-bb.X0]
-				for i, v := range srow {
-					if v == 0 {
-						continue
-					}
-					v = lut[v]
-					s := uint32(drow[i]) + uint32(v)
-					if s > 255 {
-						s = 255
-					}
-					drow[i] = uint8(s)
+				fill, st, flip := xfBoldPaths(p, size, a, b, cc, d)
+				if fill == nil {
+					continue
 				}
+				t := Translate(ex, ey)
+				mk = fxFillUnion(fill.Transform(t), st.Transform(t), flip, clip)
+			} else {
+				var p *Path
+				if sx == 1 && size == sh.Size {
+					p = xfPathGlyph(g, size, m, sh.Skew, px, y)
+				} else {
+					p = xfPathGlyph(g, size, Matrix{a, b, cc, d, ex, ey}, sh.Skew, 0, 0)
+				}
+				if p == nil {
+					continue
+				}
+				mk = fxFillPath(p, clip)
 			}
+			out = unionMasks(out, mk)
 		}
 		return out
 	}
-	// general transform: one big path
-	p := c.textPath(sh, x, y, sx)
-	if p == nil {
-		return nil
-	}
-	// Chromium fills glyph outlines with its analytic AA scan converter even
-	// when the text is rotated or scaled non-uniformly
-	return fxFillPath(p.Transform(m), clip)
+	return c.placeGlyphMasks(sh, x, y, sx, func(g Glyph, sux, suy int) *Mask {
+		return xfGlyphMask(g, size, a, b, cc, d, sh.Fake, sh.Skew, sux, suy)
+	})
 }
 
-// textPath builds the combined outline of a run (user space).
+// placeGlyphMasks places one cached mask per glyph on the quarter-pixel grid
+// and adds them up through the preblend table.
+func (c *Context) placeGlyphMasks(sh *Shaped, x, y, sx float64, maskOf func(g Glyph, subX, subY int) *Mask) *Mask {
+	m := c.st.ctm
+	clip := c.drawBounds()
+	a, b, cc, d := m[0]*sx, m[1]*sx, m[2], m[3]
+	type placed struct {
+		m      *Mask
+		ox, oy int
+	}
+	var ps []placed
+	bb := IRect{}
+	axis := xfAxis(a, b, cc, d)
+	for _, g := range sh.Glyphs {
+		px := x + g.X*sx
+		dx, dy := m[0]*px+m[2]*y+m[4], m[1]*px+m[3]*y+m[5]
+		if k := sh.ScreenScale; k > 0 && k != 1 {
+			// single-precision chain of Blink's scaled SVG text: origin scaled
+			// up, matrix scaled down
+			ik := float32(1 / k)
+			X, Y := float32(px)*float32(k), float32(y)*float32(k)
+			dx = float64(float32(m[0])*ik*X + float32(m[2])*ik*Y + float32(m[4]))
+			dy = float64(float32(m[1])*ik*X+float32(m[3])*ik*Y+float32(m[5])) - 1e-4
+		}
+		ix, iy, sux, suy := xfPlace(dx, dy, axis)
+		gm := maskOf(g, sux, suy)
+		if gm == nil {
+			continue
+		}
+		r := IRect{gm.B.X0 + ix, gm.B.Y0 + iy, gm.B.X1 + ix, gm.B.Y1 + iy}
+		if r.Intersect(clip).Empty() {
+			continue
+		}
+		ps = append(ps, placed{gm, ix, iy})
+		bb = bb.Union(r)
+	}
+	bb = bb.Intersect(clip)
+	if len(ps) == 0 || bb.Empty() {
+		return nil
+	}
+	out := newMask(bb)
+	lut := lutForLum(sh.Lum)
+	for _, p := range ps {
+		for yy := max(p.m.B.Y0+p.oy, bb.Y0); yy < min(p.m.B.Y1+p.oy, bb.Y1); yy++ {
+			src := p.m.Row(yy - p.oy)
+			x0 := max(p.m.B.X0+p.ox, bb.X0)
+			x1 := min(p.m.B.X1+p.ox, bb.X1)
+			if x1 <= x0 {
+				continue
+			}
+			srow := src[x0-p.ox-p.m.B.X0 : x1-p.ox-p.m.B.X0]
+			drow := out.Row(yy)[x0-bb.X0 : x1-bb.X0]
+			for i, v := range srow {
+				if v == 0 {
+					continue
+				}
+				v = lut[v]
+				s := uint32(drow[i]) + uint32(v)
+				if s > 255 {
+					s = 255
+				}
+				drow[i] = uint8(s)
+			}
+		}
+	}
+	return out
+}
+
+// textPath builds the combined outline of a run (user space) the way Skia
+// does for glyphs drawn as paths: outlines come from FreeType at a canonical
+// 64 px em and are scaled to the text size in single precision.
 func (c *Context) textPath(sh *Shaped, x, y, sx float64) *Path {
 	p := NewPath()
 	for _, g := range sh.Glyphs {
-		gp := glyphPath(g)
+		gp := xfPathGlyph(g, sh.Size, Matrix{sx, 0, 0, 1, x + g.X*sx, y}, sh.Skew, 0, 0)
 		if gp == nil {
 			continue
 		}
-		sk := 0.0
-		if sh.Skew {
-			sk = -0.25
-		}
-		p.AddPath(gp, Matrix{sh.Size * sx, 0, sk * sh.Size * sx, sh.Size, x + g.X*sx, y})
+		p.AddPath(gp, Identity)
 	}
 	if p.Empty() {
 		return nil
@@ -765,11 +764,47 @@ func (c *Context) StrokeText(text string, x, y, maxWidth float64) {
 		return
 	}
 	sh, ox, oy, sx := c.prepText(text, x, y, maxWidth)
+	if f := c.st.stroke; f.Gradient == nil && f.Pattern == nil {
+		sh.Lum = textLum(f.Color)
+	}
+	if mk, ok := c.strokeGlyphMask(sh, ox, oy, sx); ok {
+		c.draw(mk, c.shaderFor(c.st.stroke, c.st.alpha))
+		return
+	}
 	p := c.textPath(sh, ox, oy, sx)
 	if p == nil {
 		return
 	}
 	c.draw(c.strokeTextMask(p), c.shaderFor(c.st.stroke, c.st.alpha))
+}
+
+// strokeGlyphMask draws small stroked text the way Skia's scaler context
+// does: every glyph is a cached mask of its user-space stroke on the
+// quarter-pixel grid. ok is false for dashes and glyphs drawn as paths.
+func (c *Context) strokeGlyphMask(sh *Shaped, x, y, sx float64) (*Mask, bool) {
+	return c.strokeGlyphMaskFor(sh, x, y, sx, c.st.ss)
+}
+
+// StrokeGlyphMask is strokeGlyphMask with an explicit stroke style.
+func (c *Context) strokeGlyphMaskFor(sh *Shaped, x, y, sx float64, ss StrokeStyle) (*Mask, bool) {
+	m := c.st.ctm
+	size := sh.Size
+	a, b, cc, d := m[0]*sx, m[1]*sx, m[2], m[3]
+	if k := sh.ScreenScale; k > 0 && k != 1 {
+		size *= k
+		a, b, cc, d = a/k, b/k, cc/k, d/k
+	}
+	if len(ss.Dash) > 0 || ss.Width <= 0 || sh.Fake || math.IsNaN(a+b+cc+d) ||
+		math.Hypot(a*size, b*size) > 256 || math.Hypot(cc*size, d*size) > 256 {
+		return nil, false
+	}
+	if k := sh.ScreenScale; k > 0 && k != 1 {
+		ss.Width *= k
+	}
+	st := xfStroke{w: float32(ss.Width), miter: float32(ss.MiterLimit), join: ss.Join, cap: ss.Cap}
+	return c.placeGlyphMasks(sh, x, y, sx, func(g Glyph, sux, suy int) *Mask {
+		return xfGlyphMaskS(g, size, a, b, cc, d, false, sh.Skew, sux, suy, st)
+	}), true
 }
 
 // strokeTextMask strokes a glyph path the way StrokeMask does but fills the

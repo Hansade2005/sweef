@@ -1,6 +1,7 @@
 package raster
 
 import (
+	"math"
 	"testing"
 
 	"github.com/sweefbrowser/sweef/internal/font"
@@ -115,4 +116,57 @@ func TestShapeLigaturesAndKerning(t *testing.T) {
 	if a, b := Shape(spec, "A V", 0, 0, true).Width, Shape(spec, "A", 0, 0, true).Width+Shape(spec, " ", 0, 0, true).Width+Shape(spec, "V", 0, 0, true).Width; a != b {
 		t.Errorf("kerning across a space: %v vs %v", a, b)
 	}
+}
+
+func TestXfPlacementRules(t *testing.T) {
+	// a rotation by 90 degrees is an exact axis swap after sk_relax
+	c, s := math.Cos(math.Pi/2), math.Sin(math.Pi/2)
+	if got := xfAxis(c, s, -s, c); got != 2 {
+		t.Errorf("rot90 axis %d, want 2 (subpixel along y only)", got)
+	}
+	if got := xfAxis(-1, math.Sin(math.Pi), -math.Sin(math.Pi), -1); got != 1 {
+		t.Errorf("rot180 axis %d, want 1", got)
+	}
+	if got := xfAxis(math.Cos(0.1), math.Sin(0.1), -math.Sin(0.1), math.Cos(0.1)); got != 0 {
+		t.Errorf("rot0.1 rad axis %d, want 0", got)
+	}
+	// both axes: +1/8 then truncate to a quarter; one axis rounds to a pixel
+	ix, iy, sx, sy := xfPlace(10.37, 20.62, 0)
+	if ix != 10 || sx != 1 || iy != 20 || sy != 2 {
+		t.Errorf("place both axes = %d.%d %d.%d", ix, sx, iy, sy)
+	}
+	ix, iy, sx, sy = xfPlace(10.37, 20.62, 1)
+	if ix != 10 || sx != 1 || iy != 21 || sy != 0 {
+		t.Errorf("place kX = %d.%d %d.%d", ix, sx, iy, sy)
+	}
+}
+
+func TestRotatedGlyphMask(t *testing.T) {
+	f := font.Lookup("Liberation Sans", font.Style{Weight: 400})
+	if f == nil {
+		t.Skip("no Liberation Sans")
+	}
+	g := Glyph{R: 'L', Face: f}
+	// rotated by 90 degrees the L's stem lies along x: the mask is the
+	// transposed, flipped identity mask up to quarter-pixel placement
+	id := xfGlyphMask(g, 24, 1, 0, 0, 1, false, false, 0, 0)
+	r := xfGlyphMask(g, 24, math.Cos(math.Pi/2), math.Sin(math.Pi/2), -math.Sin(math.Pi/2), math.Cos(math.Pi/2), false, false, 0, 0)
+	if id == nil || r == nil {
+		t.Fatal("no mask")
+	}
+	if id.B.W() < 3 || r.B.H() < 3 || abs(id.B.W()-r.B.H()) > 1 || abs(id.B.H()-r.B.W()) > 1 {
+		t.Errorf("rot90 bounds %v vs identity %v are not swapped", r.B, id.B)
+	}
+	// big glyphs come out as paths and still have ink
+	big := xfPathGlyph(g, 300, Matrix{1, 0, 0, 1, 10, 300}, false, 0, 0)
+	if m := fxFillPath(big, IRect{0, 0, 400, 400}); m == nil || m.At(10+40, 250) == 0 {
+		t.Errorf("large glyph path has no ink in the stem")
+	}
+}
+
+func abs(a int) int {
+	if a < 0 {
+		return -a
+	}
+	return a
 }

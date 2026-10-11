@@ -39,30 +39,3 @@ func fxSignedArea(pts []Pt) float64 {
 	}
 	return a / 2
 }
-
-// skiaGlyphBold rasterizes the synthetic bold form of g.
-func skiaGlyphBold(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Mask {
-	p := fxGlyphPath(g, sizeX, sizeY, sub, skew)
-	if p == nil {
-		return nil
-	}
-	stroke := fxStrokePath(p, fxFakeBoldExtra(sizeY), JoinMiter, CapButt, 4, 1)
-	// Skia reverses the source when it winds the other way from the stroke
-	flip := fxLargestArea(p)*fxLargestArea(stroke) < 0
-	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
-	for _, pp := range []*Path{p, stroke} {
-		for i := 0; i < len(pp.Pts); i += 2 {
-			minX, maxX = math.Min(minX, pp.Pts[i]), math.Max(maxX, pp.Pts[i])
-			minY, maxY = math.Min(minY, pp.Pts[i+1]), math.Max(maxY, pp.Pts[i+1])
-		}
-	}
-	if minX > maxX {
-		return nil
-	}
-	ox, oy := int(math.Floor(minX)), int(math.Floor(minY))
-	w, h := int(math.Ceil(maxX))-ox, int(math.Ceil(maxY))-oy
-	if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
-		return nil
-	}
-	return fxTrim(fxFillUnion(p, stroke, flip, IRect{ox, oy, ox + w, oy + h}))
-}

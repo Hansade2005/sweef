@@ -105,7 +105,7 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle) []textGlyph {
 		c.SetFont(fs)
 		c.SetLetterSpacing(0)
 		c.SetWordSpacing(0)
-		c.SetFontKerning("none")
+		c.SetFontKerning("auto")
 		f, ok := fm[fs]
 		if !ok {
 			tm := c.MeasureText("M")
@@ -236,19 +236,28 @@ func (r *svgR) drawText(n *svgNode, st sStyle, m Matrix) {
 		c.SetLetterSpacing(r.length(p.st.letterSp, 0, p.st.fontSize, 0))
 		c.SetWordSpacing(r.length(p.st.wordSp, 0, p.st.fontSize, 0))
 		c.SetTextAlign("left")
-		c.SetFontKerning("none")
+		c.SetFontKerning("auto")
 		c.SetTextBaseline("alphabetic")
 		plain := p.plain()
+		screenScale := math.Sqrt((m[0]*m[0] + m[1]*m[1] + m[2]*m[2] + m[3]*m[3]) / 2)
 		gm := m.Mul(Translate(p.x, p.y)).Mul(Rotate(p.angle)).Mul(Scale(p.sx, 1))
 		if p.st.fill.kind != pNone && p.st.fillOp > 0 {
 			if sh := r.shaderFor(p.st.fill, p.st.fillOp, n, bb, hasBB, p.st, m); sh != nil {
 				if plain {
 					shp, ox, oy, sx := c.prepText(p.text, p.x, p.y, 0)
+					shp.ScreenScale = screenScale
+					if p.st.fill.kind == pColor {
+						shp.Lum = textLum(Color{p.st.fill.col.R, p.st.fill.col.G, p.st.fill.col.B, 1})
+					}
 					if len(shp.Glyphs) > 0 {
 						c.draw(c.textMask(shp, ox, oy, sx), sh)
 					}
 				} else {
 					shp, ox, oy, sx := c.prepText(p.text, 0, 0, 0)
+					shp.ScreenScale = screenScale
+					if p.st.fill.kind == pColor {
+						shp.Lum = textLum(Color{p.st.fill.col.R, p.st.fill.col.G, p.st.fill.col.B, 1})
+					}
 					if len(shp.Glyphs) > 0 {
 						c.Save()
 						c.SetTransform(gm)
@@ -263,6 +272,16 @@ func (r *svgR) drawText(n *svgNode, st sStyle, m Matrix) {
 			if sh := r.shaderFor(p.st.stroke, p.st.strokeOp, n, bb, hasBB, p.st, m); sh != nil {
 				if plain {
 					shp, ox, oy, sx := c.prepText(p.text, p.x, p.y, 0)
+					shp.ScreenScale = screenScale
+					if st := r.strokeStyle(p.st); len(st.Dash) == 0 {
+						if col := p.st.stroke; col.kind == pColor {
+							shp.Lum = textLum(Color{col.col.R, col.col.G, col.col.B, 1})
+						}
+						if mk, ok := c.strokeGlyphMaskFor(shp, ox, oy, sx, st); ok {
+							c.draw(mk, sh)
+							goto strokeDone
+						}
+					}
 					if tp := c.textPath(shp, ox, oy, sx); tp != nil {
 						if mk := StrokeMask(tp, m, r.strokeStyle(p.st), c.drawBounds()); mk != nil {
 							c.draw(mk, sh)
@@ -270,6 +289,20 @@ func (r *svgR) drawText(n *svgNode, st sStyle, m Matrix) {
 					}
 				} else {
 					shp, ox, oy, sx := c.prepText(p.text, 0, 0, 0)
+					shp.ScreenScale = screenScale
+					if st := r.strokeStyle(p.st); len(st.Dash) == 0 {
+						c.Save()
+						c.SetTransform(gm)
+						if col := p.st.stroke; col.kind == pColor {
+							shp.Lum = textLum(Color{col.col.R, col.col.G, col.col.B, 1})
+						}
+						mk, ok := c.strokeGlyphMaskFor(shp, ox, oy, sx, st)
+						c.Restore()
+						if ok {
+							c.draw(mk, sh)
+							goto strokeDone
+						}
+					}
 					if tp := c.textPath(shp, ox, oy, sx); tp != nil {
 						if mk := StrokeMask(tp.Transform(Rotate(p.angle).Mul(Scale(p.sx, 1))).Transform(Translate(p.x, p.y)), m, r.strokeStyle(p.st), c.drawBounds()); mk != nil {
 							c.draw(mk, sh)
@@ -278,6 +311,7 @@ func (r *svgR) drawText(n *svgNode, st sStyle, m Matrix) {
 				}
 			}
 		}
+	strokeDone:
 		if p.st.decoration != "" && p.st.fill.kind == pColor {
 			th := math.Max(1, p.st.fontSize/16)
 			col := p.st.fill.col

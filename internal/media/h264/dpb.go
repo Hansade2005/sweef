@@ -10,7 +10,11 @@ type Picture struct {
 	id        int32
 	mbW, mbH  int
 	w, h      int
-	y, cb, cr []byte
+	cw, ch    int // chroma plane size (0 for monochrome)
+	seq       int
+	cf        int // chroma_format_idc
+	bdY, bdC  int
+	y, cb, cr []uint16
 	ys, cs    int
 	poc       int
 	frameNum  int
@@ -27,12 +31,23 @@ type Picture struct {
 	fullRange bool
 }
 
-func newPicture(id int32, mbW, mbH int) *Picture {
+func newPicture(id int32, mbW, mbH int, sps *SPS) *Picture {
 	p := &Picture{id: id, mbW: mbW, mbH: mbH, w: mbW * 16, h: mbH * 16}
-	p.ys, p.cs = p.w, p.w/2
-	p.y = make([]byte, p.w*p.h)
-	p.cb = make([]byte, p.cs*p.h/2)
-	p.cr = make([]byte, p.cs*p.h/2)
+	p.ys = p.w
+	p.y = make([]uint16, p.w*p.h)
+	switch sps.ChromaFormat {
+	case 1:
+		p.cw, p.ch = p.w/2, p.h/2
+	case 2:
+		p.cw, p.ch = p.w/2, p.h
+	case 3:
+		p.cw, p.ch = p.w, p.h
+	}
+	p.cs = p.cw
+	if p.cw > 0 {
+		p.cb = make([]uint16, p.cw*p.ch)
+		p.cr = make([]uint16, p.cw*p.ch)
+	}
 	for l := 0; l < 2; l++ {
 		p.mv[l] = make([]mv16, mbW*4*mbH*4)
 		p.refIdx[l] = make([]int8, mbW*2*mbH*2)
@@ -436,12 +451,12 @@ func (d *Decoder) buildRefLists(h *sliceHeader, cur *Picture) {
 }
 
 func (d *Decoder) grayPicture(like *Picture) *Picture {
-	p := newPicture(-2, like.mbW, like.mbH)
+	p := newPicture(-2, like.mbW, like.mbH, d.first.sps)
 	for i := range p.y {
-		p.y[i] = 128
+		p.y[i] = uint16(1) << uint(d.f.bdY-1)
 	}
 	for i := range p.cb {
-		p.cb[i], p.cr[i] = 128, 128
+		p.cb[i], p.cr[i] = uint16(1)<<uint(d.f.bdC-1), uint16(1)<<uint(d.f.bdC-1)
 	}
 	p.nonExist = true
 	return p

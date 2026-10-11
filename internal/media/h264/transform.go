@@ -2,19 +2,19 @@ package h264
 
 // Inverse transforms (8.5.10 - 8.5.13).
 
-func clip255(v int32) byte {
-	if uint32(v) > 255 {
+func clipPix(v, maxv int32) uint16 {
+	if uint32(v) > uint32(maxv) {
 		if v < 0 {
 			return 0
 		}
-		return 255
+		return uint16(maxv)
 	}
-	return byte(v)
+	return uint16(v)
 }
 
 // idct4Add transforms the 16 dequantised coefficients in c (raster order)
 // and adds the residual to dst.
-func idct4Add(dst []byte, stride int, c []int32) {
+func idct4Add(dst []uint16, stride int, c []int32, maxv int32) {
 	var t [16]int32
 	for i := 0; i < 4; i++ {
 		d0, d1, d2, d3 := c[i*4], c[i*4+1], c[i*4+2], c[i*4+3]
@@ -36,23 +36,12 @@ func idct4Add(dst []byte, stride int, c []int32) {
 		h := [4]int32{g0 + g3, g1 + g2, g1 - g2, g0 - g3}
 		for i := 0; i < 4; i++ {
 			p := &dst[i*stride+j]
-			*p = clip255(int32(*p) + ((h[i] + 32) >> 6))
+			*p = clipPix(int32(*p)+((h[i]+32)>>6), maxv)
 		}
 	}
 }
 
-// idct4DCAdd is the shortcut for a block with only its DC coefficient.
-func idct4DCAdd(dst []byte, stride int, dc int32) {
-	r := (dc + 32) >> 6
-	for i := 0; i < 4; i++ {
-		row := dst[i*stride : i*stride+4]
-		for j := range row {
-			row[j] = clip255(int32(row[j]) + r)
-		}
-	}
-}
-
-func idct8Add(dst []byte, stride int, c []int32) {
+func idct8Add(dst []uint16, stride int, c []int32, maxv int32) {
 	var t [64]int32
 	for i := 0; i < 8; i++ {
 		d := c[i*8 : i*8+8]
@@ -106,7 +95,37 @@ func idct8Add(dst []byte, stride int, c []int32) {
 		r := [8]int32{b0 + b7, b2 + b5, b4 + b3, b6 + b1, b6 - b1, b4 - b3, b2 - b5, b0 - b7}
 		for i := 0; i < 8; i++ {
 			p := &dst[i*stride+j]
-			*p = clip255(int32(*p) + ((r[i] + 32) >> 6))
+			*p = clipPix(int32(*p)+((r[i]+32)>>6), maxv)
+		}
+	}
+}
+
+// bypassAdd adds an n x n block of untransformed residual (lossless
+// macroblocks). hor/ver select the intra residual DPCM of 8.5.15 along rows
+// (hor) or columns (ver); only the stripe from (x0, y0) of size w x h is
+// accumulated. c holds the residual in raster order with row pitch cp.
+func bypassAdd(dst []uint16, stride int, c []int32, cp, w, h int, maxv int32, hor, ver bool) {
+	if hor {
+		for y := 0; y < h; y++ {
+			var acc int32
+			for x := 0; x < w; x++ {
+				acc += c[y*cp+x]
+				c[y*cp+x] = acc
+			}
+		}
+	} else if ver {
+		for x := 0; x < w; x++ {
+			var acc int32
+			for y := 0; y < h; y++ {
+				acc += c[y*cp+x]
+				c[y*cp+x] = acc
+			}
+		}
+	}
+	for y := 0; y < h; y++ {
+		row := dst[y*stride : y*stride+w]
+		for x := range row {
+			row[x] = clipPix(int32(row[x])+c[y*cp+x], maxv)
 		}
 	}
 }
@@ -135,12 +154,38 @@ func lumaDCTransform(c *[16]int32, ls int32, qp int) {
 	}
 }
 
-// chromaDCTransform performs the 2x2 transform and scaling of chroma DC.
-func chromaDCTransform(c *[4]int32, ls int32, qp int) {
+// chromaDCTransform performs the 2x2 transform and scaling of 4:2:0 chroma DC.
+func chromaDCTransform(c *[8]int32, ls int32, qp int) {
 	a, b, cc, d := c[0], c[1], c[2], c[3]
 	f := [4]int32{a + b + cc + d, a - b + cc - d, a + b - cc - d, a - b - cc + d}
 	for i := range f {
 		c[i] = ((f[i] * ls) << uint(qp/6)) >> 5
+	}
+}
+
+// chromaDC422Transform performs the 2x4 transform and scaling of 4:2:2
+// chroma DC. c holds the 4 rows x 2 columns in raster order and qp is
+// QP'c + 3.
+func chromaDC422Transform(c *[8]int32, ls int32, qp int) {
+	var t [8]int32 // t[y*2+x] = column transform
+	for x := 0; x < 2; x++ {
+		c0, c1, c2, c3 := c[x], c[2+x], c[4+x], c[6+x]
+		t[x] = c0 + c1 + c2 + c3
+		t[2+x] = c0 + c1 - c2 - c3
+		t[4+x] = c0 - c1 - c2 + c3
+		t[6+x] = c0 - c1 + c2 - c3
+	}
+	for y := 0; y < 4; y++ {
+		f0 := t[y*2] + t[y*2+1]
+		f1 := t[y*2] - t[y*2+1]
+		if qp >= 36 {
+			c[y*2] = (f0 * ls) << uint(qp/6-6)
+			c[y*2+1] = (f1 * ls) << uint(qp/6-6)
+		} else {
+			r := int32(1) << uint(5-qp/6)
+			c[y*2] = (f0*ls + r) >> uint(6-qp/6)
+			c[y*2+1] = (f1*ls + r) >> uint(6-qp/6)
+		}
 	}
 }
 

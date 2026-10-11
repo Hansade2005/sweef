@@ -57,6 +57,9 @@ func loadVideoStream(src Source, info *Info) (*vstream, error) {
 }
 
 func (vs *vstream) loadWebM(src Source, info *Info, trk *Track) error {
+	if vs.codec == "av1" {
+		vs.cfg = trk.priv // av1C: configuration OBUs (sequence header)
+	}
 	off := info.DataStart
 	if off < 0 {
 		off = 0

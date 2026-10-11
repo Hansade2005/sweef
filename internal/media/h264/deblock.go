@@ -117,21 +117,21 @@ func (d *Decoder) deblockMB(pic *Picture, mbx, mby, idx int, sp *sliceParams) {
 			}
 		}
 	}
-	for c := 0; c < 3; c++ {
-		var pl []byte
-		var stride, size, base int
-		switch c {
-		case 0:
-			pl, stride, size = pic.y, pic.ys, 16
-			base = mby*16*stride + mbx*16
-		case 1:
-			pl, stride, size = pic.cb, pic.cs, 8
-			base = mby*8*stride + mbx*8
-		default:
-			pl, stride, size = pic.cr, pic.cs, 8
-			base = mby*8*stride + mbx*8
+	nPl := 3
+	if d.f.cat == 0 {
+		nPl = 1
+	}
+	for c := 0; c < nPl; c++ {
+		pl, stride := d.planeOf(c)
+		var wC, hC int // macroblock size in this plane
+		wC, hC = d.mbDims(c)
+		base := mby*hC*stride + mbx*wC
+		bd := d.f.bdY
+		if c > 0 {
+			bd = d.f.bdC
 		}
-		// per-edge QP average
+		lumaLike := c == 0 || d.f.cat == 3
+		// per-edge QP' (luma domain) and chroma conversion
 		qpOf := func(i int) int {
 			q := int(d.mbQP[i])
 			if c == 0 {
@@ -141,18 +141,19 @@ func (d *Decoder) deblockMB(pic *Picture, mbx, mby, idx int, sp *sliceParams) {
 			if c == 2 {
 				off = sp.crOff
 			}
-			return chromaQP(q, off)
+			return d.chromaQPPrime(q, off)
 		}
 		qpq := qpOf(idx)
 		// vertical edges
-		edges := 4
-		if c > 0 {
-			edges = 2
+		nV, nH := 4, 4
+		if !lumaLike {
+			nV = 2
+			nH = hC / 4
 		}
-		for e := 0; e < edges; e++ {
+		for e := 0; e < nV; e++ {
 			var bs [4]int
 			var qpAv int
-			if c == 0 {
+			if lumaLike {
 				if t8 && e&1 == 1 {
 					continue
 				}
@@ -168,17 +169,20 @@ func (d *Decoder) deblockMB(pic *Picture, mbx, mby, idx int, sp *sliceParams) {
 			} else {
 				qpAv = qpq
 			}
-			filterEdge(pl, base+e*4, 1, stride, size, bs, qpAv, sp, c > 0)
+			filterEdge(pl, base+e*4, 1, stride, hC, bs, qpAv, sp, d.f.qpBdY, !lumaLike, bd)
 		}
-		for e := 0; e < edges; e++ {
+		for e := 0; e < nH; e++ {
 			var bs [4]int
 			var qpAv int
-			if c == 0 {
+			switch {
+			case lumaLike:
 				if t8 && e&1 == 1 {
 					continue
 				}
 				bs = bsH[e]
-			} else {
+			case d.f.cat == 2:
+				bs = bsH[e]
+			default:
 				bs = bsH[e*2]
 			}
 			if e == 0 {
@@ -189,22 +193,25 @@ func (d *Decoder) deblockMB(pic *Picture, mbx, mby, idx int, sp *sliceParams) {
 			} else {
 				qpAv = qpq
 			}
-			filterEdge(pl, base+e*4*stride, stride, 1, size, bs, qpAv, sp, c > 0)
+			filterEdge(pl, base+e*4*stride, stride, 1, wC, bs, qpAv, sp, d.f.qpBdY, !lumaLike, bd)
 		}
 	}
 }
 
 // filterEdge filters one edge of length n samples. across is the step across
 // the edge, along the step along it. bs holds the four boundary strengths
-// (one per quarter of the edge).
-func filterEdge(pl []byte, pos, across, along, n int, bs [4]int, qpAv int, sp *sliceParams, chroma bool) {
-	indexA := clip3(0, 51, qpAv+sp.alpha)
-	indexB := clip3(0, 51, qpAv+sp.beta)
-	alpha := int(alphaTable[indexA])
-	beta := int(betaTable[indexB])
+// (one per quarter of the edge). qpAv is the average QP' of the two
+// macroblocks.
+func filterEdge(pl []uint16, pos, across, along, n int, bs [4]int, qpAv int, sp *sliceParams, qpBd int, chroma bool, bd int) {
+	indexA := clip3(0, 51, qpAv-qpBd+sp.alpha)
+	indexB := clip3(0, 51, qpAv-qpBd+sp.beta)
+	sh := uint(bd - 8)
+	alpha := int(alphaTable[indexA]) << sh
+	beta := int(betaTable[indexB]) << sh
 	if alpha == 0 || beta == 0 {
 		return
 	}
+	maxv := int32(1)<<uint(bd) - 1
 	per := n / 4
 	for g := 0; g < 4; g++ {
 		b := bs[g]
@@ -213,7 +220,7 @@ func filterEdge(pl []byte, pos, across, along, n int, bs [4]int, qpAv int, sp *s
 		}
 		tc0 := 0
 		if b < 4 {
-			tc0 = int(tc0Table[indexA][b])
+			tc0 = int(tc0Table[indexA][b]) << sh
 		}
 		for k := 0; k < per; k++ {
 			o := pos + (g*per+k)*along
@@ -231,11 +238,11 @@ func filterEdge(pl []byte, pos, across, along, n int, bs [4]int, qpAv int, sp *s
 				if b < 4 {
 					tc := tc0 + 1
 					delta := clip3(-tc, tc, (((q0-p0)<<2)+(p1-q1)+4)>>3)
-					pl[o-across] = clip255(int32(p0 + delta))
-					pl[o] = clip255(int32(q0 - delta))
+					pl[o-across] = clipPix(int32(p0+delta), maxv)
+					pl[o] = clipPix(int32(q0-delta), maxv)
 				} else {
-					pl[o-across] = byte((2*p1 + p0 + q1 + 2) >> 2)
-					pl[o] = byte((2*q1 + q0 + p1 + 2) >> 2)
+					pl[o-across] = uint16((2*p1 + p0 + q1 + 2) >> 2)
+					pl[o] = uint16((2*q1 + q0 + p1 + 2) >> 2)
 				}
 				continue
 			}
@@ -252,13 +259,13 @@ func filterEdge(pl []byte, pos, across, along, n int, bs [4]int, qpAv int, sp *s
 					tc++
 				}
 				delta := clip3(-tc, tc, (((q0-p0)<<2)+(p1-q1)+4)>>3)
-				pl[o-across] = clip255(int32(p0 + delta))
-				pl[o] = clip255(int32(q0 - delta))
+				pl[o-across] = clipPix(int32(p0+delta), maxv)
+				pl[o] = clipPix(int32(q0-delta), maxv)
 				if ap < beta {
-					pl[o-2*across] = byte(p1 + clip3(-tc0, tc0, (p2+((p0+q0+1)>>1)-(p1<<1))>>1))
+					pl[o-2*across] = uint16(p1 + clip3(-tc0, tc0, (p2+((p0+q0+1)>>1)-(p1<<1))>>1))
 				}
 				if aq < beta {
-					pl[o+across] = byte(q1 + clip3(-tc0, tc0, (q2+((p0+q0+1)>>1)-(q1<<1))>>1))
+					pl[o+across] = uint16(q1 + clip3(-tc0, tc0, (q2+((p0+q0+1)>>1)-(q1<<1))>>1))
 				}
 				continue
 			}
@@ -266,19 +273,19 @@ func filterEdge(pl []byte, pos, across, along, n int, bs [4]int, qpAv int, sp *s
 			small := abs(p0-q0) < (alpha>>2)+2
 			if ap < beta && small {
 				p3 := int(pl[o-4*across])
-				pl[o-across] = byte((p2 + 2*p1 + 2*p0 + 2*q0 + q1 + 4) >> 3)
-				pl[o-2*across] = byte((p2 + p1 + p0 + q0 + 2) >> 2)
-				pl[o-3*across] = byte((2*p3 + 3*p2 + p1 + p0 + q0 + 4) >> 3)
+				pl[o-across] = uint16((p2 + 2*p1 + 2*p0 + 2*q0 + q1 + 4) >> 3)
+				pl[o-2*across] = uint16((p2 + p1 + p0 + q0 + 2) >> 2)
+				pl[o-3*across] = uint16((2*p3 + 3*p2 + p1 + p0 + q0 + 4) >> 3)
 			} else {
-				pl[o-across] = byte((2*p1 + p0 + q1 + 2) >> 2)
+				pl[o-across] = uint16((2*p1 + p0 + q1 + 2) >> 2)
 			}
 			if aq < beta && small {
 				q3 := int(pl[o+3*across])
-				pl[o] = byte((p1 + 2*p0 + 2*q0 + 2*q1 + q2 + 4) >> 3)
-				pl[o+across] = byte((p0 + q0 + q1 + q2 + 2) >> 2)
-				pl[o+2*across] = byte((2*q3 + 3*q2 + q1 + q0 + p0 + 4) >> 3)
+				pl[o] = uint16((p1 + 2*p0 + 2*q0 + 2*q1 + q2 + 4) >> 3)
+				pl[o+across] = uint16((p0 + q0 + q1 + q2 + 2) >> 2)
+				pl[o+2*across] = uint16((2*q3 + 3*q2 + q1 + q0 + p0 + 4) >> 3)
 			} else {
-				pl[o] = byte((2*q1 + q0 + p1 + 2) >> 2)
+				pl[o] = uint16((2*q1 + q0 + p1 + 2) >> 2)
 			}
 		}
 	}

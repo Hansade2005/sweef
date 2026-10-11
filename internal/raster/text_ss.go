@@ -349,6 +349,16 @@ func fxGlyphPath(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Path {
 			return p
 		}
 	}
+	return fxGlyphPathOutline(g, scaleX, scaleY, skewFix, fxMat{}, sub*16, 0)
+}
+
+// fxGlyphPathOutline builds the path from the font package's decomposed
+// segments (CFF and any glyph the glyf reader cannot handle).
+func fxGlyphPathOutline(g Glyph, scaleX, scaleY, skewFix int, m fxMat, sub, subY int) *Path {
+	segs := glyphUnits(g)
+	if len(segs) == 0 {
+		return nil
+	}
 	// FreeType scales and transforms every outline point to 26.6 first;
 	// the on-curve points implied between two off-curve points are then
 	// the integer midpoints (FT_Outline_Decompose), not rounded midpoints
@@ -357,8 +367,12 @@ func fxGlyphPath(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Path {
 	conv := func(x, y float64) ipt {
 		X := ftMulFix(int(math.Round(x)), scaleX)
 		Y := ftMulFix(int(math.Round(y)), scaleY)
-		if skew {
+		if skewFix != 0 {
 			X += ftMulFix(Y, skewFix)
+		}
+		if !m.identity() {
+			// y is down here: FreeType's matrix works with y up
+			X, Y = ftMulFix(X, m.xx)-ftMulFix(Y, m.xy), -ftMulFix(X, m.yx)+ftMulFix(Y, m.yy)
 		}
 		return ipt{X, Y}
 	}
@@ -367,7 +381,7 @@ func fxGlyphPath(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Path {
 		return ipt{(a.x + b.x) / 2, -((-a.y - b.y) / 2)}
 	}
 	out := func(p ipt) (float64, float64) {
-		return float64(p.x+sub*16) / 64, float64(p.y) / 64
+		return float64(p.x+sub) / 64, float64(p.y+subY) / 64
 	}
 	p := NewPath()
 	// split into contours

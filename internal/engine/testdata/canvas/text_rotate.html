@@ -1,0 +1,19 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=420 height=300></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,420,300);x.fillStyle='#000';
+function t(m,f,s,px,py){x.save();x.setTransform.apply(x,m);x.font=f;x.fillText(s,px,py);x.restore();}
+var r=function(d,e,f){var a=d*Math.PI/180;return [Math.cos(a),Math.sin(a),-Math.sin(a),Math.cos(a),e,f];};
+t(r(5,10.3,30.6),'18px "Liberation Sans"','Rotated five degrees',0,0);
+t(r(30,20,60.2),'16px "Liberation Serif"','Thirty degrees serif',0,0);
+t(r(-45,40.5,200.5),'14px "DejaVu Sans"','Minus forty-five',0,0);
+t(r(90,300.4,20.7),'16px "DejaVu Sans"','Ninety',0,0);
+t(r(180,400,60.3),'16px "Liberation Sans"','Upside down',0,0);
+t(r(270,350.5,250.5),'15px "Liberation Serif"','Two seventy',0,0);
+t([1,0,0.36,1,150.2,100.4],'20px "Liberation Serif"','Skew X',0,0);
+t([1,0.27,0,1,150.2,130.4],'20px "Liberation Sans"','Skew Y',0,0);
+t([1.5,0,0,0.8,150.2,170.4],'16px "Liberation Sans"','Scaled 1.5 0.8',0,0);
+t([1.2,0.3,-0.2,0.9,150.2,210],'13px "Liberation Serif"','Matrix text',0,0);
+t(r(-12,200,280),'bold 18px "Liberation Sans"','Bold rotated',0,0);
+t(r(12,10,150),'italic 18px "Liberation Serif"','Italic rotated',0,0);
+x.save();x.setTransform.apply(x,r(20,230,100));x.font='16px "Liberation Sans"';x.strokeStyle='#036';x.strokeText('Stroked rot',0,0);x.fillStyle='#903';x.fillText('Max width',0,24,50);x.restore();
+</script>

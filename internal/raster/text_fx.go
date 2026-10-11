@@ -355,7 +355,7 @@ func (b *fxBuilder) monoCubic(c [4]fpt) {
 	cy, cdy, cddy, cdddy := coef(y)
 	cy = fxSnapY(cy)
 	lastX, lastY := (x[3]<<10)>>2, fxSnapY((y[3]<<10)>>2)
-	sx, sy := cx, cy
+	sy := cy
 	oldx, oldy := cx, cy
 	count := -(1 << shift)
 	for count < 0 {
@@ -382,11 +382,13 @@ func (b *fxBuilder) monoCubic(c [4]fpt) {
 		diffY := (nsy - sy) >> 10
 		slope := math.MaxInt32
 		if diffY != 0 {
-			slope = fxQuickDiv((newx-sx)>>10, diffY)
+			slope = fxQuickDiv((newx-oldx)>>10, diffY)
 		}
-		if slope < math.MaxInt32 && b.seg(sx, sy, nsy, slope, wind) {
-			sx, sy = newx, nsy
+		// the edge starts at the previous curve point's x and the snapped y
+		if slope < math.MaxInt32 {
+			b.seg(oldx, sy, nsy, slope, wind)
 		}
+		sy = nsy
 		oldx, oldy = newx, newy
 	}
 }

@@ -16,7 +16,7 @@ const (
 )
 
 // pred4x4 predicts a 4x4 luma block in place (dst points at its first sample).
-func pred4x4(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
+func pred4x4(pl []uint16, off, stride, mode int, left, top, tl, tr bool, bd int) {
 	var t [8]int32 // top samples, index 0..7
 	var l [4]int32
 	var c int32 // top-left
@@ -42,18 +42,18 @@ func pred4x4(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 	if tl {
 		c = int32(pl[off+-stride-1])
 	}
-	var o [16]byte
+	var o [16]uint16
 	switch mode {
 	case imV:
 		for y := 0; y < 4; y++ {
 			for x := 0; x < 4; x++ {
-				o[y*4+x] = byte(t[x])
+				o[y*4+x] = uint16(t[x])
 			}
 		}
 	case imH:
 		for y := 0; y < 4; y++ {
 			for x := 0; x < 4; x++ {
-				o[y*4+x] = byte(l[y])
+				o[y*4+x] = uint16(l[y])
 			}
 		}
 	case imDC:
@@ -66,18 +66,18 @@ func pred4x4(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 		case top:
 			v = (t[0] + t[1] + t[2] + t[3] + 2) >> 2
 		default:
-			v = 128
+			v = 1 << uint(bd-1)
 		}
 		for i := range o {
-			o[i] = byte(v)
+			o[i] = uint16(v)
 		}
 	case imDDL:
 		for y := 0; y < 4; y++ {
 			for x := 0; x < 4; x++ {
 				if x == 3 && y == 3 {
-					o[y*4+x] = byte((t[6] + 3*t[7] + 2) >> 2)
+					o[y*4+x] = uint16((t[6] + 3*t[7] + 2) >> 2)
 				} else {
-					o[y*4+x] = byte((t[x+y] + 2*t[x+y+1] + t[x+y+2] + 2) >> 2)
+					o[y*4+x] = uint16((t[x+y] + 2*t[x+y+1] + t[x+y+2] + 2) >> 2)
 				}
 			}
 		}
@@ -126,7 +126,7 @@ func pred4x4(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 						v = (t[x-1] + 2*t[x-2] + corner(t[:], x-3, c) + 2) >> 2
 					}
 				}
-				o[y*4+x] = byte(v)
+				o[y*4+x] = uint16(v)
 			}
 		}
 	case imVL:
@@ -134,9 +134,9 @@ func pred4x4(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 			for x := 0; x < 4; x++ {
 				k := x + (y >> 1)
 				if y&1 == 0 {
-					o[y*4+x] = byte((t[k] + t[k+1] + 1) >> 1)
+					o[y*4+x] = uint16((t[k] + t[k+1] + 1) >> 1)
 				} else {
-					o[y*4+x] = byte((t[k] + 2*t[k+1] + t[k+2] + 2) >> 2)
+					o[y*4+x] = uint16((t[k] + 2*t[k+1] + t[k+2] + 2) >> 2)
 				}
 			}
 		}
@@ -156,7 +156,7 @@ func pred4x4(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 				default:
 					v = (l[k] + 2*l[k+1] + l[k+2] + 2) >> 2
 				}
-				o[y*4+x] = byte(v)
+				o[y*4+x] = uint16(v)
 			}
 		}
 	}
@@ -173,7 +173,7 @@ func corner(a []int32, i int, c int32) int32 {
 }
 
 // pred8x8 predicts an 8x8 luma block with reference sample filtering.
-func pred8x8(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
+func pred8x8(pl []uint16, off, stride, mode int, left, top, tl, tr bool, bd int) {
 	var t [16]int32
 	var l [8]int32
 	var c int32
@@ -250,18 +250,18 @@ func pred8x8(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 		}
 		return fl[y]
 	}
-	var o [64]byte
+	var o [64]uint16
 	switch mode {
 	case imV:
 		for y := 0; y < 8; y++ {
 			for x := 0; x < 8; x++ {
-				o[y*8+x] = byte(ft[x])
+				o[y*8+x] = uint16(ft[x])
 			}
 		}
 	case imH:
 		for y := 0; y < 8; y++ {
 			for x := 0; x < 8; x++ {
-				o[y*8+x] = byte(fl[y])
+				o[y*8+x] = uint16(fl[y])
 			}
 		}
 	case imDC:
@@ -279,18 +279,18 @@ func pred8x8(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 		case top:
 			v = (st + 4) >> 3
 		default:
-			v = 128
+			v = 1 << uint(bd-1)
 		}
 		for i := range o {
-			o[i] = byte(v)
+			o[i] = uint16(v)
 		}
 	case imDDL:
 		for y := 0; y < 8; y++ {
 			for x := 0; x < 8; x++ {
 				if x == 7 && y == 7 {
-					o[y*8+x] = byte((ft[14] + 3*ft[15] + 2) >> 2)
+					o[y*8+x] = uint16((ft[14] + 3*ft[15] + 2) >> 2)
 				} else {
-					o[y*8+x] = byte((ft[x+y] + 2*ft[x+y+1] + ft[x+y+2] + 2) >> 2)
+					o[y*8+x] = uint16((ft[x+y] + 2*ft[x+y+1] + ft[x+y+2] + 2) >> 2)
 				}
 			}
 		}
@@ -306,7 +306,7 @@ func pred8x8(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 				default:
 					v = (tp(0) + 2*fc + lp(0) + 2) >> 2
 				}
-				o[y*8+x] = byte(v)
+				o[y*8+x] = uint16(v)
 			}
 		}
 	case imVR:
@@ -324,7 +324,7 @@ func pred8x8(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 				default:
 					v = (lp(y-2*x-1) + 2*lp(y-2*x-2) + lp(y-2*x-3) + 2) >> 2
 				}
-				o[y*8+x] = byte(v)
+				o[y*8+x] = uint16(v)
 			}
 		}
 	case imHD:
@@ -342,7 +342,7 @@ func pred8x8(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 				default:
 					v = (tp(x-2*y-1) + 2*tp(x-2*y-2) + tp(x-2*y-3) + 2) >> 2
 				}
-				o[y*8+x] = byte(v)
+				o[y*8+x] = uint16(v)
 			}
 		}
 	case imVL:
@@ -350,9 +350,9 @@ func pred8x8(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 			for x := 0; x < 8; x++ {
 				k := x + (y >> 1)
 				if y&1 == 0 {
-					o[y*8+x] = byte((ft[k] + ft[k+1] + 1) >> 1)
+					o[y*8+x] = uint16((ft[k] + ft[k+1] + 1) >> 1)
 				} else {
-					o[y*8+x] = byte((ft[k] + 2*ft[k+1] + ft[k+2] + 2) >> 2)
+					o[y*8+x] = uint16((ft[k] + 2*ft[k+1] + ft[k+2] + 2) >> 2)
 				}
 			}
 		}
@@ -372,7 +372,7 @@ func pred8x8(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 				default:
 					v = (fl[k] + 2*fl[k+1] + fl[k+2] + 2) >> 2
 				}
-				o[y*8+x] = byte(v)
+				o[y*8+x] = uint16(v)
 			}
 		}
 	}
@@ -381,8 +381,10 @@ func pred8x8(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 	}
 }
 
-// pred16x16 predicts a whole luma macroblock. Modes: 0 V, 1 H, 2 DC, 3 plane.
-func pred16x16(pl []byte, off, stride, mode int, left, top bool) {
+// pred16x16 predicts a whole luma (or 4:4:4 chroma) macroblock. Modes: 0 V,
+// 1 H, 2 DC, 3 plane.
+func pred16x16(pl []uint16, off, stride, mode int, left, top bool, bd int) {
+	maxv := int32(1)<<uint(bd) - 1
 	switch mode {
 	case 0:
 		for y := 0; y < 16; y++ {
@@ -415,12 +417,12 @@ func pred16x16(pl []byte, off, stride, mode int, left, top bool) {
 		case top || left:
 			v = (s + 8) >> 4
 		default:
-			v = 128
+			v = 1 << uint(bd-1)
 		}
 		for y := 0; y < 16; y++ {
 			row := pl[off+y*stride : off+y*stride+16]
 			for x := range row {
-				row[x] = byte(v)
+				row[x] = uint16(v)
 			}
 		}
 	case 3:
@@ -434,32 +436,37 @@ func pred16x16(pl []byte, off, stride, mode int, left, top bool) {
 		c := (5*v + 32) >> 6
 		for y := 0; y < 16; y++ {
 			for x := 0; x < 16; x++ {
-				pl[off+y*stride+x] = clip255((a + b*int32(x-7) + c*int32(y-7) + 16) >> 5)
+				pl[off+y*stride+x] = clipPix((a+b*int32(x-7)+c*int32(y-7)+16)>>5, maxv)
 			}
 		}
 	}
 }
 
-// predChroma predicts an 8x8 chroma block. Modes: 0 DC, 1 H, 2 V, 3 plane.
-func predChroma(pl []byte, off, stride, mode int, left, top bool) {
+// predChroma predicts a chroma macroblock of w x h samples (8x8 for 4:2:0,
+// 8x16 for 4:2:2). Modes: 0 DC, 1 H, 2 V, 3 plane.
+func predChroma(pl []uint16, off, stride, mode int, left, top bool, bd, w, h int) {
+	maxv := int32(1)<<uint(bd) - 1
 	switch mode {
 	case 0:
-		var sT, sL [2]int32
+		// per 4x4 block sums of the top and left neighbours
+		var sT [2]int32
+		var sL [4]int32
 		if top {
-			for x := 0; x < 8; x++ {
+			for x := 0; x < w; x++ {
 				sT[x>>2] += int32(pl[off+x-stride])
 			}
 		}
 		if left {
-			for y := 0; y < 8; y++ {
+			for y := 0; y < h; y++ {
 				sL[y>>2] += int32(pl[off+y*stride-1])
 			}
 		}
-		for by := 0; by < 2; by++ {
+		dflt := int32(1) << uint(bd-1)
+		for by := 0; by < h/4; by++ {
 			for bx := 0; bx < 2; bx++ {
 				var v int32
 				switch {
-				case bx == 0 && by == 0, bx == 1 && by == 1:
+				case bx == 0 && by == 0, bx > 0 && by > 0:
 					switch {
 					case top && left:
 						v = (sT[bx] + sL[by] + 4) >> 3
@@ -468,37 +475,37 @@ func predChroma(pl []byte, off, stride, mode int, left, top bool) {
 					case left:
 						v = (sL[by] + 2) >> 2
 					default:
-						v = 128
+						v = dflt
 					}
-				case bx == 1 && by == 0:
+				case bx > 0: // by == 0
 					switch {
 					case top:
 						v = (sT[bx] + 2) >> 2
 					case left:
 						v = (sL[by] + 2) >> 2
 					default:
-						v = 128
+						v = dflt
 					}
-				default: // bx == 0, by == 1
+				default: // bx == 0, by > 0
 					switch {
 					case left:
 						v = (sL[by] + 2) >> 2
 					case top:
 						v = (sT[bx] + 2) >> 2
 					default:
-						v = 128
+						v = dflt
 					}
 				}
 				for y := 0; y < 4; y++ {
 					row := pl[off+(by*4+y)*stride+bx*4 : off+(by*4+y)*stride+bx*4+4]
 					for x := range row {
-						row[x] = byte(v)
+						row[x] = uint16(v)
 					}
 				}
 			}
 		}
 	case 1:
-		for y := 0; y < 8; y++ {
+		for y := 0; y < h; y++ {
 			v := pl[off+y*stride-1]
 			row := pl[off+y*stride : off+y*stride+8]
 			for x := range row {
@@ -506,21 +513,31 @@ func predChroma(pl []byte, off, stride, mode int, left, top bool) {
 			}
 		}
 	case 2:
-		for y := 0; y < 8; y++ {
+		for y := 0; y < h; y++ {
 			copy(pl[off+y*stride:off+y*stride+8], pl[off-stride:off-stride+8])
 		}
 	case 3:
-		var h, v int32
-		for i := 0; i < 4; i++ {
-			h += int32(i+1) * (int32(pl[off+4+i-stride]) - int32(pl[off+2-i-stride]))
-			v += int32(i+1) * (int32(pl[off+(4+i)*stride-1]) - int32(pl[off+(2-i)*stride-1]))
+		yCF := 0
+		if h == 16 {
+			yCF = 4
 		}
-		a := 16 * (int32(pl[off+7*stride-1]) + int32(pl[off+7-stride]))
-		b := (34*h + 32) >> 6
-		c := (34*v + 32) >> 6
-		for y := 0; y < 8; y++ {
+		var hh, vv int32
+		for i := 0; i < 4; i++ {
+			hh += int32(i+1) * (int32(pl[off+4+i-stride]) - int32(pl[off+2-i-stride]))
+		}
+		for i := 0; i < 4+yCF; i++ {
+			vv += int32(i+1) * (int32(pl[off+(4+yCF+i)*stride-1]) - int32(pl[off+(2+yCF-i)*stride-1]))
+		}
+		a := 16 * (int32(pl[off+(h-1)*stride-1]) + int32(pl[off+7-stride]))
+		b := (34*hh + 32) >> 6
+		cc := int32(34)
+		if h == 16 {
+			cc = 5
+		}
+		c := (cc*vv + 32) >> 6
+		for y := 0; y < h; y++ {
 			for x := 0; x < 8; x++ {
-				pl[off+y*stride+x] = clip255((a + b*int32(x-3) + c*int32(y-3) + 16) >> 5)
+				pl[off+y*stride+x] = clipPix((a+b*int32(x-3)+c*int32(y-3-yCF)+16)>>5, maxv)
 			}
 		}
 	}

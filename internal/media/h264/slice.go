@@ -41,6 +41,7 @@ type sliceHeader struct {
 	deltaPOCBottom     int
 	deltaPOC           [2]int
 	redundantPicCnt    int
+	colourPlane        int
 	directSpatial      bool
 	numRef             [2]int
 	refMods            [2][]refMod
@@ -79,8 +80,14 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 		h.sps = d.sps[h.sps.ID]
 	}
 	sps := h.sps
-	if sps.ChromaFormat != 1 || sps.BitDepthLuma != 8 || sps.BitDepthChroma != 8 {
+	if sps.ChromaFormat != 0 && sps.BitDepthLuma != sps.BitDepthChroma {
 		return nil, ErrUnsupported
+	}
+	if sps.SeparatePlanes {
+		h.colourPlane = int(r.u(2))
+		if h.colourPlane > 2 {
+			return nil, errBitstream
+		}
 	}
 	h.frameNum = int(r.u(uint(sps.Log2MaxFrameNum)))
 	if !sps.FrameMbsOnly {
@@ -151,7 +158,9 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 	if (h.pps.WeightedPred && (h.sliceType == sliceP || h.sliceType == sliceSP)) || (h.pps.WeightedBipredIdc == 1 && h.isB()) {
 		h.hasPW = true
 		h.logWDLuma = int(r.ue())
-		h.logWDChroma = int(r.ue())
+		if sps.ChromaArrayType() != 0 {
+			h.logWDChroma = int(r.ue())
+		}
 		for l := 0; l < 1+btoi(h.isB()); l++ {
 			pw := &h.pw[l]
 			for i := 0; i < h.numRef[l]; i++ {
@@ -164,7 +173,7 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 				for c := 0; c < 2; c++ {
 					pw.chromaW[i][c] = 1 << uint(h.logWDChroma)
 				}
-				if r.flag() {
+				if sps.ChromaArrayType() != 0 && r.flag() {
 					pw.chromaFlag[i] = true
 					for c := 0; c < 2; c++ {
 						pw.chromaW[i][c] = int(r.se())
@@ -216,7 +225,7 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 	if h.sliceType == sliceSP || h.sliceType == sliceSI {
 		return nil, ErrUnsupported
 	}
-	if h.qp < 0 || h.qp > 51 {
+	if h.qp < -6*(sps.BitDepthLuma-8) || h.qp > 51 {
 		return nil, errBitstream
 	}
 	if h.pps.DeblockControl {

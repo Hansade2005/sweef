@@ -14,7 +14,7 @@ import (
 )
 
 // Glyph lab: single glyphs rendered by Chromium (testdata/glyphlab/ref.png,
-// captured from testdata/glyphlab/lab.html) against glyphMask + the preblend
+// captured from testdata/glyphlab/lab.html) against xfGlyphMask + the preblend
 // table. Regenerate the page with GLYPHLAB_GEN=1 go test -run GlyphLabGen.
 
 type labFace struct {
@@ -519,11 +519,7 @@ func labFracSuffix() string {
 	return r
 }
 
-// labMask renders one glyph the way glyphMask does, calling the synthetic
-// bold rasterizer directly.
+// labMask renders one glyph the way textMask does (xfGlyphMask).
 func labMask(g Glyph, size float64, sub int, bold, skew bool) *Mask {
-	if bold {
-		return skiaGlyphBold(g, size, size, sub, skew)
-	}
-	return glyphMask(g, size, size, sub, false, skew)
+	return xfGlyphMask(g, size, 1, 0, 0, 1, bold, skew, sub, 0)
 }

@@ -4,598 +4,705 @@ import "errors"
 
 var errCorrupt = errors.New("h264: corrupt macroblock data")
 
-// startMB prepares neighbour availability for macroblock mbAddr.
-func (d *Decoder) startMB(mbAddr int) {
-	d.mbIdx = mbAddr
-	d.mbx, d.mby = mbAddr%d.mbW, mbAddr/d.mbW
-	d.mbSlice[mbAddr] = d.curSlice
-	d.availA = d.mbx > 0 && d.mbSlice[mbAddr-1] == d.curSlice
-	d.availB = d.mby > 0 && d.mbSlice[mbAddr-d.mbW] == d.curSlice
-	d.availC = d.mby > 0 && d.mbx < d.mbW-1 && d.mbSlice[mbAddr-d.mbW+1] == d.curSlice
-	d.availD = d.mbx > 0 && d.mby > 0 && d.mbSlice[mbAddr-d.mbW-1] == d.curSlice
+// startMB prepares the state of macroblock (mbx, mby).
+func (d *Decoder) startMB(mbx, mby int) {
+	d.mbx, d.mby = mbx, mby
+	d.mbIdx = d.curPic.mbIdx(mbx, mby)
 	d.curDirect = 0
 	d.decodedMB++
+	d.scan4, d.scan8 = &zigzag4, &zigzag8
+	if d.mbField {
+		d.scan4, d.scan8 = &fieldScan4, &fieldScan8
+	}
+	d.bypassMB = false
+	d.nzMask = 0
+	d.cbpBits = 0
+	d.setMBGeometry()
 }
 
-func (d *Decoder) finishMBCommon(typ uint8, cbp int, t8 bool, chroma int) {
-	i := d.mbIdx
-	d.mbType[i] = typ
-	d.mbCBP[i] = uint8(cbp)
-	d.mbT8[i] = t8
-	d.mbChroma[i] = uint8(chroma)
-	d.mbDirect[i] = d.curDirect
-	d.mbQP[i] = int8(d.qp)
-}
-
-// decodeSkipMB handles P_Skip and B_Skip macroblocks.
-func (d *Decoder) decodeSkipMB(mbAddr int) {
-	d.startMB(mbAddr)
-	i := d.mbIdx
-	for k := 0; k < 24; k++ {
-		d.nz[i*24+k] = 0
-	}
-	d.mbDC[i] = 0
-	d.nzMask[i] = 0
-	d.lastDQ = false
-	h := d.hdr
-	var parts [16]rect
-	np := 0
-	if h.isB() {
-		d.curDirect = 0xf
-		d.directMB(0xf)
-		d.finishMBCommon(mtBSkip, 0, false, 0)
-		np = d.directRects(0xf, parts[:])
-	} else {
-		d.refListCheck()
-		m := d.pSkipMV()
-		d.storeMotion(0, rect{0, 0, 4, 4}, 0, m)
-		d.finishMBCommon(mtPSkip, 0, false, 0)
-		parts[0] = rect{0, 0, 4, 4}
-		np = 1
-	}
-	for k := 0; k < np; k++ {
-		d.mcRect(parts[k])
-	}
-}
-
-func (d *Decoder) refListCheck() {}
-
-// directRects lists the prediction rectangles of direct blocks in mask.
-func (d *Decoder) directRects(mask uint8, out []rect) int {
-	n := 0
-	for b8 := 0; b8 < 4; b8++ {
-		if mask&(1<<uint(b8)) == 0 {
-			continue
+func (d *Decoder) clearNZCaches() {
+	for p := 0; p < 3; p++ {
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				d.nzCache[p][c0+y*8+x] = 0
+			}
 		}
-		bx, by := (b8&1)*2, (b8>>1)*2
-		if d.hdr.sps.Direct8x8 {
-			out[n] = rect{bx, by, 2, 2}
-			n++
-		} else {
-			for k := 0; k < 4; k++ {
-				out[n] = rect{bx + k&1, by + k>>1, 1, 1}
+	}
+}
+
+// writeBackNZ stores the non-zero counts of the current macroblock.
+func (d *Decoder) writeBackNZ() {
+	idx := d.mbIdx
+	nPl := 3
+	if d.f.cat == 0 {
+		nPl = 1
+	}
+	for p := 0; p < nPl; p++ {
+		w, h := d.nzW(p), d.nzH(p)
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				d.nz[idx*48+p*16+y*w+x] = d.nzCache[p][c0+y*8+x]
+			}
+		}
+	}
+}
+
+// finishMB stores the per-macroblock tables shared with later macroblocks
+// and the deblocking filter.
+func (d *Decoder) finishMB(mbType uint32, cbp int) {
+	idx := d.mbIdx
+	d.curPic.mbType[idx] = mbType
+	d.cbpTable[idx] = uint16(cbp) | d.cbpBits
+	d.qpTable[idx] = int8(d.qp + d.f.qpBdY)
+	d.mbNZMask[idx] = d.nzMask
+	d.mbBypass[idx] = d.bypassMB
+}
+
+// partition rectangles of the macroblock for motion compensation.
+func (d *Decoder) mcParts(mbType uint32, out *[16]rect) int {
+	n := 0
+	switch {
+	case mbType&mb8x8 != 0:
+		for i := 0; i < 4; i++ {
+			x, y := (i&1)*2, (i>>1)*2
+			st := d.subMbType[i]
+			switch {
+			case st&mbDirect2 != 0:
+				if d.hdr.sps.Direct8x8 {
+					out[n] = rect{x, y, 2, 2}
+					n++
+				} else {
+					for k := 0; k < 4; k++ {
+						out[n] = rect{x + k&1, y + k>>1, 1, 1}
+						n++
+					}
+				}
+			case st&mb16x16 != 0:
+				out[n] = rect{x, y, 2, 2}
 				n++
+			case st&mb16x8 != 0:
+				out[n] = rect{x, y, 2, 1}
+				out[n+1] = rect{x, y + 1, 2, 1}
+				n += 2
+			case st&mb8x16 != 0:
+				out[n] = rect{x, y, 1, 2}
+				out[n+1] = rect{x + 1, y, 1, 2}
+				n += 2
+			default:
+				for k := 0; k < 4; k++ {
+					out[n] = rect{x + k&1, y + k>>1, 1, 1}
+					n++
+				}
+			}
+		}
+	case mbType&mb16x16 != 0:
+		out[0] = rect{0, 0, 4, 4}
+		n = 1
+	case mbType&mb16x8 != 0:
+		out[0] = rect{0, 0, 4, 2}
+		out[1] = rect{0, 2, 4, 2}
+		n = 2
+	case mbType&mb8x16 != 0:
+		out[0] = rect{0, 0, 2, 4}
+		out[1] = rect{2, 0, 2, 4}
+		n = 2
+	default: // direct
+		for i := 0; i < 4; i++ {
+			x, y := (i&1)*2, (i>>1)*2
+			if d.hdr.sps.Direct8x8 {
+				out[n] = rect{x, y, 2, 2}
+				n++
+			} else {
+				for k := 0; k < 4; k++ {
+					out[n] = rect{x + k&1, y + k>>1, 1, 1}
+					n++
+				}
 			}
 		}
 	}
 	return n
 }
 
-func (d *Decoder) readQPDelta() (int, error) {
+func (d *Decoder) motionComp(mbType uint32) {
+	var parts [16]rect
+	n := d.mcParts(mbType, &parts)
+	for i := 0; i < n; i++ {
+		d.mcRect(parts[i])
+	}
+}
+
+// decodeSkipMB handles P_Skip and B_Skip macroblocks.
+func (d *Decoder) decodeSkipMB() {
+	h := d.hdr
+	idx := d.mbIdx
+	for k := 0; k < 48; k++ {
+		d.nz[idx*48+k] = 0
+	}
+	var mbType uint32
+	if d.mbField {
+		mbType |= mbInterlaced
+	}
+	d.sliceTable[idx] = d.curSlice
+	d.fillNeighbors()
+	if h.isB() {
+		mbType |= mbL0L1 | mbDirect2 | mbSkip
+		d.curPic.mbType[idx] = mbType
+		if h.directSpatial {
+			d.fillCaches(mbType)
+		}
+		d.predDirect(0xf)
+	} else {
+		mbType |= mb16x16 | mbP0L0 | mbSkip
+		fillRef(&d.refCache[0], 0, 0, 4, 4, 0)
+		m := d.predPSkipMotion()
+		fillMV(&d.mvCache[0], 0, 0, 4, 4, m)
+		fillRef(&d.refCache[1], 0, 0, 4, 4, refNotUsed)
+	}
+	d.curPic.mbType[idx] = mbType
+	d.writeBackMotion(mbType)
+	d.cbpTable[idx] = 0
+	d.chromaPredTable[idx] = 0
+	d.lastDQ = false
+	d.finishMB(mbType, 0)
+	d.motionComp(mbType)
+	d.prevMBSkipped = true
+}
+
+func (d *Decoder) readQPDelta() error {
 	var dq int
 	if d.cabacOn {
 		dq = d.cabacQPDelta()
 	} else {
 		dq = int(d.br.se())
 	}
-	if dq < -26 || dq > 25 {
-		return 0, errCorrupt
+	qpBd := d.f.qpBdY
+	if dq < -(26+qpBd/2) || dq > 25+qpBd/2 {
+		return errCorrupt
 	}
 	d.lastDQ = dq != 0
-	d.qp = (d.qp + dq + 52) % 52
-	return dq, nil
+	d.qp = (d.qp+dq+52+2*qpBd)%(52+qpBd) - qpBd
+	d.bypassMB = d.f.bypass && d.qp+qpBd == 0
+	return nil
+}
+
+func (d *Decoder) predIntraMode(n int) int {
+	idx := scan8[n]
+	l, t := int(d.ipmCache[idx-1]), int(d.ipmCache[idx-8])
+	m := min(l, t)
+	if m < 0 {
+		return 2
+	}
+	return m
+}
+
+// readRef reads ref_idx for a partition with rc active references.
+func (d *Decoder) readRef(list, n, rc int) (int, error) {
+	if rc <= 1 {
+		return 0, nil
+	}
+	var v int
+	if d.cabacOn {
+		v = d.cabacRefIdx(list, n)
+	} else if rc == 2 {
+		v = int(d.br.u1()) ^ 1
+	} else {
+		v = int(d.br.ue())
+	}
+	if v < 0 || v >= rc {
+		return 0, corrupt()
+	}
+	return v, nil
+}
+
+// readMVD reads a motion vector difference pair for the partition at block n
+// and returns it with the stored (clamped) magnitudes.
+func (d *Decoder) readMVD(list, n int) (mx, my int, ax, ay uint8) {
+	if d.cabacOn {
+		i := scan8[n]
+		mc := &d.mvdCache[list]
+		amvd0 := int(mc[i-1][0]) + int(mc[i-8][0])
+		amvd1 := int(mc[i-1][1]) + int(mc[i-8][1])
+		mx, ax = d.cabacMVD(40, amvd0)
+		my, ay = d.cabacMVD(47, amvd1)
+		return
+	}
+	return int(d.br.se()), int(d.br.se()), 0, 0
 }
 
 // decodeMB decodes one non-skipped macroblock (macroblock_layer()).
-func (d *Decoder) decodeMB(mbAddr int) error {
-	d.startMB(mbAddr)
+func (d *Decoder) decodeMB() error {
 	h := d.hdr
 	pps := h.pps
 	idx := d.mbIdx
 	br := d.br
-	var raw int
-	if d.cabacOn {
-		switch {
-		case h.isI():
-			raw = d.cabacIntraMBType(true, 0)
-		case h.isB():
-			raw = d.cabacMBTypeB()
-		default:
-			raw = d.cabacMBTypeP()
-		}
-	} else {
-		raw = int(br.ue())
-	}
-	intra := false
-	itype := 0
-	var it interMB
+	cabac := d.cabacOn
+	cat := d.f.cat
+	decodeChroma := cat == 1 || cat == 2
+	dct8x8Allowed := pps.Transform8x8
+	mbaffShift := uint(btoi(d.mbMbaff()))
+
+	d.fillNeighbors()
+	var mbType uint32
+	partCount := 0
+	cbp := 0
+	i16Mode := 0
+	intraRaw := -1
 	switch {
-	case h.isI():
-		intra, itype = true, raw
 	case h.isB():
-		if raw >= 23 {
-			intra, itype = true, raw-23
+		var raw int
+		if cabac {
+			raw = d.cabacMBTypeB()
 		} else {
-			it = bMBTypes[raw]
+			raw = int(br.ue())
+		}
+		if raw < 23 {
+			mbType, partCount = bMbTypeInfo[raw].typ, bMbTypeInfo[raw].parts
+		} else {
+			intraRaw = raw - 23
+		}
+	case h.isI():
+		if cabac {
+			intraRaw = d.cabacIntraMBType(true, 0)
+		} else {
+			intraRaw = int(br.ue())
 		}
 	default:
-		if raw >= 5 {
-			intra, itype = true, raw-5
+		var raw int
+		if cabac {
+			raw = d.cabacMBTypeP()
 		} else {
-			it = pMBTypes[raw]
+			raw = int(br.ue())
+		}
+		if raw < 5 {
+			mbType, partCount = pMbTypeInfo[raw].typ, pMbTypeInfo[raw].parts
+		} else {
+			intraRaw = raw - 5
 		}
 	}
-	if itype > 25 || raw < 0 {
-		return corrupt()
+	if intraRaw >= 0 {
+		if intraRaw > 25 {
+			return corrupt()
+		}
+		info := iMbTypeInfo[intraRaw]
+		mbType, cbp = info.typ, int(info.cbp)
+		if intraRaw >= 1 && intraRaw <= 24 {
+			i16Mode = (intraRaw - 1) & 3
+		}
 	}
-	for k := 0; k < 24; k++ {
-		d.nz[idx*24+k] = 0
+	if d.mbField {
+		mbType |= mbInterlaced
 	}
-	d.mbDC[idx] = 0
-	d.nzMask[idx] = 0
-	for i := range d.coef {
-		d.coef[i] = 0
-	}
+	d.sliceTable[idx] = d.curSlice
 
-	if intra && itype == 25 {
-		return d.decodePCM()
+	if mbType&mbIntraPCM != 0 {
+		return d.decodePCM(mbType)
 	}
+	d.fillCaches(mbType)
 
-	var (
-		cbp        int
-		t8         bool
-		chromaMode int
-		i16Mode    int
-		mbt        uint8
-		parts      [16]rect
-		np         int
-		noSub8     = true
-	)
-	if intra {
-		if itype == 0 {
-			mbt = mtI4x4
-			if pps.Transform8x8 {
-				if d.cabacOn {
+	chromaMode := 0
+	if isIntraT(mbType) {
+		if mbType&mbIntra4x4 != 0 {
+			step := 1
+			if dct8x8Allowed {
+				var t8 bool
+				if cabac {
 					t8 = d.cabacT8()
 				} else {
 					t8 = br.flag()
 				}
+				if t8 {
+					mbType |= mb8x8DCT
+					step = 4
+				}
 			}
-			d.mbT8[idx] = t8
-			if err := d.parseIntraModes(t8); err != nil {
-				return err
+			for i := 0; i < 16; i += step {
+				mode := d.predIntraMode(i)
+				if cabac {
+					if d.cab.bin(68) == 0 {
+						rem := d.cab.bin(69)
+						rem += 2 * d.cab.bin(69)
+						rem += 4 * d.cab.bin(69)
+						mode = rem + btoi(rem >= mode)
+					}
+				} else if !br.flag() {
+					rem := int(br.u(3))
+					mode = rem + btoi(rem >= mode)
+				}
+				if step == 4 {
+					c := scan8[i]
+					d.ipmCache[c], d.ipmCache[c+1], d.ipmCache[c+8], d.ipmCache[c+9] = int8(mode), int8(mode), int8(mode), int8(mode)
+				} else {
+					d.ipmCache[scan8[i]] = int8(mode)
+				}
 			}
-		} else {
-			mbt = mtI16
-			i16Mode = (itype - 1) & 3
-			cbp = ((itype-1)>>2)%3<<4 | btoi(itype >= 13)*15
-			// record DC mode for neighbours' mode prediction
-			for k := 0; k < 16; k++ {
-				d.ipm[idx*16+k] = 2
+			for y := 0; y < 4; y++ {
+				for x := 0; x < 4; x++ {
+					d.ipm[idx*16+y*4+x] = d.ipmCache[c0+y*8+x]
+				}
 			}
 		}
-		if d.cabacOn {
-			chromaMode = d.cabacIntraChroma()
-		} else {
-			chromaMode = int(br.ue())
-		}
-		if chromaMode > 3 {
-			return corrupt()
-		}
-		d.mbChroma[idx] = uint8(chromaMode)
-	} else {
-		mbt = mtInter
-		if h.isB() && raw == 0 {
-			mbt = mtBDirect
-		}
-		var err error
-		np, noSub8, err = d.parseInter(&it, parts[:])
-		if err != nil {
-			return err
-		}
-	}
-	if intra && itype == 0 || !intra {
-		// coded_block_pattern
-		if d.cabacOn {
-			cbp = d.cabacCBP()
-		} else {
-			v := int(br.ue())
-			if v > 47 {
+		if decodeChroma {
+			if cabac {
+				chromaMode = d.cabacIntraChroma()
+			} else {
+				chromaMode = int(br.ue())
+			}
+			if chromaMode > 3 {
 				return corrupt()
 			}
-			if intra {
-				cbp = int(golombToIntra4x4CBP[v])
+		}
+		d.chromaPredTable[idx] = uint8(chromaMode)
+	} else if partCount == 4 {
+		var subCount [4]int
+		isB := h.isB()
+		directMask := uint8(0)
+		for i := 0; i < 4; i++ {
+			var t int
+			if isB {
+				if cabac {
+					t = d.cabacSubTypeB()
+				} else {
+					t = int(br.ue())
+				}
+				if t >= 13 {
+					return corrupt()
+				}
+				subCount[i], d.subMbType[i] = bSubMbTypeInfo[t].parts, bSubMbTypeInfo[t].typ
 			} else {
-				cbp = int(golombToInterCBP[v])
+				if cabac {
+					t = d.cabacSubTypeP()
+				} else {
+					t = int(br.ue())
+				}
+				if t >= 4 {
+					return corrupt()
+				}
+				subCount[i], d.subMbType[i] = pSubMbTypeInfo[t].parts, pSubMbTypeInfo[t].typ
+			}
+			if d.subMbType[i]&mbDirect2 != 0 {
+				directMask |= 1 << uint(i)
 			}
 		}
-		if !intra && cbp&15 != 0 && pps.Transform8x8 && noSub8 && (mbt != mtBDirect || h.sps.Direct8x8) {
-			if d.cabacOn {
+		if directMask != 0 {
+			d.predDirect(directMask)
+			for l := 0; l < 2; l++ {
+				d.refCache[l][scan8[4]] = refNotAvail
+				d.refCache[l][scan8[12]] = refNotAvail
+			}
+			if cabac {
+				for i := 0; i < 4; i++ {
+					v := uint8(d.subMbType[i] >> 1)
+					c := scan8[4*i]
+					d.directCache[c], d.directCache[c+1], d.directCache[c+8], d.directCache[c+9] = v, v, v, v
+				}
+			}
+		}
+		var ref [2][4]int
+		for list := 0; list < d.listCount; list++ {
+			rc := h.numRef[list] << mbaffShift
+			if mbType&mbRef0 != 0 {
+				rc = 1
+			}
+			for i := 0; i < 4; i++ {
+				if d.subMbType[i]&mbDirect2 != 0 {
+					continue
+				}
+				if isDir(d.subMbType[i], 0, list) {
+					v, err := d.readRef(list, 4*i, rc)
+					if err != nil {
+						return err
+					}
+					ref[list][i] = v
+				} else {
+					ref[list][i] = -1
+				}
+				c := scan8[4*i]
+				r := int8(ref[list][i])
+				d.refCache[list][c+1], d.refCache[list][c+8], d.refCache[list][c+9] = r, r, r
+				if !cabac {
+					d.refCache[list][c] = r
+				}
+			}
+		}
+		if dct8x8Allowed {
+			dct8x8Allowed = d.dct8x8Allowed()
+		}
+		for list := 0; list < d.listCount; list++ {
+			for i := 0; i < 4; i++ {
+				c := scan8[4*i]
+				if d.subMbType[i]&mbDirect2 != 0 {
+					d.refCache[list][c] = d.refCache[list][c+1]
+					if cabac {
+						fillMVD(&d.mvdCache[list], (i&1)*2, (i>>1)*2, 2, 2, [2]uint8{})
+					}
+					continue
+				}
+				if cabac {
+					d.refCache[list][c] = d.refCache[list][c+1]
+				}
+				if isDir(d.subMbType[i], 0, list) {
+					st := d.subMbType[i]
+					bw := 1
+					if st&(mb16x16|mb16x8) != 0 {
+						bw = 2
+					}
+					for j := 0; j < subCount[i]; j++ {
+						index := 4*i + bw*j
+						ci := scan8[index]
+						mx, my := d.predMotion(index, bw, list, int(d.refCache[list][ci]))
+						dx, dy, ax, ay := d.readMVD(list, index)
+						mx += dx
+						my += dy
+						m := mv16{int16(mx), int16(my)}
+						mvd := [2]uint8{ax, ay}
+						mc := &d.mvCache[list]
+						md := &d.mvdCache[list]
+						switch {
+						case st&mb16x16 != 0: // 8x8
+							mc[ci+1], mc[ci+8], mc[ci+9] = m, m, m
+							md[ci+1], md[ci+8], md[ci+9] = mvd, mvd, mvd
+						case st&mb16x8 != 0: // 8x4
+							mc[ci+1] = m
+							md[ci+1] = mvd
+						case st&mb8x16 != 0: // 4x8
+							mc[ci+8] = m
+							md[ci+8] = mvd
+						}
+						mc[ci] = m
+						md[ci] = mvd
+					}
+				} else {
+					fillMV(&d.mvCache[list], (i&1)*2, (i>>1)*2, 2, 2, mv16{})
+					if cabac {
+						fillMVD(&d.mvdCache[list], (i&1)*2, (i>>1)*2, 2, 2, [2]uint8{})
+					}
+				}
+			}
+		}
+	} else if mbType&mbDirect2 != 0 {
+		d.predDirect(0xf)
+		if cabac {
+			fillMVD(&d.mvdCache[0], 0, 0, 4, 4, [2]uint8{})
+			fillMVD(&d.mvdCache[1], 0, 0, 4, 4, [2]uint8{})
+		}
+		dct8x8Allowed = dct8x8Allowed && h.sps.Direct8x8
+	} else {
+		for list := 0; list < d.listCount; list++ {
+			rc := h.numRef[list] << mbaffShift
+			switch {
+			case mbType&mb16x16 != 0:
+				if isDir(mbType, 0, list) {
+					v, err := d.readRef(list, 0, rc)
+					if err != nil {
+						return err
+					}
+					fillRef(&d.refCache[list], 0, 0, 4, 4, int8(v))
+				}
+			case mbType&mb16x8 != 0:
+				for i := 0; i < 2; i++ {
+					if isDir(mbType, i, list) {
+						v, err := d.readRef(list, 8*i, rc)
+						if err != nil {
+							return err
+						}
+						fillRef(&d.refCache[list], 0, 2*i, 4, 2, int8(v))
+					} else {
+						fillRef(&d.refCache[list], 0, 2*i, 4, 2, refNotUsed)
+					}
+				}
+			default: // 8x16
+				for i := 0; i < 2; i++ {
+					if isDir(mbType, i, list) {
+						v, err := d.readRef(list, 4*i, rc)
+						if err != nil {
+							return err
+						}
+						fillRef(&d.refCache[list], 2*i, 0, 2, 4, int8(v))
+					} else {
+						fillRef(&d.refCache[list], 2*i, 0, 2, 4, refNotUsed)
+					}
+				}
+			}
+		}
+		for list := 0; list < d.listCount; list++ {
+			switch {
+			case mbType&mb16x16 != 0:
+				if isDir(mbType, 0, list) {
+					mx, my := d.predMotion(0, 4, list, int(d.refCache[list][c0]))
+					dx, dy, ax, ay := d.readMVD(list, 0)
+					fillMVD(&d.mvdCache[list], 0, 0, 4, 4, [2]uint8{ax, ay})
+					fillMV(&d.mvCache[list], 0, 0, 4, 4, mv16{int16(mx + dx), int16(my + dy)})
+				}
+			case mbType&mb16x8 != 0:
+				for i := 0; i < 2; i++ {
+					if isDir(mbType, i, list) {
+						mx, my := d.pred16x8Motion(8*i, list, int(d.refCache[list][c0+16*i]))
+						dx, dy, ax, ay := d.readMVD(list, 8*i)
+						fillMVD(&d.mvdCache[list], 0, 2*i, 4, 2, [2]uint8{ax, ay})
+						fillMV(&d.mvCache[list], 0, 2*i, 4, 2, mv16{int16(mx + dx), int16(my + dy)})
+					} else {
+						fillMVD(&d.mvdCache[list], 0, 2*i, 4, 2, [2]uint8{})
+						fillMV(&d.mvCache[list], 0, 2*i, 4, 2, mv16{})
+					}
+				}
+			default:
+				for i := 0; i < 2; i++ {
+					if isDir(mbType, i, list) {
+						mx, my := d.pred8x16Motion(4*i, list, int(d.refCache[list][c0+2*i]))
+						dx, dy, ax, ay := d.readMVD(list, 4*i)
+						fillMVD(&d.mvdCache[list], 2*i, 0, 2, 4, [2]uint8{ax, ay})
+						fillMV(&d.mvCache[list], 2*i, 0, 2, 4, mv16{int16(mx + dx), int16(my + dy)})
+					} else {
+						fillMVD(&d.mvdCache[list], 2*i, 0, 2, 4, [2]uint8{})
+						fillMV(&d.mvCache[list], 2*i, 0, 2, 4, mv16{})
+					}
+				}
+			}
+		}
+	}
+	if isInterT(mbType) || mbType&mbDirect2 != 0 {
+		d.chromaPredTable[idx] = 0
+		d.writeBackMotion(mbType)
+	}
+
+	if mbType&mbIntra16x16 == 0 {
+		if cabac {
+			cbp = d.cabacCBPLuma()
+			if decodeChroma {
+				cbp |= d.cabacCBPChroma() << 4
+			}
+		} else {
+			v := int(br.ue())
+			if decodeChroma {
+				if v > 47 {
+					return corrupt()
+				}
+				if mbType&mbIntra4x4 != 0 {
+					cbp = int(golombToIntra4x4CBP[v])
+				} else {
+					cbp = int(golombToInterCBP[v])
+				}
+			} else {
+				if v > 15 {
+					return corrupt()
+				}
+				if mbType&mbIntra4x4 != 0 {
+					cbp = int(golombToIntra4x4CBPGray[v])
+				} else {
+					cbp = int(golombToInterCBPGray[v])
+				}
+			}
+		}
+		if dct8x8Allowed && cbp&15 != 0 && !isIntraT(mbType) {
+			var t8 bool
+			if cabac {
 				t8 = d.cabacT8()
 			} else {
 				t8 = br.flag()
 			}
-			d.mbT8[idx] = t8
+			if t8 {
+				mbType |= mb8x8DCT
+			}
 		}
 	}
-	d.mbCBP[idx] = uint8(cbp)
-	d.mbType[idx] = mbt
-	d.mbT8[idx] = t8
-	d.mbDirect[idx] = d.curDirect
-	// inter prediction first (needs only motion data)
-	if !intra {
-		for k := 0; k < np; k++ {
-			d.mcRect(parts[k])
-		}
+	d.curPic.mbType[idx] = mbType
+	t8 := mbType&mb8x8DCT != 0
+	d.bypassMB = d.f.bypass && d.qp+d.f.qpBdY == 0
+	for i := range d.coef {
+		d.coef[i] = 0
 	}
-	if cbp > 0 || mbt == mtI16 {
-		if _, err := d.readQPDelta(); err != nil {
+	d.clearNZCaches()
+	if cbp != 0 || mbType&mbIntra16x16 != 0 {
+		if err := d.readQPDelta(); err != nil {
 			return err
 		}
-		d.mbQP[idx] = int8(d.qp)
-		if err := d.parseResidual(intra, mbt == mtI16, cbp, t8); err != nil {
+		if err := d.parseResidual(isIntraT(mbType), mbType&mbIntra16x16 != 0, cbp, t8); err != nil {
 			return err
 		}
 	} else {
 		d.lastDQ = false
-		d.mbQP[idx] = int8(d.qp)
 	}
-	if d.mbChroma != nil {
-		d.mbChroma[idx] = uint8(chromaMode)
-	}
-	if intra {
-		d.reconIntra(mbt, i16Mode, chromaMode, cbp, t8)
+	d.writeBackNZ()
+	d.finishMB(mbType, cbp)
+	if isIntraT(mbType) {
+		d.reconIntra(mbType, i16Mode, chromaMode, cbp, t8)
 	} else {
+		d.motionComp(mbType)
 		d.addInterResidual(cbp, t8)
 	}
+	d.prevMBSkipped = false
 	return nil
 }
 
-func (d *Decoder) decodePCM() error {
+// dct8x8Allowed reports whether the 8x8 transform may be used by a B_8x8 /
+// P_8x8 macroblock given its sub-macroblock types.
+func (d *Decoder) dct8x8Allowed() bool {
+	for i := 0; i < 4; i++ {
+		st := d.subMbType[i]
+		if st&mbDirect2 != 0 {
+			if !d.hdr.sps.Direct8x8 {
+				return false
+			}
+			continue
+		}
+		if st&(mb16x8|mb8x16|mb8x8) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (d *Decoder) decodePCM(mbType uint32) error {
 	idx := d.mbIdx
 	pic := d.cur
-	var src []byte
+	var r *bitReader
 	if d.cabacOn {
 		// after the terminating bin the stream continues byte aligned
 		pos := (d.cab.pos + 7) &^ 7
-		if (pos>>3)+384 > len(d.cab.data) {
-			return corrupt()
-		}
-		src = d.cab.data[pos>>3 : pos>>3+384]
-		d.cab.start(pos + 384*8)
+		r = &bitReader{b: d.cab.data, pos: pos, end: len(d.cab.data) * 8}
 	} else {
 		d.br.byteAlign()
-		p := d.br.pos >> 3
-		if p+384 > len(d.br.b) {
-			return corrupt()
-		}
-		src = d.br.b[p : p+384]
-		d.br.pos += 384 * 8
+		r = d.br
 	}
+	need := 256 * d.f.bdY
+	if d.f.cat != 0 {
+		need += 2 * d.f.mbWC * d.f.mbHC * d.f.bdC
+	}
+	if r.pos+need > r.end || (d.cabacOn && r.pos+need > len(r.b)*8-64) {
+		return corrupt()
+	}
+	_ = pic
+	pl, _ := d.planeOf(0)
 	for y := 0; y < 16; y++ {
-		copy(pic.y[(d.mby*16+y)*pic.ys+d.mbx*16:], src[y*16:y*16+16])
+		row := pl[d.mbOff[0]+y*d.mbStr[0]:]
+		for x := 0; x < 16; x++ {
+			row[x] = uint16(r.u(uint(d.f.bdY)))
+		}
 	}
-	for y := 0; y < 8; y++ {
-		copy(pic.cb[(d.mby*8+y)*pic.cs+d.mbx*8:], src[256+y*8:256+y*8+8])
-		copy(pic.cr[(d.mby*8+y)*pic.cs+d.mbx*8:], src[320+y*8:320+y*8+8])
+	if d.f.cat != 0 {
+		for c := 1; c <= 2; c++ {
+			cpl, _ := d.planeOf(c)
+			for y := 0; y < d.f.mbHC; y++ {
+				row := cpl[d.mbOff[c]+y*d.mbStr[c]:]
+				for x := 0; x < d.f.mbWC; x++ {
+					row[x] = uint16(r.u(uint(d.f.bdC)))
+				}
+			}
+		}
 	}
-	for k := 0; k < 24; k++ {
-		d.nz[idx*24+k] = 16
+	if d.cabacOn {
+		d.cab.start(r.pos)
 	}
-	d.mbDC[idx] = 7
-	d.nzMask[idx] = 0xffff
-	d.mbType[idx] = mtPCM
-	d.mbCBP[idx] = 0x2f
-	d.mbT8[idx] = false
-	d.mbChroma[idx] = 0
-	d.mbDirect[idx] = 0
-	for k := 0; k < 16; k++ {
-		d.ipm[idx*16+k] = 2
+	for k := 0; k < 48; k++ {
+		d.nz[idx*48+k] = 16
 	}
-	d.mbQP[idx] = 0
+	d.curPic.mbType[idx] = mbType
+	d.cbpTable[idx] = 0xf7ef
+	d.chromaPredTable[idx] = 0
+	d.qpTable[idx] = 0
+	d.mbNZMask[idx] = 0xffff
+	d.mbBypass[idx] = false
 	d.lastDQ = false
+	d.prevMBSkipped = false
 	return nil
-}
-
-// parseIntraModes reads the Intra4x4/8x8 prediction modes (7.3.5.1) into the
-// per-block mode array d.ipm and d.curIPM.
-func (d *Decoder) parseIntraModes(t8 bool) error {
-	idx := d.mbIdx
-	n := 16
-	if t8 {
-		n = 4
-	}
-	for k := 0; k < n; k++ {
-		var bx, by int
-		if t8 {
-			bx, by = (k&1)*2, (k>>1)*2
-		} else {
-			bx, by = blkX[k], blkY[k]
-		}
-		var prev bool
-		rem := 0
-		if d.cabacOn {
-			prev = d.cab.bin(68) != 0
-			if !prev {
-				rem = d.cab.bin(69)
-				rem |= d.cab.bin(69) << 1
-				rem |= d.cab.bin(69) << 2
-			}
-		} else {
-			prev = d.br.flag()
-			if !prev {
-				rem = int(d.br.u(3))
-			}
-		}
-		// predicted mode
-		a := d.ipmAt(bx-1, by)
-		b := d.ipmAt(bx, by-1)
-		pm := 2
-		if a >= 0 && b >= 0 {
-			pm = min(a, b)
-		}
-		mode := pm
-		if !prev {
-			if rem < pm {
-				mode = rem
-			} else {
-				mode = rem + 1
-			}
-		}
-		if t8 {
-			for q := 0; q < 4; q++ {
-				d.ipm[idx*16+(by+q>>1)*4+bx+q&1] = int8(mode)
-			}
-		} else {
-			d.ipm[idx*16+by*4+bx] = int8(mode)
-		}
-	}
-	return nil
-}
-
-// ipmAt returns the intra mode of the block at macroblock-relative 4x4
-// coordinates, -1 when unavailable for prediction (7.3.5.1 rules), and 2 for
-// blocks of macroblocks that are not Intra NxN.
-func (d *Decoder) ipmAt(bx, by int) int {
-	idx := d.mbIdx
-	if bx >= 0 && by >= 0 {
-		return int(d.ipm[idx*16+by*4+bx])
-	}
-	var ni int
-	switch {
-	case bx < 0:
-		if !d.availA {
-			return -1
-		}
-		ni = idx - 1
-		bx = 3
-	default:
-		if !d.availB {
-			return -1
-		}
-		ni = idx - d.mbW
-		by = 3
-	}
-	if d.hdr.pps.ConstrainedIntra && !isIntraMB(d.mbType[ni]) {
-		return -1
-	}
-	if d.mbType[ni] != mtI4x4 {
-		return 2
-	}
-	return int(d.ipm[ni*16+by*4+bx])
-}
-
-// parseInter parses the prediction syntax of an inter macroblock (mb_pred /
-// sub_mb_pred) including motion vector derivation. It fills parts with the
-// prediction rectangles.
-func (d *Decoder) parseInter(it *interMB, parts []rect) (int, bool, error) {
-	h := d.hdr
-	noSub8 := true
-	np := 0
-	isB := h.isB()
-	cab := d.cabacOn
-	br := d.br
-	var sub [4]subMB
-	var subRaw [4]int
-	type partSpec struct {
-		r  rect
-		pm uint8
-		sh int
-	}
-	var specs [16]partSpec // partitions (non-8x8) or 8x8 blocks
-	switch {
-	case it.direct && !it.is8x8: // B_Direct_16x16
-		d.curDirect = 0xf
-		d.directMB(0xf)
-		np = d.directRects(0xf, parts)
-		return np, h.sps.Direct8x8, nil
-	case it.is8x8:
-		for b8 := 0; b8 < 4; b8++ {
-			var t int
-			if cab {
-				if isB {
-					t = d.cabacSubTypeB()
-				} else {
-					t = d.cabacSubTypeP()
-				}
-			} else {
-				t = int(br.ue())
-			}
-			subRaw[b8] = t
-			if isB {
-				if t > 12 {
-					return 0, false, corrupt()
-				}
-				sub[b8] = bSubTypes[t]
-			} else {
-				if t > 3 {
-					return 0, false, corrupt()
-				}
-				sub[b8] = pSubTypes[t]
-			}
-			if sub[b8].direct {
-				d.curDirect |= 1 << uint(b8)
-				if !h.sps.Direct8x8 {
-					noSub8 = false
-				}
-			} else if sub[b8].n > 1 {
-				noSub8 = false
-			}
-		}
-		if d.curDirect != 0 {
-			d.directMB(d.curDirect)
-		}
-		for b8 := 0; b8 < 4; b8++ {
-			specs[b8] = partSpec{rect{(b8 & 1) * 2, (b8 >> 1) * 2, 2, 2}, sub[b8].pm, 0}
-		}
-	default:
-		for p := 0; p < it.n; p++ {
-			var r rect
-			sh := 0
-			switch {
-			case it.n == 1:
-				r = rect{0, 0, 4, 4}
-			case it.h == 2: // 16x8
-				r = rect{0, p * 2, 4, 2}
-				sh = 1 + p
-			default: // 8x16
-				r = rect{p * 2, 0, 2, 4}
-				sh = 3 + p
-			}
-			specs[p] = partSpec{r, it.pm[p], sh}
-		}
-	}
-	nspec := it.n
-	if it.is8x8 {
-		nspec = 4
-	}
-	// reference indices
-	var refs [2][4]int
-	for l := 0; l < 2; l++ {
-		nref := h.numRef[l]
-		for p := 0; p < nspec; p++ {
-			sp := specs[p]
-			use := sp.pm&(1<<uint(l)) != 0
-			if it.is8x8 && sub[p].direct {
-				use = false
-			}
-			if !use {
-				continue
-			}
-			ref := 0
-			if nref > 1 && !it.ref0 {
-				if cab {
-					ref = d.cabacRefIdx(l, sp.r.x, sp.r.y)
-				} else {
-					ref = int(br.te(uint32(nref - 1)))
-				}
-			}
-			if ref < 0 || ref >= nref {
-				return 0, false, corrupt()
-			}
-			refs[l][p] = ref
-			d.storeRef(l, sp.r, ref)
-		}
-	}
-	// motion vectors
-	for l := 0; l < 2; l++ {
-		for p := 0; p < nspec; p++ {
-			sp := specs[p]
-			use := sp.pm&(1<<uint(l)) != 0
-			if it.is8x8 && sub[p].direct {
-				continue
-			}
-			if !use {
-				continue
-			}
-			ref := refs[l][p]
-			if it.is8x8 {
-				s := sub[p]
-				for q := 0; q < s.n; q++ {
-					r := subRect(sp.r, s, q)
-					if err := d.readMVFor(l, ref, r, 0); err != nil {
-						return 0, false, err
-					}
-				}
-			} else {
-				if err := d.readMVFor(l, ref, sp.r, sp.sh); err != nil {
-					return 0, false, err
-				}
-			}
-		}
-	}
-	// prediction rectangles
-	if it.is8x8 {
-		for b8 := 0; b8 < 4; b8++ {
-			s := sub[b8]
-			sp := specs[b8]
-			if s.direct {
-				if h.sps.Direct8x8 {
-					parts[np] = sp.r
-					np++
-				} else {
-					for k := 0; k < 4; k++ {
-						parts[np] = rect{sp.r.x + k&1, sp.r.y + k>>1, 1, 1}
-						np++
-					}
-				}
-				continue
-			}
-			for q := 0; q < s.n; q++ {
-				r := subRect(sp.r, s, q)
-				parts[np] = r
-				np++
-			}
-		}
-	} else {
-		for p := 0; p < nspec; p++ {
-			parts[np] = specs[p].r
-			np++
-		}
-	}
-	return np, noSub8, nil
-}
-
-// readMVFor reads mvd for list l of rectangle r, predicts and stores the
-// vector.
-func (d *Decoder) readMVFor(l, ref int, r rect, shape int) error {
-	var mx, my int
-	if d.cabacOn {
-		mx = d.cabacMVD(l, 0, r.x, r.y)
-		my = d.cabacMVD(l, 1, r.x, r.y)
-	} else {
-		mx = int(d.br.se())
-		my = int(d.br.se())
-	}
-	p := d.predMV(l, ref, r.x, r.y, r.w, shape)
-	m := mv16{int16(int(p.x) + mx), int16(int(p.y) + my)}
-	d.storeMotion(l, r, ref, m)
-	if d.cabacOn {
-		ax := min(abs(mx), 255)
-		ay := min(abs(my), 255)
-		d.storeMVD(l, r, [2]uint8{uint8(ax), uint8(ay)})
-	}
-	return nil
-}
-
-func subRect(sp rect, s subMB, q int) rect {
-	switch {
-	case s.w == 2 && s.h == 1:
-		return rect{sp.x, sp.y + q, 2, 1}
-	case s.w == 1 && s.h == 2:
-		return rect{sp.x + q, sp.y, 1, 2}
-	case s.w == 1 && s.h == 1:
-		return rect{sp.x + q&1, sp.y + q>>1, 1, 1}
-	}
-	return sp
 }
