@@ -30,6 +30,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	fnet "github.com/sweefbrowser/sweef/internal/net"
 	"modernc.org/quickjs"
@@ -1292,7 +1293,12 @@ func (t *Tab) httpForScript(method, rawurl string, headers map[string]string, bo
 	for k, v := range res.Header {
 		hdr[strings.ToLower(k)] = strings.Join(v, ", ")
 	}
-	return map[string]any{"status": res.StatusCode, "statusText": http.StatusText(res.StatusCode), "headers": hdr, "body": string(data), "url": rec.FinalURL}, nil
+	out := map[string]any{"status": res.StatusCode, "statusText": http.StatusText(res.StatusCode), "headers": hdr, "body": string(data), "url": rec.FinalURL}
+	if !utf8.Valid(data) {
+		// binary payload: the text form above is lossy, so also hand over the exact bytes
+		out["b64"] = base64.StdEncoding.EncodeToString(data)
+	}
+	return out, nil
 }
 
 // fetchResource GETs a sub-resource (script, module) as text through the

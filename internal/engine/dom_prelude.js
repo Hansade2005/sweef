@@ -2459,6 +2459,14 @@
     for (var i = 0; i < s.length; i++) { buf = (buf << 6) | B64.indexOf(s[i]); bits += 6; if (bits >= 8) { bits -= 8; out += String.fromCharCode((buf >> bits) & 255); } }
     return out;
   };
+  var B64LUT = null;
+  function b64ToBytes(str) {
+    if (!B64LUT) { B64LUT = new Uint8Array(256).fill(255); for (var k = 0; k < 64; k++) B64LUT[B64.charCodeAt(k)] = k; }
+    var n = str.length, pad = n && str.charCodeAt(n - 1) === 61 ? (str.charCodeAt(n - 2) === 61 ? 2 : 1) : 0;
+    var out = new Uint8Array((n * 3 >> 2) - pad), o = 0, buf = 0, bits = 0;
+    for (var i = 0; i < n; i++) { var v = B64LUT[str.charCodeAt(i)]; if (v === 255) continue; buf = (buf << 6) | v; bits += 6; if (bits >= 8) { bits -= 8; if (o < out.length) out[o++] = (buf >> bits) & 255; buf &= (1 << bits) - 1; } }
+    return out;
+  }
   function utf8Encode(str) {
     str = toStr(str); var out = [];
     for (var i = 0; i < str.length; i++) {
@@ -2771,9 +2779,9 @@
       _consume: function () { if (this._used) return Promise.reject(new TypeError('Failed to execute \'text\' on \'' + this.constructor.name + '\': body stream already read')); this._used = true; return Promise.resolve(this._text()); },
       text: function () { return this._consume(); },
       json: function () { return this._consume().then(function (t) { return JSON.parse(t); }); },
-      arrayBuffer: function () { return this._consume().then(function (t) { return utf8Encode(t).buffer; }); },
-      bytes: function () { return this._consume().then(function (t) { return utf8Encode(t); }); },
-      blob: function () { var type = this.headers.get('content-type') || ''; return this._consume().then(function (t) { return new Blob([t], { type: type }); }); },
+      arrayBuffer: function () { var raw = this._rawBytes; return this._consume().then(function (t) { return raw ? raw.slice().buffer : utf8Encode(t).buffer; }); },
+      bytes: function () { var raw = this._rawBytes; return this._consume().then(function (t) { return raw ? raw.slice() : utf8Encode(t); }); },
+      blob: function () { var type = this.headers.get('content-type') || '', raw = this._rawBytes; return this._consume().then(function (t) { return new Blob([raw || t], { type: type }); }); },
       formData: function () { var type = this.headers.get('content-type') || ''; return this._consume().then(function (t) { var fd = new FormData(); if (/urlencoded/.test(type)) new URLSearchParams(t).forEach(function (v, k) { fd.append(k, v); }); return fd; }); }
     });
   }
@@ -2838,6 +2846,7 @@
     var status = r.status | 0;
     var resp = new Response(r.body === undefined || r.body === null ? '' : r.body, { status: status >= 200 && status <= 599 ? status : 200, statusText: r.statusText || '', headers: r.headers || {} });
     if (status < 200 || status > 599) Object.defineProperty(resp, 'status', { value: status });
+    if (r.b64) Object.defineProperty(resp, '_rawBytes', { value: b64ToBytes(String(r.b64)), writable: true });
     resp.url = r.url || url;
     resp.redirected = !!r.url && r.url !== url;
     resp.type = 'basic';
@@ -2884,6 +2893,7 @@
     x.status = r.status | 0; x.statusText = r.statusText || ''; x.responseURL = r.url || url;
     x._resHeaders = new Headers(r.headers || {});
     x._responseText = r.body === undefined || r.body === null ? '' : String(r.body);
+    x._responseBytes = r.b64 ? b64ToBytes(String(r.b64)) : null;
     xhrState(x, 2); xhrState(x, 3); xhrState(x, 4);
     var len = x._responseText.length;
     fire(x, 'progress', { lengthComputable: true, loaded: len, total: len });
@@ -2904,8 +2914,8 @@
         switch (this.responseType) {
           case '': case 'text': return this._responseText;
           case 'json': try { return JSON.parse(this._responseText); } catch (e) { return null; }
-          case 'arraybuffer': return utf8Encode(this._responseText).buffer;
-          case 'blob': return new Blob([this._responseText], { type: this._resHeaders.get('content-type') || '' });
+          case 'arraybuffer': return this._responseBytes ? this._responseBytes.slice().buffer : utf8Encode(this._responseText).buffer;
+          case 'blob': return new Blob([this._responseBytes || this._responseText], { type: this._resHeaders.get('content-type') || '' });
           case 'document': return this.responseXML;
           default: return this._responseText;
         }
