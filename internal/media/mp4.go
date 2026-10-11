@@ -438,6 +438,10 @@ func (t *mp4Track) parseAudioConfig(typ string, kids []mp4box) {
 					aot = 2
 				}
 				t.Codec = fmt.Sprintf("mp4a.40.%d", aot)
+				// HE-AAC: report the SBR output rate, like ffprobe and browsers do
+				if c, err := parseASC(esdsDecoderSpecific(e.data[4:])); err == nil && c.sbr && c.extRate > 0 {
+					t.SampleRate = c.extRate
+				}
 			case 0x6b:
 				t.CodecName, t.Codec = "mp3", "mp4a.6B"
 			case 0x69:
