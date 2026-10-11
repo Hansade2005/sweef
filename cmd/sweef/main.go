@@ -143,6 +143,7 @@ func cmdServe(args []string) {
 
 func cmdFetch(args []string) {
 	fs := flag.NewFlagSet("fetch", flag.ExitOnError)
+	addCommonFlags(fs)
 	html := fs.Bool("html", false, "print raw HTML instead of text")
 	width := fs.Int("width", 0, "if >0, print structured render at this width")
 	rest := parseSkipURL(fs, args)
@@ -172,6 +173,7 @@ func cmdFetch(args []string) {
 
 func cmdSnapshot(args []string) {
 	fs := flag.NewFlagSet("snapshot", flag.ExitOnError)
+	addCommonFlags(fs)
 	aria := fs.Bool("aria", false, "Playwright-style YAML accessibility tree with [ref=eN] handles")
 	rest := parseSkipURL(fs, args)
 	if len(rest) == 0 {
@@ -204,6 +206,7 @@ func cmdSnapshot(args []string) {
 // with Playwright-like --width/--height/--dsf flags.
 func cmdShot(args []string) {
 	fs := flag.NewFlagSet("shot", flag.ExitOnError)
+	addCommonFlags(fs)
 	width := fs.Int("width", 0, "viewport width (0 = context default)")
 	height := fs.Int("height", 0, "viewport height (0 = context default)")
 	dsf := fs.Float64("dsf", 1, "device scale factor")
@@ -232,6 +235,7 @@ func cmdShot(args []string) {
 
 func cmdEval(args []string) {
 	fs := flag.NewFlagSet("eval", flag.ExitOnError)
+	addCommonFlags(fs)
 	rest := parseSkipURL(fs, args)
 	if len(rest) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: sweef eval <url> <expression>")
