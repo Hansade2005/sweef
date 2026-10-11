@@ -9,6 +9,7 @@ import (
 	"github.com/sweefbrowser/sweef/internal/media/h264"
 	"github.com/sweefbrowser/sweef/internal/media/vp8"
 	"github.com/sweefbrowser/sweef/internal/media/vp9"
+	"github.com/sweefbrowser/sweef/internal/media/yuv"
 )
 
 // vdecoder is a pure-Go video decoder fed one access unit at a time. Decode
@@ -17,6 +18,45 @@ import (
 type vdecoder interface {
 	Decode(data []byte) (*image.YCbCr, error)
 	Reset()
+}
+
+// vpic is a decoded picture in either of the two pixel containers: an 8-bit
+// 4:2:0 image.YCbCr (the fast path) or a yuv.Frame for every other depth,
+// chroma layout or colour description.
+type vpic struct {
+	ycc *image.YCbCr
+	frm *yuv.Frame
+}
+
+func (p vpic) valid() bool { return p.ycc != nil || p.frm != nil }
+
+// rgba converts the picture for display.
+func (p vpic) rgba(bt709 bool) *image.RGBA {
+	if p.frm != nil {
+		return p.frm.RGBA()
+	}
+	return yuvToRGBA(p.ycc, bt709)
+}
+
+// picDecoder is implemented by decoders that can return pictures that do not
+// fit an 8-bit 4:2:0 image.YCbCr (high bit depth, 4:2:2, 4:4:4, ...). The
+// nativeFrames tier prefers it over vdecoder.Decode.
+type picDecoder interface {
+	DecodePic(data []byte) (vpic, error)
+}
+
+// framePic wraps a decoded frame, using the YCbCr fast path when the frame
+// is plain 8-bit 4:2:0 with default colour description.
+func framePic(fr *yuv.Frame) vpic {
+	if fr == nil {
+		return vpic{}
+	}
+	if fr.Depth == 8 && fr.Format == yuv.F420 && !fr.FullRange && (fr.Matrix == yuv.MatrixUnspecified || fr.Matrix == yuv.MatrixBT601 || fr.Matrix == 6 || fr.Matrix == yuv.MatrixBT709) {
+		if img, ok := fr.ToYCbCr(); ok {
+			return vpic{ycc: img}
+		}
+	}
+	return vpic{frm: fr}
 }
 
 type vp8Adapter struct{ d *vp8.Decoder }
@@ -28,11 +68,19 @@ type vp9Adapter struct{ d *vp9.Decoder }
 
 func (a *vp9Adapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Decode(data) }
 func (a *vp9Adapter) Reset()                                   { a.d.Reset() }
+func (a *vp9Adapter) DecodePic(data []byte) (vpic, error) {
+	fr, err := a.d.DecodeFrame(data)
+	return framePic(fr), err
+}
 
 type h264Adapter struct{ d *h264.Decoder }
 
 func (a *h264Adapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Decode(data) }
 func (a *h264Adapter) Reset()                                   { a.d.Reset() }
+func (a *h264Adapter) DecodePic(data []byte) (vpic, error) {
+	fr, err := a.d.DecodeFrame(data)
+	return framePic(fr), err
+}
 
 // newNativeDecoder returns a decoder for the stream codec, or nil when no
 // pure-Go decoder exists for it.
@@ -48,6 +96,8 @@ func newNativeDecoder(vs *vstream) vdecoder {
 			return nil
 		}
 		return &h264Adapter{d}
+	case "av1":
+		return newAV1Adapter(vs.cfg)
 	}
 	return nil
 }
@@ -56,7 +106,7 @@ func newNativeDecoder(vs *vstream) vdecoder {
 // without ffmpeg.
 func HasNativeVideo(codec string) bool {
 	switch codec {
-	case "vp8", "vp9", "h264":
+	case "vp8", "vp9", "h264", "av1":
 		return true
 	}
 	return false
@@ -72,7 +122,7 @@ type nativeFrames struct {
 	order  []int // sample indices by presentation time
 	mu     sync.Mutex
 	pos    int // decode index of the last decoded sample (-1 none)
-	last   *image.YCbCr
+	last   vpic
 	cache  map[int]*image.RGBA
 	cacheQ []int
 	keys   []int // decode indices of sync samples
@@ -137,41 +187,49 @@ func (n *nativeFrames) Frame(t float64) (image.Image, error) {
 	if n.pos < 0 || idx <= n.pos {
 		start = n.keyBefore(idx)
 		n.dec.Reset()
-		n.last = nil
+		n.last = vpic{}
 	} else if k := n.keyBefore(idx); k > n.pos {
 		start = k
 		n.dec.Reset()
-		n.last = nil
+		n.last = vpic{}
 	}
-	var pic *image.YCbCr
+	var pic vpic
+	pd, _ := n.dec.(picDecoder)
 	for i := start; i <= idx; i++ {
 		data, err := n.vs.payload(n.src, i)
 		if err != nil {
 			n.pos = -1
 			return nil, err
 		}
-		p, err := n.dec.Decode(data)
+		var p vpic
+		if pd != nil {
+			p, err = pd.DecodePic(data)
+		} else {
+			var ycc *image.YCbCr
+			ycc, err = n.dec.Decode(data)
+			p = vpic{ycc: ycc}
+		}
 		if err != nil {
 			// A broken access unit: keep going so later key frames recover.
-			if i == idx && n.last == nil {
+			if i == idx && !n.last.valid() {
 				n.pos = -1
 				return nil, fmt.Errorf("media: %s decode: %w", n.vs.codec, err)
 			}
 			continue
 		}
 		pic = p
-		if p != nil {
+		if p.valid() {
 			n.last = p
 		}
 	}
 	n.pos = idx
-	if pic == nil {
+	if !pic.valid() {
 		pic = n.last
 	}
-	if pic == nil {
+	if !pic.valid() {
 		return nil, fmt.Errorf("media: no decodable frame at %.3fs", t)
 	}
-	img := yuvToRGBA(pic, n.vs.h >= 720)
+	img := pic.rgba(n.vs.h >= 720)
 	n.cache[idx] = img
 	n.cacheQ = append(n.cacheQ, idx)
 	for len(n.cacheQ) > 6 {

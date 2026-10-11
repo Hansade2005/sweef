@@ -65,7 +65,7 @@ func (d *Decoder) uvTxSize() int {
 	if b.miSize < block8x8 {
 		return tx4x4
 	}
-	uvSize := int(ssSizeLookup[b.miSize][1][1])
+	uvSize := int(ssSizeLookup[b.miSize][d.subX][d.subY])
 	return min(b.txSize, int(maxTxSize[uvSize]))
 }
 
@@ -87,12 +87,13 @@ func (d *Decoder) residual() {
 		bsize = block8x8
 	}
 	qi := d.qindex(b.segID)
+	qt := (d.bitDepth - 8) >> 1
 	for plane := 0; plane < 3; plane++ {
 		txSz := b.txSize
 		subX, subY := 0, 0
 		if plane > 0 {
 			txSz = d.uvTxSize()
-			subX, subY = 1, 1
+			subX, subY = d.subX, d.subY
 		}
 		step := 1 << uint(txSz)
 		planeSz := int(ssSizeLookup[bsize][subX][subY])
@@ -115,11 +116,11 @@ func (d *Decoder) residual() {
 		maxY := (d.miRows * 8) >> uint(subY)
 		var dcQ, acQ int
 		if plane == 0 {
-			dcQ = int(dcQLookup[0][clip3(0, 255, qi+d.deltaQYDc)])
-			acQ = int(acQLookup[0][clip3(0, 255, qi)])
+			dcQ = int(dcQLookup[qt][clip3(0, 255, qi+d.deltaQYDc)])
+			acQ = int(acQLookup[qt][clip3(0, 255, qi)])
 		} else {
-			dcQ = int(dcQLookup[0][clip3(0, 255, qi+d.deltaQUVDc)])
-			acQ = int(acQLookup[0][clip3(0, 255, qi+d.deltaQUVAc)])
+			dcQ = int(dcQLookup[qt][clip3(0, 255, qi+d.deltaQUVDc)])
+			acQ = int(acQLookup[qt][clip3(0, 255, qi+d.deltaQUVAc)])
 		}
 		blockIdx := 0
 		for y := 0; y < n4h; y += step {
@@ -268,6 +269,13 @@ func (d *Decoder) tokens4(plane, startX, startY, txSz, blockIdx, dcQ, acQ, maxX,
 				cat := extraBits[token][0]
 				numExtra := extraBits[token][1]
 				coef = extraBits[token][2]
+				if token == 10 {
+					// high bit depth adds leading bits with probability 255
+					nHi := d.bitDepth - 8
+					for e := 0; e < nHi; e++ {
+						coef += d.bd.read(255) << uint(numExtra+nHi-1-e)
+					}
+				}
 				for e := 0; e < numExtra; e++ {
 					coef += d.bd.read(catProbs[cat][e]) << uint(numExtra-1-e)
 				}
@@ -317,7 +325,7 @@ func (d *Decoder) reconstruct(plane, x, y, txSz, txType, eob, maxRow int, scan [
 		for i := 0; i < n0; i++ {
 			row := pix[(y+i)*stride+x : (y+i)*stride+x+n0]
 			for j := range row {
-				row[j] = clip255(int32(row[j]) + add)
+				row[j] = d.clipPix(int32(row[j]) + add)
 			}
 		}
 		return
@@ -327,7 +335,7 @@ func (d *Decoder) reconstruct(plane, x, y, txSz, txType, eob, maxRow int, scan [
 		row := pix[(y+i)*stride+x : (y+i)*stride+x+n0]
 		src := buf[i*n0 : i*n0+n0]
 		for j := range row {
-			row[j] = clip255(int32(row[j]) + src[j])
+			row[j] = d.clipPix(int32(row[j]) + src[j])
 		}
 	}
 	for i := range buf {

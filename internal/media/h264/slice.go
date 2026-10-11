@@ -41,6 +41,9 @@ type sliceHeader struct {
 	deltaPOCBottom     int
 	deltaPOC           [2]int
 	redundantPicCnt    int
+	structure          int
+	sliceGroupCycle    int
+	colourPlane        int
 	directSpatial      bool
 	numRef             [2]int
 	refMods            [2][]refMod
@@ -75,20 +78,24 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 	}
 	h.pps = d.pps[ppsID]
 	h.sps = h.pps.sps
-	if d.sps[h.sps.ID] != nil && d.sps[h.sps.ID] != h.sps && d.sps[h.sps.ID].MbW == h.sps.MbW {
-		h.sps = d.sps[h.sps.ID]
-	}
 	sps := h.sps
-	if sps.ChromaFormat != 1 || sps.BitDepthLuma != 8 || sps.BitDepthChroma != 8 {
+	if sps.ChromaFormat != 0 && sps.BitDepthLuma != sps.BitDepthChroma {
 		return nil, ErrUnsupported
 	}
+	if sps.SeparatePlanes {
+		h.colourPlane = int(r.u(2))
+		if h.colourPlane > 2 {
+			return nil, errBitstream
+		}
+	}
 	h.frameNum = int(r.u(uint(sps.Log2MaxFrameNum)))
+	h.structure = picFrame
 	if !sps.FrameMbsOnly {
 		h.fieldPic = r.flag()
 		if h.fieldPic {
 			h.bottom = r.flag()
+			h.structure = picTop + btoi(h.bottom)
 		}
-		return nil, ErrUnsupported
 	}
 	if h.idr {
 		h.idrPicID = int(r.ue())
@@ -151,7 +158,9 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 	if (h.pps.WeightedPred && (h.sliceType == sliceP || h.sliceType == sliceSP)) || (h.pps.WeightedBipredIdc == 1 && h.isB()) {
 		h.hasPW = true
 		h.logWDLuma = int(r.ue())
-		h.logWDChroma = int(r.ue())
+		if sps.ChromaArrayType() != 0 {
+			h.logWDChroma = int(r.ue())
+		}
 		for l := 0; l < 1+btoi(h.isB()); l++ {
 			pw := &h.pw[l]
 			for i := 0; i < h.numRef[l]; i++ {
@@ -164,7 +173,7 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 				for c := 0; c < 2; c++ {
 					pw.chromaW[i][c] = 1 << uint(h.logWDChroma)
 				}
-				if r.flag() {
+				if sps.ChromaArrayType() != 0 && r.flag() {
 					pw.chromaFlag[i] = true
 					for c := 0; c < 2; c++ {
 						pw.chromaW[i][c] = int(r.se())
@@ -175,9 +184,19 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 		}
 	}
 	if nalRefIdc != 0 {
+		maxPicNum := 1 << uint(sps.Log2MaxFrameNum)
+		curPicNum := h.frameNum
+		if h.fieldPic {
+			maxPicNum <<= 1
+			curPicNum = 2*h.frameNum + 1
+		}
 		if h.idr {
 			h.noOutputPrior = r.flag()
 			h.longTermRef = r.flag()
+			h.adaptiveMarking = true
+			if h.longTermRef {
+				h.mmcos = append(h.mmcos, mmco{op: 6, a: 0})
+			}
 		} else if r.flag() {
 			h.adaptiveMarking = true
 			for n := 0; ; n++ {
@@ -191,16 +210,17 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 				m := mmco{op: op}
 				switch op {
 				case 1:
-					m.a = int(r.ue())
+					m.a = (curPicNum - int(r.ue()) - 1) & (maxPicNum - 1)
 				case 2:
 					m.a = int(r.ue())
 				case 3:
-					m.a = int(r.ue())
+					m.a = (curPicNum - int(r.ue()) - 1) & (maxPicNum - 1)
 					m.b = int(r.ue())
-				case 4:
+				case 4, 6:
 					m.a = int(r.ue())
-				case 6:
-					m.a = int(r.ue())
+				}
+				if op == 2 && m.a >= 32 || op == 3 && m.b >= 16 || op == 6 && m.a >= 16 || op == 4 && m.a > 16 {
+					return nil, errBitstream
 				}
 				h.mmcos = append(h.mmcos, m)
 			}
@@ -216,7 +236,7 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 	if h.sliceType == sliceSP || h.sliceType == sliceSI {
 		return nil, ErrUnsupported
 	}
-	if h.qp < 0 || h.qp > 51 {
+	if h.qp < -6*(sps.BitDepthLuma-8) || h.qp > 51 {
 		return nil, errBitstream
 	}
 	if h.pps.DeblockControl {
@@ -225,6 +245,15 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 			h.alphaOff = int(r.se()) * 2
 			h.betaOff = int(r.se()) * 2
 		}
+	}
+	if h.pps.NumSliceGroups > 1 && h.pps.SliceGroupType >= 3 && h.pps.SliceGroupType <= 5 {
+		units := sps.MbW * (sps.MbH >> uint(btoi(!sps.FrameMbsOnly)))
+		n := (units + h.pps.ChangeRate - 1) / h.pps.ChangeRate
+		bits := uint(0)
+		for (1 << bits) < n+1 {
+			bits++
+		}
+		h.sliceGroupCycle = int(r.u(bits))
 	}
 	if r.overrun() {
 		return nil, errBitstream

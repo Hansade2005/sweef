@@ -29,11 +29,13 @@ func buildVLC(lens, codes []uint8, maxBits uint) *vlcTable {
 }
 
 var (
-	coeffTokenVLC    [3]*vlcTable
-	chromaDCTokenVLC *vlcTable
-	totalZerosVLC    [16]*vlcTable
-	chromaDCZerosVLC [4]*vlcTable
-	runBeforeVLC     [8]*vlcTable
+	coeffTokenVLC       [3]*vlcTable
+	chromaDCTokenVLC    *vlcTable
+	chroma422DCTokenVLC *vlcTable
+	chroma422DCZerosVLC [8]*vlcTable
+	totalZerosVLC       [16]*vlcTable
+	chromaDCZerosVLC    [4]*vlcTable
+	runBeforeVLC        [8]*vlcTable
 )
 
 var vlcOnce sync.Once
@@ -55,6 +57,10 @@ func initVLC() {
 	}
 	for tz := 1; tz < 4; tz++ {
 		chromaDCZerosVLC[tz] = buildVLC(chromaDCTotalZerosLen[tz-1][:], chromaDCTotalZerosBits[tz-1][:], 3)
+	}
+	chroma422DCTokenVLC = buildVLC(chroma422DCCoeffTokenLen[:], chroma422DCCoeffTokenBits[:], 13)
+	for tz := 1; tz < 8; tz++ {
+		chroma422DCZerosVLC[tz] = buildVLC(chroma422DCTotalZerosLen[tz-1][:], chroma422DCTotalZerosBits[tz-1][:], 5)
 	}
 	for z := 1; z < 8; z++ {
 		runBeforeVLC[z] = buildVLC(runLen[z-1][:], runBits[z-1][:], 11)
@@ -82,6 +88,8 @@ func (d *Decoder) cavlcBlock(nC, maxNum int, lv *[64]int32) int {
 	var sym int
 	var ok bool
 	switch {
+	case nC == -2:
+		sym, ok = chroma422DCTokenVLC.read(r)
 	case nC == -1:
 		sym, ok = chromaDCTokenVLC.read(r)
 	case nC < 2:
@@ -169,7 +177,16 @@ func (d *Decoder) cavlcBlock(nC, maxNum int, lv *[64]int32) int {
 	}
 	zerosLeft := 0
 	if total < maxNum {
-		if nC == -1 {
+		if nC == -2 {
+			if total > 7 {
+				return -1
+			}
+			z, ok := chroma422DCZerosVLC[total].read(r)
+			if !ok {
+				return -1
+			}
+			zerosLeft = z
+		} else if nC == -1 {
 			if total > 3 {
 				return -1
 			}

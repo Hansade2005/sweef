@@ -50,7 +50,7 @@ func (d *Decoder) loopFilterFrame() {
 func (d *Decoder) loopFilterSB(plane, pass, row, col int) {
 	subX, subY := 0, 0
 	if plane > 0 {
-		subX, subY = 1, 1
+		subX, subY = d.subX, d.subY
 	}
 	var sub, edgeLen int
 	if pass == 0 {
@@ -100,7 +100,7 @@ func (d *Decoder) loopFilterSB(plane, pass, row, col int) {
 				if miSize < block8x8 {
 					txSz = tx4x4
 				} else {
-					txSz = min(txSz, int(maxTxSize[ssSizeLookup[miSize][1][1]]))
+					txSz = min(txSz, int(maxTxSize[ssSizeLookup[miSize][d.subX][d.subY]]))
 				}
 			}
 			sbSize := miSize
@@ -171,7 +171,7 @@ func (d *Decoder) loopFilterSB(plane, pass, row, col int) {
 				across, along = stride, 1
 			}
 			for k := 0; k < cnt; k++ {
-				filterSample(pix, pos+k*along, across, lim, blimit, thresh, filterSize)
+				filterSample(pix, uint(d.bitDepth), pos+k*along, across, lim, blimit, thresh, filterSize)
 			}
 		}
 	}
@@ -184,17 +184,19 @@ func abs32(v int32) int32 {
 	return v
 }
 
-func filter4Clamp(v int32) int32 {
-	if v < -128 {
-		return -128
+func clampSigned(v int32, sh uint) int32 {
+	lo, hi := -(int32(128) << sh), (int32(128)<<sh)-1
+	if v < lo {
+		return lo
 	}
-	if v > 127 {
-		return 127
+	if v > hi {
+		return hi
 	}
 	return v
 }
 
-func filterSample(pix []byte, pos, across, limit, blimit, thresh, filterSize int) {
+func filterSample(pix []uint16, bd uint, pos, across, limit, blimit, thresh, filterSize int) {
+	sh := bd - 8
 	q0 := int32(pix[pos])
 	q1 := int32(pix[pos+across])
 	q2 := int32(pix[pos+2*across])
@@ -203,32 +205,34 @@ func filterSample(pix []byte, pos, across, limit, blimit, thresh, filterSize int
 	p1 := int32(pix[pos-2*across])
 	p2 := int32(pix[pos-3*across])
 	p3 := int32(pix[pos-4*across])
-	lim := int32(limit)
-	hev := abs32(p1-p0) > int32(thresh) || abs32(q1-q0) > int32(thresh)
+	lim := int32(limit) << sh
+	hev := abs32(p1-p0) > int32(thresh)<<sh || abs32(q1-q0) > int32(thresh)<<sh
 	if abs32(p3-p2) > lim || abs32(p2-p1) > lim || abs32(p1-p0) > lim ||
 		abs32(q1-q0) > lim || abs32(q2-q1) > lim || abs32(q3-q2) > lim ||
-		abs32(p0-q0)*2+abs32(p1-q1)/2 > int32(blimit) {
+		abs32(p0-q0)*2+abs32(p1-q1)/2 > int32(blimit)<<sh {
 		return
 	}
+	one := int32(1) << sh
 	flat := false
 	if filterSize >= tx8x8 {
-		flat = abs32(p1-p0) <= 1 && abs32(q1-q0) <= 1 && abs32(p2-p0) <= 1 && abs32(q2-q0) <= 1 && abs32(p3-p0) <= 1 && abs32(q3-q0) <= 1
+		flat = abs32(p1-p0) <= one && abs32(q1-q0) <= one && abs32(p2-p0) <= one && abs32(q2-q0) <= one && abs32(p3-p0) <= one && abs32(q3-q0) <= one
 	}
 	if filterSize == tx4x4 || !flat {
-		ps1, ps0, qs0, qs1 := p1-128, p0-128, q0-128, q1-128
+		off := int32(128) << sh
+		ps1, ps0, qs0, qs1 := p1-off, p0-off, q0-off, q1-off
 		var f int32
 		if hev {
-			f = filter4Clamp(ps1 - qs1)
+			f = clampSigned(ps1-qs1, sh)
 		}
-		f = filter4Clamp(f + 3*(qs0-ps0))
-		f1 := filter4Clamp(f+4) >> 3
-		f2 := filter4Clamp(f+3) >> 3
-		pix[pos] = uint8(filter4Clamp(qs0-f1) + 128)
-		pix[pos-across] = uint8(filter4Clamp(ps0+f2) + 128)
+		f = clampSigned(f+3*(qs0-ps0), sh)
+		f1 := clampSigned(f+4, sh) >> 3
+		f2 := clampSigned(f+3, sh) >> 3
+		pix[pos] = uint16(clampSigned(qs0-f1, sh) + off)
+		pix[pos-across] = uint16(clampSigned(ps0+f2, sh) + off)
 		if !hev {
 			f = (f1 + 1) >> 1
-			pix[pos+across] = uint8(filter4Clamp(qs1-f) + 128)
-			pix[pos-2*across] = uint8(filter4Clamp(ps1+f) + 128)
+			pix[pos+across] = uint16(clampSigned(qs1-f, sh) + off)
+			pix[pos-2*across] = uint16(clampSigned(ps1+f, sh) + off)
 		}
 		return
 	}
@@ -236,7 +240,7 @@ func filterSample(pix []byte, pos, across, limit, blimit, thresh, filterSize int
 	if filterSize >= tx16x16 {
 		flat2 = true
 		for k := 4; k < 8; k++ {
-			if abs32(int32(pix[pos-(k+1)*across])-p0) > 1 || abs32(int32(pix[pos+k*across])-q0) > 1 {
+			if abs32(int32(pix[pos-(k+1)*across])-p0) > one || abs32(int32(pix[pos+k*across])-q0) > one {
 				flat2 = false
 				break
 			}
@@ -249,7 +253,7 @@ func filterSample(pix []byte, pos, across, limit, blimit, thresh, filterSize int
 	}
 }
 
-func wideFilter(pix []byte, pos, across int, log2Size uint) {
+func wideFilter(pix []uint16, pos, across int, log2Size uint) {
 	n := (1 << (log2Size - 1)) - 1
 	var s [16]int32 // s[k+8] = sample at offset k, k in [-8, 7]
 	for k := -(n + 1); k <= n; k++ {
@@ -265,6 +269,6 @@ func wideFilter(pix []byte, pos, across int, log2Size uint) {
 		f[i+8] = (t + (1 << (log2Size - 1))) >> log2Size
 	}
 	for i := -n; i < n; i++ {
-		pix[pos+i*across] = uint8(f[i+8])
+		pix[pos+i*across] = uint16(f[i+8])
 	}
 }

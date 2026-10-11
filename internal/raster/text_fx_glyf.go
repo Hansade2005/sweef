@@ -269,6 +269,32 @@ func (g *glyfFont) simple(d []byte, nc, p, sx, sy int) ([][]glyfPt, bool) {
 // fxGlyphPathTT is fxGlyphPath for TrueType outlines; ok is false when the
 // glyph cannot be read this way.
 func fxGlyphPathTT(f *font.Face, gid int, scaleX, scaleY, skewFix, sub int) (*Path, bool) {
+	return fxGlyphPathTTM(f, gid, scaleX, scaleY, skewFix, fxMat{}, sub*16, 0)
+}
+
+// fxMat is the 16.16 matrix FreeType applies to a scaled outline
+// (FT_Set_Transform), in FreeType's y-up space. The zero value is identity.
+type fxMat struct{ xx, xy, yx, yy int }
+
+func (m fxMat) identity() bool { return m == fxMat{} }
+
+// fxGlyphPathTTM is fxGlyphPathTT with an additional FT_Outline_Transform
+// matrix; sub and subY are the subpixel offsets in 26.6 units (device down for subY).
+func fxGlyphPathTTM(f *font.Face, gid int, scaleX, scaleY, skewFix int, m fxMat, sub, subY int) (*Path, bool) {
+	cs, ok := fxContoursTT(f, gid, scaleX, scaleY, skewFix, m)
+	if !ok {
+		return nil, false
+	}
+	p := NewPath()
+	for _, c := range cs {
+		fxDecompose(p, c, sub, subY)
+	}
+	return p, true
+}
+
+// fxContoursTT returns the contours of a TrueType glyph as FreeType's loader
+// leaves them: scaled to 26.6, skewed, transformed by m (y up).
+func fxContoursTT(f *font.Face, gid int, scaleX, scaleY, skewFix int, m fxMat) ([][]glyfPt, bool) {
 	g := glyfFor(f)
 	if g == nil {
 		return nil, false
@@ -277,7 +303,6 @@ func fxGlyphPathTT(f *font.Face, gid int, scaleX, scaleY, skewFix, sub int) (*Pa
 	if !ok || len(cs) == 0 {
 		return nil, false
 	}
-	p := NewPath()
 	for _, c := range cs {
 		if skewFix != 0 {
 			// the skew is defined for y down: x' = x - 0.25*y(down) = x + 0.25*y(up)
@@ -285,18 +310,24 @@ func fxGlyphPathTT(f *font.Face, gid int, scaleX, scaleY, skewFix, sub int) (*Pa
 				c[i].x += ftMulFix(c[i].y, -skewFix)
 			}
 		}
-		fxDecompose(p, c, sub)
+		if !m.identity() {
+			for i := range c {
+				x, y := c[i].x, c[i].y
+				c[i].x = ftMulFix(x, m.xx) + ftMulFix(y, m.xy)
+				c[i].y = ftMulFix(x, m.yx) + ftMulFix(y, m.yy)
+			}
+		}
 	}
-	return p, true
+	return cs, true
 }
 
 // fxDecompose mirrors FT_Outline_Decompose for one contour of conic points.
-func fxDecompose(p *Path, pts []glyfPt, sub int) {
+func fxDecompose(p *Path, pts []glyfPt, sub, subY int) {
 	n := len(pts)
 	if n == 0 {
 		return
 	}
-	out := func(x, y int) (float64, float64) { return float64(x+sub*16) / 64, -float64(y) / 64 }
+	out := func(x, y int) (float64, float64) { return float64(x+sub) / 64, -float64(y-subY) / 64 }
 	mid := func(a, b glyfPt) glyfPt { return glyfPt{(a.x + b.x) / 2, (a.y + b.y) / 2, true} }
 	first, last := 0, n-1
 	start := pts[first]

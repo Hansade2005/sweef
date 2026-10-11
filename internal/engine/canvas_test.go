@@ -107,7 +107,7 @@ func canvasServer(t *testing.T) *httptest.Server {
 	return httptest.NewServer(http.FileServer(http.Dir("testdata/canvas")))
 }
 
-var textFixtures = map[string]bool{"text_sans": true, "text_serif": true, "text_mono": true, "text_liberation": true, "text_align_baseline": true, "text_stroke_maxwidth": true, "text_bold_italic": true, "text_spacing": true, "shadow_text": true, "text_gradient_fill": true}
+var textFixtures = map[string]bool{"text_sans": true, "text_serif": true, "text_mono": true, "text_liberation": true, "text_align_baseline": true, "text_stroke_maxwidth": true, "text_bold_italic": true, "text_spacing": true, "shadow_text": true, "text_gradient_fill": true, "text_rotate": true, "text_scale": true}
 
 // refreshCanvasRefs re-captures Chromium's toDataURL() output for every
 // fixture: CANVAS_REFRESH=1 AB=<agent-browser> CHROME=<chromium> go test -run CanvasAgainst

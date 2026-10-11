@@ -1,0 +1,258 @@
+package av1
+
+import (
+	"crypto/md5"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// picBytes serialises a picture like ffmpeg's rawvideo output (yuv420p,
+// yuv420p10le, gray, ...): planar, 8 bits per sample or 16-bit little endian.
+func picBytes(p *Picture) []byte {
+	var out []byte
+	n := 3
+	if p.Mono {
+		n = 1
+	}
+	for pl := 0; pl < n; pl++ {
+		w, h := p.Width, p.Height
+		if pl > 0 {
+			w = (w + p.SubX) >> uint(p.SubX)
+			h = (h + p.SubY) >> uint(p.SubY)
+		}
+		for y := 0; y < h; y++ {
+			row := p.Planes[pl][y*p.Stride[pl] : y*p.Stride[pl]+w]
+			for _, v := range row {
+				if p.BitDepth == 8 {
+					out = append(out, byte(v))
+				} else {
+					out = append(out, byte(v), byte(v>>8))
+				}
+			}
+		}
+	}
+	return out
+}
+
+// splitTemporalUnits splits a low-overhead OBU stream at temporal delimiters.
+func splitTemporalUnits(data []byte) [][]byte {
+	var tus [][]byte
+	start := 0
+	pos := 0
+	for pos < len(data) {
+		b := &bitReader{buf: data[pos:]}
+		b.f(1)
+		typ := b.f(4)
+		ext := b.flag()
+		hasSize := b.flag()
+		b.f(1)
+		if ext {
+			b.f(8)
+		}
+		if !hasSize {
+			break
+		}
+		size := b.leb128()
+		n := b.pos/8 + size
+		if typ == obuTemporalDelimiter && pos > start {
+			tus = append(tus, data[start:pos])
+			start = pos
+		}
+		pos += n
+	}
+	if start < len(data) {
+		tus = append(tus, data[start:])
+	}
+	return tus
+}
+
+func fixtureList(t *testing.T) []string {
+	files, _ := filepath.Glob("../testdata/av1_*.obu")
+	if len(files) == 0 {
+		t.Fatal("no AV1 fixtures in ../testdata")
+	}
+	return files
+}
+
+func md5s(pics []*Picture) []string {
+	var out []string
+	for _, p := range pics {
+		s := md5.Sum(picBytes(p))
+		out = append(out, hex.EncodeToString(s[:]))
+	}
+	return out
+}
+
+// TestFixtures decodes every committed clip and compares each output frame
+// with the MD5 of the frame libdav1d produced (the .md5 files were written
+// from ffmpeg -c:v libdav1d rawvideo output). The clips are decoded both as a
+// whole and one temporal unit at a time.
+func TestFixtures(t *testing.T) {
+	resetCoverage()
+	for _, f := range fixtureList(t) {
+		f := f
+		name := strings.TrimSuffix(filepath.Base(f), ".obu")
+		t.Run(name, func(t *testing.T) {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantRaw, err := os.ReadFile(strings.TrimSuffix(f, ".obu") + ".md5")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := strings.Fields(string(wantRaw))
+			pics, err := NewDecoder().Decode(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := md5s(pics)
+			if len(got) != len(want) {
+				t.Fatalf("decoded %d frames, reference has %d", len(got), len(want))
+			}
+			for i := range got {
+				if got[i] != want[i] {
+					t.Fatalf("frame %d: md5 %s want %s", i, got[i], want[i])
+				}
+			}
+			d := NewDecoder()
+			var tuPics []*Picture
+			for _, tu := range splitTemporalUnits(data) {
+				ps, err := d.Decode(tu)
+				if err != nil {
+					t.Fatal(err)
+				}
+				tuPics = append(tuPics, ps...)
+			}
+			got2 := md5s(tuPics)
+			if fmt.Sprint(got2) != fmt.Sprint(want) {
+				t.Fatalf("temporal-unit-wise decoding differs from whole-stream decoding")
+			}
+		})
+	}
+}
+
+// TestFixtureCoverage checks that, between them, the fixtures exercise the
+// coding tools the decoder claims to implement.
+func TestFixtureCoverage(t *testing.T) {
+	resetCoverage()
+	for _, f := range fixtureList(t) {
+		data, _ := os.ReadFile(f)
+		NewDecoder().Decode(data)
+	}
+	need := []int{covPalette, covPaletteUV, covIntrabc, covCfl, covFilterIntra, covDirectional, covEdgeUpsample,
+		covSmooth, covPaeth, covOBMC, covLocalWarp, covGlobalWarp, covWedge, covDiffwtd, covDistance, covInterintra,
+		covCompoundAvg, covScaledRef, covSkipMode, covSegmentation, covDeltaQ, covDeltaLF, covQmatrix, covTx64,
+		covIdtx, covLRWiener, covLRSgr, covSuperres, covFilmGrain, covCdef, covLoopFilter, covMfmv, covTiles,
+		covInterpDual, covLossless, covIntraEdgeFilter, covRefMvTemporal}
+	for _, c := range need {
+		if coverage[c] == 0 {
+			t.Errorf("no fixture exercises %s", covNames[c])
+		}
+	}
+}
+
+// TestCorruptStreams flips bits in real streams: the decoder must return
+// (possibly with an error) and never panic or hang.
+func TestCorruptStreams(t *testing.T) {
+	for _, name := range []string{"av1_lossless", "av1_still", "av1_odd"} {
+		data, err := os.ReadFile("../testdata/" + name + ".obu")
+		if err != nil {
+			t.Fatal(err)
+		}
+		rnd := uint32(12345)
+		next := func() uint32 { rnd = rnd*1664525 + 1013904223; return rnd >> 8 }
+		for it := 0; it < 40; it++ {
+			m := append([]byte(nil), data...)
+			for k := 0; k < 1+int(next()%6); k++ {
+				lim := len(m)
+				if it%2 == 0 && lim > 80 {
+					lim = 80 // headers
+				}
+				m[int(next())%lim] ^= byte(1 << (next() % 8))
+			}
+			NewDecoder().Decode(m)
+		}
+		// truncations
+		for cut := 1; cut < len(data); cut += 1 + len(data)/25 {
+			NewDecoder().Decode(data[:cut])
+		}
+	}
+}
+
+// TestFileCompare decodes $AV1_FILE and compares with the raw output in
+// $AV1_YUV (development helper, skipped by default).
+func TestFileCompare(t *testing.T) {
+	file := os.Getenv("AV1_FILE")
+	if file == "" {
+		t.Skip("AV1_FILE not set")
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resetCoverage()
+	pics, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Logf("decode error after %d pictures: %v", len(pics), err)
+	}
+	yuv, _ := os.ReadFile(os.Getenv("AV1_YUV"))
+	pos, bad := 0, 0
+	for i, p := range pics {
+		b := picBytes(p)
+		if pos+len(b) > len(yuv) {
+			t.Logf("frame %d: reference too short", i)
+			break
+		}
+		ref := yuv[pos : pos+len(b)]
+		pos += len(b)
+		diff, first := 0, -1
+		for j := range b {
+			if b[j] != ref[j] {
+				diff++
+				if first < 0 {
+					first = j
+				}
+			}
+		}
+		if diff != 0 {
+			bad++
+			t.Logf("frame %d (%dx%d): %d/%d bytes differ, first at byte %d", i, p.Width, p.Height, diff, len(b), first)
+		}
+	}
+	t.Logf("%d pictures, %d mismatching", len(pics), bad)
+	var cv string
+	for i, n := range covNames {
+		if coverage[i] > 0 {
+			cv += fmt.Sprintf(" %s=%d", n, coverage[i])
+		}
+	}
+	t.Logf("coverage:%s", cv)
+	if bad != 0 || err != nil {
+		t.Fail()
+	}
+}
+
+func BenchmarkDecode(b *testing.B) {
+	file := os.Getenv("AV1_FILE")
+	if file == "" {
+		file = "../testdata/av1_tools.obu"
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		b.Skip(err)
+	}
+	frames := 0
+	for i := 0; i < b.N; i++ {
+		pics, err := NewDecoder().Decode(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+		frames += len(pics)
+	}
+	b.ReportMetric(float64(frames)/b.Elapsed().Seconds(), "fps")
+}

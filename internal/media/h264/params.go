@@ -5,12 +5,23 @@ package h264
 // zigzag4 maps scan position to raster index inside a 4x4 block.
 var zigzag4 = [16]uint8{0, 1, 4, 8, 5, 2, 3, 6, 9, 12, 13, 10, 7, 11, 14, 15}
 
+// fieldScan4 is the field scan (Table 8-12 / Figure 8-9) of 4x4 blocks.
+var fieldScan4 = [16]uint8{0, 4, 1, 8, 12, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15}
+
 // zigzag8 maps scan position to raster index inside an 8x8 block.
 var zigzag8 = [64]uint8{
 	0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5,
 	12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28,
 	35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
 	58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63,
+}
+
+// fieldScan8 is the 8x8 field scan (Table 8-13).
+var fieldScan8 = [64]uint8{
+	0, 8, 16, 1, 9, 24, 32, 17, 2, 25, 40, 48, 56, 33, 10, 3,
+	18, 41, 49, 57, 26, 11, 4, 19, 34, 42, 50, 58, 27, 12, 5, 20,
+	35, 43, 51, 59, 28, 13, 6, 21, 36, 44, 52, 60, 29, 14, 22, 37,
+	45, 53, 61, 30, 7, 15, 38, 46, 54, 62, 23, 31, 39, 47, 55, 63,
 }
 
 // Default scaling lists in raster order (Tables 7-3 and 7-4).
@@ -38,10 +49,11 @@ var defaultScaling8 = [2][64]uint8{
 		24, 25, 27, 28, 30, 32, 33, 35},
 }
 
-// scalingMatrix holds resolved weight matrices in raster order.
+// scalingMatrix holds resolved weight matrices in raster order. The 8x8 lists
+// are ordered Intra Y, Inter Y, Intra Cb, Inter Cb, Intra Cr, Inter Cr.
 type scalingMatrix struct {
 	m4 [6][16]uint8
-	m8 [2][64]uint8
+	m8 [6][64]uint8
 }
 
 func flatMatrix() scalingMatrix {
@@ -59,7 +71,7 @@ func flatMatrix() scalingMatrix {
 	return s
 }
 
-// parseScalingList reads one list into raster order. It returns false when
+// parseScalingList reads one list into raster order. It returns true when
 // the useDefaultScalingMatrixFlag is set.
 func parseScalingList(r *bitReader, dst []uint8, zz []uint8) (useDefault bool) {
 	last, next := 8, 8
@@ -79,21 +91,17 @@ func parseScalingList(r *bitReader, dst []uint8, zz []uint8) (useDefault bool) {
 	return
 }
 
-// parseScalingMatrix reads the lists of an SPS or PPS. fallback supplies the
-// matrix used for lists that are not transmitted at the sequence/picture
-// level (rule A: defaults; rule B: the sequence-level lists).
+// parseScalingMatrix reads the lists of an SPS or PPS. n8 is the number of
+// 8x8 lists transmitted (0, 2 or 6). fallbackSPS supplies the matrix used for
+// the first list of each kind when it is not transmitted at picture level
+// (rule B); nil selects the default lists (rule A).
 func parseScalingMatrix(r *bitReader, n8 int, fallbackSPS *scalingMatrix) scalingMatrix {
 	var m scalingMatrix
 	n := 6 + n8
 	for i := 0; i < n; i++ {
 		present := r.flag()
 		if i < 6 {
-			var dflt []uint8
-			if i < 3 {
-				dflt = defaultScaling4[0][:]
-			} else {
-				dflt = defaultScaling4[1][:]
-			}
+			dflt := defaultScaling4[i/3][:]
 			fb := dflt
 			if fallbackSPS != nil && (i == 0 || i == 3) {
 				fb = fallbackSPS.m4[i][:]
@@ -109,38 +117,36 @@ func parseScalingMatrix(r *bitReader, n8 int, fallbackSPS *scalingMatrix) scalin
 			if parseScalingList(r, m.m4[i][:], zigzag4[:]) {
 				copy(m.m4[i][:], dflt)
 			}
-		} else {
-			k := i - 6 // 0 intra Y, 1 inter Y (4:2:0)
-			if k >= 2 {
-				var scratch [64]uint8
-				if !present {
-					continue
-				}
-				parseScalingList(r, scratch[:], zigzag8[:])
-				continue
-			}
-			dflt := defaultScaling8[k][:]
-			fb := dflt
-			if fallbackSPS != nil {
-				fb = fallbackSPS.m8[k][:]
-			}
-			if !present {
-				copy(m.m8[k][:], fb)
-				continue
-			}
-			if parseScalingList(r, m.m8[k][:], zigzag8[:]) {
-				copy(m.m8[k][:], dflt)
-			}
+			continue
+		}
+		k := i - 6
+		dflt := defaultScaling8[k&1][:]
+		var fb []uint8
+		switch {
+		case k >= 2:
+			fb = m.m8[k-2][:]
+		case fallbackSPS != nil:
+			fb = fallbackSPS.m8[k][:]
+		default:
+			fb = dflt
+		}
+		if !present {
+			copy(m.m8[k][:], fb)
+			continue
+		}
+		if parseScalingList(r, m.m8[k][:], zigzag8[:]) {
+			copy(m.m8[k][:], dflt)
 		}
 	}
-	// lists that were not part of the syntax (8x8 without transform8x8 in PPS)
-	for k := n - 6; k < 2; k++ {
-		if k >= 0 {
-			if fallbackSPS != nil {
-				m.m8[k] = fallbackSPS.m8[k]
-			} else {
-				m.m8[k] = defaultScaling8[k]
-			}
+	// 8x8 lists that are not part of the syntax
+	for k := n8; k < 6; k++ {
+		switch {
+		case k >= 2:
+			m.m8[k] = m.m8[k-2]
+		case fallbackSPS != nil:
+			m.m8[k] = fallbackSPS.m8[k]
+		default:
+			m.m8[k] = defaultScaling8[k]
 		}
 	}
 	return m
@@ -151,6 +157,7 @@ type SPS struct {
 	ID                 int
 	Profile, Level     int
 	ChromaFormat       int
+	SeparatePlanes     bool
 	BitDepthLuma       int
 	BitDepthChroma     int
 	Bypass             bool
@@ -174,6 +181,16 @@ type SPS struct {
 	ColorMatrix        int // VUI matrix_coefficients (2 = unspecified)
 	FullRange          bool
 	NumReorder         int
+	raw                []byte
+}
+
+// ChromaArrayType is the chroma sampling that is actually coded in the
+// macroblock layer (0 for monochrome and for separately coded planes).
+func (s *SPS) ChromaArrayType() int {
+	if s.SeparatePlanes {
+		return 0
+	}
+	return s.ChromaFormat
 }
 
 func isHighProfile(p int) bool {
@@ -186,7 +203,7 @@ func isHighProfile(p int) bool {
 
 func parseSPS(rbsp []byte) (*SPS, error) {
 	r := newBitReader(rbsp)
-	s := &SPS{ChromaFormat: 1, BitDepthLuma: 8, BitDepthChroma: 8, ColorMatrix: 2, Matrix: flatMatrix()}
+	s := &SPS{ChromaFormat: 1, BitDepthLuma: 8, BitDepthChroma: 8, ColorMatrix: 2, Matrix: flatMatrix(), raw: append([]byte(nil), rbsp...)}
 	s.Profile = int(r.u(8))
 	r.u(8) // constraint flags
 	s.Level = int(r.u(8))
@@ -200,12 +217,13 @@ func parseSPS(rbsp []byte) (*SPS, error) {
 			return nil, errBitstream
 		}
 		if s.ChromaFormat == 3 {
-			if r.flag() {
-				return nil, ErrUnsupported
-			}
+			s.SeparatePlanes = r.flag()
 		}
 		s.BitDepthLuma = int(r.ue()) + 8
 		s.BitDepthChroma = int(r.ue()) + 8
+		if s.BitDepthLuma > 14 || s.BitDepthChroma > 14 {
+			return nil, ErrUnsupported
+		}
 		s.Bypass = r.flag()
 		if r.flag() {
 			s.HasMatrix = true
@@ -221,6 +239,9 @@ func parseSPS(rbsp []byte) (*SPS, error) {
 	switch s.POCType {
 	case 0:
 		s.Log2MaxPOCLsb = int(r.ue()) + 4
+		if s.Log2MaxPOCLsb > 16 {
+			return nil, errBitstream
+		}
 	case 1:
 		s.DeltaPOCAlwaysZero = r.flag()
 		s.OffsetNonRef = r.se()
@@ -234,6 +255,9 @@ func parseSPS(rbsp []byte) (*SPS, error) {
 		}
 	case 2:
 	default:
+		return nil, errBitstream
+	}
+	if s.Log2MaxFrameNum > 16 {
 		return nil, errBitstream
 	}
 	s.MaxNumRefFrames = int(r.ue())
@@ -253,15 +277,19 @@ func parseSPS(rbsp []byte) (*SPS, error) {
 	if r.flag() { // frame cropping
 		cl, cr, ct, cb := int(r.ue()), int(r.ue()), int(r.ue()), int(r.ue())
 		sw, sh := 1, 1
-		if s.ChromaFormat == 1 {
+		switch s.ChromaArrayType() {
+		case 1:
 			sw, sh = 2, 2
-		} else if s.ChromaFormat == 2 {
+		case 2:
 			sw = 2
 		}
 		if !s.FrameMbsOnly {
 			sh *= 2
 		}
 		s.CropL, s.CropR, s.CropT, s.CropB = cl*sw, cr*sw, ct*sh, cb*sh
+		if s.CropL+s.CropR >= s.MbW*16 || s.CropT+s.CropB >= s.MbH*16 {
+			s.CropL, s.CropR, s.CropT, s.CropB = 0, 0, 0, 0
+		}
 	}
 	if r.flag() { // VUI
 		parseVUI(r, s)
@@ -354,9 +382,20 @@ type PPS struct {
 	Transform8x8      bool
 	Matrix            scalingMatrix
 	sps               *SPS
+	raw               []byte
+
+	// slice groups (FMO)
+	NumSliceGroups   int
+	SliceGroupType   int
+	RunLength        [8]int
+	TopLeft, BotRght [8]int
+	ChangeDirection  bool
+	ChangeRate       int
+	SliceGroupID     []uint8
+
 	// dequantisation tables, [list][qp%6][raster index]
 	ls4 [6][6][16]int32
-	ls8 [2][6][64]int32
+	ls8 [6][6][64]int32
 }
 
 var normAdjust4 = [6][3]int32{{10, 16, 13}, {11, 18, 14}, {13, 20, 16}, {14, 23, 18}, {16, 25, 20}, {18, 29, 23}}
@@ -383,7 +422,7 @@ func (p *PPS) buildTables() {
 			}
 		}
 	}
-	for l := 0; l < 2; l++ {
+	for l := 0; l < 6; l++ {
 		for m := 0; m < 6; m++ {
 			for k := 0; k < 64; k++ {
 				i, j := k>>3, k&7
@@ -410,7 +449,7 @@ func (p *PPS) buildTables() {
 
 func parsePPS(rbsp []byte, spsList *[32]*SPS) (*PPS, error) {
 	r := newBitReader(rbsp)
-	p := &PPS{}
+	p := &PPS{raw: append([]byte(nil), rbsp...)}
 	p.ID = int(r.ue())
 	p.SPSID = int(r.ue())
 	if p.ID > 255 || p.SPSID > 31 {
@@ -423,8 +462,42 @@ func parsePPS(rbsp []byte, spsList *[32]*SPS) (*PPS, error) {
 	p.sps = sps
 	p.CABAC = r.flag()
 	p.BottomPOCPresent = r.flag()
-	if r.ue() > 0 {
-		return nil, ErrUnsupported // slice groups (FMO)
+	p.NumSliceGroups = int(r.ue()) + 1
+	if p.NumSliceGroups > 8 {
+		return nil, errBitstream
+	}
+	if p.NumSliceGroups > 1 {
+		p.SliceGroupType = int(r.ue())
+		switch p.SliceGroupType {
+		case 0:
+			for i := 0; i < p.NumSliceGroups; i++ {
+				p.RunLength[i] = int(r.ue()) + 1
+			}
+		case 2:
+			for i := 0; i < p.NumSliceGroups-1; i++ {
+				p.TopLeft[i] = int(r.ue())
+				p.BotRght[i] = int(r.ue())
+			}
+		case 3, 4, 5:
+			p.ChangeDirection = r.flag()
+			p.ChangeRate = int(r.ue()) + 1
+		case 6:
+			n := int(r.ue()) + 1
+			if n > sps.MbW*sps.MbH {
+				return nil, errBitstream
+			}
+			bits := uint(0)
+			for (1 << bits) < p.NumSliceGroups {
+				bits++
+			}
+			p.SliceGroupID = make([]uint8, n)
+			for i := range p.SliceGroupID {
+				p.SliceGroupID[i] = uint8(r.u(bits))
+			}
+		case 1:
+		default:
+			return nil, errBitstream
+		}
 	}
 	p.NumRefIdxDefault[0] = int(r.ue()) + 1
 	p.NumRefIdxDefault[1] = int(r.ue()) + 1

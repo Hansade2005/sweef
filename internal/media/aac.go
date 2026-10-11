@@ -10,15 +10,17 @@ import (
 // Pure-Go AAC-LC decoder (ISO/IEC 14496-3, 1024-sample frames): ADTS and
 // raw access units with an AudioSpecificConfig, mono to 7.1, sampling rates
 // 7.35-96 kHz, long/short/start/stop windows with sine or KBD shapes, TNS,
-// PNS, intensity and mid/side stereo, pulse data. Not implemented: SBR/PS
-// (HE-AAC), LTP, main-profile prediction, SSR gain control, coupling channels
-// and 960-sample frames; those streams report ErrUnsupported.
+// PNS, intensity and mid/side stereo, pulse data. HE-AAC v1/v2 (SBR in
+// sbr.go, parametric stereo in ps.go) layers on top, signalled explicitly
+// (AOT 5/29, sync extensions) or implicitly (in-band fill elements). Not
+// implemented: LTP, main-profile prediction, SSR gain control, coupling
+// channels and 960-sample frames; those streams report ErrUnsupported.
 
 var errAACUnsupported = fmt.Errorf("%w: aac feature", ErrUnsupported)
 
 // nativeAAC reports whether the pure-Go AAC decoder handles the track.
 func nativeAAC(a *Track) bool {
-	return a != nil && a.CodecName == "aac" && a.Codec == "mp4a.40.2"
+	return a != nil && a.CodecName == "aac" && (a.Codec == "mp4a.40.2" || a.Codec == "mp4a.40.5" || a.Codec == "mp4a.40.29")
 }
 
 type aacBits struct {
@@ -119,41 +121,67 @@ type aacDecoder struct {
 	rnd              int32
 	buf, tmp         []float64
 	pcm              [][]float32
-	order            []int // output channel permutation
-	hasSBR           bool
+	order            []int    // output channel permutation
 	stats            aacStats // feature usage counters (tests)
+
+	// HE-AAC
+	sbr      bool // SBR output (explicit signalling or detected)
+	ps       bool // PS: mono core, stereo output
+	down     bool // downsampled SBR: output rate == core rate
+	probe    bool // detection pass: count SBR/PS, no output
+	sbrEl    []*sbrElem
+	sbrBuf   [2][]float32
+	sawSBR   bool
+	sawPS    bool
+	endBit   int   // bit position of the END element of the last frame (tests)
+	elemEnds []int // bit positions after each SCE/CPE/LFE of the last frame (tests)
+	elemKind []int // 0 SCE, 1 CPE, 2 LFE (tests)
+	outN     int   // output samples per core frame
 }
 
-type aacStats struct{ ms, is, pns, tns, pulse, short, start, stop int }
+type aacStats struct{ ms, is, pns, tns, pulse, short, start, stop, faults int }
 
 type aacConfig struct {
 	aot, sfi, rate, chCfg int
-	sbr                   bool
+	sbr, ps               bool
+	extRate               int  // SBR output rate (explicit signalling), 0 if unknown
+	probe                 bool // implicit signalling: detect SBR/PS from the payload
 }
 
 func parseASC(b []byte) (aacConfig, error) {
 	r := &aacBits{b: b}
 	var c aacConfig
-	c.aot = r.bits(5)
-	if c.aot == 31 {
-		c.aot = 32 + r.bits(6)
-	}
-	c.sfi = r.bits(4)
-	if c.sfi == 15 {
-		c.rate = r.bits(24)
-		c.sfi = -1
-		for i, rt := range aacRates {
-			if rt == c.rate {
-				c.sfi = i
-			}
+	readAOT := func() int {
+		a := r.bits(5)
+		if a == 31 {
+			a = 32 + r.bits(6)
 		}
-	} else if c.sfi < 13 {
-		c.rate = aacRates[c.sfi]
+		return a
 	}
+	readRate := func() (int, int) {
+		i := r.bits(4)
+		if i == 15 {
+			rate := r.bits(24)
+			for j, rt := range aacRates {
+				if rt == rate {
+					return j, rate
+				}
+			}
+			return -1, rate
+		}
+		if i < 13 {
+			return i, aacRates[i]
+		}
+		return -1, 0
+	}
+	c.aot = readAOT()
+	c.sfi, c.rate = readRate()
 	c.chCfg = r.bits(4)
 	if c.aot == 5 || c.aot == 29 {
 		c.sbr = true
-		return c, errAACUnsupported
+		c.ps = c.aot == 29
+		_, c.extRate = readRate()
+		c.aot = readAOT()
 	}
 	if r.err || c.sfi < 0 || c.sfi > 12 {
 		return c, fmt.Errorf("media: bad AudioSpecificConfig")
@@ -168,6 +196,28 @@ func parseASC(b []byte) (aacConfig, error) {
 		return c, errAACUnsupported
 	}
 	r.bit() // extensionFlag
+	// backward compatible signalling
+	if !c.sbr && len(b)*8-r.pos >= 16 && r.peek(11) == 0x2b7 {
+		r.bits(11)
+		if readAOT() == 5 {
+			if r.bit() {
+				c.sbr = true
+				_, c.extRate = readRate()
+				if len(b)*8-r.pos >= 12 && r.peek(11) == 0x548 {
+					r.bits(11)
+					c.ps = r.bit()
+				}
+			}
+		}
+	}
+	if c.sbr && c.extRate == 0 {
+		c.extRate = 2 * c.rate
+	}
+	if c.ps && c.chCfg == 2 {
+		c.chCfg = 1 // some encoders signal the PS output layout; the core is mono
+	} else if c.ps && c.chCfg > 2 {
+		c.ps = false // PS needs a mono core
+	}
 	return c, nil
 }
 
@@ -191,7 +241,8 @@ func newAACDecoder(c aacConfig) (*aacDecoder, error) {
 	aacInitHuff()
 	aacInitWindows()
 	cls := aacSwbClass[c.sfi]
-	d := &aacDecoder{sfi: c.sfi, rate: c.rate, chCfg: c.chCfg, nch: n,
+	d := &aacDecoder{sfi: c.sfi, rate: c.rate, chCfg: c.chCfg, nch: n, sbr: c.sbr, ps: c.ps && c.chCfg == 1,
+		down: c.sbr && c.extRate != 0 && c.extRate <= c.rate, probe: c.probe, outN: 1024,
 		swbLong: aacSwbLong[cls], swbShort: aacSwbShort[cls],
 		plan1024: newIMDCT(1024).clone(), plan128: newIMDCT(128).clone(),
 		rnd: 0x1f2e3d4c, buf: make([]float64, 2048), tmp: make([]float64, 2048)}
@@ -202,6 +253,9 @@ func newAACDecoder(c aacConfig) (*aacDecoder, error) {
 	}
 	// aacChanOrder[cfg][elementChannelIndex] = output index
 	d.order = aacChanOrder[c.chCfg]
+	if d.sbr && !d.down {
+		d.outN = 2048
+	}
 	return d, nil
 }
 
@@ -261,8 +315,8 @@ func (d *aacDecoder) readSections(r *aacBits, c *aacChan) error {
 					break
 				}
 			}
-			if k+l > ics.maxSfb {
-				return fmt.Errorf("media: aac section overrun")
+			if r.err || l == 0 || k+l > ics.maxSfb {
+				return fmt.Errorf("media: aac bad section")
 			}
 			for i := 0; i < l; i++ {
 				c.cb[g][k+i] = uint8(cb)
@@ -730,12 +784,34 @@ func (d *aacDecoder) synth(ch int, c *aacChan, out []float32) {
 
 var errAACEnd = errors.New("end")
 
-// decodeFrame decodes one raw_data_block and appends 1024 samples per output
-// channel to d.pcm.
+// decodeFrameSafe decodes a frame, turning a panic caused by a damaged
+// bitstream into an error.
+func (d *aacDecoder) decodeFrameSafe(data []byte) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.stats.faults++
+			err = fmt.Errorf("media: aac decoder fault: %v", r)
+		}
+	}()
+	return d.decodeFrame(data)
+}
+
+// aacElem records an element of the frame being decoded (for SBR).
+type aacElem struct {
+	first, n int
+	lfe      bool
+}
+
+// decodeFrame decodes one raw_data_block and appends the output samples of
+// every channel to d.pcm (1024 per core frame, 2048 with SBR).
 func (d *aacDecoder) decodeFrame(data []byte) error {
 	r := &aacBits{b: data}
 	var frame [8][1024]float32
+	var elems []aacElem
+	d.elemEnds = d.elemEnds[:0]
+	d.elemKind = d.elemKind[:0]
 	nextCh := 0
+	last := -1 // index of the SCE/CPE a following fill element belongs to
 	for {
 		id := r.bits(3)
 		if r.err {
@@ -743,10 +819,8 @@ func (d *aacDecoder) decodeFrame(data []byte) error {
 		}
 		switch id {
 		case 7:
-			for c := 0; c < d.nch; c++ {
-				d.pcm[d.outCh(c)] = append(d.pcm[d.outCh(c)], frame[c][:]...)
-			}
-			return nil
+			d.endBit = r.pos - 3
+			return d.finishFrame(&frame, elems)
 		case 0, 3: // SCE, LFE
 			r.bits(4)
 			if nextCh >= d.nch {
@@ -757,6 +831,14 @@ func (d *aacDecoder) decodeFrame(data []byte) error {
 				return err
 			}
 			d.finishChannel(nextCh, c, frame[nextCh][:])
+			elems = append(elems, aacElem{nextCh, 1, id == 3})
+			d.elemEnds = append(d.elemEnds, r.pos)
+			d.elemKind = append(d.elemKind, id/3*2)
+			if id == 0 {
+				last = len(elems) - 1
+			} else {
+				last = -1
+			}
 			nextCh++
 		case 1: // CPE
 			r.bits(4)
@@ -799,6 +881,10 @@ func (d *aacDecoder) decodeFrame(data []byte) error {
 			d.applyStereo(l, rt, &msUsed, msMode)
 			d.finishChannel(nextCh, l, frame[nextCh][:])
 			d.finishChannel(nextCh+1, rt, frame[nextCh+1][:])
+			elems = append(elems, aacElem{nextCh, 2, false})
+			d.elemEnds = append(d.elemEnds, r.pos)
+			d.elemKind = append(d.elemKind, 1)
+			last = len(elems) - 1
 			nextCh += 2
 		case 4: // DSE
 			r.bits(4)
@@ -836,10 +922,16 @@ func (d *aacDecoder) decodeFrame(data []byte) error {
 			}
 			if cnt > 0 {
 				ext := r.bits(4)
-				if ext == 13 || ext == 14 {
-					return errAACUnsupported // SBR
+				if (ext == 13 || ext == 14) && last >= 0 && (d.sbr || d.probe) {
+					start := r.pos
+					d.parseSBR(r, last, elems[last], 8*cnt-4, ext == 14)
+					r.pos = start + 8*cnt - 4
+					if r.pos > len(data)*8 {
+						r.err = true
+					}
+				} else {
+					r.skip(8*cnt - 4)
 				}
-				r.skip(8*cnt - 4)
 			}
 		default: // CCE
 			return errAACUnsupported
@@ -848,6 +940,84 @@ func (d *aacDecoder) decodeFrame(data []byte) error {
 			return fmt.Errorf("media: aac truncated frame")
 		}
 	}
+}
+
+// sbrFor returns the SBR decoder of element ordinal ei.
+func (d *aacDecoder) sbrFor(ei int, e aacElem) *sbrElem {
+	for len(d.sbrEl) <= ei {
+		d.sbrEl = append(d.sbrEl, nil)
+	}
+	if d.sbrEl[ei] == nil {
+		el := newSBRElem(e.n == 2, d.rate, d.down)
+		el.psOK = (d.ps || d.probe) && e.n == 1 && d.chCfg == 1
+		d.sbrEl[ei] = el
+	}
+	return d.sbrEl[ei]
+}
+
+func (d *aacDecoder) parseSBR(r *aacBits, ei int, e aacElem, bits int, crc bool) {
+	el := d.sbrFor(ei, e)
+	d.sawSBR = true
+	sub := &aacBits{b: r.b, pos: r.pos}
+	// the payload must not be read past its fill element
+	if sub.pos+bits > len(sub.b)*8 {
+		return
+	}
+	el.parse(sub, bits, crc)
+	if el.psSeen {
+		d.sawPS = true
+	}
+}
+
+// finishFrame emits the PCM of a decoded frame, running SBR/PS where enabled.
+func (d *aacDecoder) finishFrame(frame *[8][1024]float32, elems []aacElem) error {
+	if d.probe {
+		return nil
+	}
+	nOut := d.nch
+	if d.ps {
+		nOut++
+	}
+	if !d.sbr {
+		for c := 0; c < d.nch; c++ {
+			d.pcm[d.outCh(c)] = append(d.pcm[d.outCh(c)], frame[c][:]...)
+		}
+		return nil
+	}
+	var covered [8]bool
+	var out [2][]float32
+	if d.sbrBuf[0] == nil {
+		d.sbrBuf = [2][]float32{make([]float32, 2048), make([]float32, 2048)}
+	}
+	out = d.sbrBuf
+	for ei, e := range elems {
+		el := d.sbrFor(ei, e)
+		in := make([][]float32, e.n)
+		for k := range in {
+			in[k] = frame[e.first+k][:]
+		}
+		nout := el.apply(in, out[:])
+		for k := 0; k < nout; k++ {
+			ch := d.outCh(e.first + k)
+			if e.first+k >= d.nch { // PS second channel
+				ch = e.first + k
+			}
+			d.pcm[ch] = append(d.pcm[ch], out[k][:d.outN]...)
+			if e.first+k < 8 {
+				covered[e.first+k] = true
+			}
+		}
+	}
+	for c := 0; c < nOut && c < 8; c++ {
+		if !covered[c] {
+			ch := d.outCh(c)
+			if c >= d.nch {
+				ch = c
+			}
+			d.pcm[ch] = append(d.pcm[ch], make([]float32, d.outN)...)
+		}
+	}
+	return nil
 }
 
 func (d *aacDecoder) outCh(i int) int {
@@ -915,16 +1085,45 @@ func decodeAACStream(data []byte, as *audioStream) (*PCM, error) {
 	if err != nil {
 		return nil, err
 	}
+	// implicit (backward compatible) signalling: the SBR / PS payload is only
+	// visible in-band, so look at the first access units
+	if !(cfg.sbr && (cfg.ps || cfg.chCfg != 1)) {
+		pc := cfg
+		pc.probe = true
+		if pd, err := newAACDecoder(pc); err == nil {
+			for i, p := range as.packets {
+				if i >= 8 || (pd.sawSBR && (pd.sawPS || cfg.chCfg != 1)) {
+					break
+				}
+				pd.decodeFrameSafe(p)
+			}
+			if pd.sawSBR && !cfg.sbr {
+				cfg.sbr = true
+				cfg.extRate = 2 * cfg.rate
+			}
+			if pd.sawPS && cfg.chCfg == 1 {
+				cfg.ps = true
+			}
+		}
+	}
 	d, err := newAACDecoder(cfg)
 	if err != nil {
 		return nil, err
 	}
-	d.pcm = make([][]float32, d.nch)
+	nOut := d.nch
+	if d.ps {
+		nOut++
+	}
+	outRate := cfg.rate
+	if d.sbr && !d.down {
+		outRate = 2 * cfg.rate
+	}
+	d.pcm = make([][]float32, nOut)
 	for i := range d.pcm {
-		d.pcm[i] = make([]float32, 0, len(as.packets)*1024)
+		d.pcm[i] = make([]float32, 0, len(as.packets)*d.outN)
 	}
 	for _, p := range as.packets {
-		if err := d.decodeFrame(p); err != nil {
+		if err := d.decodeFrameSafe(p); err != nil {
 			if errors.Is(err, ErrUnsupported) {
 				return nil, err
 			}
@@ -933,11 +1132,11 @@ func decodeAACStream(data []byte, as *audioStream) (*PCM, error) {
 			}
 			// a damaged frame becomes silence
 			for c := range d.pcm {
-				d.pcm[c] = append(d.pcm[c], make([]float32, 1024)...)
+				d.pcm[c] = append(d.pcm[c], make([]float32, d.outN)...)
 			}
 		}
 	}
-	out := &PCM{SampleRate: cfg.rate, Data: d.pcm}
+	out := &PCM{SampleRate: outRate, Data: d.pcm}
 	lastAACStats = d.stats
 	skip := 0
 	if as.skip > 0 {

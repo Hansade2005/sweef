@@ -105,6 +105,8 @@ func classifyCodec(c string) codecInfo {
 		return codecInfo{"audio", ccFree, ""}
 	case lc == "mp4a.40.2" || lc == "mp4a.40.02":
 		return codecInfo{"audio", ccFree, ""} // AAC-LC: pure-Go decoder
+	case lc == "mp4a.40.5" || lc == "mp4a.40.05" || lc == "mp4a.40.29":
+		return codecInfo{"audio", ccFree, ""} // HE-AAC v1/v2 (SBR, PS): pure-Go decoder
 	case strings.HasPrefix(lc, "mp4a.40."):
 		return codecInfo{"audio", ccFFmpeg, ""}
 	case lc == "speex" || lc == "0":
@@ -168,13 +170,19 @@ func CanPlayType(mime string) string {
 		}
 		return rule.def
 	}
+	maybe := false
 	for _, c := range codecs {
 		ci := classifyCodec(c)
 		if ci.class == ccUnknown || ci.class == ccNo {
 			return ""
 		}
-		if ci.class == ccFFmpeg && !ff && !(ci.native != "" && HasNativeVideo(ci.native)) {
-			return ""
+		if ci.class == ccFFmpeg && !ff {
+			switch nativeCodecSupport(strings.ToLower(c), ci.native) {
+			case "":
+				return ""
+			case "maybe":
+				maybe = true
+			}
 		}
 		if ci.kind == "video" && !rule.video {
 			return ""
@@ -199,6 +207,27 @@ func CanPlayType(mime string) string {
 			if lc == "vp8" || lc == "vorbis" {
 				return ""
 			}
+		}
+	}
+	if maybe {
+		return "maybe"
+	}
+	return "probably"
+}
+
+// nativeCodecSupport reports how well the pure-Go decoders cover a codecs=
+// string whose codec is otherwise ffmpeg-only: "" when there is no native
+// decoder, "maybe" when some streams of that profile still need ffmpeg,
+// "probably" otherwise.
+func nativeCodecSupport(lc, native string) string {
+	if native == "" || !HasNativeVideo(native) {
+		return ""
+	}
+	if strings.HasPrefix(lc, "avc1") || strings.HasPrefix(lc, "avc3") {
+		// avc1.PPCCLL: the Extended profile (88) may use data partitioning,
+		// which the native decoder lacks.
+		if len(lc) >= 7 && strings.EqualFold(lc[5:7], "58") {
+			return "maybe"
 		}
 	}
 	return "probably"

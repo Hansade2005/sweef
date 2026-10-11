@@ -3,9 +3,11 @@ package vp9
 import (
 	"errors"
 	"image"
+
+	"github.com/sweefbrowser/sweef/internal/media/yuv"
 )
 
-// ErrUnsupported is returned for streams outside profile 0 / 8-bit 4:2:0.
+// ErrUnsupported is returned for streams using features this decoder lacks.
 var ErrUnsupported = errors.New("vp9: unsupported stream feature")
 
 var errBitstream = errors.New("vp9: invalid bitstream")
@@ -15,9 +17,12 @@ type Frame struct {
 	w, h   int // FrameWidth, FrameHeight
 	pw, ph [3]int
 	stride [3]int
-	pix    [3][]byte
+	pix    [3][]uint16
 	subX   int
 	subY   int
+	bd     int // bit depth
+	cs     int // color_space
+	full   bool
 }
 
 type segParams struct {
@@ -79,6 +84,7 @@ type Decoder struct {
 	resetFrameCtx   int
 	refreshFlags    int
 	refFrameIdx     [3]int
+	refValid        [3]bool
 	signBias        [4]bool
 	allowHp         bool
 	interpFilter    int
@@ -108,6 +114,14 @@ type Decoder struct {
 
 	cur *Frame
 
+	// colour configuration of the current frame
+	bitDepth int
+	maxV     int32
+	subX     int
+	subY     int
+	colorSp  int
+	fullRng  bool
+
 	// tile/block decode state
 	bd                   boolDec
 	miRowStart, miRowEnd int
@@ -125,10 +139,10 @@ type Decoder struct {
 	lvlLookup            [8][4][2]uint8
 	fp                   [4][4][3]int32 // dequant cache
 
-	predBuf   [2][64 * 64]uint8
-	tmpBuf    [(64 + 7) * (64 + 7)]uint8
-	predTmp   [(64 + 7) * 64]uint8
-	scaledTmp [330 * 64]uint8
+	predBuf   [2][64 * 64]uint16
+	tmpBuf    [(64 + 7) * (64 + 7)]uint16
+	predTmp   [(64 + 7) * 64]uint16
+	scaledTmp [330 * 64]uint16
 }
 
 // NewDecoder returns a new decoder.
@@ -142,8 +156,25 @@ func (d *Decoder) Reset() {
 }
 
 // Decode decodes one chunk of data (a frame or a superframe) and returns the
-// last frame it displays, or nil when it displays none.
-func (d *Decoder) Decode(data []byte) (img *image.YCbCr, err error) {
+// last frame it displays as an 8-bit YCbCr image, or nil when it displays
+// none. Streams that do not fit an 8-bit image.YCbCr (high bit depth, 4:4:4,
+// ...) return ErrUnsupported; use DecodeFrame for those.
+func (d *Decoder) Decode(data []byte) (*image.YCbCr, error) {
+	fr, err := d.DecodeFrame(data)
+	if fr == nil {
+		return nil, err
+	}
+	img, ok := fr.ToYCbCr()
+	if !ok {
+		return nil, ErrUnsupported
+	}
+	return img, err
+}
+
+// DecodeFrame decodes one chunk of data (a frame or a superframe) and returns
+// the last frame it displays in its native sample format, or nil when it
+// displays none.
+func (d *Decoder) DecodeFrame(data []byte) (img *yuv.Frame, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			img, err = nil, errBitstream

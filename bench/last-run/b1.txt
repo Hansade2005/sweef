@@ -40,7 +40,7 @@
 ✓ press Enter #email (0ms)
 ✓ get title (0ms)  → Welcome
 ✓ open http://127.0.0.1:18080/app (48ms)  → Counter
-✓ click #inc (2ms)
+✓ click #inc (1ms)
 ✗ eval document.querySelector(h1).textContent (0ms): ReferenceError: 'h1' is not defined
     at <eval> (<eval>:2:24)
 10/10 steps in 54ms  Counter  http://127.0.0.1:18080/app

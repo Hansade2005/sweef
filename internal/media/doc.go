@@ -19,9 +19,9 @@ package media
 //	with ffmpeg   any video codec ffmpeg knows: one frame per currentTime
 //	              (cached, asynchronous, at most two ffmpeg processes)
 //	pure Go       VP8 key frames (golang.org/x/image/vp8), MJPEG in AVI/MP4,
-//	              animated GIF and APNG by wall time. Inter frames of VP8/VP9/
-//	              H.264/AV1 are NOT decoded: without ffmpeg a WebM VP8 video
-//	              shows its key frame, and VP9/AV1/H.264/HEVC are refused
+//	              animated GIF and APNG by wall time. AV1 (internal/media/av1)
+//	              is decoded natively, with all its inter tools. Codecs without a
+//	              pure-Go decoder (HEVC, and VP9/H.264 where unavailable) are refused
 //	              (MEDIA_ERR_SRC_NOT_SUPPORTED, canPlayType "").
 //
 // canPlayType claims H.264 and HE-AAC only with a decoder (AAC-LC is native). The element clock does

@@ -2,107 +2,185 @@ package h264
 
 import (
 	"errors"
+	"fmt"
 	"image"
+	"runtime/debug"
+
+	"github.com/sweefbrowser/sweef/internal/media/yuv"
 )
 
-// MB type classes stored per macroblock.
-const (
-	mtI4x4 = iota // Intra NxN (4x4 or 8x8)
-	mtI16
-	mtPCM
-	mtInter
-	mtPSkip
-	mtBSkip
-	mtBDirect // B_Direct_16x16
-)
+// DebugPanic, when set, receives the value and stack of a recovered decoder panic.
+var DebugPanic func(v any, stack []byte)
 
-func isIntraMB(t uint8) bool { return t <= mtPCM }
+// DebugSlice, when set, receives a summary of every parsed slice header.
+var DebugSlice func(string)
+
+// fmtInfo caches the sample format of the active sequence.
+type fmtInfo struct {
+	cat          int // ChromaArrayType
+	cf           int // chroma_format_idc
+	sep          bool
+	bdY, bdC     int
+	qpBdY, qpBdC int
+	maxY, maxC   int32
+	mbWC, mbHC   int // chroma macroblock size (0 when not coded)
+	nBlkC        int // 4x4 chroma blocks per plane (cat 1: 4, cat 2: 8)
+	bypass       bool
+}
+
+func newFmtInfo(s *SPS) fmtInfo {
+	f := fmtInfo{cat: s.ChromaArrayType(), cf: s.ChromaFormat, sep: s.SeparatePlanes, bdY: s.BitDepthLuma, bdC: s.BitDepthChroma, bypass: s.Bypass}
+	f.qpBdY, f.qpBdC = 6*(f.bdY-8), 6*(f.bdC-8)
+	f.maxY, f.maxC = int32(1)<<uint(f.bdY)-1, int32(1)<<uint(f.bdC)-1
+	switch f.cat {
+	case 1:
+		f.mbWC, f.mbHC, f.nBlkC = 8, 8, 4
+	case 2:
+		f.mbWC, f.mbHC, f.nBlkC = 8, 16, 8
+	case 3:
+		f.mbWC, f.mbHC, f.nBlkC = 16, 16, 16
+	}
+	return f
+}
 
 type sliceParams struct {
-	disable        int
-	alpha, beta    int
-	cbOff, crOff   int
-	chromaOffCount int
+	disable      int
+	alpha, beta  int
+	cbOff, crOff int
+	listCount    int
 }
 
 // Decoder decodes an H.264 stream access unit by access unit.
 type Decoder struct {
-	sps        [32]*SPS
-	pps        [256]*PPS
-	lenSize    int
-	dpb        []*Picture
-	poc        pocState
-	maxLongIdx int
-	nextID     int32
+	// OutPOC and OutSeq describe the picture returned by the last
+	// DecodeFrame call: pictures of one sequence (OutSeq) are displayed in
+	// ascending OutPOC order; a new sequence starts at each IDR picture and
+	// after each memory_management_control_operation 5.
+	OutPOC, OutSeq int
+	seqNo          int
 
-	// current picture
-	cur       *Picture
-	first     *sliceHeader
-	mbW, mbH  int
-	sliceNum  int32
-	mbSlice   []int32
-	mbType    []uint8
-	mbT8      []bool
-	mbCBP     []uint8
-	mbQP      []int8
-	mbChroma  []uint8
-	mbDirect  []uint8
-	mbDC      []uint8
-	nz        []uint8
-	ipm       []int8
-	mvd       [2][][2]uint8
-	nzMask    []uint16
-	slices    []sliceParams
-	decodedMB int
+	f       fmtInfo
+	sps     [32]*SPS
+	pps     [256]*PPS
+	lenSize int
+
+	// reference pictures
+	shortRef   []*Picture
+	longRef    [16]*Picture
+	longCount  int
+	defaultRef [2]refEntry
+	grey       *Picture
+	poc        pocState
+
+	// the picture being decoded
+	cur          *Picture // alias of curPic used by sample access helpers
+	curPic       *Picture
+	first        *sliceHeader // header of the first slice of the picture
+	nextID       int32
+	firstField   bool
+	picStructure int
+	fieldPic     bool
+	mbaffFrame   bool
+	droppable    bool
+	picActive    bool
+	lastStruct   int
+	lastDrop     bool
+	pending      *Picture // completed frame to return
+
+	mbW, mbH, mbStride int
+	sliceTable         []uint16
+	qpTable            []int8
+	nz                 []uint8
+	cbpTable           []uint16
+	chromaPredTable    []uint8
+	ipm                []int8
+	mvd                [2][][2]uint8
+	directTable        []uint8
+	mbNZMask           []uint16
+	mbBypass           []bool
+	slices             []sliceParams
+	sliceNum           int
+	decodedMB          int
+	cplane             int // active colour plane (separate planes)
+	planeTab           [3]planeTables
+	curSlice           uint16
 
 	// current slice
-	hdr      *sliceHeader
-	refList  [2][]*Picture
-	br       *bitReader
-	cab      cabacDec
-	cabacOn  bool
-	qp       int
-	lastDQ   bool // previous MB had a non-zero mb_qp_delta (CABAC context)
-	skipRun  int
-	prevSkip bool
-	mbx, mby int
-	mbIdx    int
-	curSlice int32
+	hdr           *sliceHeader
+	br            *bitReader
+	cab           cabacDec
+	cabacOn       bool
+	qp            int
+	lastDQ        bool
+	skipRun       int
+	prevMBSkipped bool
+	nextMBSkipped bool
+	listCount     int
+	refList       [2][]refEntry
+	refListField  [2][]refEntry
+	fmoMap        []uint8
+	fmoNext       []int
+	fmoPos        int
+	rowAdvanced   bool
 
-	// per-MB neighbour availability
-	availA, availB, availC, availD bool
+	implicitW          [3][64][64]int16
+	distScale          [64]int
+	distScaleField     [2][64]int
+	mapColToList0      [2][16 + 32]int
+	mapColToList0Field [2][2][16 + 32]int
+	colParity          int
+	colFieldOff        int
 
-	// implicit bi-prediction weights [ref0][ref1] for the slice
-	implicitW [32][32]int16
+	// current macroblock
+	mbx, mby, mbIdx int
+	mbField         bool
+	mbTypeCur       uint32
+	nb              nbState
+	availA, availB  bool
+	availC, availD  bool
+	nzCache         [3][40]uint8
+	mvCache         [2][40]mv16
+	refCache        [2][40]int8
+	mvdCache        [2][40][2]uint8
+	directCache     [40]uint8
+	ipmCache        [40]int8
+	subMbType       [4]uint32
+	topCBP, leftCBP int
+	neighborT8      int
+	cbpBits         uint16
+	nzMask          uint16
+	curDirect       uint8
+	blkNZ           [48]bool
+	bypassMB        bool
+	scan4           *[16]uint8
+	scan8           *[64]uint8
+	mbOff, mbStr    [3]int
 
 	// reconstruction scratch
-	coef  [384]int32
+	coef  [768]int32
 	lv    [64]int32
-	dcY   [16]int32
-	pred  [2][256 + 128]byte
-	tmpMC [(16 + 5) * (16 + 5)]byte
+	dcY   [3][16]int32
+	pred  [2][3 * 256]uint16
+	tmpMC [(16 + 5) * (16 + 5)]uint16
 	tmpI  [(16 + 5) * 16]int32
-
-	// colocated data for direct prediction
-	col *Picture
-
-	curDirect uint8 // direct-predicted 8x8 blocks of the current MB
-	blkNZ     [24]bool
-	i16DC     bool
 }
 
 // NewDecoder returns an empty decoder.
 func NewDecoder() *Decoder {
 	vlcOnce.Do(initVLC)
-	return &Decoder{lenSize: 0}
+	d := &Decoder{lenSize: 0}
+	d.resetPOC()
+	return d
 }
 
 // Reset drops all reference pictures (used when seeking).
 func (d *Decoder) Reset() {
-	d.dpb = nil
-	d.cur = nil
-	d.poc = pocState{}
-	d.maxLongIdx = -1
+	d.removeAllRefs()
+	d.curPic, d.cur = nil, nil
+	d.picActive = false
+	d.firstField = false
+	d.pending = nil
+	d.resetPOC()
 }
 
 // SetAVCC configures the decoder from an AVCDecoderConfigurationRecord and
@@ -147,12 +225,36 @@ func (d *Decoder) SetAVCC(avcc []byte) error {
 	return nil
 }
 
-// Decode decodes one access unit and returns its picture (in decoding order,
-// not display order), cropped to the SPS frame cropping rectangle.
-func (d *Decoder) Decode(data []byte) (img *image.YCbCr, err error) {
+// Decode decodes one access unit and returns its picture as an 8-bit
+// image.YCbCr (in decoding order, not display order), cropped to the SPS
+// frame cropping rectangle. Streams with other sample depths must use
+// DecodeFrame.
+func (d *Decoder) Decode(data []byte) (*image.YCbCr, error) {
+	fr, err := d.DecodeFrame(data)
+	if fr == nil {
+		return nil, err
+	}
+	img, ok := fr.ToYCbCr()
+	if !ok {
+		return nil, ErrUnsupported
+	}
+	return img, err
+}
+
+// DecodeFrame decodes one access unit and returns its picture in any sample
+// format, in decoding order, cropped to the SPS frame cropping rectangle.
+// A frame whose second field is still to come is returned by the call that
+// decodes that field.
+func (d *Decoder) DecodeFrame(data []byte) (img *yuv.Frame, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			d.cur = nil
+			if DebugPanic != nil {
+				DebugPanic(r, debug.Stack())
+			}
+			d.selectPlane(0)
+			d.picActive = false
+			d.curPic, d.cur = nil, nil
+			d.firstField = false
 			img, err = nil, errBitstream
 		}
 	}()
@@ -171,21 +273,43 @@ func (d *Decoder) Decode(data []byte) (img *image.YCbCr, err error) {
 			firstErr = err
 		}
 	}
-	pic := d.finishPicture()
+	d.finishPicture()
+	pic := d.pending
+	d.pending = nil
 	if pic == nil {
 		if firstErr != nil {
 			return nil, firstErr
 		}
 		return nil, nil
 	}
-	return pictureImage(pic), firstErr
+	d.OutPOC, d.OutSeq = pic.poc, pic.seq
+	return d.pictureFrame(pic), firstErr
 }
 
-func pictureImage(p *Picture) *image.YCbCr {
-	img := &image.YCbCr{Y: p.y, Cb: p.cb, Cr: p.cr, YStride: p.ys, CStride: p.cs, SubsampleRatio: image.YCbCrSubsampleRatio420}
-	r := image.Rect(p.crop[0], p.crop[2], p.w-p.crop[1], p.h-p.crop[3])
-	img.Rect = image.Rect(0, 0, p.w, p.h)
-	return img.SubImage(r).(*image.YCbCr)
+// pictureFrame wraps a decoded picture as a cropped output frame.
+func (d *Decoder) pictureFrame(p *Picture) *yuv.Frame {
+	f := &yuv.Frame{Depth: p.bdY, Matrix: p.colorMtx, FullRange: p.fullRange}
+	cl, cr, ct, cb := p.crop[0], p.crop[1], p.crop[2], p.crop[3]
+	f.Width, f.Height = p.w-cl-cr, p.h-ct-cb
+	f.Planes[0] = p.y[ct*p.ys+cl:]
+	f.Stride[0] = p.ys
+	switch p.cf {
+	case 0:
+		f.Format = yuv.F400
+		return f
+	case 1:
+		f.Format = yuv.F420
+	case 2:
+		f.Format = yuv.F422
+	default:
+		f.Format = yuv.F444
+	}
+	sx, sy := f.Format.Subsampling()
+	f.CWidth, f.CHeight = f.Width>>sx, f.Height>>sy
+	co := (ct>>sy)*p.cs + cl>>sx
+	f.Planes[1], f.Planes[2] = p.cb[co:], p.cr[co:]
+	f.Stride[1], f.Stride[2] = p.cs, p.cs
+	return f
 }
 
 func (d *Decoder) handleNAL(n []byte) error {
@@ -197,7 +321,7 @@ func (d *Decoder) handleNAL(n []byte) error {
 		if err != nil {
 			return err
 		}
-		d.sps[s.ID] = s
+		d.setSPS(s)
 	case 8:
 		p, err := parsePPS(unescape(n[1:]), &d.sps)
 		if err != nil {
@@ -212,16 +336,42 @@ func (d *Decoder) handleNAL(n []byte) error {
 	return nil
 }
 
+// setSPS stores a sequence parameter set. A set identical to the one in use
+// is ignored; a changed one re-resolves the picture parameter sets that
+// refer to it.
+func (d *Decoder) setSPS(s *SPS) {
+	old := d.sps[s.ID]
+	if old != nil && string(old.raw) == string(s.raw) {
+		return
+	}
+	d.sps[s.ID] = s
+	for i, p := range d.pps {
+		if p != nil && p.SPSID == s.ID {
+			if np, err := parsePPS(p.raw, &d.sps); err == nil {
+				d.pps[i] = np
+			} else {
+				d.pps[i] = nil
+			}
+		}
+	}
+}
+
 func (d *Decoder) handleSlice(n []byte, typ, refIdc int) error {
 	r := newBitReader(unescape(n[1:]))
 	h, err := d.parseSliceHeader(r, typ, refIdc)
 	if err != nil {
 		return err
 	}
+	if DebugSlice != nil {
+		DebugSlice(fmt.Sprintf("nal=%d ref=%d first=%d type=%d fn=%d struct=%d poc=%d numRef=%v mods=%v mmco=%v adaptive=%v idr=%v long=%v", typ, refIdc, h.firstMB, h.sliceType, h.frameNum, h.structure, h.pocLsb, h.numRef, h.refMods, h.mmcos, h.adaptiveMarking, h.idr, h.longTermRef))
+	}
 	if h.redundantPicCnt > 0 {
 		return nil
 	}
-	if d.cur == nil {
+	if d.picActive && d.isNewPicture(h) {
+		d.finishPicture()
+	}
+	if !d.picActive {
 		if err := d.startPicture(h); err != nil {
 			return err
 		}
@@ -229,174 +379,353 @@ func (d *Decoder) handleSlice(n []byte, typ, refIdc int) error {
 	return d.decodeSlice(h, r)
 }
 
+// isNewPicture implements the first-slice-of-a-picture detection of 7.4.1.2.4.
+func (d *Decoder) isNewPicture(h *sliceHeader) bool { return d.isNewPictureFrom(d.first, h) }
+
+func (d *Decoder) isNewPictureFrom(f, h *sliceHeader) bool {
+	switch {
+	case f.frameNum != h.frameNum, f.pps.ID != h.pps.ID, f.fieldPic != h.fieldPic, f.bottom != h.bottom:
+		return true
+	case (f.nalRefIdc == 0) != (h.nalRefIdc == 0):
+		return true
+	case f.idr != h.idr:
+		return true
+	case f.idr && f.idrPicID != h.idrPicID:
+		return true
+	}
+	switch h.sps.POCType {
+	case 0:
+		if f.pocLsb != h.pocLsb || f.deltaPOCBottom != h.deltaPOCBottom {
+			return true
+		}
+	case 1:
+		if f.deltaPOC != h.deltaPOC {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *Decoder) allocTables(sps *SPS) {
+	d.mbW, d.mbH = sps.MbW, sps.MbH
+	d.mbStride = d.mbW + 1
+	n := (d.mbH+3)*d.mbStride + 1
+	d.sliceTable = make([]uint16, n)
+	d.qpTable = make([]int8, n)
+	d.nz = make([]uint8, n*48)
+	d.cbpTable = make([]uint16, n)
+	d.chromaPredTable = make([]uint8, n)
+	d.ipm = make([]int8, n*16)
+	for l := 0; l < 2; l++ {
+		d.mvd[l] = make([][2]uint8, n*16)
+	}
+	d.directTable = make([]uint8, n*4)
+	d.mbNZMask = make([]uint16, n)
+	d.mbBypass = make([]bool, n)
+	d.cplane = 0
+	d.planeTab = [3]planeTables{}
+	if sps.SeparatePlanes {
+		for k := 1; k < 3; k++ {
+			t := &d.planeTab[k]
+			t.sliceTable = make([]uint16, n)
+			t.qpTable = make([]int8, n)
+			t.nz = make([]uint8, n*48)
+			t.cbpTable = make([]uint16, n)
+			t.chromaPredTable = make([]uint8, n)
+			t.ipm = make([]int8, n*16)
+			for l := 0; l < 2; l++ {
+				t.mvd[l] = make([][2]uint8, n*16)
+			}
+			t.directTable = make([]uint8, n*4)
+			t.mbNZMask = make([]uint16, n)
+			t.mbBypass = make([]bool, n)
+		}
+	}
+}
+
+// startPicture begins a new frame, field or second field.
 func (d *Decoder) startPicture(h *sliceHeader) error {
 	sps := h.sps
+	if d.first != nil && d.first.sps != sps && (d.mbW != sps.MbW || d.mbH != sps.MbH || d.f.cf != sps.ChromaFormat || d.f.bdY != sps.BitDepthLuma || d.f.bdC != sps.BitDepthChroma) {
+		d.flushForNewSequence()
+	}
+	if d.sliceTable == nil || d.mbW != sps.MbW || d.mbH != sps.MbH || sps.SeparatePlanes != d.f.sep {
+		d.allocTables(sps)
+		d.flushForNewSequence()
+	}
+	d.f = newFmtInfo(sps)
+	st := &d.poc
 	if h.idr {
-		d.poc.prevPOCMsb, d.poc.prevPOCLsb = 0, 0
+		d.removeAllRefs()
+		d.shortRef = d.shortRef[:0]
+		d.resetPOC()
+		d.seqNo++
 	}
-	d.mbW, d.mbH = sps.MbW, sps.MbH
-	d.nextID++
-	pic := newPicture(d.nextID, d.mbW, d.mbH)
-	pic.frameNum = h.frameNum
-	pic.poc = d.computePOC(h)
-	pic.crop = [4]int{sps.CropL, sps.CropR, sps.CropT, sps.CropB}
-	pic.colorMtx = sps.ColorMatrix
-	pic.fullRange = sps.FullRange
-	d.cur = pic
-	d.first = h
-	n := d.mbW * d.mbH
-	d.mbSlice = resizeI32(d.mbSlice, n, -1)
-	d.mbType = resizeU8(d.mbType, n)
-	if cap(d.mbT8) >= n {
-		d.mbT8 = d.mbT8[:n]
-		for i := range d.mbT8 {
-			d.mbT8[i] = false
+	lastStruct, lastDrop := d.lastStruct, d.lastDrop
+	d.droppable = h.nalRefIdc == 0
+	d.picStructure = h.structure
+	d.fieldPic = h.structure != picFrame
+	d.mbaffFrame = sps.MBAFF && !d.fieldPic
+	st.frameNum = h.frameNum
+	st.pocLsb = h.pocLsb
+	st.deltaPOCBottom = h.deltaPOCBottom
+	st.deltaPOC = h.deltaPOC
+	maxFrameNum := 1 << uint(sps.Log2MaxFrameNum)
+
+	// shorten frame_num gaps so no more frames than can be referenced are made
+	if st.frameNum != st.prevFrameNum {
+		unwrap := st.prevFrameNum
+		if unwrap > st.frameNum {
+			unwrap -= maxFrameNum
+		}
+		if st.frameNum-unwrap > sps.MaxNumRefFrames {
+			unwrap = st.frameNum - sps.MaxNumRefFrames - 1
+			if unwrap < 0 {
+				unwrap += maxFrameNum
+			}
+			st.prevFrameNum = unwrap
+		}
+	}
+	if d.firstField && d.curPic != nil {
+		// a pending first field: decide whether this slice pairs with it
+		switch {
+		case !d.fieldPic || d.picStructure == lastStruct:
+			// the previous field stays unpaired
+		case d.curPic.frameNum != st.frameNum:
+		default:
+			if (lastStruct == picTop && d.picStructure != picBottom) || (lastStruct == picBottom && d.picStructure != picTop) || lastDrop != d.droppable {
+				// invalid combination: treat as a new frame
+			}
+		}
+	}
+	for st.frameNum != st.prevFrameNum && !d.firstField && st.frameNum != (st.prevFrameNum+1)%maxFrameNum {
+		if !d.makeGapFrame(h, maxFrameNum) {
+			break
+		}
+	}
+	if d.firstField && d.curPic != nil {
+		switch {
+		case !d.fieldPic || d.picStructure == lastStruct:
+			d.curPic = nil
+			d.firstField = d.fieldPic
+		case d.curPic.frameNum != st.frameNum:
+			d.firstField = true
+			d.curPic = nil
+		default:
+			d.firstField = false
 		}
 	} else {
-		d.mbT8 = make([]bool, n)
+		d.firstField = d.fieldPic
 	}
-	d.mbCBP = resizeU8(d.mbCBP, n)
-	if cap(d.mbQP) >= n {
-		d.mbQP = d.mbQP[:n]
-		for i := range d.mbQP {
-			d.mbQP[i] = 0
-		}
-	} else {
-		d.mbQP = make([]int8, n)
-	}
-	d.mbChroma = resizeU8(d.mbChroma, n)
-	d.mbDirect = resizeU8(d.mbDirect, n)
-	d.mbDC = resizeU8(d.mbDC, n)
-	d.nz = resizeU8(d.nz, n*24)
-	if cap(d.ipm) >= n*16 {
-		d.ipm = d.ipm[:n*16]
-		for i := range d.ipm {
-			d.ipm[i] = 2
-		}
-	} else {
-		d.ipm = make([]int8, n*16)
-		for i := range d.ipm {
-			d.ipm[i] = 2
+	if !d.fieldPic || d.firstField || d.curPic == nil {
+		d.nextID++
+		pic := newPicture(d.nextID, sps)
+		pic.frameNum = st.frameNum
+		pic.fieldPicture = d.fieldPic
+		pic.mbaff = d.mbaffFrame
+		pic.seq = d.seqNo
+		pic.idr = h.idr
+		d.curPic = pic
+		if d.fieldPic {
+			d.firstField = true
 		}
 	}
-	for l := 0; l < 2; l++ {
-		w4 := d.mbW * 4
-		if cap(d.mvd[l]) >= w4*d.mbH*4 {
-			d.mvd[l] = d.mvd[l][:w4*d.mbH*4]
-			for i := range d.mvd[l] {
-				d.mvd[l][i] = [2]uint8{}
+	d.cur = d.curPic
+	if d.curPic.mbaff != d.mbaffFrame && !d.fieldPic {
+		d.curPic.mbaff = d.mbaffFrame
+	}
+	d.lastStruct, d.lastDrop = d.picStructure, d.droppable
+	// reset the slice table of this picture / field
+	for k := 0; k < d.numPlanes(); k++ {
+		d.selectPlane(k)
+		if d.fieldPic {
+			for r := btoi(d.picStructure == picBottom); r < d.mbH; r += 2 {
+				base := (r + 2) * d.mbStride
+				for i := 0; i < d.mbStride; i++ {
+					d.sliceTable[base+i] = 0xffff
+				}
 			}
 		} else {
-			d.mvd[l] = make([][2]uint8, w4*d.mbH*4)
+			for i := range d.sliceTable {
+				d.sliceTable[i] = 0xffff
+			}
 		}
 	}
-	if cap(d.nzMask) >= n {
-		d.nzMask = d.nzMask[:n]
-		for i := range d.nzMask {
-			d.nzMask[i] = 0
-		}
-	} else {
-		d.nzMask = make([]uint16, n)
+	d.selectPlane(0)
+	d.initPOC(d.curPic, sps, d.picStructure, h.nalRefIdc)
+	if h.nalRefIdc != 0 && d.picStructure != picFrame && d.curPic.reference == 0 {
+		// marked at the end of the field
 	}
+	d.first = h
 	d.slices = d.slices[:0]
 	d.sliceNum = 0
 	d.decodedMB = 0
+	d.picActive = true
 	return nil
 }
 
-func resizeI32(s []int32, n int, v int32) []int32 {
-	if cap(s) >= n {
-		s = s[:n]
-	} else {
-		s = make([]int32, n)
-	}
-	for i := range s {
-		s[i] = v
-	}
-	return s
-}
-
-func resizeU8(s []uint8, n int) []uint8 {
-	if cap(s) >= n {
-		s = s[:n]
-		for i := range s {
-			s[i] = 0
-		}
-		return s
-	}
-	return make([]uint8, n)
-}
-
-// finishPicture deblocks, conceals missing macroblocks, performs reference
-// marking and returns the completed picture.
-func (d *Decoder) finishPicture() *Picture {
-	pic := d.cur
-	if pic == nil {
-		return nil
-	}
-	h := d.first
-	defer func() { d.cur = nil }()
-	if d.decodedMB < d.mbW*d.mbH {
-		d.conceal(pic)
-	}
-	d.deblockPicture(pic)
-	// POC / frame_num state for the next picture
-	mm5 := d.markCurrent(h, pic)
-	pic.frameWrap = pic.frameNum
+// makeGapFrame inserts a substitute frame for a missing frame_num.
+func (d *Decoder) makeGapFrame(h *sliceHeader, maxFrameNum int) bool {
 	st := &d.poc
-	if mm5 {
-		pic.poc = 0
-		st.prevFrameNum, st.prevFrameNumOffset = 0, 0
-		st.prevPOCMsb, st.prevPOCLsb = 0, 0
+	sps := h.sps
+	prev := (*Picture)(nil)
+	if len(d.shortRef) > 0 {
+		prev = d.shortRef[0]
+	}
+	d.nextID++
+	pic := newPicture(d.nextID, sps)
+	st.prevFrameNum = (st.prevFrameNum + 1) % maxFrameNum
+	pic.frameNum = st.prevFrameNum
+	pic.invalidGap = !sps.GapsAllowed
+	pic.fieldPOC = [2]int{0, 0}
+	pic.seq = d.seqNo
+	if prev != nil && prev.w == pic.w && prev.h == pic.h && prev.cf == pic.cf {
+		copy(pic.y, prev.y)
+		copy(pic.cb, prev.cb)
+		copy(pic.cr, prev.cr)
+		pic.poc = prev.poc + 2
+		pic.fieldPOC = [2]int{prev.fieldPOC[0] + 2, prev.fieldPOC[1] + 2}
 	} else {
-		st.prevFrameNum = h.frameNum
-		st.prevFrameNumOffset = st.frameNumOffset
-		if h.nalRefIdc != 0 {
-			st.prevPOCMsb = st.pocMsb
-			st.prevPOCLsb = h.pocLsb
+		for i := range pic.y {
+			pic.y[i] = uint16(1) << uint(sps.BitDepthLuma-1)
+		}
+		for i := range pic.cb {
+			pic.cb[i], pic.cr[i] = uint16(1)<<uint(sps.BitDepthChroma-1), uint16(1)<<uint(sps.BitDepthChroma-1)
 		}
 	}
-	if h.nalRefIdc == 0 {
-		// non-reference pictures are not kept
+	d.curPic = pic
+	gapHdr := &sliceHeader{sps: sps}
+	saved := d.picStructure
+	d.picStructure = picFrame
+	d.executeRefMarking(gapHdr, picFrame, false)
+	d.picStructure = saved
+	d.curPic = nil
+	st.prevFrameNumOffset = st.frameNumOffset
+	return true
+}
+
+func (d *Decoder) flushForNewSequence() {
+	d.removeAllRefs()
+	d.shortRef = d.shortRef[:0]
+	d.curPic, d.cur = nil, nil
+	d.firstField = false
+	d.grey = nil
+	d.resetPOC()
+}
+
+// finishPicture completes the current frame or field: concealment,
+// deblocking, reference marking and POC state.
+func (d *Decoder) finishPicture() {
+	if !d.picActive {
+		return
 	}
-	return pic
+	d.picActive = false
+	pic := d.curPic
+	h := d.first
+	for k := 0; k < d.numPlanes(); k++ {
+		d.selectPlane(k)
+		if d.decodedMB < d.numPlanes()*d.mbCountPicture() {
+			d.conceal(pic)
+		}
+		d.deblockPicture(pic)
+	}
+	d.selectPlane(0)
+	st := &d.poc
+	if !d.droppable {
+		if d.executeRefMarking(h, d.picStructure, d.firstField) {
+			// MMCO 5: frame_num restarts at 0 (POC handling follows FFmpeg)
+		}
+		st.prevPOCMsb = st.pocMsb
+		st.prevPOCLsb = st.pocLsb
+	}
+	st.prevFrameNumOffset = st.frameNumOffset
+	st.prevFrameNum = st.frameNum
+	if pic.mmcoReset {
+		d.seqNo++
+		pic.seq = d.seqNo
+	}
+	if !d.fieldPic || !d.firstField {
+		d.pending = pic
+	}
+}
+
+func (d *Decoder) mbCountPicture() int {
+	if d.fieldPic {
+		return d.mbW * d.mbH / 2
+	}
+	return d.mbW * d.mbH
 }
 
 // conceal copies undecoded macroblocks from the nearest reference picture.
 func (d *Decoder) conceal(pic *Picture) {
 	var src *Picture
-	for i := len(d.dpb) - 1; i >= 0; i-- {
-		if d.dpb[i] != pic {
-			src = d.dpb[i]
+	for _, p := range d.shortRef {
+		if p != pic {
+			src = p
 			break
 		}
 	}
-	for mby := 0; mby < d.mbH; mby++ {
+	neutralY := uint16(1) << uint(d.f.bdY-1)
+	neutralC := uint16(1) << uint(d.f.bdC-1)
+	step := 1
+	row0 := 0
+	if d.fieldPic {
+		step = 2
+		row0 = btoi(d.picStructure == picBottom)
+	}
+	for mby := row0; mby < d.mbH; mby += step {
 		for mbx := 0; mbx < d.mbW; mbx++ {
-			if d.mbSlice[mby*d.mbW+mbx] >= 0 {
+			idx := pic.mbIdx(mbx, mby)
+			if d.sliceTable[idx] != 0xffff {
 				continue
 			}
+			// rows of this macroblock (field macroblocks interleave)
+			rows := make([]int, 16)
 			for y := 0; y < 16; y++ {
-				o := (mby*16+y)*pic.ys + mbx*16
+				if d.fieldPic {
+					rows[y] = ((mby>>1)*16+y)*2 + (mby & 1)
+				} else {
+					rows[y] = mby*16 + y
+				}
+			}
+			for y := 0; y < 16; y++ {
+				o := rows[y]*pic.ys + mbx*16
 				if src != nil {
 					copy(pic.y[o:o+16], src.y[o:o+16])
 				} else {
 					for i := 0; i < 16; i++ {
-						pic.y[o+i] = 128
+						pic.y[o+i] = neutralY
 					}
 				}
 			}
-			for y := 0; y < 8; y++ {
-				o := (mby*8+y)*pic.cs + mbx*8
-				for i := 0; i < 8; i++ {
-					if src != nil {
-						pic.cb[o+i], pic.cr[o+i] = src.cb[o+i], src.cr[o+i]
+			if pic.cw > 0 {
+				w, h := 8, 8
+				if pic.cf == 2 {
+					h = 16
+				} else if pic.cf == 3 {
+					w, h = 16, 16
+				}
+				for y := 0; y < h; y++ {
+					var row int
+					if d.fieldPic {
+						row = ((mby>>1)*h+y)*2 + (mby & 1)
 					} else {
-						pic.cb[o+i], pic.cr[o+i] = 128, 128
+						row = mby*h + y
+					}
+					o := row*pic.cs + mbx*w
+					for i := 0; i < w; i++ {
+						if src != nil {
+							pic.cb[o+i], pic.cr[o+i] = src.cb[o+i], src.cr[o+i]
+						} else {
+							pic.cb[o+i], pic.cr[o+i] = neutralC, neutralC
+						}
 					}
 				}
 			}
-			d.mbType[mby*d.mbW+mbx] = mtPSkip
+			pic.mbType[idx] = mbSkip | mb16x16 | mbP0L0
+			d.qpTable[idx] = 0
+			d.mbNZMask[idx] = 0
+			d.sliceTable[idx] = 0xfffe
 		}
 	}
 }
