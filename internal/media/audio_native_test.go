@@ -116,3 +116,87 @@ func TestOpusNativeWithoutFFmpeg(t *testing.T) {
 		t.Error("opus canPlayType must not need ffmpeg")
 	}
 }
+
+func TestAACMatchesFFmpeg(t *testing.T) {
+	if FFmpegPath() == "" {
+		t.Skip("no ffmpeg for the reference decode")
+	}
+	files := []string{"aac_st_ms.m4a", "aac_transient.m4a", "aac_noise_pns.m4a", "aac_lowrate.aac", "aac_st_hi.aac",
+		"aac_51.m4a", "aac_speech16k.m4a", "aac_frag.mp4"}
+	for _, f := range files {
+		data := nativeData(t, f)
+		info, err := ProbeBytes(data)
+		if err != nil {
+			t.Fatal(f, err)
+		}
+		if !NativeAudio(info) {
+			t.Errorf("%s not native", f)
+			continue
+		}
+		start := time.Now()
+		got, err := DecodeAudio(data)
+		el := time.Since(start)
+		if err != nil {
+			t.Errorf("%s: %v", f, err)
+			continue
+		}
+		ref, err := DecodeAudioFFmpeg(data, got.SampleRate, len(got.Data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		snr, _ := snrDB(got, ref)
+		t.Logf("%-20s rate=%d ch=%d frames=%d (ffmpeg %d) SNR=%.1f dB %.0fx realtime stats=%+v", f, got.SampleRate, len(got.Data), got.Frames(), ref.Frames(), snr, got.Duration()/el.Seconds(), lastAACStats)
+		if got.Frames() != ref.Frames() {
+			t.Errorf("%s: length %d vs ffmpeg %d", f, got.Frames(), ref.Frames())
+		}
+		if snr < 60 {
+			t.Errorf("%s: SNR %.1f dB < 60", f, snr)
+		}
+	}
+}
+
+func TestAACSampleRates(t *testing.T) {
+	if FFmpegPath() == "" {
+		t.Skip("no ffmpeg")
+	}
+	for _, r := range []int{96000, 64000, 48000, 32000, 24000, 22050, 16000, 12000, 11025, 8000} {
+		tmp := t.TempDir()
+		in := filepath.Join(tmp, "in.m4a")
+		src := "aevalsrc='0.3*sin(2*PI*(200+2500*t)*t)+0.1*sin(2*PI*3100*t)':s=" + strconv.Itoa(r) + ":d=0.5"
+		if err := exec.Command(FFmpegPath(), "-v", "error", "-y", "-nostdin", "-f", "lavfi", "-i", src, "-c:a", "aac", "-b:a", "64k", in).Run(); err != nil {
+			t.Fatal(err)
+		}
+		data, _ := os.ReadFile(in)
+		got, err := DecodeAudio(data)
+		if err != nil {
+			t.Errorf("%d: %v", r, err)
+			continue
+		}
+		ref, _ := DecodeAudioFFmpeg(data, got.SampleRate, 1)
+		if snr, _ := snrDB(got, ref); snr < 60 || got.SampleRate != r {
+			t.Errorf("rate %d: SNR %.1f (rate %d)", r, snr, got.SampleRate)
+		}
+	}
+}
+
+func TestAACNativeWithoutFFmpeg(t *testing.T) {
+	SetFFmpegEnabled(false)
+	defer SetFFmpegEnabled(true)
+	for _, f := range []string{"aac_st_ms.m4a", "aac_lowrate.aac", "aac_51.m4a"} {
+		p, err := DecodeAudio(nativeData(t, f))
+		if err != nil || p.Frames() < 20000 {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+	for mime, want := range map[string]string{
+		`audio/mp4; codecs="mp4a.40.2"`: "probably", `audio/aac`: "maybe", `audio/aac; codecs="mp4a.40.2"`: "probably",
+		`audio/mp4; codecs="mp4a.40.5"`: "", `video/mp4; codecs="avc1.64001e, mp4a.40.2"`: CanPlayType(`video/mp4; codecs="avc1.64001e, mp4a.40.2"`),
+	} {
+		if got := CanPlayType(mime); got != want {
+			t.Errorf("canPlayType(%s) = %q want %q", mime, got, want)
+		}
+	}
+	if !IsTypeSupportedMSE(`audio/mp4; codecs="mp4a.40.2"`) {
+		t.Error("MSE isTypeSupported for AAC-LC audio/mp4")
+	}
+}

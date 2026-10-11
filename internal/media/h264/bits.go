@@ -9,7 +9,9 @@ package h264
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math/bits"
+	"runtime"
 )
 
 // ErrUnsupported is returned for streams outside the supported subset.
@@ -177,4 +179,15 @@ func splitLengthPrefixed(data []byte, lenSize int) [][]byte {
 		data = data[n:]
 	}
 	return out
+}
+
+// DebugCorrupt, when set, receives the source location of corrupt-data errors.
+var DebugCorrupt func(loc string)
+
+func corrupt() error {
+	if DebugCorrupt != nil {
+		_, file, line, _ := runtime.Caller(1)
+		DebugCorrupt(fmt.Sprintf("%s:%d", file, line))
+	}
+	return errCorrupt
 }

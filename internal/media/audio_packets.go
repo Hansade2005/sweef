@@ -14,6 +14,7 @@ type audioStream struct {
 	lastGran int64 // ogg: granule position of the last page (-1 when unknown)
 	skip     int   // mp4 edit-list start (samples at the track rate), -1 unknown
 	endTrim  int   // webm DiscardPadding at 48 kHz
+	editDur  int   // mp4 edit-list duration in samples, -1 unknown
 }
 
 // ---- Ogg ---------------------------------------------------------------------
@@ -152,7 +153,7 @@ func webmAudio(data []byte) (*audioStream, error) {
 	if tr == nil {
 		return nil, fmt.Errorf("media: no audio track")
 	}
-	as := &audioStream{codec: tr.CodecName, lastGran: -1, skip: -1}
+	as := &audioStream{codec: tr.CodecName, lastGran: -1, skip: -1, editDur: -1}
 	switch tr.CodecName {
 	case "opus":
 		as.cfg, as.cfgKind = tr.priv, "opushead"
@@ -221,7 +222,10 @@ func mp4Audio(data []byte) (*audioStream, error) {
 	if tr == nil {
 		return nil, fmt.Errorf("media: no audio track")
 	}
-	as := &audioStream{codec: tr.CodecName, cfg: tr.cfg, lastGran: -1, skip: tr.editStart}
+	as := &audioStream{codec: tr.CodecName, cfg: tr.cfg, lastGran: -1, skip: tr.editStart, editDur: -1}
+	if tr.editDur >= 0 && moov.Timescale > 0 && tr.SampleRate > 0 {
+		as.editDur = int(int64(tr.editDur) * int64(tr.SampleRate) / int64(moov.Timescale))
+	}
 	switch tr.CodecName {
 	case "opus":
 		as.cfgKind = "dops"
@@ -381,10 +385,50 @@ func loadAudioStream(data []byte, info *Info) (*audioStream, error) {
 			if err != nil || len(hdr) < 1 {
 				return nil, fmt.Errorf("media: bad ogg opus")
 			}
-			return &audioStream{codec: "opus", cfg: hdr[0], cfgKind: "opushead", packets: pk, lastGran: gran, skip: -1}, nil
+			return &audioStream{codec: "opus", cfg: hdr[0], cfgKind: "opushead", packets: pk, lastGran: gran, skip: -1, editDur: -1}, nil
 		}
 	case "aac":
-		return &audioStream{codec: "aac", lastGran: -1, skip: -1}, nil
+		return adtsAudio(data)
 	}
 	return nil, ErrUnsupported
+}
+
+// adtsAudio splits an ADTS stream into raw access units and synthesises the
+// AudioSpecificConfig from the first header.
+func adtsAudio(data []byte) (*audioStream, error) {
+	p := 0
+	if len(data) >= 10 && string(data[:3]) == "ID3" {
+		p = 10 + (int(data[6]&0x7f)<<21 | int(data[7]&0x7f)<<14 | int(data[8]&0x7f)<<7 | int(data[9]&0x7f))
+	}
+	as := &audioStream{codec: "aac", cfgKind: "asc", lastGran: -1, skip: -1, editDur: -1}
+	for p+7 <= len(data) {
+		if data[p] != 0xff || data[p+1]&0xf6 != 0xf0 {
+			p++
+			continue
+		}
+		fl := int(data[p+3]&3)<<11 | int(data[p+4])<<3 | int(data[p+5])>>5
+		hl := 7
+		if data[p+1]&1 == 0 {
+			hl = 9
+		}
+		if fl < hl || p+fl > len(data) {
+			break
+		}
+		if data[p+6]&3 != 0 {
+			return nil, ErrUnsupported // several raw data blocks per frame
+		}
+		if as.cfg == nil {
+			aot := int(data[p+2]>>6) + 1
+			sfi := int(data[p+2]>>2) & 0xf
+			ch := int(data[p+2]&1)<<2 | int(data[p+3]>>6)
+			v := aot<<11 | sfi<<7 | ch<<3
+			as.cfg = []byte{byte(v >> 8), byte(v)}
+		}
+		as.packets = append(as.packets, data[p+hl:p+fl])
+		p += fl
+	}
+	if len(as.packets) == 0 {
+		return nil, ErrUnsupported
+	}
+	return as, nil
 }

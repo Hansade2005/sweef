@@ -88,7 +88,7 @@ func (d *Decoder) parseResidual(intra, i16 bool, cbp int, t8 bool) error {
 			n = d.cavlcBlock(nC, 16, &d.lv)
 		}
 		if n < 0 {
-			return errCorrupt
+			return corrupt()
 		}
 		for i := range d.dcY {
 			d.dcY[i] = 0
@@ -125,7 +125,7 @@ func (d *Decoder) parseResidual(intra, i16 bool, cbp int, t8 bool) error {
 				n = read(0, 2, bx, by, 16)
 			}
 			if n < 0 {
-				return errCorrupt
+				return corrupt()
 			}
 			d.nz[idx*24+by*4+bx] = uint8(n)
 			if n == 0 {
@@ -169,7 +169,7 @@ func (d *Decoder) parseResidual(intra, i16 bool, cbp int, t8 bool) error {
 			n = d.cavlcBlock(-1, 4, &d.lv)
 		}
 		if n < 0 {
-			return errCorrupt
+			return corrupt()
 		}
 		if n > 0 {
 			d.mbDC[idx] |= 2 << uint(c)
@@ -201,7 +201,7 @@ func (d *Decoder) parseResidual(intra, i16 bool, cbp int, t8 bool) error {
 			bx, by := b&1, b>>1
 			n := read(1+c, 4, bx, by, 15)
 			if n < 0 {
-				return errCorrupt
+				return corrupt()
 			}
 			d.nz[idx*24+16+c*4+b] = uint8(n)
 			if n == 0 {
@@ -250,7 +250,7 @@ func (d *Decoder) luma8x8(intra bool, b8, qp int) error {
 			nC, _ := d.blockCtx(0, bx, by, intra)
 			n := d.cavlcBlock(nC, 16, &d.lv)
 			if n < 0 {
-				return errCorrupt
+				return corrupt()
 			}
 			d.nz[idx*24+by*4+bx] = uint8(n)
 			total += n

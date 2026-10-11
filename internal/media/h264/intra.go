@@ -16,17 +16,17 @@ const (
 )
 
 // pred4x4 predicts a 4x4 luma block in place (dst points at its first sample).
-func pred4x4(dst []byte, stride, mode int, left, top, tl, tr bool) {
+func pred4x4(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 	var t [8]int32 // top samples, index 0..7
 	var l [4]int32
 	var c int32 // top-left
 	if top {
 		for i := 0; i < 4; i++ {
-			t[i] = int32(dst[i-stride])
+			t[i] = int32(pl[off+i-stride])
 		}
 		if tr {
 			for i := 4; i < 8; i++ {
-				t[i] = int32(dst[i-stride])
+				t[i] = int32(pl[off+i-stride])
 			}
 		} else {
 			for i := 4; i < 8; i++ {
@@ -36,11 +36,11 @@ func pred4x4(dst []byte, stride, mode int, left, top, tl, tr bool) {
 	}
 	if left {
 		for i := 0; i < 4; i++ {
-			l[i] = int32(dst[i*stride-1])
+			l[i] = int32(pl[off+i*stride-1])
 		}
 	}
 	if tl {
-		c = int32(dst[-stride-1])
+		c = int32(pl[off+-stride-1])
 	}
 	var o [16]byte
 	switch mode {
@@ -161,7 +161,7 @@ func pred4x4(dst []byte, stride, mode int, left, top, tl, tr bool) {
 		}
 	}
 	for y := 0; y < 4; y++ {
-		copy(dst[y*stride:y*stride+4], o[y*4:y*4+4])
+		copy(pl[off+y*stride:off+y*stride+4], o[y*4:y*4+4])
 	}
 }
 
@@ -173,17 +173,17 @@ func corner(a []int32, i int, c int32) int32 {
 }
 
 // pred8x8 predicts an 8x8 luma block with reference sample filtering.
-func pred8x8(dst []byte, stride, mode int, left, top, tl, tr bool) {
+func pred8x8(pl []byte, off, stride, mode int, left, top, tl, tr bool) {
 	var t [16]int32
 	var l [8]int32
 	var c int32
 	if top {
 		for i := 0; i < 8; i++ {
-			t[i] = int32(dst[i-stride])
+			t[i] = int32(pl[off+i-stride])
 		}
 		if tr {
 			for i := 8; i < 16; i++ {
-				t[i] = int32(dst[i-stride])
+				t[i] = int32(pl[off+i-stride])
 			}
 		} else {
 			for i := 8; i < 16; i++ {
@@ -193,11 +193,11 @@ func pred8x8(dst []byte, stride, mode int, left, top, tl, tr bool) {
 	}
 	if left {
 		for i := 0; i < 8; i++ {
-			l[i] = int32(dst[i*stride-1])
+			l[i] = int32(pl[off+i*stride-1])
 		}
 	}
 	if tl {
-		c = int32(dst[-stride-1])
+		c = int32(pl[off+-stride-1])
 	}
 	// filtered samples
 	var ft [16]int32
@@ -377,21 +377,21 @@ func pred8x8(dst []byte, stride, mode int, left, top, tl, tr bool) {
 		}
 	}
 	for y := 0; y < 8; y++ {
-		copy(dst[y*stride:y*stride+8], o[y*8:y*8+8])
+		copy(pl[off+y*stride:off+y*stride+8], o[y*8:y*8+8])
 	}
 }
 
 // pred16x16 predicts a whole luma macroblock. Modes: 0 V, 1 H, 2 DC, 3 plane.
-func pred16x16(dst []byte, stride, mode int, left, top bool) {
+func pred16x16(pl []byte, off, stride, mode int, left, top bool) {
 	switch mode {
 	case 0:
 		for y := 0; y < 16; y++ {
-			copy(dst[y*stride:y*stride+16], dst[-stride:-stride+16])
+			copy(pl[off+y*stride:off+y*stride+16], pl[off-stride:off-stride+16])
 		}
 	case 1:
 		for y := 0; y < 16; y++ {
-			v := dst[y*stride-1]
-			row := dst[y*stride : y*stride+16]
+			v := pl[off+y*stride-1]
+			row := pl[off+y*stride : off+y*stride+16]
 			for x := range row {
 				row[x] = v
 			}
@@ -400,12 +400,12 @@ func pred16x16(dst []byte, stride, mode int, left, top bool) {
 		var s int32
 		if top {
 			for x := 0; x < 16; x++ {
-				s += int32(dst[x-stride])
+				s += int32(pl[off+x-stride])
 			}
 		}
 		if left {
 			for y := 0; y < 16; y++ {
-				s += int32(dst[y*stride-1])
+				s += int32(pl[off+y*stride-1])
 			}
 		}
 		var v int32
@@ -418,7 +418,7 @@ func pred16x16(dst []byte, stride, mode int, left, top bool) {
 			v = 128
 		}
 		for y := 0; y < 16; y++ {
-			row := dst[y*stride : y*stride+16]
+			row := pl[off+y*stride : off+y*stride+16]
 			for x := range row {
 				row[x] = byte(v)
 			}
@@ -426,33 +426,33 @@ func pred16x16(dst []byte, stride, mode int, left, top bool) {
 	case 3:
 		var h, v int32
 		for i := 0; i < 8; i++ {
-			h += int32(i+1) * (int32(dst[8+i-stride]) - int32(dst[6-i-stride]))
-			v += int32(i+1) * (int32(dst[(8+i)*stride-1]) - int32(dst[(6-i)*stride-1]))
+			h += int32(i+1) * (int32(pl[off+8+i-stride]) - int32(pl[off+6-i-stride]))
+			v += int32(i+1) * (int32(pl[off+(8+i)*stride-1]) - int32(pl[off+(6-i)*stride-1]))
 		}
-		a := 16 * (int32(dst[15*stride-1]) + int32(dst[15-stride]))
+		a := 16 * (int32(pl[off+15*stride-1]) + int32(pl[off+15-stride]))
 		b := (5*h + 32) >> 6
 		c := (5*v + 32) >> 6
 		for y := 0; y < 16; y++ {
 			for x := 0; x < 16; x++ {
-				dst[y*stride+x] = clip255((a + b*int32(x-7) + c*int32(y-7) + 16) >> 5)
+				pl[off+y*stride+x] = clip255((a + b*int32(x-7) + c*int32(y-7) + 16) >> 5)
 			}
 		}
 	}
 }
 
 // predChroma predicts an 8x8 chroma block. Modes: 0 DC, 1 H, 2 V, 3 plane.
-func predChroma(dst []byte, stride, mode int, left, top bool) {
+func predChroma(pl []byte, off, stride, mode int, left, top bool) {
 	switch mode {
 	case 0:
 		var sT, sL [2]int32
 		if top {
 			for x := 0; x < 8; x++ {
-				sT[x>>2] += int32(dst[x-stride])
+				sT[x>>2] += int32(pl[off+x-stride])
 			}
 		}
 		if left {
 			for y := 0; y < 8; y++ {
-				sL[y>>2] += int32(dst[y*stride-1])
+				sL[y>>2] += int32(pl[off+y*stride-1])
 			}
 		}
 		for by := 0; by < 2; by++ {
@@ -490,7 +490,7 @@ func predChroma(dst []byte, stride, mode int, left, top bool) {
 					}
 				}
 				for y := 0; y < 4; y++ {
-					row := dst[(by*4+y)*stride+bx*4 : (by*4+y)*stride+bx*4+4]
+					row := pl[off+(by*4+y)*stride+bx*4 : off+(by*4+y)*stride+bx*4+4]
 					for x := range row {
 						row[x] = byte(v)
 					}
@@ -499,28 +499,28 @@ func predChroma(dst []byte, stride, mode int, left, top bool) {
 		}
 	case 1:
 		for y := 0; y < 8; y++ {
-			v := dst[y*stride-1]
-			row := dst[y*stride : y*stride+8]
+			v := pl[off+y*stride-1]
+			row := pl[off+y*stride : off+y*stride+8]
 			for x := range row {
 				row[x] = v
 			}
 		}
 	case 2:
 		for y := 0; y < 8; y++ {
-			copy(dst[y*stride:y*stride+8], dst[-stride:-stride+8])
+			copy(pl[off+y*stride:off+y*stride+8], pl[off-stride:off-stride+8])
 		}
 	case 3:
 		var h, v int32
 		for i := 0; i < 4; i++ {
-			h += int32(i+1) * (int32(dst[4+i-stride]) - int32(dst[2-i-stride]))
-			v += int32(i+1) * (int32(dst[(4+i)*stride-1]) - int32(dst[(2-i)*stride-1]))
+			h += int32(i+1) * (int32(pl[off+4+i-stride]) - int32(pl[off+2-i-stride]))
+			v += int32(i+1) * (int32(pl[off+(4+i)*stride-1]) - int32(pl[off+(2-i)*stride-1]))
 		}
-		a := 16 * (int32(dst[7*stride-1]) + int32(dst[7-stride]))
+		a := 16 * (int32(pl[off+7*stride-1]) + int32(pl[off+7-stride]))
 		b := (34*h + 32) >> 6
 		c := (34*v + 32) >> 6
 		for y := 0; y < 8; y++ {
 			for x := 0; x < 8; x++ {
-				dst[y*stride+x] = clip255((a + b*int32(x-3) + c*int32(y-3) + 16) >> 5)
+				pl[off+y*stride+x] = clip255((a + b*int32(x-3) + c*int32(y-3) + 16) >> 5)
 			}
 		}
 	}

@@ -103,6 +103,8 @@ func classifyCodec(c string) codecInfo {
 		return codecInfo{"audio", ccFree, ""}
 	case lc == "mp4a.6b" || lc == "mp4a.69":
 		return codecInfo{"audio", ccFree, ""}
+	case lc == "mp4a.40.2" || lc == "mp4a.40.02":
+		return codecInfo{"audio", ccFree, ""} // AAC-LC: pure-Go decoder
 	case strings.HasPrefix(lc, "mp4a.40."):
 		return codecInfo{"audio", ccFFmpeg, ""}
 	case lc == "speex" || lc == "0":
@@ -120,6 +122,8 @@ type containerRule struct {
 	only         map[string]bool
 }
 
+var aacOnly = map[string]bool{"mp4a.40.2": true, "mp4a.40.02": true, "mp4a.40.1": true, "mp4a.40.5": true, "mp4a.40.29": true}
+
 var mimeRules = map[string]containerRule{
 	"audio/wav":       {audio: true, def: "maybe", only: map[string]bool{"1": true}},
 	"audio/x-wav":     {audio: true, def: "maybe", only: map[string]bool{"1": true}},
@@ -134,8 +138,8 @@ var mimeRules = map[string]containerRule{
 	"video/mp4":       {audio: true, video: true, def: "maybe"},
 	"audio/mp4":       {audio: true, def: "maybe"},
 	"audio/flac":      {audio: true, def: "probably", implied: "flac", only: map[string]bool{"flac": true}},
-	"audio/x-m4a":     {audio: true, def: "maybe", proprietary: true},
-	"audio/aac":       {audio: true, def: "maybe", proprietary: true},
+	"audio/x-m4a":     {audio: true, def: "maybe", only: aacOnly},
+	"audio/aac":       {audio: true, def: "maybe", only: aacOnly},
 }
 
 // CanPlayType implements HTMLMediaElement.canPlayType truthfully for what
@@ -224,7 +228,7 @@ func Playable(info *Info) (bool, string) {
 	switch info.Container {
 	case "mp4", "webm", "matroska", "ogg", "wav", "mp3", "flac":
 	case "aac":
-		if FFmpegPath() == "" {
+		if FFmpegPath() == "" && !nativeAAC(info.Audio()) {
 			return false, "AAC needs ffmpeg"
 		}
 	default:
@@ -246,7 +250,7 @@ func Playable(info *Info) (bool, string) {
 			switch t.CodecName {
 			case "vorbis", "opus", "flac", "mp3":
 			case "aac":
-				if !ff {
+				if !ff && !nativeAAC(&t) {
 					return false, "AAC needs ffmpeg"
 				}
 			default:

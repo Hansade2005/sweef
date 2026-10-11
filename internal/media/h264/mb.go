@@ -136,7 +136,7 @@ func (d *Decoder) decodeMB(mbAddr int) error {
 		}
 	}
 	if itype > 25 || raw < 0 {
-		return errCorrupt
+		return corrupt()
 	}
 	for k := 0; k < 24; k++ {
 		d.nz[idx*24+k] = 0
@@ -190,7 +190,7 @@ func (d *Decoder) decodeMB(mbAddr int) error {
 			chromaMode = int(br.ue())
 		}
 		if chromaMode > 3 {
-			return errCorrupt
+			return corrupt()
 		}
 		d.mbChroma[idx] = uint8(chromaMode)
 	} else {
@@ -211,7 +211,7 @@ func (d *Decoder) decodeMB(mbAddr int) error {
 		} else {
 			v := int(br.ue())
 			if v > 47 {
-				return errCorrupt
+				return corrupt()
 			}
 			if intra {
 				cbp = int(golombToIntra4x4CBP[v])
@@ -269,7 +269,7 @@ func (d *Decoder) decodePCM() error {
 		// after the terminating bin the stream continues byte aligned
 		pos := (d.cab.pos + 7) &^ 7
 		if (pos>>3)+384 > len(d.cab.data) {
-			return errCorrupt
+			return corrupt()
 		}
 		src = d.cab.data[pos>>3 : pos>>3+384]
 		d.cab.start(pos + 384*8)
@@ -277,7 +277,7 @@ func (d *Decoder) decodePCM() error {
 		d.br.byteAlign()
 		p := d.br.pos >> 3
 		if p+384 > len(d.br.b) {
-			return errCorrupt
+			return corrupt()
 		}
 		src = d.br.b[p : p+384]
 		d.br.pos += 384 * 8
@@ -434,12 +434,12 @@ func (d *Decoder) parseInter(it *interMB, parts []rect) (int, bool, error) {
 			subRaw[b8] = t
 			if isB {
 				if t > 12 {
-					return 0, false, errCorrupt
+					return 0, false, corrupt()
 				}
 				sub[b8] = bSubTypes[t]
 			} else {
 				if t > 3 {
-					return 0, false, errCorrupt
+					return 0, false, corrupt()
 				}
 				sub[b8] = pSubTypes[t]
 			}
@@ -501,7 +501,7 @@ func (d *Decoder) parseInter(it *interMB, parts []rect) (int, bool, error) {
 				}
 			}
 			if ref < 0 || ref >= nref {
-				return 0, false, errCorrupt
+				return 0, false, corrupt()
 			}
 			refs[l][p] = ref
 			d.storeRef(l, sp.r, ref)

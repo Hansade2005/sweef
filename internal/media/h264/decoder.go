@@ -73,7 +73,7 @@ type Decoder struct {
 	availA, availB, availC, availD bool
 
 	// implicit bi-prediction weights [ref0][ref1] for the slice
-	implicitW [32][32]int8
+	implicitW [32][32]int16
 
 	// reconstruction scratch
 	coef  [384]int32
@@ -85,6 +85,10 @@ type Decoder struct {
 
 	// colocated data for direct prediction
 	col *Picture
+
+	curDirect uint8 // direct-predicted 8x8 blocks of the current MB
+	blkNZ     [24]bool
+	i16DC     bool
 }
 
 // NewDecoder returns an empty decoder.
@@ -142,7 +146,13 @@ func (d *Decoder) SetAVCC(avcc []byte) error {
 
 // Decode decodes one access unit and returns its picture (in decoding order,
 // not display order), cropped to the SPS frame cropping rectangle.
-func (d *Decoder) Decode(data []byte) (*image.YCbCr, error) {
+func (d *Decoder) Decode(data []byte) (img *image.YCbCr, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.cur = nil
+			img, err = nil, errBitstream
+		}
+	}()
 	var nals [][]byte
 	if d.lenSize == 0 {
 		nals = splitAnnexB(data)
@@ -321,8 +331,8 @@ func (d *Decoder) finishPicture() *Picture {
 	if pic == nil {
 		return nil
 	}
-	d.cur = nil
 	h := d.first
+	defer func() { d.cur = nil }()
 	if d.decodedMB < d.mbW*d.mbH {
 		d.conceal(pic)
 	}

@@ -393,10 +393,10 @@ func TestMediaH264NeedsFFmpegAndFramesFollowTime(t *testing.T) {
 			var cp []string
 			evalJSON(t, tab, `(function(){var v=document.createElement('video');return [v.canPlayType('video/mp4; codecs="avc1.64001e, mp4a.40.2"'),v.canPlayType('audio/mp4; codecs="mp4a.40.2"'),v.canPlayType('video/webm; codecs="vp8"')]})()`, &cp)
 			wantH264 := ""
-			if withFF {
+			if withFF || media.HasNativeVideo("h264") { // AAC-LC itself is native
 				wantH264 = "probably"
 			}
-			if cp[0] != wantH264 || cp[1] != wantH264 || cp[2] != "probably" {
+			if cp[0] != wantH264 || cp[1] != "probably" || cp[2] != "probably" {
 				t.Fatalf("canPlayType = %v", cp)
 			}
 			// MP4 (H.264+AAC)
@@ -546,5 +546,46 @@ func TestMediaRangeRequestsAndHonestBuffered(t *testing.T) {
 	}
 	if !sawFar {
 		t.Fatalf("no Range request near byte offset of t=450: %v", ranges)
+	}
+}
+
+// TestMediaNativeVideoWithoutFFmpeg checks that VP8 and H.264 (B-frames)
+// decode with the pure-Go decoders and frames follow currentTime when
+// ffmpeg is unavailable.
+func TestMediaNativeVideoWithoutFFmpeg(t *testing.T) {
+	srv := mediaServer(t)
+	media.SetFFmpegEnabled(false)
+	defer media.SetFFmpegEnabled(true)
+	e := New(DefaultOptions())
+	defer e.Close()
+	tab, err := e.NewTab(srv.URL + "/fx.html?s=none")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cp []any
+	evalJSON(t, tab, `(function(){var v=document.createElement('video');return [v.canPlayType('video/mp4; codecs="avc1.42E01E"'),v.canPlayType('video/mp4; codecs="avc1.640028"'),v.canPlayType('video/webm; codecs="vp8"'),v.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"'),MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"')]})()`, &cp)
+	if cp[0] != "probably" || cp[1] != "probably" || cp[2] != "probably" || cp[3] != "" || cp[4] != true {
+		t.Fatalf("canPlayType = %v", cp)
+	}
+	for _, c := range []struct{ id, src string }{{"h", "h264_bframes.mp4"}, {"w", "clip.webm"}} {
+		evalJSON(t, tab, `new Promise(function(res){var v=document.createElement('video');v.id='`+c.id+`';v.muted=true;v.preload='auto';v.src='`+c.src+`';document.body.appendChild(v);v.onloadeddata=function(){res(1)};v.onerror=function(){res(0)}})`, nil)
+		w, h, s0 := waitFrame(t, tab, "#"+c.id, 0)
+		if w != 160 || h != 120 {
+			t.Fatalf("%s frame %dx%d", c.src, w, h)
+		}
+		evalJSON(t, tab, `(function(){document.getElementById('`+c.id+`').currentTime=1.5;return 1})()`, nil)
+		tab.Settle(300 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
+		_, _, s1 := videoFrame(t, tab, "#"+c.id)
+		if s1 == s0 {
+			t.Errorf("%s: frame did not change after seeking", c.src)
+		}
+		evalJSON(t, tab, `(function(){document.getElementById('`+c.id+`').currentTime=0.2;return 1})()`, nil)
+		tab.Settle(300 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
+		_, _, s2 := videoFrame(t, tab, "#"+c.id)
+		if s2 == s1 {
+			t.Errorf("%s: frame did not change after seeking back", c.src)
+		}
 	}
 }

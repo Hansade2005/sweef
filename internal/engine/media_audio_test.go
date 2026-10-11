@@ -246,6 +246,7 @@ func finite(f []float32) []float32 {
 
 // Opus (Ogg, WebM and MP4) must decode through decodeAudioData with ffmpeg
 // disabled: the native decoders run before any ffmpeg fallback.
+// AAC-LC (m4a, ADTS, 5.1) is covered by the same table.
 func TestWebAudioDecodeOpusWithoutFFmpeg(t *testing.T) {
 	media.SetFFmpegEnabled(false)
 	defer media.SetFFmpegEnabled(true)
@@ -255,6 +256,7 @@ func TestWebAudioDecodeOpusWithoutFFmpeg(t *testing.T) {
 		dur  float64
 	}{
 		{"opus_celt_st.opus", 2, 1.0}, {"opus_silk_nb.opus", 1, 1.0}, {"opus_st.webm", 2, 0.6}, {"opus_st.mp4", 2, 0.6}, {"opus_51.opus", 6, 0.5},
+		{"aac_st_ms.m4a", 2, 1.02}, {"aac_lowrate.aac", 2, 1.045}, {"aac_51.m4a", 6, 0.62},
 	}
 	for _, c := range cases {
 		c := c

@@ -80,6 +80,7 @@ type mp4Track struct {
 	mdhdDur   uint64
 	samples   []mp4Sample
 	fourcc    string
+	editDur   int    // elst segment duration (movie timescale), -1 none
 	editStart int    // elst media_time of the first non-empty edit (-1 none)
 	cfg       []byte // esds payload (AAC) or dOps (Opus) of the first sample entry
 	vcfg      []byte // avcC / vpcC / av1C payload of a video sample entry
@@ -215,29 +216,31 @@ func parseTrak(b []byte) (*mp4Track, error) {
 			t.Name = n
 		}
 	}
-	t.editStart = -1
+	t.editStart, t.editDur = -1, -1
 	if edts := findBox(kids, "edts"); edts != nil {
 		if el := findBox(parseBoxes(edts.data), "elst"); el != nil && len(el.data) >= 8 {
 			n := int(be32(el.data[4:]))
 			ver := el.data[0]
 			p := 8
 			for i := 0; i < n; i++ {
-				var mt int64
+				var mt, sd int64
 				if ver == 1 {
 					if p+20 > len(el.data) {
 						break
 					}
 					mt = int64(be64(el.data[p+8:]))
+					sd = int64(be64(el.data[p:]))
 					p += 20
 				} else {
 					if p+12 > len(el.data) {
 						break
 					}
 					mt = int64(int32(be32(el.data[p+4:])))
+					sd = int64(be32(el.data[p:]))
 					p += 12
 				}
 				if mt >= 0 {
-					t.editStart = int(mt)
+					t.editStart, t.editDur = int(mt), int(sd)
 					break
 				}
 			}

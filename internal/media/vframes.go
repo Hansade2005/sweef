@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/sweefbrowser/sweef/internal/media/h264"
 	"github.com/sweefbrowser/sweef/internal/media/vp8"
 )
 
@@ -22,12 +23,23 @@ type vp8Adapter struct{ d *vp8.Decoder }
 func (a *vp8Adapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Decode(data) }
 func (a *vp8Adapter) Reset()                                   { a.d.Reset() }
 
+type h264Adapter struct{ d *h264.Decoder }
+
+func (a *h264Adapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Decode(data) }
+func (a *h264Adapter) Reset()                                   { a.d.Reset() }
+
 // newNativeDecoder returns a decoder for the stream codec, or nil when no
 // pure-Go decoder exists for it.
 func newNativeDecoder(vs *vstream) vdecoder {
 	switch vs.codec {
 	case "vp8":
 		return &vp8Adapter{vp8.NewDecoder()}
+	case "h264":
+		d := h264.NewDecoder()
+		if err := d.SetAVCC(vs.cfg); err != nil {
+			return nil
+		}
+		return &h264Adapter{d}
 	}
 	return nil
 }
@@ -36,7 +48,7 @@ func newNativeDecoder(vs *vstream) vdecoder {
 // without ffmpeg.
 func HasNativeVideo(codec string) bool {
 	switch codec {
-	case "vp8":
+	case "vp8", "h264":
 		return true
 	}
 	return false
@@ -165,9 +177,9 @@ func yuvToRGBA(src *image.YCbCr, bt709 bool) *image.RGBA {
 	// Fixed-point (16.16) coefficients.
 	var cr2r, cb2g, cr2g, cb2b int32
 	if bt709 {
-		cr2r, cb2g, cr2g, cb2b = 103206, 12276, 30679, 121609
+		cr2r, cb2g, cr2g, cb2b = 117489, 13975, 34925, 138438
 	} else {
-		cr2r, cb2g, cr2g, cb2b = 91881, 22554, 46802, 116130
+		cr2r, cb2g, cr2g, cb2b = 104597, 25675, 53279, 132201
 	}
 	const yscale = 76309 // 255/219 in 16.16
 	for y := 0; y < h; y++ {

@@ -128,16 +128,21 @@ func DecodeAudio(data []byte) (*PCM, error) {
 	}
 	if NativeAudio(info) {
 		if a := info.Audio(); a.CodecName == "opus" || a.CodecName == "aac" {
-			return decodeNativeCodec(data, info)
+			p, err := decodeNativeCodec(data, info)
+			if err == nil || !errors.Is(err, ErrUnsupported) || FFmpegPath() == "" {
+				return p, err
+			}
+			// a feature the native decoder lacks (SBR, LTP, ...): use ffmpeg
 		}
-		switch info.Container {
-		case "wav":
+		switch c := info.Container; {
+		case info.Audio().CodecName == "opus" || info.Audio().CodecName == "aac":
+		case c == "wav":
 			return decodeWAV(data)
-		case "mp3":
+		case c == "mp3":
 			return decodeMP3(data)
-		case "ogg":
+		case c == "ogg":
 			return decodeVorbis(data)
-		case "flac":
+		case c == "flac":
 			return DecodeFLAC(data)
 		}
 	}
