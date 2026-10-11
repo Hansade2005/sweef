@@ -1,0 +1,35 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>selectors</title>
+<style>
+body { margin: 0; padding: 16px; font: 16px/1.4 Arial, sans-serif; }
+.card { border: 2px solid #999; padding: 8px; margin-bottom: 8px; width: 400px; }
+.card:has(img.flag) { border-color: red; padding-left: 40px; }
+.card:has(> h4 + p) { background: #eef; }
+.card:not(:has(p)) { opacity: 1; background: #ffd; height: 40px; }
+li:is(.a, .b) { color: blue; font-size: 20px; }
+li:where(.a) { color: green; font-size: 12px; }
+:is(#x, .y) .z { color: red; padding-left: 30px; }
+.z:not(.q, .r) { margin-left: 20px; }
+.m:not(#nope) { color: purple; font-size: 22px; }
+.m.m2 { color: teal; font-size: 18px; }
+:where(.low) { font-size: 30px; }
+.low { font-size: 14px; }
+label:has(+ input:checked) { background: #cfc; padding: 4px; }
+ul:has(li:nth-child(3)) { background: #eee; }
+p:has(+ p.next) { margin-bottom: 30px; }
+div:nth-child(2 of .item) { background: #fcc; }
+.cnt:empty { height: 20px; background: #aaa; }
+:root:has(.card) .tag { display: block; width: 60px; background: #ccf; }
+</style></head><body>
+<div class="card"><img class="flag" width="10" height="10" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"><p>With flag</p></div>
+<div class="card"><h4>H</h4><p>Sibling p</p></div>
+<div class="card">No paragraphs</div>
+<ul><li class="a">a is blue 20px</li><li class="b">b</li><li>c</li></ul>
+<div class="y"><span class="z">z span</span></div>
+<span class="m m2">compound beats :not(#id)? no</span>
+<div class="low">where low</div>
+<label>check<input type="checkbox" checked></label>
+<p>first</p><p class="next">next</p>
+<div class="item">i1</div><div class="item">i2</div><div class="item">i3</div>
+<div class="cnt"></div><span class="tag">tag</span>
+</body></html>

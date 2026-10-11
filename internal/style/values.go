@@ -87,6 +87,8 @@ type Calc struct {
 	A, B   *Calc
 	List   []*Calc
 	isNumb bool
+	Fn     string // Op 'F': math function name
+	Strat  string // round() strategy
 }
 
 func (c *Calc) hasPct() bool {
@@ -138,6 +140,101 @@ func (c *Calc) eval(base float64) float64 {
 	case 'c':
 		lo, v, hi := c.List[0].eval(base), c.List[1].eval(base), c.List[2].eval(base)
 		return math.Max(lo, math.Min(v, hi))
+	case 'F':
+		return c.evalFn(base)
+	}
+	return 0
+}
+
+func (c *Calc) evalFn(base float64) float64 {
+	a := make([]float64, len(c.List))
+	for i, x := range c.List {
+		a[i] = x.eval(base)
+	}
+	arg := func(i int) float64 {
+		if i < len(a) {
+			return a[i]
+		}
+		return 0
+	}
+	switch c.Fn {
+	case "sin":
+		return math.Sin(arg(0))
+	case "cos":
+		return math.Cos(arg(0))
+	case "tan":
+		return math.Tan(arg(0))
+	case "asin":
+		return math.Asin(arg(0))
+	case "acos":
+		return math.Acos(arg(0))
+	case "atan":
+		return math.Atan(arg(0))
+	case "atan2":
+		return math.Atan2(arg(0), arg(1))
+	case "sqrt":
+		return math.Sqrt(arg(0))
+	case "exp":
+		return math.Exp(arg(0))
+	case "log":
+		if len(a) > 1 {
+			return math.Log(arg(0)) / math.Log(arg(1))
+		}
+		return math.Log(arg(0))
+	case "pow":
+		return math.Pow(arg(0), arg(1))
+	case "hypot":
+		s := 0.0
+		for _, v := range a {
+			s += v * v
+		}
+		return math.Sqrt(s)
+	case "abs":
+		return math.Abs(arg(0))
+	case "sign":
+		v := arg(0)
+		if v > 0 {
+			return 1
+		} else if v < 0 {
+			return -1
+		}
+		return 0
+	case "mod":
+		d := arg(1)
+		if d == 0 {
+			return 0
+		}
+		r := math.Mod(arg(0), d)
+		if r != 0 && (r < 0) != (d < 0) {
+			r += d
+		}
+		return r
+	case "rem":
+		if arg(1) == 0 {
+			return 0
+		}
+		return math.Mod(arg(0), arg(1))
+	case "round":
+		step := 1.0
+		if len(a) > 1 {
+			step = a[1]
+		}
+		if step == 0 {
+			return 0
+		}
+		step = math.Abs(step)
+		q := arg(0) / step
+		switch c.Strat {
+		case "up":
+			q = math.Ceil(q)
+		case "down":
+			q = math.Floor(q)
+		case "to-zero":
+			q = math.Trunc(q)
+		default:
+			q = math.Floor(q + 0.5)
+		}
+		return q * step
 	}
 	return 0
 }
@@ -626,6 +723,22 @@ func (p *calcParser) parseAtom() *Calc {
 		name := p.s[p.pos:j]
 		p.pos = j + 1
 		var args []*Calc
+		strat := ""
+		if name == "round" {
+			p.skip()
+			for _, k := range []string{"nearest", "up", "down", "to-zero"} {
+				if strings.HasPrefix(p.s[p.pos:], k) {
+					q := p.pos + len(k)
+					for q < len(p.s) && p.s[q] == ' ' {
+						q++
+					}
+					if q < len(p.s) && p.s[q] == ',' {
+						strat = k
+						p.pos = q + 1
+					}
+				}
+			}
+		}
 		for {
 			x := p.parseSum()
 			if x == nil {
@@ -658,8 +771,8 @@ func (p *calcParser) parseAtom() *Calc {
 			if len(args) == 3 {
 				return &Calc{Op: 'c', List: args}
 			}
-		case "abs":
-			return &Calc{Op: 'M', List: []*Calc{args[0], {Op: '*', A: args[0], B: &Calc{Op: 'n', Px: -1, isNumb: true}}}}
+		case "abs", "sign", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "exp", "log", "pow", "hypot", "mod", "rem", "round":
+			return &Calc{Op: 'F', Fn: name, List: args, Strat: strat, isNumb: numFn[name]}
 		}
 		p.err = true
 		return nil
@@ -668,12 +781,19 @@ func (p *calcParser) parseAtom() *Calc {
 	v, rest, ok := numPrefix(p.s[p.pos:])
 	if !ok {
 		// constants
-		for _, k := range []string{"pi", "e"} {
+		for _, k := range []string{"infinity", "-infinity", "nan", "pi", "e"} {
 			if strings.HasPrefix(p.s[p.pos:], k) {
 				p.pos += len(k)
 				val := math.Pi
-				if k == "e" {
+				switch k {
+				case "e":
 					val = math.E
+				case "infinity":
+					val = 1e9
+				case "-infinity":
+					val = -1e9
+				case "nan":
+					val = 0
 				}
 				return &Calc{Op: 'n', Px: val, isNumb: true}
 			}
@@ -693,6 +813,16 @@ func (p *calcParser) parseAtom() *Calc {
 	if unit == "" {
 		return &Calc{Op: 'n', Px: v, isNumb: true}
 	}
+	switch unit {
+	case "deg":
+		return &Calc{Op: 'n', Px: v * math.Pi / 180, isNumb: true}
+	case "rad":
+		return &Calc{Op: 'n', Px: v, isNumb: true}
+	case "grad":
+		return &Calc{Op: 'n', Px: v * math.Pi / 200, isNumb: true}
+	case "turn":
+		return &Calc{Op: 'n', Px: v * 2 * math.Pi, isNumb: true}
+	}
 	px, pct, ok := p.u.unitPx(v, unit)
 	if !ok {
 		p.err = true
@@ -707,6 +837,8 @@ func (p *calcParser) parseAtom() *Calc {
 // ---- colors -----------------------------------------------------------------------
 
 var namedColors = map[string]Color{}
+
+var numFn = map[string]bool{"sign": true, "sin": true, "cos": true, "tan": true, "asin": true, "acos": true, "atan": true, "atan2": true, "exp": true, "log": true}
 
 func init() {
 	for k, v := range map[string]uint32{

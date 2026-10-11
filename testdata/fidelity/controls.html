@@ -1,0 +1,14 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>controls</title>
+<style>body{margin:12px;font:13.333px Arial,sans-serif;color:#222}.r{display:flex;gap:14px;align-items:center;margin-bottom:12px;flex-wrap:wrap}</style></head><body>
+<div class="r"><input type="checkbox"><input type="checkbox" checked><input type="checkbox" disabled><input type="checkbox" checked disabled>
+<input type="radio"><input type="radio" checked><input type="radio" disabled><input type="radio" checked disabled>
+<input type="checkbox" style="width:24px;height:24px" checked><input type="radio" style="width:24px;height:24px" checked></div>
+<div class="r"><input type="range" min="0" max="100" value="0"><input type="range" value="50"><input type="range" value="100"><input type="range" value="30" disabled></div>
+<div class="r"><progress value="30" max="100"></progress><progress value="100" max="100"></progress><meter value="0.2"></meter><meter value="0.6" low="0.3" high="0.8" optimum="0.9"></meter><meter value="0.9" low="0.3" high="0.8" optimum="0.1"></meter><meter value="50" min="0" max="100" optimum="80"></meter></div>
+<div class="r"><select><option>One</option><option>Two</option></select><select disabled><option>Disabled</option></select><select style="width:150px"><option>Wide select</option></select><select multiple size="3"><option>a</option><option selected>b</option><option>c</option></select></div>
+<div class="r"><input type="file"><input type="color" value="#3366cc"><input type="date"><input type="time"><input type="number" value="5"><input type="search" value="q"></div>
+<div class="r"><button>Button</button><button disabled>Disabled</button><input type="submit" value="Submit"><input type="text" value="text" disabled><input type="text" value="ro" readonly><textarea rows="2" cols="20">area</textarea></div>
+<div class="r"><details open><summary>Summary open</summary>Body</details><details><summary>Closed</summary>Body</details></div>
+<div class="r"><fieldset><legend>Legend</legend><input type="text" size="8"></fieldset><input type="text" placeholder="placeholder" style="border:2px solid #36c;border-radius:6px"><button style="border-radius:20px;padding:4px 16px">Pill</button></div>
+</body></html>

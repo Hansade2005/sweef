@@ -173,6 +173,14 @@ func (p *Painter) op(op render.Op) {
 		c.Restore()
 	case render.Bitmap:
 		p.bitmap(o)
+	case render.SVGDraw:
+		p.svgDraw(o)
+	case render.Scrollbar:
+		p.scrollbar(o)
+	case render.ScrollCorner:
+		p.scrollCorner(o)
+	case render.BackdropFilter:
+		p.backdrop(o)
 	}
 }
 
@@ -313,6 +321,33 @@ func (p *Painter) border(o render.Border) {
 		{{x1, y1}, {x0, y1}, {ix0, iy1}, {ix1, iy1}},
 		{{x0, y1}, {x0, y0}, {ix0, iy0}, {ix0, iy1}},
 	}
+	if !rad.IsZero() {
+		// extend the miter lines inward so the corner arcs fall inside the
+		// adjacent sides' regions
+		mr, mw := 0.0, 0.0
+		for k := 0; k < 4; k++ {
+			mr = math.Max(mr, math.Max(rad[k][0], rad[k][1]))
+			mw = math.Max(mw, w[k])
+		}
+		ext := func(ox, oy, dx, dy float64) Pt {
+			m := math.Max(math.Abs(dx), math.Abs(dy))
+			if m == 0 {
+				return Pt{ox, oy}
+			}
+			t := (mr + mw) / m
+			return Pt{ox + dx*t, oy + dy*t}
+		}
+		tl := ext(x0, y0, w[3], w[0])
+		tr := ext(x1, y0, -w[1], w[0])
+		br := ext(x1, y1, -w[1], -w[2])
+		bl := ext(x0, y1, w[3], -w[2])
+		quads = [4][]Pt{
+			{{x0, y0}, {x1, y0}, tr, tl},
+			{{x1, y0}, {x1, y1}, br, tr},
+			{{x1, y1}, {x0, y1}, bl, br},
+			{{x0, y1}, {x0, y0}, tl, bl},
+		}
+	}
 	// uniform solid fast path
 	uniform := true
 	for i := 1; i < 4; i++ {
@@ -323,6 +358,10 @@ func (p *Painter) border(o render.Border) {
 	if uniform && o.Styles[0] == "solid" {
 		ring := p.ring(r, rad, 0, 0, 0, 0, w[3], w[0], w[1], w[2])
 		c.draw(p.maskOf(ring, EvenOdd), Solid(col(o.Colors[0])))
+		return
+	}
+	if uniform && !rad.IsZero() && (o.Styles[0] == "dashed" || o.Styles[0] == "dotted") {
+		p.dashedRounded(r, rad, w, 0, nil, col(o.Colors[0]), o.Styles[0] == "dotted")
 		return
 	}
 	for i := 0; i < 4; i++ {
@@ -376,7 +415,11 @@ func (p *Painter) border(o render.Border) {
 			fill(sideMask(band(0, 0.5)), d)
 			fill(sideMask(band(0.5, 1)), l)
 		case "dashed", "dotted":
-			p.dashedSide(o, r, rad, w, i, quads[i], color, style == "dotted")
+			if !rad.IsZero() {
+				p.dashedRounded(r, rad, w, i, quads[i], color, style == "dotted")
+			} else {
+				p.dashedSide(o, r, rad, w, i, quads[i], color, style == "dotted")
+			}
 		default:
 			fill(sideMask(band(0, 1)), color)
 		}
@@ -484,7 +527,7 @@ func (p *Painter) dashedSide(o render.Border, r render.Rect, rad render.Radii, w
 
 func (p *Painter) text(o render.TextRun) {
 	c := p.c
-	sh := &Shaped{Size: o.Size, Width: o.Width, Fake: o.Bold, Skew: o.Italic}
+	sh := &Shaped{Size: o.Size, Width: o.Width, Fake: o.Bold, Skew: o.Italic, Lum: textLum(col(o.Color))}
 	sh.Glyphs = make([]Glyph, 0, len(o.Glyphs))
 	for _, g := range o.Glyphs {
 		if g.Face == nil {
@@ -528,7 +571,15 @@ func (p *Painter) text(o render.TextRun) {
 	if o.DecoColor.A == 0 {
 		dc = col(o.Color)
 	}
-	th := math.Max(1, math.Round(o.Size/14.5))
+	// Geometry measured from Chromium (Linux, Liberation/DejaVu fonts):
+	// thickness floor(size/10) (min 1); underline top = baseline +
+	// max(ceil(size/20), ceil(thickness/2)); overline sits on the ascent;
+	// line-through centre follows a size-dependent table.
+	th := math.Max(1, math.Floor(o.Size/10))
+	autoTh := th
+	if o.DecoThick > 0 {
+		th = math.Max(1, math.Round(o.DecoThick))
+	}
 	asc := math.Round(o.Size * 0.9)
 	for _, g := range o.Glyphs {
 		if g.Face != nil {
@@ -536,49 +587,90 @@ func (p *Painter) text(o render.TextRun) {
 			break
 		}
 	}
-	line := func(y float64) {
+	line := func(y float64, dir float64) {
 		switch o.DecoStyle {
 		case "double":
-			p.decoRect(o.X, y-th, o.Width, th, dc)
-			p.decoRect(o.X, y+th, o.Width, th, dc)
+			p.decoRect(o.X, y, o.Width, th, dc)
+			p.decoRect(o.X, y+dir*(th+1), o.Width, th, dc)
 		case "dotted", "dashed":
-			dl := th
+			dash, gap := th, th
 			if o.DecoStyle == "dashed" {
-				dl = 3 * th
+				dash, gap = 2*th, th
+				if th < 3 {
+					dash, gap = 3*th, 2*th
+				}
 			}
-			for x := 0.0; x < o.Width; x += 2 * dl {
-				p.decoRect(o.X+x, y, math.Min(dl, o.Width-x), th, dc)
+			if o.Width <= dash*2 {
+				p.decoRect(o.X, y, o.Width, th, dc)
+				return
+			}
+			gap = selectBestDashGap(o.Width, dash, gap, false)
+			for x := 0.0; x < o.Width-1e-6; x += dash + gap {
+				p.decoRect(o.X+x, y, math.Min(dash, o.Width-x), th, dc)
 			}
 		case "wavy":
+			amp := (th + 3) / 2
+			per := 4*th + 3
+			cy := y + amp + th/2
 			pa := NewPath()
-			amp := th * 1.5
-			step := th * 2
-			pa.MoveTo(o.X, y+th/2)
-			up := true
-			for x := 0.0; x < o.Width; x += step {
-				ny := y + th/2 - amp
-				if !up {
-					ny = y + th/2 + amp
+			step := 0.5
+			for x := 0.0; x <= o.Width+step; x += step {
+				xx := math.Min(x, o.Width)
+				yy := cy + amp*math.Sin(2*math.Pi*xx/per)
+				if x == 0 {
+					pa.MoveTo(o.X+xx, yy)
+				} else {
+					pa.LineTo(o.X+xx, yy)
 				}
-				pa.LineTo(o.X+math.Min(x+step, o.Width), ny)
-				up = !up
 			}
 			c.SetStroke(Brush{Color: dc})
 			c.SetStrokeStyle(StrokeStyle{Width: th, Join: JoinRound})
+			c.Save()
+			c.ClipRect(o.X, y-1, o.Width, 2*amp+th+2)
 			c.StrokePath(pa)
+			c.Restore()
 		default:
 			p.decoRect(o.X, y, o.Width, th, dc)
 		}
 	}
 	if o.Underline {
-		line(o.Y + math.Max(1, math.Round(o.Size/16)))
+		off := math.Max(math.Ceil(o.Size/20), math.Ceil(th/2))
+		if o.UnderOffset != 0 {
+			off = o.UnderOffset
+		}
+		line(o.Y+off, 1)
 	}
 	if o.Overline {
-		line(o.Y - asc - th)
+		line(o.Y-asc-th, -1)
 	}
 	if o.LineThrough {
-		line(o.Y - o.Size/3 - th/2)
+		// centre above the baseline (measured table, linearly interpolated)
+		ctr := lineThroughCenter(o.Size, autoTh)
+		line(o.Y-ctr-th/2, 1)
 	}
+}
+
+// lineThroughCenter is the distance of the strike-through centre above the
+// baseline for the auto thickness (measured: top offsets for 1..64px).
+func lineThroughCenter(size, th float64) float64 {
+	tbl := [][2]float64{{10, 3}, {12, 4}, {14, 5}, {16, 5}, {18, 6}, {20, 7}, {24, 9}, {28, 10}, {32, 11}, {40, 14}, {48, 17}, {64, 23}}
+	top := 0.0
+	switch {
+	case size <= tbl[0][0]:
+		top = tbl[0][1] * size / tbl[0][0]
+	case size >= tbl[len(tbl)-1][0]:
+		top = tbl[len(tbl)-1][1] + (size-64)*0.365
+	default:
+		for k := 1; k < len(tbl); k++ {
+			if size <= tbl[k][0] {
+				a, b := tbl[k-1], tbl[k]
+				top = a[1] + (b[1]-a[1])*(size-a[0])/(b[0]-a[0])
+				break
+			}
+		}
+	}
+	top = math.Round(top)
+	return top - th/2
 }
 
 func (p *Painter) decoRect(x, y, w, h float64, cl Color) {

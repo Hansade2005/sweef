@@ -1,0 +1,24 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>container</title>
+<style>
+body { margin: 0; padding: 16px; font: 16px/1.4 Arial, sans-serif; }
+.wrap { container-type: inline-size; border: 2px solid #333; margin-bottom: 16px; padding: 8px; }
+.w1 { width: 500px; } .w2 { width: 300px; } .w3 { width: 60%; container-name: card; }
+.card { display: flex; flex-direction: column; background: #eef; padding: 8px; }
+.card .t { font-size: 20px; width: 50cqw; background: #cfc; }
+@container (min-width: 400px) { .card { flex-direction: row; gap: 12px; background: #fee; } .card .t { font-size: 28px; } }
+@container card (min-width: 600px) { .card { background: #efe; padding: 20px; } }
+@container (max-width: 350px) { .card .t { color: red; } }
+.u { width: 20cqi; height: 30px; background: #fc9; margin-top: 6px; }
+.v { container-type: size; width: 300px; height: 120px; border: 1px solid #000; }
+.v .inner { width: 50cqw; height: 50cqh; background: #9cf; }
+.nm { container: side / inline-size; width: 420px; }
+@container side (min-width: 400px) { .nm .x { display: grid; grid-template-columns: 1fr 2fr; gap: 4px; } }
+.x div { background: #ddd; padding: 4px; }
+</style></head><body>
+<div class="wrap w1"><div class="card"><div class="t">Wide card</div><div>Body text</div></div><div class="u"></div></div>
+<div class="wrap w2"><div class="card"><div class="t">Narrow card</div><div>Body text</div></div><div class="u"></div></div>
+<div class="wrap w3"><div class="card"><div class="t">Percent card</div><div>Body text</div></div></div>
+<div class="v"><div class="inner"></div></div>
+<div class="nm"><div class="x"><div>One</div><div>Two</div></div></div>
+</body></html>

@@ -146,6 +146,9 @@ func (c *ctx) shapeWith(fs *fontSpec, st *style.Computed, rs []rune, prev rune, 
 				a = fs.size * 0.5
 			}
 			adv = a
+			if st.VertFrame != 0 && st.TextOrientation == "upright" {
+				adv = fs.size // upright glyphs advance by an em in vertical text
+			}
 			if kern && prev != 0 && prevFace == f {
 				adv += f.KernF(prev, r, fs.size)
 			}

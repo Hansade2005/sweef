@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>multicol2</title>
+<style>
+body { margin: 0; padding: 16px; font: 16px/1.4 Arial, sans-serif; }
+.mc { column-count: 3; column-gap: 30px; column-rule: 2px solid #c00; width: 720px; background: #f4f4f4; padding: 10px; margin-bottom: 20px; }
+.mc p { margin: 0 0 10px; }
+.mc h3 { margin: 0 0 8px; font-size: 18px; }
+.mc .span { column-span: all; background: #cde; padding: 6px; margin: 8px 0; text-align: center; }
+.mc2 { column-width: 200px; column-gap: 20px; column-rule: 1px dashed #060; width: 700px; height: 220px; column-fill: auto; border: 1px solid #333; }
+.mc3 { column-count: 2; column-gap: 40px; width: 600px; }
+.mc3 .blk { break-inside: avoid; background: #fec; border: 1px solid #c80; margin-bottom: 8px; padding: 4px; }
+.mc3 .brk { break-before: column; }
+</style></head><body>
+<div class="mc"><h3>Heading</h3><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+<div class="span">Spanning heading across all columns</div>
+<p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p><p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.</p></div>
+<div class="mc2"><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p></div>
+<div class="mc3"><div class="blk">Block one is kept together</div><div class="blk">Block two has more text so it is taller than the first one, kept together too</div><div class="blk brk">Forced to column two</div><div class="blk">Block four</div></div>
+</body></html>

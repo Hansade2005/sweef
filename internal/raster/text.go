@@ -2,7 +2,6 @@ package raster
 
 import (
 	"math"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -328,6 +327,7 @@ type Shaped struct {
 	Skew   bool // synthetic italic
 	Size   float64
 	Set    *faceSet
+	Lum    uint8 // text color luminance, selects the coverage preblend table
 }
 
 func normalizeText(s string) string {
@@ -363,10 +363,10 @@ func Shape(spec FontSpec, text string, letterSpacing, wordSpacing float64, kern 
 		if f == nil {
 			continue
 		}
-		if kern && prevFace == f {
-			x += f.Kern(prev, r, 2048) * spec.Size / 2048
+		if kern && prevFace == f && prev != ' ' && r != ' ' { // canvas shapes word by word
+			x += f.KernF(prev, r, spec.Size)
 		}
-		adv := f.Advance(r, 2048) * spec.Size / 2048
+		adv := f.AdvanceF(r, spec.Size)
 		if adv < 0 {
 			adv = spec.Size * 0.5
 		}
@@ -463,15 +463,25 @@ func (c *Context) alignOffset(sh *Shaped, t *textState) (float64, float64) {
 		}
 	}
 	asc, desc := sh.FontMetrics()
+	// Blink derives the em box baselines from the OS/2 typographic metrics
+	// (unrounded) when the font has them
+	tasc, tdesc := asc, desc
+	if len(sh.Set.faces) > 0 {
+		if a, d, ok := sh.Set.faces[0].TypoMetrics(sh.Size); ok {
+			tasc, tdesc = a, d
+		}
+	}
 	var dy float64
 	switch t.baseline {
 	case "top":
-		dy = asc
+		dy = tasc
 	case "hanging":
 		dy = asc * 0.8
 	case "middle":
-		dy = (asc - desc) / 2
-	case "ideographic", "bottom":
+		dy = (tasc - tdesc) / 2
+	case "bottom":
+		dy = -tdesc
+	case "ideographic":
 		dy = -desc
 	}
 	return dx, dy
@@ -480,12 +490,12 @@ func (c *Context) alignOffset(sh *Shaped, t *textState) (float64, float64) {
 // ---- drawing ---------------------------------------------------------------------------
 
 type gmKey struct {
-	f    *font.Face
-	r    rune
-	size int32
-	sub  uint8
-	bold bool
-	skew bool
+	f      *font.Face
+	r      rune
+	sx, sy int32 // FreeType's 26.6 pixel sizes along x and y
+	sub    uint8
+	bold   bool
+	skew   bool
 }
 
 var (
@@ -503,33 +513,30 @@ func fakeBoldExtra(size float64) float64 {
 	return size * (1/24 + (size-9)/(36-9)*(1.0/32-1.0/24))
 }
 
-func glyphMask(g Glyph, size float64, sub int, bold, skew bool) *Mask {
-	k := gmKey{g.Face, g.R, int32(size*64 + 0.5), uint8(sub), bold, skew}
+func glyphMask(g Glyph, sizeX, sizeY float64, sub int, bold, skew bool) *Mask {
+	k := gmKey{g.Face, g.R, int32(sizeX * 64), int32(sizeY * 64), uint8(sub), bold, skew}
 	gmMu.Lock()
 	if m, ok := gmCache[k]; ok {
 		gmMu.Unlock()
 		return m
 	}
 	gmMu.Unlock()
-	p := glyphPath(g.Face, g.R)
 	var m *Mask
-	if p != nil {
-		p = hintPath(p, g.Face, size)
+	if !bold {
+		m = skiaGlyph(g.Face, g.R, sizeX, sizeY, sub, skew)
+	} else if p := glyphPath(g.Face, g.R); p != nil {
 		sk := 0.0
 		if skew {
 			sk = -0.25
 		}
-		mat := Matrix{size, 0, sk * size, size, float64(sub) / 4, 0}
+		mat := Matrix{sizeX, 0, sk * sizeX, sizeY, float64(sub) / 4, 0}
 		big := IRect{-2048, -2048, 2048, 2048}
 		m = FillMask(p, mat, NonZero, big)
-		if bold && m != nil {
-			ex := fakeBoldExtra(size)
+		if m != nil {
+			ex := fakeBoldExtra(sizeY)
 			sp := p.Transform(mat)
 			sm := StrokeMask(sp, Identity, StrokeStyle{Width: ex, Join: JoinMiter, MiterLimit: 4}, big)
 			m = unionMasks(m, sm)
-		}
-		if m != nil {
-			m = applyTextGamma(m)
 		}
 	}
 	gmMu.Lock()
@@ -566,29 +573,17 @@ func unionMasks(a, b *Mask) *Mask {
 	return o
 }
 
-// textGamma boosts coverage slightly the way Skia's contrast/gamma tables do.
-var textLUT [256]uint8
-
-func init() {
-	for i := range textLUT {
-		textLUT[i] = uint8(i)
-	}
-}
-
-func applyTextGamma(m *Mask) *Mask { return m }
-
 // textMaskFor assembles a coverage mask for a shaped run placed at (x,y) in
 // user space. Returns nil if nothing visible.
 func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 	m := c.st.ctm
-	simple := m[1] == 0 && m[2] == 0 && m[0] > 0 && m[3] > 0 && math.Abs(m[0]-m[3]) < 1e-9 && sx == 1
+	dsizeX, dsizeY := sh.Size*m[0]*sx, sh.Size*m[3]
+	// glyphs up to 256px are cached masks placed on the quarter-pixel grid;
+	// bigger ones, and rotated or skewed text, are drawn as paths
+	simple := m[1] == 0 && m[2] == 0 && m[0] > 0 && m[3] > 0 && sx > 0 && dsizeX <= 256 && dsizeY <= 256
 	clip := c.drawBounds()
 	if simple {
 		scale := m[0]
-		dsize := sh.Size * scale
-		if dsize > 400 {
-			simple = false
-		}
 		var out *Mask
 		type placed struct {
 			m      *Mask
@@ -598,11 +593,11 @@ func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 		bb := IRect{}
 		for _, g := range sh.Glyphs {
 			gx := (x+g.X*sx)*scale + m[4]
-			gy := math.Round(y*scale + m[5])
+			gy := math.Round(y*m[3] + m[5])
 			gx += 0.125 // Skia rounds to the nearest quarter pixel
 			ix := math.Floor(gx)
 			sub := int(math.Floor((gx - ix) * 4))
-			gm := glyphMask(g, dsize, sub, sh.Fake, sh.Skew)
+			gm := glyphMask(g, dsizeX, dsizeY, sub, sh.Fake, sh.Skew)
 			if gm == nil {
 				continue
 			}
@@ -622,6 +617,7 @@ func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 			return nil
 		}
 		out = newMask(bb)
+		lut := lutForLum(sh.Lum)
 		for _, p := range ps {
 			for yy := max(p.m.B.Y0+p.oy, bb.Y0); yy < min(p.m.B.Y1+p.oy, bb.Y1); yy++ {
 				src := p.m.Row(yy - p.oy)
@@ -636,6 +632,7 @@ func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 					if v == 0 {
 						continue
 					}
+					v = lut[v]
 					s := uint32(drow[i]) + uint32(v)
 					if s > 255 {
 						s = 255
@@ -651,7 +648,9 @@ func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 	if p == nil {
 		return nil
 	}
-	return FillMask(p, m, NonZero, clip)
+	// Chromium fills glyph outlines with its analytic AA scan converter even
+	// when the text is rotated or scaled non-uniformly
+	return RasterizePolys(aaaFlatten(p.Transform(m)), NonZero, clip)
 }
 
 // textPath builds the combined outline of a run (user space).
@@ -697,6 +696,9 @@ func (c *Context) FillText(text string, x, y, maxWidth float64) {
 	if len(sh.Glyphs) == 0 {
 		return
 	}
+	if f := c.st.fill; f.Gradient == nil && f.Pattern == nil {
+		sh.Lum = textLum(f.Color)
+	}
 	c.draw(c.textMask(sh, ox, oy, sx), c.shaderFor(c.st.fill, c.st.alpha))
 }
 
@@ -710,7 +712,25 @@ func (c *Context) StrokeText(text string, x, y, maxWidth float64) {
 	if p == nil {
 		return
 	}
-	c.StrokePath(p)
+	c.draw(c.strokeTextMask(p), c.shaderFor(c.st.stroke, c.st.alpha))
+}
+
+// strokeTextMask strokes a glyph path the way StrokeMask does but fills the
+// outline with the snapped edges Chromium's scan converter uses.
+func (c *Context) strokeTextMask(p *Path) *Mask {
+	m := c.st.ctm
+	sc := m.MaxScale()
+	if sc == 0 || math.IsNaN(sc) {
+		return nil
+	}
+	tol := 0.05 / sc
+	polys := StrokePolys(p.Flatten(tol), c.st.ss, tol)
+	for i := range polys {
+		for j, q := range polys[i].P {
+			polys[i].P[j] = aaaPt(m.ApplyPt(q).X, m.ApplyPt(q).Y)
+		}
+	}
+	return RasterizePolys(polys, NonZero, c.drawBounds())
 }
 
 // SetFont sets the font from a CSS shorthand; false if invalid.
@@ -769,65 +789,4 @@ func (f FontSpec) String() string {
 	}
 	parts = append(parts, strings.Join(fam, ", "))
 	return strings.Join(parts, " ")
-}
-
-// hintPath approximates FreeType's light auto-hinting: it snaps the
-// baseline, x-height and cap-height to whole pixels by warping y.
-func hintPath(p *Path, f *font.Face, size float64) *Path {
-	if !hintEnabled || size < 4 || size > 80 {
-		return p
-	}
-	m := f.Metrics(size)
-	xh, ch := m.XHeight, m.CapHeight
-	if xh <= 0 || ch <= 0 {
-		return p
-	}
-	rx := hintRound(xh, size)
-	rc := hintRound(ch, size)
-	if hintMode == "x" {
-		rc = ch + (rx - xh)
-	}
-	if hintMode == "c" {
-		rx = xh
-	}
-	if hintMode == "n" {
-		rx, rc = math.Floor(xh+0.5), math.Floor(ch+0.5)
-	}
-	if rx == xh && rc == ch {
-		return p
-	}
-	// control points in unit-em y-up space
-	x0, x1 := xh/size, ch/size
-	rx0, rc0 := rx/size, rc/size
-	warp := func(yUp float64) float64 {
-		switch {
-		case yUp <= 0:
-			return yUp
-		case yUp <= x0:
-			return yUp * rx0 / x0
-		case yUp <= x1:
-			return rx0 + (yUp-x0)*(rc0-rx0)/(x1-x0)
-		}
-		return yUp + (rc0 - x1)
-	}
-	q := &Path{Cmds: p.Cmds, Pts: make([]float64, len(p.Pts)), has: p.has}
-	for i := 0; i < len(p.Pts); i += 2 {
-		q.Pts[i] = p.Pts[i]
-		q.Pts[i+1] = -warp(-p.Pts[i+1])
-	}
-	return q
-}
-
-var hintEnabled = os.Getenv("HINT") == "1"
-var hintMode = os.Getenv("HINT")
-
-func hintRound(v, size float64) float64 {
-	r := math.Floor(v + 0.5)
-	if size < 14 && v-math.Floor(v) > 0.2 {
-		r = math.Ceil(v)
-	}
-	if r < 1 {
-		r = 1
-	}
-	return r
 }

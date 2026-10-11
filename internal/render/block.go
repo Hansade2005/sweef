@@ -115,7 +115,7 @@ func (b *lbox) isBFCRoot() bool {
 	if b.parent == nil && b.n != nil {
 		return true
 	}
-	if b.floated || b.oof || b.kind == kAtomic {
+	if b.floated || b.oof || b.kind == kAtomic || b.vflow != 0 {
 		return true
 	}
 	switch b.inner {
@@ -131,7 +131,7 @@ func (b *lbox) isBFCRoot() bool {
 	if st.Display == "flow-root" || st.Display == "inline-block" || st.Display == "list-item" && false {
 		return true
 	}
-	if st.Contain != "" && st.Contain != "none" && (contains(st.Contain, "layout") || contains(st.Contain, "paint") || contains(st.Contain, "strict") || contains(st.Contain, "content")) {
+	if st.ContainsLayout() {
 		return true
 	}
 	if st.ColumnCount > 0 || st.ColumnWidth.K != style.LAuto {
@@ -177,6 +177,12 @@ func (c *ctx) edges(b *lbox, cbw float64) {
 	}
 	if b.hasBorOv {
 		b.bor = b.borOv
+	}
+	if b.quirkMT {
+		b.mar[0] = 0
+	}
+	if b.quirkMB {
+		b.mar[2] = 0
 	}
 	if b.kind == kInline {
 		// vertical margins do not apply
@@ -313,6 +319,17 @@ func (c *ctx) layoutBox(b *lbox, in layoutIn) {
 	if b.hasLast && !b.touchesBFC && b.lastIn.sameAs(in, false) && !c.noCache {
 		return
 	}
+	if b.vflow != 0 && b.vt == 0 {
+		b.lastIn, b.hasLast = in, true
+		c.layoutVertical(b, in)
+		return
+	}
+	c.layoutBoxH(b, in)
+}
+
+// layoutBoxH is the layout of a box in a horizontal frame (the logical frame
+// of a vertical flow root included).
+func (c *ctx) layoutBoxH(b *lbox, in layoutIn) {
 	b.lastIn, b.hasLast = in, true
 	b.hasFloat, b.touchesBFC = false, false
 	b.legendBase = -1
@@ -395,6 +412,15 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 		if b.parent == nil && b.n != nil && cbh < 0 && st.Height.K == style.LAuto {
 			cbh = -1
 		}
+		if c.quirks && cbh < 0 && st.Height.K == style.LAuto && in.fixH < 0 {
+			switch {
+			case b == c.bodyBox || b == c.rootBox:
+				cbh = c.quirkFillH(b)
+			case b.kind == kBlock && !b.floated && !b.oof && b.inner == iFlow && in.cbh >= 0 && b.parent != nil && b.parent.inner == iFlow && b.n != nil:
+				// percentage heights skip auto-height ancestors in quirks mode
+				cbh = math.Max(0, in.cbh-b.mar[0]-b.mar[2]-b.vExtra())
+			}
+		}
 		pushed := c.pushCB(b)
 		var contentH float64
 		topAdj := !root && b.pad[0] == 0 && b.bor[0] == 0
@@ -412,10 +438,24 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 			contentH = c.layoutMulticolContent(b, cw, cx, cy, bfc, cbh, topAdj, in)
 		} else if b.ifc {
 			contentH = c.layoutInlineContent(b, cw, cx, cy, bfc, cbh)
+			if root {
+				// a BFC root contains the floats of its inline content
+				for _, f := range bfc.floats {
+					if f.y1-cy > contentH {
+						contentH = f.y1 - cy
+					}
+				}
+			}
 		} else {
 			contentH = c.layoutBlockKids(b, cw, cx, cy, bfc, cbh, topAdj, botAdj, root)
 		}
 		c.inFlow = c.inFlow[:len(c.inFlow)-1]
+		if st.ContainsBlockSize() && in.fixH < 0 {
+			contentH = 0
+			if st.CIntrH.K == style.LPx {
+				contentH = st.CIntrH.V
+			}
+		}
 		b.contentH = contentH
 		// height
 		h := contentH
@@ -440,12 +480,7 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 		}
 		h = c.clampH(b, h, in.cbh, contentH)
 		if c.quirks && !hSpec && in.fixH < 0 && (b == c.bodyBox || b == c.rootBox) {
-			want := c.vh - b.vExtra() - b.sbH
-			if b == c.bodyBox && c.rootBox != nil {
-				want -= b.mar[0] + b.mar[2] + c.rootBox.vExtra() + c.rootBox.mar[0] + c.rootBox.mar[2]
-			} else {
-				want -= b.mar[0] + b.mar[2]
-			}
+			want := c.quirkFillH(b)
 			if want > h {
 				h = want
 			}
@@ -474,7 +509,13 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 		// scrollbar necessity for overflow:auto
 		if pass == 0 && (st.OverflowY == "auto" || st.OverflowX == "auto") && st.Scrollbar != "none" {
 			need := false
-			if st.OverflowY == "auto" && !b.vscroll && contentH > h+0.01 && hSpec {
+			ext := contentH
+			if b.inner == iFlex || b.inner == iGrid {
+				if e := c.itemsExtent(b); e > ext {
+					ext = e
+				}
+			}
+			if st.OverflowY == "auto" && !b.vscroll && ext > h-b.sbH+0.0001 && hSpec {
 				b.vscroll = true
 				need = true
 			}
@@ -615,7 +656,7 @@ func (b *lbox) isContainingBlockForAbs() bool {
 	if st.WillChange != "" && (contains(st.WillChange, "transform") || contains(st.WillChange, "perspective")) {
 		return true
 	}
-	if st.Contain != "" && (contains(st.Contain, "layout") || contains(st.Contain, "paint") || contains(st.Contain, "strict") || contains(st.Contain, "content")) {
+	if st.ContainsLayout() {
 		return true
 	}
 	return false
@@ -1125,4 +1166,32 @@ func (b *lbox) floatCount() int {
 		}
 	}
 	return n
+}
+
+// quirkFillH is the content height body and html take in quirks mode (they
+// fill the viewport, which percentage heights then resolve against).
+func (c *ctx) quirkFillH(b *lbox) float64 {
+	want := c.vh - b.vExtra() - b.sbH
+	if b == c.bodyBox && c.rootBox != nil {
+		want -= b.mar[0] + b.mar[2] + c.rootBox.vExtra() + c.rootBox.mar[0] + c.rootBox.mar[2]
+	} else {
+		want -= b.mar[0] + b.mar[2]
+	}
+	return math.Max(0, want)
+}
+
+// itemsExtent is the bottom edge (content-box coordinates) of the flex or
+// grid items of b, including their margins: the block extent of the content
+// even when the container has a definite height.
+func (c *ctx) itemsExtent(b *lbox) float64 {
+	m := 0.0
+	for _, k := range b.kids {
+		if k.oof || k.kind == kText || k.kind == kInline || k.kind == kBreak || k.kind == kMarker || k.hiddenFlow {
+			continue
+		}
+		if e := k.y + k.h + k.mar[2]; e > m {
+			m = e
+		}
+	}
+	return m
 }

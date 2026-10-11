@@ -58,10 +58,11 @@ func parseSVGTransform(s string) m6 {
 		if i < 0 || j < i {
 			break
 		}
-		name := strings.TrimSpace(strings.Trim(s[:i], ", "))
+		name := strings.ToLower(strings.TrimSpace(strings.Trim(s[:i], ", ")))
 		args := strings.FieldsFunc(s[i+1:j], func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\n' })
 		var a []float64
 		for _, x := range args {
+			x = strings.TrimSuffix(strings.TrimSuffix(x, "px"), "deg")
 			v, _ := strconv.ParseFloat(x, 64)
 			a = append(a, v)
 		}
@@ -86,9 +87,9 @@ func parseSVGTransform(s string) m6 {
 				cx, cy := a[1], a[2]
 				t = mmul(mmul(m6{1, 0, 0, 1, cx, cy}, t), m6{1, 0, 0, 1, -cx, -cy})
 			}
-		case "skewX":
+		case "skewx":
 			t[2] = math.Tan(g(0, 0) * math.Pi / 180)
-		case "skewY":
+		case "skewy":
 			t[1] = math.Tan(g(0, 0) * math.Pi / 180)
 		case "matrix":
 			t = m6{g(0, 1), g(1, 0), g(2, 0), g(3, 1), g(4, 0), g(5, 0)}
@@ -129,6 +130,10 @@ func (b *bbox) addRect(m m6, x0, y0, x1, y1 float64) {
 
 func (c *ctx) svgGeometry(b *lbox) {
 	n := b.n
+	doc := c.svgDocFor(n, b.st)
+	if doc == nil {
+		doc = &SVGDoc{dom: map[*html.Node]*SVGNode{}}
+	}
 	cr := c.contentRect0(b)
 	w, h := cr.W, cr.H
 	vbx, vby, vbw, vbh := 0.0, 0.0, w, h
@@ -167,7 +172,7 @@ func (c *ctx) svgGeometry(b *lbox) {
 		}
 	}
 	for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
-		c.svgElem(ch, base, vbw, vbh)
+		c.svgElem(ch, base, vbw, vbh, doc)
 	}
 }
 
@@ -176,17 +181,17 @@ func (c *ctx) contentRect0(b *lbox) Rect {
 }
 
 // svgElem computes the box of one SVG element (and descendants) under m.
-func (c *ctx) svgElem(n *html.Node, m m6, vw, vh float64) bbox {
+func (c *ctx) svgElem(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 	var bb bbox
 	if n.Type != html.ElementNode {
 		return bb
 	}
-	if t := attr(n, "transform"); t != "" {
+	if t, _ := svgProp(doc, n, "transform"); t != "" && t != "none" {
 		m = mmul(m, parseSVGTransform(t))
 	}
 	g := func(k string) float64 { return svgLen(attr(n, k), vw, 0) }
 	switch n.Data {
-	case "rect", "image", "foreignobject", "use":
+	case "rect", "image", "foreignobject":
 		x, y := g("x"), svgLen(attr(n, "y"), vh, 0)
 		w, h := g("width"), svgLen(attr(n, "height"), vh, 0)
 		bb.addRect(m, x, y, x+w, y+h)
@@ -207,24 +212,13 @@ func (c *ctx) svgElem(n *html.Node, m m6, vw, vh float64) bbox {
 		}
 	case "path":
 		svgPathBBox(attr(n, "d"), m, &bb)
-	case "text", "tspan":
-		x, y := g("x"), svgLen(attr(n, "y"), vh, 0)
-		fsz := svgNum(attr(n, "font-size"), 16)
-		txt := collapseSpaces(textContent(n))
-		st := c.eng.Anonymous(c.eng.InitialStyle(), "inline")
-		cp := *st
-		cp.FontSize = fsz
-		if ff := attr(n, "font-family"); ff != "" {
-			cp.FontFamily = []string{strings.ToLower(strings.Trim(strings.Split(ff, ",")[0], " \"'"))}
-		}
-		tw := c.textWidth(&cp, txt)
-		fs := c.spec(&cp)
-		if attr(n, "text-anchor") == "middle" {
-			x -= tw / 2
-		} else if attr(n, "text-anchor") == "end" {
-			x -= tw
-		}
-		bb.addRect(m, x, y-fs.asc, x+tw, y+fs.desc)
+	case "use":
+		bb = c.svgUse(n, m, vw, vh, doc)
+	case "text":
+		bb = c.svgText(n, m, vw, vh, doc)
+		return bb
+	case "tspan":
+		return bb
 	case "svg":
 		x, y, w, h := g("x"), svgLen(attr(n, "y"), vh, 0), svgLen(attr(n, "width"), vw, vw), svgLen(attr(n, "height"), vh, vh)
 		bb.addRect(m, x, y, x+w, y+h)
@@ -234,7 +228,7 @@ func (c *ctx) svgElem(n *html.Node, m m6, vw, vh float64) bbox {
 				s := math.Min(w/vbw, h/vbh)
 				mm := mmul(m, m6{s, 0, 0, s, x - svgNum(vb[0], 0)*s, y - svgNum(vb[1], 0)*s})
 				for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
-					c.svgElem(ch, mm, vbw, vbh)
+					c.svgElem(ch, mm, vbw, vbh, doc)
 				}
 			}
 		}
@@ -243,7 +237,7 @@ func (c *ctx) svgElem(n *html.Node, m m6, vw, vh float64) bbox {
 	case "g", "a", "switch", "symbol", "marker", "defs", "clippath", "mask", "pattern", "lineargradient", "radialgradient":
 		if n.Data == "defs" || n.Data == "clippath" || n.Data == "mask" || n.Data == "pattern" || n.Data == "lineargradient" || n.Data == "radialgradient" || n.Data == "marker" || n.Data == "symbol" {
 			for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
-				c.svgElem(ch, m, vw, vh)
+				c.svgElem(ch, m, vw, vh, doc)
 			}
 			c.res.Boxes[n] = &Box{Display: "inline", Visible: true, Transform: [6]float64{1, 0, 0, 1, 0, 0}}
 			return bb
@@ -251,9 +245,9 @@ func (c *ctx) svgElem(n *html.Node, m m6, vw, vh float64) bbox {
 	}
 	for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
 		if ch.Type == html.ElementNode && n.Data != "text" {
-			bb.union(c.svgElem(ch, m, vw, vh))
+			bb.union(c.svgElem(ch, m, vw, vh, doc))
 		} else if ch.Type == html.ElementNode {
-			bb.union(c.svgElem(ch, m, vw, vh))
+			bb.union(c.svgElem(ch, m, vw, vh, doc))
 		}
 	}
 	c.setSVGBox(n, bb)

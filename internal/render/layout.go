@@ -43,12 +43,49 @@ type ctx struct {
 	quirks  bool
 	res     *Result
 
-	painter *painter
-	all     []*lbox
+	painter    *painter
+	vcache     map[vkey]*style.Computed
+	smallCaps  map[*style.Computed]*style.Computed
+	vIntrinsic bool
+	curFL      *lbox // IFC root whose first line is being finished
+	all        []*lbox
 }
 
 // Layout lays out the document rooted at root (a document or html element).
+//
+// Documents that use @container rules are laid out repeatedly: each pass
+// evaluates the queries against the container sizes measured in the previous
+// pass until the sizes stop changing.
 func Layout(root *html.Node, o Options) *Result {
+	res, obs, has := layoutPass(root, o, nil)
+	if !has {
+		return res
+	}
+	used := map[*html.Node]style.ContSize(nil)
+	for pass := 0; pass < 5 && !sameContSizes(used, obs); pass++ {
+		used = obs
+		res, obs, _ = layoutPass(root, o, used)
+	}
+	return res
+}
+
+func sameContSizes(a, b map[*html.Node]style.ContSize) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		w, ok := b[k]
+		if !ok || math.Abs(v.W-w.W) > 0.01 || math.Abs(v.H-w.H) > 0.01 {
+			return false
+		}
+	}
+	return true
+}
+
+// layoutPass is one full layout. It returns the sizes of the document's query
+// containers as laid out, and whether the style engine saw any @container
+// rule (a re-run is only needed then).
+func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize) (*Result, map[*html.Node]style.ContSize, bool) {
 	if o.Width <= 0 {
 		o.Width = 1280
 	}
@@ -82,12 +119,15 @@ func Layout(root *html.Node, o Options) *Result {
 	c.quirks = isQuirks(root)
 	c.eng = style.NewEngineQ(env, sheets, c.quirks)
 	c.eng.SysFont = "arial"
+	if cq != nil {
+		c.eng.SetContainerSizes(cq)
+	}
 	registerFonts(c.eng.Fonts)
 	if c.docEl == nil {
 		res.Width, res.Height = o.Width, o.Height
 		res.Viewport = Rect{0, 0, o.Width, o.Height}
 		res.Hit = func(x, y float64) *html.Node { return nil }
-		return res
+		return res, nil, false
 	}
 	var top []*lbox
 	c.buildElement(c.docEl, nil, &top)
@@ -95,7 +135,7 @@ func Layout(root *html.Node, o Options) *Result {
 		res.Width, res.Height = o.Width, o.Height
 		res.Viewport = Rect{0, 0, o.Width, o.Height}
 		res.Hit = func(x, y float64) *html.Node { return nil }
-		return res
+		return res, nil, false
 	}
 	rb := top[0]
 	rb.kind = kBlock
@@ -103,7 +143,20 @@ func Layout(root *html.Node, o Options) *Result {
 	c.findBody(rb)
 	c.layoutRoot(rb)
 	c.finishResult(rb)
-	return res
+	if !c.eng.HasContainerQueries() {
+		return res, nil, false
+	}
+	obs := map[*html.Node]style.ContSize{}
+	for _, n := range c.eng.ContainerNodes() {
+		for _, b := range c.byNode[n] {
+			if b.pseudo != "" {
+				continue
+			}
+			obs[n] = style.ContSize{W: b.w - b.bor[1] - b.bor[3] - b.pad[1] - b.pad[3] - b.sbW, H: b.h - b.bor[0] - b.bor[2] - b.pad[0] - b.pad[2] - b.sbH}
+			break
+		}
+	}
+	return res, obs, true
 }
 
 func findDocEl(n *html.Node) *html.Node {
@@ -151,7 +204,7 @@ func (c *ctx) layoutRoot(rb *lbox) {
 	if oy == "scroll" {
 		c.sbViewport = sbSize
 	}
-	for pass := 0; pass < 3; pass++ {
+	for pass := 0; pass < 4; pass++ {
 		c.resetKids(rb)
 		cw := c.vw - c.sbViewport
 		in := layoutIn{cbw: cw, cbh: c.vh - c.sbViewportH, fixW: -1, fixH: -1, bfc: &bfcState{}}
@@ -162,15 +215,12 @@ func (c *ctx) layoutRoot(rb *lbox) {
 		docH := math.Max(rb.ovBottom, rb.y+rb.h+rb.mar[2])
 		docW := math.Max(rb.ovRight, rb.x+rb.w+rb.mar[1])
 		ox, _ := c.viewportOverflow()
-		if pass == 0 && c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh-c.sbViewportH+0.01 {
+		if c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh-c.sbViewportH+0.01 {
 			c.sbViewport = sbSize
 			continue
 		}
 		if c.sbViewportH == 0 && (ox == "auto" || ox == "visible" || ox == "scroll") && docW > c.vw-c.sbViewport+0.01 {
 			c.sbViewportH = sbSize
-			if c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh-c.sbViewportH+0.01 {
-				c.sbViewport = sbSize
-			}
 			continue
 		}
 		break
@@ -573,7 +623,7 @@ func (c *ctx) buildBoxes() {
 		first := true
 		for _, b := range bs {
 			var r Rect
-			if b.kind == kInline {
+			if b.kind == kInline || b.kind == kBreak {
 				for _, f := range b.absFrags {
 					bx.Frags = append(bx.Frags, f)
 					r = r.union(f)

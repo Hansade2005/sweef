@@ -259,6 +259,7 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 	if n.Data == "br" {
 		b.kind = kBreak
 		b.inlineLv = true
+		c.finishCommon(b)
 		*out = append(*out, b)
 		return
 	}
@@ -270,6 +271,7 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 		return
 	}
 	b.inlineLv = (b.kind == kInline || b.kind == kAtomic) && !b.floated && !b.oof
+	c.markVertical(b, pst)
 	if n.Data == "button" {
 		b.isBtn = true
 	}
@@ -287,6 +289,20 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 	for _, k := range kids {
 		b.addKid(k)
 	}
+	if kind == kBlock || st.Display == "inline-block" || st.Display == "list-item" {
+		c.applyFirstLetter(b, n, st)
+	}
+	if st.ContentVisibility == "hidden" {
+		// skipped contents: laid out (for geometry) but neither take space nor paint
+		var keep []*lbox
+		for _, k := range b.kids {
+			if k.kind == kBlock && !k.oof && !k.floated {
+				k.hiddenFlow = true
+				keep = append(keep, k)
+			}
+		}
+		b.kids = keep
+	}
 	if n.Data == "details" && !hasAttr(n, "open") {
 		seenSummary := false
 		for _, k := range b.kids {
@@ -301,6 +317,28 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 	}
 	c.finishCommon(b)
 	c.fixupChildren(b)
+	if c.quirks && (n.Data == "body" || n.Data == "td" || n.Data == "th") {
+		var first, last *lbox
+		for _, k := range b.kids {
+			if k.kind == kBlock && !k.floated && !k.oof && !k.hiddenFlow {
+				if first == nil {
+					first = k
+				}
+				last = k
+			}
+		}
+		if first != nil && first.st.QuirkMarginTop {
+			first.quirkMT = true
+		}
+		if last != nil && last.st.QuirkMarginBottom {
+			last.quirkMB = true
+		}
+	}
+	if (kind == kBlock || st.Display == "inline-block") && b.inner == iFlow {
+		if fls := c.eng.Compute(n, st, "first-line"); fls != nil {
+			c.setFirstLine(b, fls)
+		}
+	}
 	if b.kind == kInline && !b.floated && !b.oof {
 		// block-in-inline splitting
 		if pieces := c.splitInline(b); pieces != nil {

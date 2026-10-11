@@ -39,6 +39,7 @@ type Rule struct {
 	Entries []*Entry
 	Origin  Origin
 	Layer   int // 0 unlayered; larger = later layer
+	Cont    *ContCond
 	Order   int
 	id      int
 }
@@ -76,13 +77,21 @@ type parser struct {
 	out       *Parsed
 	supportsF func(name, val string) bool
 	depth     int
+	cont      *ContCond
+	quirks    bool
 }
 
 // ParseSheet parses CSS text. order is a shared counter that gives rules a
 // global source order across sheets; layers is shared between sheets so
 // @layer ordering is document-wide.
 func ParseSheet(text string, env *Env, origin Origin, order *int, layers map[string]int) *Parsed {
-	p := &parser{env: env, origin: origin, order: order, layers: layers, out: &Parsed{}}
+	return ParseSheetQ(text, env, origin, order, layers, false)
+}
+
+// ParseSheetQ is ParseSheet for a document in quirks mode (class and id
+// selectors compare case-insensitively).
+func ParseSheetQ(text string, env *Env, origin Origin, order *int, layers map[string]int, quirks bool) *Parsed {
+	p := &parser{env: env, origin: origin, order: order, layers: layers, out: &Parsed{}, quirks: quirks}
 	n := len(layers)
 	p.layerSeq = &n
 	p.supportsF = Supports
@@ -297,8 +306,15 @@ func (p *parser) atBlock(prelude, body, parentSel string) {
 		if ff.Family != "" {
 			p.out.Fonts = append(p.out.Fonts, ff)
 		}
-	case "@container", "@scope", "@document", "@-moz-document":
-		// Container queries cannot be evaluated here; their rules are skipped.
+	case "@container":
+		if cc, ok := parseContainerPrelude(args); ok {
+			old := p.cont
+			cc.Outer = old
+			p.cont = cc
+			p.nestedBody(body, parentSel)
+			p.cont = old
+		}
+	case "@scope", "@document", "@-moz-document":
 	case "@starting-style", "@keyframes", "@-webkit-keyframes", "@page", "@property", "@font-feature-values", "@counter-style", "@view-transition", "@position-try":
 	}
 }
@@ -441,7 +457,7 @@ func (p *parser) addRule(selText string, decls []Decl) {
 	if len(decls) == 0 {
 		return
 	}
-	r := &Rule{Decls: decls, Origin: p.origin, Layer: p.curLayer}
+	r := &Rule{Decls: decls, Origin: p.origin, Layer: p.curLayer, Cont: p.cont}
 	*p.order++
 	r.Order = *p.order
 	for _, alt := range splitTop(selText, ',') {
@@ -456,7 +472,7 @@ func (p *parser) addRule(selText string, decls []Decl) {
 		if base == "" {
 			base = "*"
 		}
-		cs, err := snet.CompileSelector(base)
+		cs, err := snet.CompileSelectorQ(base, p.quirks)
 		if err != nil {
 			continue
 		}
@@ -729,12 +745,15 @@ func mediaFeature(f string, env *Env) bool {
 			return val == "reduce"
 		}
 		return val == "no-preference"
-	case "prefers-contrast", "forced-colors", "prefers-reduced-transparency", "prefers-reduced-data", "inverted-colors":
+	case "prefers-contrast", "forced-colors", "prefers-reduced-transparency", "prefers-reduced-data":
 		return val == "no-preference" || val == "none"
+	case "inverted-colors", "scan":
+		return false
 	case "hover", "any-hover":
-		return val == "hover" || val == ""
+		// headless Chromium has no pointing device
+		return val == "none"
 	case "pointer", "any-pointer":
-		return val == "fine" || val == ""
+		return val == "none"
 	case "color":
 		if val == "" {
 			return true

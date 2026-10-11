@@ -28,14 +28,15 @@ type hitRec struct {
 }
 
 type painter struct {
-	c      *ctx
-	ops    []Op
-	clips  []clipRec
-	m      [6]float64
-	hasM   bool
-	hits   []hitRec
-	outl   []*lbox
-	active map[*lbox]bool
+	c       *ctx
+	ops     []Op
+	clips   []clipRec
+	m       [6]float64
+	hasM    bool
+	hits    []hitRec
+	outl    []*lbox
+	active  map[*lbox]bool
+	svgdocs map[string]*SVGDoc
 }
 
 var identity = [6]float64{1, 0, 0, 1, 0, 0}
@@ -46,6 +47,7 @@ func (c *ctx) paintAll(rb *lbox) {
 	p := &painter{c: c, m: identity, active: map[*lbox]bool{}}
 	c.canvasBackground(p, rb)
 	p.paintSC(rb, true)
+	p.paintViewportScrollbars()
 	c.res.List = p.ops
 	c.painter = p
 }
@@ -201,6 +203,7 @@ func (p *painter) paintSC(b *lbox, isRoot bool) {
 		p.paintSC(deferred[idx], false)
 	}
 	if clipped {
+		p.paintScrollbars(b)
 		p.popClip(b)
 	}
 	endFx()
@@ -222,6 +225,13 @@ func (p *painter) beginEffects(b *lbox) func() {
 		p.emit(PushTransform{M: m})
 		p.m = mulM(p.m, m)
 		p.hasM = true
+	}
+	if len(st.BackdropFilter) > 0 && st.Visibility != "hidden" {
+		bf := BackdropFilter{Rect: rectOf(b), Radii: p.radii(b)}
+		for _, f := range st.BackdropFilter {
+			bf.Filter = append(bf.Filter, Filter{Name: f.Name, Args: f.Args, Color: f.Color})
+		}
+		p.emit(bf)
 	}
 	if layer {
 		pl := PushLayer{Opacity: 1, Blend: st.MixBlend, Bounds: Rect{b.ovLeft, b.ovTop, b.ovRight - b.ovLeft, b.ovBottom - b.ovTop}}
@@ -331,7 +341,10 @@ func (p *painter) collectDeferred(b *lbox, out *[]*lbox) {
 			*out = append(*out, k)
 			continue
 		}
-		if k.kind == kBlock || k.kind == kAtomic {
+		// an atomic box that forms a stacking context paints its own positioned
+		// descendants (paintAtomic); a plain inline-block leaves them to the
+		// enclosing stacking context
+		if k.kind == kBlock || k.kind == kAtomic && !k.createsSC() {
 			p.collectDeferred(k, out)
 		}
 	}
@@ -404,6 +417,7 @@ func (p *painter) phaseInline(b *lbox) {
 		}
 		p.phaseInline(k)
 		if clipped {
+			p.paintScrollbars(k)
 			p.popClip(k)
 		}
 	}
@@ -423,7 +437,9 @@ func (p *painter) paintAtomic(a *lbox) {
 		clipped = true
 	}
 	var deferred []*lbox
-	p.collectDeferred(a, &deferred)
+	if a.createsSC() {
+		p.collectDeferred(a, &deferred)
+	}
 	p.phaseBlocks(a)
 	p.phaseFloats(a)
 	p.phaseInline(a)
@@ -432,6 +448,7 @@ func (p *painter) paintAtomic(a *lbox) {
 		p.paintSC(d, false)
 	}
 	if clipped {
+		p.paintScrollbars(a)
 		p.popClip(a)
 	}
 	endFx()
@@ -487,7 +504,15 @@ func (p *painter) paintDecor(b *lbox, isRoot bool) {
 			cr := Rect{b.ax + b.bor[3] + b.pad[3], b.ay + b.bor[0] + b.pad[0], b.w - b.hExtra(), b.h - b.vExtra()}
 			for i := 1; i < b.mcN; i++ {
 				x := cr.X + float64(i)*(b.mcW+b.mcGap) - b.mcGap/2 - st.ColumnRuleW/2
-				p.emit(FillRect{Rect: Rect{x, cr.Y, st.ColumnRuleW, cr.H}, Color: st.ColumnRuleColor})
+				switch st.ColumnRuleStyle {
+				case "dashed", "dotted", "double", "groove", "ridge", "inset", "outset":
+					// painted like a one-sided border (additive: reuses the Border op)
+					c := st.ColumnRuleColor
+					p.emit(Border{Rect: Rect{x, cr.Y, st.ColumnRuleW, cr.H}, Widths: [4]float64{0, 0, 0, st.ColumnRuleW},
+						Colors: [4]Color{c, c, c, c}, Styles: [4]string{"none", "none", "none", st.ColumnRuleStyle}})
+				default:
+					p.emit(FillRect{Rect: Rect{x, cr.Y, st.ColumnRuleW, cr.H}, Color: st.ColumnRuleColor})
+				}
 			}
 		}
 		if st.OutlineWidth > 0 && st.OutlineStyle != "none" {
@@ -558,9 +583,24 @@ func (p *painter) paintBackgroundArea(b *lbox, border Rect, radii Radii, originB
 		}
 		return bb, rad
 	}
-	if st.BgColor.A != 0 && lastClip != "text" {
+	blended := false
+	for _, ly := range st.BgLayers {
+		if ly.Blend != "" && ly.Blend != "normal" && !ly.Image.IsNone() {
+			blended = true
+		}
+	}
+	if st.BgColor.A != 0 && lastClip != "text" && !blended {
 		cr, crad := boxFor(lastClip)
 		p.emit(FillRect{Rect: cr, Color: st.BgColor, Radii: crad})
+	}
+	// background-blend-mode: blended layers composite against the element's own
+	// background only, so the whole background is an isolated group
+	if blended {
+		p.emit(PushLayer{Opacity: 1, Bounds: border})
+		if st.BgColor.A != 0 && lastClip != "text" {
+			cr, crad := boxFor(lastClip)
+			p.emit(FillRect{Rect: cr, Color: st.BgColor, Radii: crad})
+		}
 	}
 	for i := len(st.BgLayers) - 1; i >= 0; i-- {
 		ly := st.BgLayers[i]
@@ -575,7 +615,17 @@ func (p *painter) paintBackgroundArea(b *lbox, border Rect, radii Radii, originB
 		} else {
 			pa, _ = boxFor(ly.Origin)
 		}
+		bl := blended && ly.Blend != "" && ly.Blend != "normal"
+		if bl {
+			p.emit(PushLayer{Opacity: 1, Blend: ly.Blend, Bounds: border})
+		}
 		p.paintBgLayer(b, ly, clipBox, clipRad, pa)
+		if bl {
+			p.emit(PopLayer{})
+		}
+	}
+	if blended {
+		p.emit(PopLayer{})
 	}
 }
 
@@ -598,6 +648,7 @@ func (p *painter) paintBgLayer(b *lbox, ly style.BgLayer, clip Rect, clipRad Rad
 	}
 	var iw, ih float64
 	var img image.Image
+	var svgDoc *SVGDoc
 	var grad *style.Gradient
 	hasIntrW, hasIntrH := false, false
 	var ratio float64
@@ -606,13 +657,33 @@ func (p *painter) paintBgLayer(b *lbox, ly style.BgLayer, clip Rect, clipRad Rad
 	} else {
 		img = p.c.env.Image(ly.Image.URL)
 		if img == nil {
-			return
-		}
-		bnd := img.Bounds()
-		iw, ih = float64(bnd.Dx()), float64(bnd.Dy())
-		hasIntrW, hasIntrH = true, true
-		if ih > 0 {
-			ratio = iw / ih
+			sd := p.c.svgImageDocFor(ly.Image.URL)
+			if sd == nil {
+				return
+			}
+			svgDoc = sd
+			w, h, hw, hh, rt := svgIntrinsic(sd)
+			iw, ih, hasIntrW, hasIntrH, ratio = w, h, hw, hh, rt
+			if !hw && !hh {
+				// no intrinsic size: ratio-only images fit the positioning area
+				switch {
+				case rt > 0:
+					iw, ih = pa.W, pa.W/rt
+					if ih > pa.H {
+						iw, ih = pa.H*rt, pa.H
+					}
+				default:
+					iw, ih = pa.W, pa.H
+				}
+				hasIntrW, hasIntrH = true, true
+			}
+		} else {
+			bnd := img.Bounds()
+			iw, ih = float64(bnd.Dx()), float64(bnd.Dy())
+			hasIntrW, hasIntrH = true, true
+			if ih > 0 {
+				ratio = iw / ih
+			}
 		}
 	}
 	// image size
@@ -708,6 +779,10 @@ func (p *painter) paintBgLayer(b *lbox, ly style.BgLayer, clip Rect, clipRad Rad
 	tile := &Tile{Origin: [2]float64{pa.X + px, pa.Y + py}, Size: [2]float64{tw, th}, Step: [2]float64{stepX, stepY}, RepeatX: rx, RepeatY: ry}
 	if grad != nil {
 		p.emit(p.gradientOp(b, grad, clip, clipRad, tile))
+		return
+	}
+	if svgDoc != nil {
+		p.emitSVGTiles(b, svgDoc, clip, clipRad, tile)
 		return
 	}
 	p.emit(Image{Img: img, Dst: clip, Radii: clipRad, Smooth: b.st.ImageRendering != "pixelated" && b.st.ImageRendering != "crisp-edges", Tile: tile})
@@ -876,14 +951,22 @@ func (p *painter) paintOutline(b *lbox) {
 	e := w + off
 	rr := Rect{r.X - e, r.Y - e, r.W + 2*e, r.H + 2*e}
 	styl := st.OutlineStyle
-	if styl == "auto" {
+	auto := styl == "auto"
+	if auto {
+		// Chromium's focus ring: a 2px rounded ring hugging the border box
 		styl = "solid"
+		w = 2
+		e = w + off
+		rr = Rect{r.X - e, r.Y - e, r.W + 2*e, r.H + 2*e}
 	}
 	rad := p.radii(b)
 	for i := range rad {
 		if rad[i][0] > 0 {
 			rad[i][0] += e
 			rad[i][1] += e
+		}
+		if auto && rad[i][0] < 4 {
+			rad[i] = [2]float64{4, 4}
 		}
 	}
 	p.emit(Border{Rect: rr, Widths: [4]float64{w, w, w, w}, Colors: [4]Color{st.OutlineColor, st.OutlineColor, st.OutlineColor, st.OutlineColor},

@@ -1,0 +1,43 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>atrules</title>
+<style>
+@layer base, theme, utilities;
+@layer utilities { .box { background: #fc9 !important; } .t { color: red; } }
+@layer base { .box { background: #ccc; width: 100px; height: 40px; padding: 4px; } .t { color: blue; font-size: 24px; } }
+@layer theme { .box { background: #9cf; width: 220px; } }
+.unlayered { color: green; }
+@layer base { .unlayered { color: red; } }
+@supports (display: grid) { .sup { background: #cfc; } }
+@supports not (display: grid) { .sup { background: #f99; } }
+@supports (display: nonsense) { .sup2 { background: #f99; } }
+@supports selector(:has(a)) { .sup3 { background: #cfc; } }
+.sup, .sup2, .sup3 { padding: 6px; margin: 4px 0; }
+.nest { color: #333; padding: 6px; background: #eee; width: 300px;
+  & .in { color: red; margin-left: 10px; }
+  &:hover { color: blue; }
+  .x & { background: #fcc; }
+  & > p { margin: 4px 0; font-size: 20px; }
+  @media (min-width: 600px) { padding: 20px; }
+  &.big { font-size: 22px; }
+}
+.n2 { display: flex; gap: 8px;
+  .a { flex: 1; background: #cdf; }
+  .b { flex: 2; background: #fdc;
+    &:first-child { border: 2px solid #000; } }
+}
+@media (min-width: 600px) and (max-width: 2000px) { .mq { background: #cfc; } }
+@media (width >= 600px) { .mq2 { background: #cfc; } }
+@media not all and (monochrome) { .mq3 { background: #cfc; } }
+.mq, .mq2, .mq3 { padding: 4px; margin: 2px 0; }
+@layer { .anon { color: red; } }
+.anon { color: green; }
+</style></head><body>
+<div class="box"><span class="t">layered</span></div>
+<div class="unlayered">unlayered wins</div>
+<div class="sup">supports grid</div><div class="sup2">unsupported</div><div class="sup3">selector()</div>
+<div class="nest"><span class="in">inner</span><p>para</p></div>
+<div class="x"><div class="nest big">nested big</div></div>
+<div class="n2"><div class="a">A</div><div class="b">B</div></div>
+<div class="mq">mq range</div><div class="mq2">mq level 4</div><div class="mq3">not</div>
+<div class="anon">anon layer</div>
+</body></html>

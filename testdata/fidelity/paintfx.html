@@ -1,0 +1,70 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>paintfx</title>
+<style>
+body{margin:12px;font:13px Arial,sans-serif;color:#223}
+.row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-start}
+.bd{position:relative;width:160px;height:90px;background:linear-gradient(90deg,#e33 0 25%,#3a3 25% 50%,#33e 50% 75%,#fc0 75%)}
+.glass{position:absolute;left:30px;top:20px;width:100px;height:50px;border-radius:12px;backdrop-filter:blur(6px);background:rgba(255,255,255,.25);border:1px solid rgba(255,255,255,.6)}
+.glass2{position:absolute;left:30px;top:20px;width:100px;height:50px;backdrop-filter:grayscale(1) contrast(1.4);background:rgba(0,0,0,.1)}
+.mb{position:relative;width:150px;height:90px;background:#fc3}
+.mb i{position:absolute;display:block;width:70px;height:70px;border-radius:50%}
+.mb .a{left:10px;top:10px;background:#0af;mix-blend-mode:multiply}
+.mb .b{left:55px;top:10px;background:#f0a;mix-blend-mode:screen}
+.iso{isolation:isolate}
+.dash{width:110px;height:70px;border:5px dashed #36c;border-radius:20px}
+.dot{width:110px;height:70px;border:4px dotted #c36;border-radius:35px}
+.dash2{width:110px;height:70px;border:3px dashed #393;border-radius:6px 30px 6px 30px}
+.dbl{width:110px;height:70px;border:7px double #555;border-radius:16px}
+.grv{width:110px;height:70px;border:8px groove #888;border-radius:16px}
+.ins{width:110px;height:70px;border:8px inset #c88;border-radius:0}
+.mc{column-count:3;column-gap:30px;column-rule:3px dashed #c33;width:420px;background:#eef;border:2px solid #99c;padding:8px}
+.mc2{column-count:2;column-gap:24px;column-rule:2px solid #393;width:300px}
+ul.l1{list-style:disc inside}ul.l2{list-style:square}ol.l3{list-style:lower-roman}ul.l4{list-style:circle}
+.ol{width:90px;height:50px;background:#eee;outline:3px solid #36c;outline-offset:3px}
+.ol2{width:90px;height:50px;background:#eee;outline:2px dashed #c33;outline-offset:-4px}
+.ol3{width:90px;height:50px;background:#eee;outline:auto}
+.ov{width:140px;height:80px;overflow:auto;border:1px solid #888}
+.ov2{width:140px;height:80px;overflow:scroll;border:1px solid #888}
+.ov3{width:140px;height:80px;overflow-y:scroll;border:1px solid #888;background:#fee}
+.td{text-decoration:underline wavy #c00;text-decoration-thickness:2px}
+.td2{text-decoration:underline dotted #06c}
+.td3{text-decoration:line-through double #333}
+.td4{text-decoration:underline overline #080;text-underline-offset:4px}
+.td5{text-decoration:underline dashed;font-size:20px}
+.px{image-rendering:pixelated}
+.of{width:90px;height:60px;background:#ddd;border:1px solid #999}
+</style></head><body>
+<div class="row">
+<div class="bd"><div class="glass"></div></div>
+<div class="bd"><div class="glass2"></div></div>
+<div class="mb"><i class="a"></i><i class="b"></i></div>
+<div class="mb iso"><i class="a"></i><i class="b"></i></div>
+</div>
+<div class="row">
+<div class="dash"></div><div class="dot"></div><div class="dash2"></div><div class="dbl"></div><div class="grv"></div><div class="ins"></div>
+</div>
+<div class="row">
+<div class="mc"><p style="margin:0">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit.</p></div>
+<div class="mc2"><p style="margin:0">Short text in two columns with a solid rule between them, enough text to fill both columns evenly and show it.</p></div>
+</div>
+<div class="row">
+<ul class="l1"><li>one</li><li>two</li></ul><ul class="l2"><li>sq a</li><li>sq b</li></ul><ol class="l3"><li>x</li><li>y</li><li>z</li></ol><ul class="l4"><li>circ</li><li>circ2</li></ul>
+<ol start="9"><li>nine</li><li>ten</li><li>eleven</li></ol>
+</div>
+<div class="row" style="padding:6px">
+<div class="ol"></div><div class="ol2"></div><div class="ol3"></div>
+<div class="td">wavy underline</div><div class="td2">dotted</div><div class="td3">double through</div><div class="td4">under+over</div><div class="td5">dashed 20px</div>
+</div>
+<div class="row">
+<div class="ov"><div style="width:300px;height:200px;background:linear-gradient(#cfc,#fcf)">scroll me</div></div>
+<div class="ov2"><div style="width:100px;height:30px">small</div></div>
+<div class="ov3"><div style="height:200px">tall</div></div>
+<div class="ov" style="overflow:hidden"><div style="width:300px;height:200px;background:#cde">hidden</div></div>
+</div>
+<div class="row">
+<img class="of" style="object-fit:cover" width="90" height="60" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAIAAAAH5iiXAAAA6klEQVR4nL3VMRKCMBAF0F2HykaOoS0NFHISr2Rl4YWkIAV3kRPEYjUyCckuGya/gxnmzS7hg2PTgDbn51H3YN0NlVpVkwDwHq/lYEfSZSG47gZHFoK9QUvAMVIPt9MU3pxNLyQ18CpJObUv4sPXmQsnVAoiAjfoZjitEmmtpcvl2mM57KJaa50Kv7Wnk3WqvUE3pdL1LUt2jzsD61TdlHo4Z7deRIdrNj0ihocolsvN7ANTJwgHlajArnpZfrPp2e9EqKbg1b6lZljl5WQUZiveFRP7zWyAhRWfnz8s+ZftDBcmv3Cx3Xr5ANmjc+s3hErNAAAAAElFTkSuQmCC">
+<img class="of px" width="90" height="60" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAIAAAAH5iiXAAAA6klEQVR4nL3VMRKCMBAF0F2HykaOoS0NFHISr2Rl4YWkIAV3kRPEYjUyCckuGya/gxnmzS7hg2PTgDbn51H3YN0NlVpVkwDwHq/lYEfSZSG47gZHFoK9QUvAMVIPt9MU3pxNLyQ18CpJObUv4sPXmQsnVAoiAjfoZjitEmmtpcvl2mM57KJaa50Kv7Wnk3WqvUE3pdL1LUt2jzsD61TdlHo4Z7deRIdrNj0ihocolsvN7ANTJwgHlajArnpZfrPp2e9EqKbg1b6lZljl5WQUZiveFRP7zWyAhRWfnz8s+ZftDBcmv3Cx3Xr5ANmjc+s3hErNAAAAAElFTkSuQmCC">
+<img class="of" style="object-fit:none;object-position:right bottom" width="90" height="60" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAIAAAAH5iiXAAAA6klEQVR4nL3VMRKCMBAF0F2HykaOoS0NFHISr2Rl4YWkIAV3kRPEYjUyCckuGya/gxnmzS7hg2PTgDbn51H3YN0NlVpVkwDwHq/lYEfSZSG47gZHFoK9QUvAMVIPt9MU3pxNLyQ18CpJObUv4sPXmQsnVAoiAjfoZjitEmmtpcvl2mM57KJaa50Kv7Wnk3WqvUE3pdL1LUt2jzsD61TdlHo4Z7deRIdrNj0ihocolsvN7ANTJwgHlajArnpZfrPp2e9EqKbg1b6lZljl5WQUZiveFRP7zWyAhRWfnz8s+ZftDBcmv3Cx3Xr5ANmjc+s3hErNAAAAAElFTkSuQmCC">
+<img class="of" style="object-fit:contain" width="90" height="60" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAIAAAAH5iiXAAAA6klEQVR4nL3VMRKCMBAF0F2HykaOoS0NFHISr2Rl4YWkIAV3kRPEYjUyCckuGya/gxnmzS7hg2PTgDbn51H3YN0NlVpVkwDwHq/lYEfSZSG47gZHFoK9QUvAMVIPt9MU3pxNLyQ18CpJObUv4sPXmQsnVAoiAjfoZjitEmmtpcvl2mM57KJaa50Kv7Wnk3WqvUE3pdL1LUt2jzsD61TdlHo4Z7deRIdrNj0ihocolsvN7ANTJwgHlajArnpZfrPp2e9EqKbg1b6lZljl5WQUZiveFRP7zWyAhRWfnz8s+ZftDBcmv3Cx3Xr5ANmjc+s3hErNAAAAAElFTkSuQmCC">
+</div>
+</body></html>

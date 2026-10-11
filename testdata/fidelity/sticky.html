@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>sticky</title>
+<style>
+body { margin: 0; padding: 0; font: 16px/1.4 Arial, sans-serif; }
+header { position: sticky; top: 0; background: #234; color: #fff; padding: 10px 16px; height: 30px; z-index: 5; }
+.sec { margin: 0 16px; border: 1px solid #ccc; padding: 8px; height: 300px; }
+.sec h3 { position: sticky; top: 50px; background: #fe9; margin: 0; padding: 4px; }
+.side { position: sticky; top: 60px; width: 120px; background: #cdf; height: 60px; margin-left: 20px; }
+.wrapper { display: flex; gap: 10px; align-items: flex-start; }
+.col { flex: 1; height: 600px; background: #f4f4f4; }
+.tbl th { position: sticky; top: 0; background: #ddd; }
+.bottom { position: sticky; bottom: 0; background: #fcc; padding: 6px; }
+.scroller { height: 100px; overflow: auto; width: 300px; border: 1px solid #000; margin: 10px 16px; }
+.scroller .st { position: sticky; top: 0; background: #cfc; }
+.scroller .pad { height: 300px; }
+.inl { position: sticky; left: 10px; background: #fcf; }
+.st1 { position: sticky; top: 120px; background: #fcf; height: 30px; margin-top: 10px; }
+.st2 { position: sticky; bottom: 40px; background: #cff; height: 24px; margin-top: 900px; }
+.wrap2 { height: 400px; background: #fafafa; border: 1px solid #ccc; margin: 0 16px; }
+.st3 { position: sticky; top: 300px; left: 20px; width: 100px; height: 30px; background: #ffc; }
+.sc2 { height: 120px; overflow: auto; margin: 10px 16px; border: 1px solid #000; }
+.sc2 .st4 { position: sticky; top: 10px; bottom: 10px; height: 20px; background: #cfc; margin-top: 60px; }
+.sc2 .tall { height: 400px; }
+.st5 { position: sticky; top: 0; z-index: 3; background: #fdd; }
+.fl { display: flex; align-items: flex-start; margin: 0 16px; height: 300px; }
+.fl .a { position: sticky; top: 200px; width: 80px; height: 40px; background: #dfd; }
+.fl .b { flex: 1; height: 300px; background: #eee; }
+</style></head><body>
+<header>Sticky header</header>
+<div class="sec"><h3>Section one heading</h3>content</div>
+<div class="wrapper"><div class="side">sticky aside</div><div class="col">column</div></div>
+<div class="scroller"><div class="st">stick in scroller</div><div class="pad">pad</div></div>
+<table class="tbl" style="margin:0 16px"><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>
+<div class="sec"><h3>Section two heading</h3>content <span class="inl">inline sticky</span></div>
+<div class="bottom">sticky bottom</div>
+<div class="wrap2"><div class="st1">st1 top:120 natural near top</div><div style="height:100px"></div><div class="st3">st3</div></div>
+<div class="wrap2"><div class="st2">st2 bottom sticky far below</div><div style="height:30px"></div></div>
+<div class="sc2"><div style="height:20px"></div><div class="st4">st4</div><div class="tall"></div></div>
+<div class="fl"><div class="a">a</div><div class="b">b</div></div>
+<div style="height:200px"></div>
+</body></html>

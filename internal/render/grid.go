@@ -29,11 +29,15 @@ type gitem struct {
 	idx            int
 	areaW, areaH   float64
 	x, y           float64
+	subC, subR     bool    // subgrid in the column / row axis
+	virt           bool    // stands for one track of a subgrid item (sizing only)
+	vmin, vmax     float64 // contributions of a virtual item
 }
 
 type gridPlace struct{}
 
 type gridModel struct {
+	natural    bool // intrinsic pass of a subgrid: tracks keep their content sizes
 	cols, rows []*gtrack
 	items      []*gitem
 	colNames   map[string][]int
@@ -181,6 +185,12 @@ func (c *ctx) layoutGridContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 			rgap = rl(st.RowGap, 0)
 		}
 	}
+	if b.forceCols != nil {
+		cgap = b.forceCGap
+	}
+	if b.forceRows != nil {
+		rgap = b.forceRGap
+	}
 	colDefs, _, colEnd := c.expandTemplate(st.GridCols, cw, cgap, st.GridAutoCols)
 	rowDefs, _, rowEnd := c.expandTemplate(st.GridRows, cbh, rgap, st.GridAutoRows)
 	if st.GridCols.None {
@@ -188,6 +198,16 @@ func (c *ctx) layoutGridContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 	}
 	if st.GridRows.None {
 		rowDefs = nil
+	}
+	if b.forceCols != nil {
+		colDefs, colEnd = fixedTracks(b.forceCols), nil
+	} else if st.GridCols.Subgrid {
+		colDefs, colEnd = autoTracks(b.natColN), nil
+	}
+	if b.forceRows != nil {
+		rowDefs, rowEnd = fixedTracks(b.forceRows), nil
+	} else if st.GridRows.Subgrid {
+		rowDefs, rowEnd = autoTracks(b.natRowN), nil
 	}
 	colNames := c.buildLineNames(colDefs, colEnd)
 	rowNames := c.buildLineNames(rowDefs, rowEnd)
@@ -226,7 +246,7 @@ func (c *ctx) layoutGridContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 			ncols = len(row)
 		}
 	}
-	gm := &gridModel{colNames: colNames, rowNames: rowNames}
+	gm := &gridModel{colNames: colNames, rowNames: rowNames, natural: b.gridNat}
 	rowArea := func(n string, isEnd bool) (int, bool) {
 		n = strings.TrimSuffix(strings.TrimSuffix(n, "-start"), "-end")
 		a, ok := areaPos[n]
@@ -526,9 +546,17 @@ func (c *ctx) layoutGridContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 		it := it
 		_ = it
 	}
-	colSpanItems := items
+	colSpanItems := c.subgridColItems(items, cw, cbh, cgap)
 	c.sizeAxis(gm.cols, colSpanItems, cgap, colAvail, true, st, func(it *gitem) (int, int) { return it.c0, it.cs },
-		func(it *gitem, wantMin bool) float64 { return c.outerIntrinsic(it.b, wantMin) }, cw, cbh, gm)
+		func(it *gitem, wantMin bool) float64 {
+			if it.virt {
+				if wantMin {
+					return it.vmin
+				}
+				return it.vmax
+			}
+			return c.outerIntrinsic(it.b, wantMin)
+		}, cw, cbh, gm)
 	// justify-content for columns
 	c.alignTracks(gm.cols, cgap, cw, stripSafe(st.JustifyContent), true)
 	// row sizing needs item heights at their column widths
@@ -544,8 +572,20 @@ func (c *ctx) layoutGridContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 	if in.fixH >= 0 {
 		rowAvail = math.Max(0, in.fixH-b.vExtra()-b.sbH)
 	}
-	c.sizeAxis(gm.rows, items, rgap, rowAvail, false, st, func(it *gitem) (int, int) { return it.r0, it.rs },
-		func(it *gitem, wantMin bool) float64 { return c.gridItemHeight(it, cw, cbh) }, cw, cbh, gm)
+	for _, it := range items {
+		if it.subC {
+			c.forceSubgrid(it, gm, cgap, rgap)
+		}
+	}
+	rowItems := c.subgridRowItems(items, cw, cbh, rgap)
+	rowContrib := func(it *gitem, wantMin bool) float64 {
+		if it.virt {
+			return it.vmin
+		}
+		return c.gridItemHeight(it, cw, cbh)
+	}
+	c.sizeAxis(gm.rows, rowItems, rgap, rowAvail, false, st, func(it *gitem) (int, int) { return it.r0, it.rs },
+		rowContrib, cw, cbh, gm)
 	// content height
 	total := 0.0
 	for i, t := range gm.rows {
@@ -565,8 +605,8 @@ func (c *ctx) layoutGridContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 		}
 		if want != total {
 			rowAvail = want
-			c.sizeAxis(gm.rows, items, rgap, rowAvail, false, st, func(it *gitem) (int, int) { return it.r0, it.rs },
-				func(it *gitem, wantMin bool) float64 { return c.gridItemHeight(it, cw, cbh) }, cw, cbh, gm)
+			c.sizeAxis(gm.rows, rowItems, rgap, rowAvail, false, st, func(it *gitem) (int, int) { return it.r0, it.rs },
+				rowContrib, cw, cbh, gm)
 			total = 0
 			for i, t := range gm.rows {
 				total += t.size
@@ -606,7 +646,17 @@ func (c *ctx) layoutGridContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 		}
 		ah += rgap * float64(it.rs-1)
 		it.areaW, it.areaH = aw, ah
+		if it.subC || it.subR {
+			c.forceSubgrid(it, gm, cgap, rgap)
+		}
 		c.placeGridItem(b, it, ax, ay, aw, ah)
+	}
+	b.gridColSz, b.gridRowSz = b.gridColSz[:0], b.gridRowSz[:0]
+	for _, t := range gm.cols {
+		b.gridColSz = append(b.gridColSz, t.size)
+	}
+	for _, t := range gm.rows {
+		b.gridRowSz = append(b.gridRowSz, t.size)
 	}
 	// static positions of positioned children
 	for _, k := range b.kids {
@@ -672,6 +722,10 @@ func (c *ctx) placeGridItem(b *lbox, it *gitem, ax, ay, aw, ah float64) {
 	}
 	if al == "normal" || al == "" {
 		al = "stretch"
+		if st.AspectRatio > 0 && st.Height.K == style.LAuto {
+			// "normal" does not stretch items that have a preferred aspect ratio
+			al = "start"
+		}
 	}
 	replaced := k.inner == iReplaced
 	// width
@@ -1097,7 +1151,7 @@ func (c *ctx) sizeAxis(tracks []*gtrack, items []*gitem, gap, avail float64, isC
 		if !isCol {
 			mode = stripSafe(st.AlignContent)
 		}
-		if mode == "normal" || mode == "stretch" || mode == "" {
+		if (mode == "normal" || mode == "stretch" || mode == "") && !(gm != nil && gm.natural) {
 			free := avail - gap*float64(n-1)
 			for _, t := range tracks {
 				free -= t.size
@@ -1186,4 +1240,191 @@ func (c *ctx) gridIntrinsic(b *lbox) (float64, float64) {
 	}
 	gaps := cgap * float64(ncols-1)
 	return mn + gaps, mx + gaps
+}
+
+// ---- subgrid ------------------------------------------------------------------------------
+
+func fixedTracks(sizes []float64) []style.Track {
+	out := make([]style.Track, len(sizes))
+	for i, v := range sizes {
+		sz := style.Sz{K: style.SzLen, L: style.Px(v)}
+		out[i] = style.Track{Min: sz, Max: sz}
+	}
+	return out
+}
+
+func autoTracks(n int) []style.Track {
+	out := make([]style.Track, n)
+	for i := range out {
+		out[i] = style.Track{Min: style.Sz{K: style.SzAuto}, Max: style.Sz{K: style.SzAuto}}
+	}
+	return out
+}
+
+func (c *ctx) virtualBox() *lbox { return &lbox{st: c.eng.InitialStyle()} }
+
+// ownGap is the gap a subgrid uses between its tracks along an axis; the
+// parent's gap is inherited when the subgrid specifies none.
+func (c *ctx) subgridGap(k *lbox, col bool, parentGap float64) float64 {
+	g := k.st.RowGap
+	if col {
+		g = k.st.ColumnGap
+	}
+	if g.K == style.LAuto {
+		return parentGap
+	}
+	return rl(g, 0)
+}
+
+// subgridColItems replaces column-subgrid items by one virtual item per
+// spanned track carrying the content size of the matching subgrid track.
+func (c *ctx) subgridColItems(items []*gitem, cw, cbh, cgap float64) []*gitem {
+	var out []*gitem
+	for _, it := range items {
+		k := it.b
+		if k.inner != iGrid || k.oof || !k.st.GridCols.Subgrid {
+			out = append(out, it)
+			continue
+		}
+		it.subC = true
+		c.edges(k, cw)
+		k.natColN = it.cs
+		k.forceCols = nil
+		if k.st.GridRows.Subgrid {
+			k.natRowN = it.rs
+		}
+		var mins, maxs []float64
+		for pass, w := range []float64{0, 1e5} {
+			k.gridNat = true
+			k.hasLast = false
+			in := layoutIn{item: true, cbw: w, cbh: -1, fixW: -1, fixH: -1, bfc: &bfcState{}}
+			c.layoutGridContent(k, w, -1, in)
+			k.gridNat = false
+			sz := append([]float64(nil), k.gridColSz...)
+			if pass == 0 {
+				mins = sz
+			} else {
+				maxs = sz
+			}
+		}
+		k.hasLast = false
+		og := c.subgridGap(k, true, cgap)
+		d := cgap - og
+		for i := 0; i < it.cs; i++ {
+			v := &gitem{b: c.virtualBox(), c0: it.c0 + i, cs: 1, r0: it.r0, rs: it.rs, virt: true}
+			if i < len(mins) {
+				v.vmin, v.vmax = mins[i], maxs[i]
+			}
+			adj := 0.0
+			if i > 0 {
+				adj++
+			}
+			if i < it.cs-1 {
+				adj++
+			}
+			v.vmin -= d * adj / 2
+			v.vmax -= d * adj / 2
+			if i == 0 {
+				e := k.mar[3] + k.bor[3] + k.pad[3]
+				v.vmin += e
+				v.vmax += e
+			}
+			if i == it.cs-1 {
+				e := k.mar[1] + k.bor[1] + k.pad[1]
+				v.vmin += e
+				v.vmax += e
+			}
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// subgridRowItems is subgridColItems for the row axis; it runs once the
+// column sizes (and the subgrid's forced columns) are known.
+func (c *ctx) subgridRowItems(items []*gitem, cw, cbh, rgap float64) []*gitem {
+	var out []*gitem
+	for _, it := range items {
+		k := it.b
+		if k.inner != iGrid || k.oof || !k.st.GridRows.Subgrid {
+			out = append(out, it)
+			continue
+		}
+		it.subR = true
+		k.natRowN = it.rs
+		k.forceRows = nil
+		k.hasLast = false
+		c.gridItemHeight(it, cw, cbh)
+		sz := append([]float64(nil), k.gridRowSz...)
+		og := c.subgridGap(k, false, rgap)
+		d := rgap - og
+		for i := 0; i < it.rs; i++ {
+			v := &gitem{b: c.virtualBox(), r0: it.r0 + i, rs: 1, c0: it.c0, cs: it.cs, virt: true}
+			if i < len(sz) {
+				v.vmin = sz[i]
+			}
+			adj := 0.0
+			if i > 0 {
+				adj++
+			}
+			if i < it.rs-1 {
+				adj++
+			}
+			v.vmin -= d * adj / 2
+			if i == 0 {
+				v.vmin += k.mar[0] + k.bor[0] + k.pad[0]
+			}
+			if i == it.rs-1 {
+				v.vmin += k.mar[2] + k.bor[2] + k.pad[2]
+			}
+			out = append(out, v)
+		}
+		k.hasLast = false
+	}
+	return out
+}
+
+// forceSubgrid gives a subgrid item the sizes of the parent tracks it spans.
+func (c *ctx) forceSubgrid(it *gitem, gm *gridModel, cgap, rgap float64) {
+	k := it.b
+	force := func(tracks []*gtrack, start, n int, parentGap, og float64, lo, hi float64) []float64 {
+		d := parentGap - og
+		out := make([]float64, n)
+		for i := 0; i < n; i++ {
+			sz := 0.0
+			if start+i < len(tracks) {
+				sz = tracks[start+i].size
+			}
+			adj := 0.0
+			if i > 0 {
+				adj++
+			}
+			if i < n-1 {
+				adj++
+			}
+			sz += d * adj / 2
+			if i == 0 {
+				sz -= lo
+			}
+			if i == n-1 {
+				sz -= hi
+			}
+			if sz < 0 {
+				sz = 0
+			}
+			out[i] = sz
+		}
+		return out
+	}
+	if it.subC {
+		og := c.subgridGap(k, true, cgap)
+		k.forceCols = force(gm.cols, it.c0, it.cs, cgap, og, k.mar[3]+k.bor[3]+k.pad[3], k.mar[1]+k.bor[1]+k.pad[1])
+		k.forceCGap = og
+	}
+	if it.subR {
+		og := c.subgridGap(k, false, rgap)
+		k.forceRows = force(gm.rows, it.r0, it.rs, rgap, og, k.mar[0]+k.bor[0]+k.pad[0], k.mar[2]+k.bor[2]+k.pad[2])
+		k.forceRGap = og
+	}
+	k.hasLast = false
 }

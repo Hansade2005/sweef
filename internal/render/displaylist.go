@@ -88,6 +88,8 @@ type TextRun struct {
 	LineThrough bool
 	DecoStyle   string // solid, double, dotted, dashed, wavy
 	DecoColor   Color
+	DecoThick   float64 // text-decoration-thickness in px (0 = auto); additive
+	UnderOffset float64 // text-underline-offset in px (0 = auto); additive
 	Shadows     []TextShadow
 	Stroke      float64 // -webkit-text-stroke width
 	StrokeColor Color

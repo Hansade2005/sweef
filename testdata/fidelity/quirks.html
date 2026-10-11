@@ -1,0 +1,18 @@
+<html><head><meta charset="utf-8"><title>quirks</title>
+<style>
+.Foo { color: red; } #Bar { background: #eef; }
+body { margin: 0; padding: 12px; font-family: Arial; }
+table { margin-bottom: 10px; }
+td { background: #eee; }
+.box { width: 200px; height: 50px; padding: 10px; border: 2px solid #333; }
+div.wrap { font-size: 20px; }
+</style></head><body>
+<p class="foo">class case-insensitive</p>
+<p id="bar">id case-insensitive</p>
+<div class="wrap"><table border="1"><tr><td>Table font inherits from body in quirks mode</td><td>x</td></tr></table></div>
+<div class="box">content-box-ish</div>
+<div style="font-size:30px">Line-height in quirks <span style="font-size:10px">small</span></div>
+<ul><li>Item<li>Another</ul>
+<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" width="40" height="40"> inline image baseline
+<div style="height:30%;background:#fed">percent height in quirks</div>
+</body></html>
