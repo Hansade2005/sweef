@@ -453,3 +453,33 @@ func elementChildren(n *html.Node) []*html.Node {
 	}
 	return out
 }
+
+// BoxRow is one element's box in document order, for fidelity scoring and
+// diagnostics (every element appears; Has is false when it has no box).
+type BoxRow struct {
+	Tag        string
+	ID         string
+	X, Y, W, H float64
+	Has        bool
+}
+
+// ElementBoxes lists every element in document order with its layout box.
+func (d *Doc) ElementBoxes(width int) []BoxRow {
+	l := d.Layout(width)
+	var out []BoxRow
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			r := BoxRow{Tag: n.Data, ID: attr(n, "id")}
+			if b, ok := l.Boxes[n]; ok {
+				r.X, r.Y, r.W, r.H, r.Has = float64(b[0]), float64(b[1]), float64(b[2]), float64(b[3]), true
+			}
+			out = append(out, r)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(d.Root)
+	return out
+}

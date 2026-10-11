@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +36,56 @@ import (
 
 //go:embed dom_prelude.js
 var domPrelude string
+
+// Extension points. Feature packages (canvas, WebGL, media, ...) add their
+// browser API in their own files without touching the shared lists:
+//
+//	func init() {
+//	    registerPrelude("canvas", canvasPreludeJS)           // evaluated after the base prelude
+//	    registerHostExtension("canvas", func(j *jsVM) map[string]hostFn { ... })
+//	}
+//
+// Host functions appear on the page's __sw object (e.g. __sw.canvasFill).
+type hostFn = func(a []any) (any, error)
+
+var (
+	extMu          sync.Mutex
+	preludeExtras  = map[string]string{}
+	hostExtensions = map[string]func(j *jsVM) map[string]hostFn{}
+)
+
+func registerPrelude(name, src string) {
+	extMu.Lock()
+	preludeExtras[name] = src
+	extMu.Unlock()
+}
+
+func registerHostExtension(name string, f func(j *jsVM) map[string]hostFn) {
+	extMu.Lock()
+	hostExtensions[name] = f
+	extMu.Unlock()
+}
+
+// fullPrelude is the base prelude, the WebSocket/Worker layer and every
+// registered extra, in name order so the bytecode cache key is stable.
+func fullPrelude() string {
+	extMu.Lock()
+	defer extMu.Unlock()
+	names := make([]string, 0, len(preludeExtras))
+	for n := range preludeExtras {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	b.WriteString(domPrelude)
+	b.WriteString("\n")
+	b.WriteString(domPreludeExt)
+	for _, n := range names {
+		b.WriteString("\n;/* extension: " + n + " */\n")
+		b.WriteString(preludeExtras[n])
+	}
+	return b.String()
+}
 
 // The prelude is compiled to QuickJS bytecode once per process; loading
 // bytecode into a fresh VM takes ~3 ms against ~40 ms to parse the source,
@@ -57,7 +108,7 @@ func setPreludeCacheDir(dir string) {
 
 func compiledPrelude() []byte {
 	preludeOnce.Do(func() {
-		src := domPrelude + "\n" + domPreludeExt
+		src := fullPrelude()
 		preludeDiskMu.Lock()
 		dir := preludeDiskDir
 		preludeDiskMu.Unlock()
@@ -140,7 +191,7 @@ func buildVM(o Options) (*jsVM, error) {
 		}
 	}
 	if !loaded {
-		if _, err := vm.Eval(domPrelude+"\n"+domPreludeExt, quickjs.EvalGlobal); err != nil {
+		if _, err := vm.Eval(fullPrelude(), quickjs.EvalGlobal); err != nil {
 			vm.Close()
 			return nil, fmt.Errorf("prelude: %w", err)
 		}
@@ -1068,6 +1119,28 @@ func (j *jsVM) registerHost() error {
 			d := j.tab.SaveDownloadBytes(argS(a, 0), argS(a, 2), data, argS(a, 3))
 			return d.Path, nil
 		}},
+	}
+	extMu.Lock()
+	extNames := make([]string, 0, len(hostExtensions))
+	for n := range hostExtensions {
+		extNames = append(extNames, n)
+	}
+	sort.Strings(extNames)
+	exts := make([]func(j *jsVM) map[string]hostFn, 0, len(extNames))
+	for _, n := range extNames {
+		exts = append(exts, hostExtensions[n])
+	}
+	extMu.Unlock()
+	for _, ext := range exts {
+		fns := ext(j)
+		names := make([]string, 0, len(fns))
+		for n := range fns {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			hs = append(hs, h{n, fns[n]})
+		}
 	}
 	for _, x := range hs {
 		if err := reg(x.name, x.fn); err != nil {

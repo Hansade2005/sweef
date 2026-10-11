@@ -702,3 +702,9 @@ func (d *Doc) ScriptElement(id int64) *ScriptEl {
 	s := d.scriptEl(n)
 	return &s
 }
+
+// NodeByID returns the element/text node for an internal id, or nil.
+func (d *Doc) NodeByID(id int64) *html.Node { return d.find(id) }
+
+// IDOf returns (assigning if needed) the internal id of a node.
+func (d *Doc) IDOf(n *html.Node) int64 { return d.idOf(n) }

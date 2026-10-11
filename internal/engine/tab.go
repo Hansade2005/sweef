@@ -181,6 +181,7 @@ func (t *Tab) Context() *BrowserContext {
 
 func (t *Tab) close() {
 	if t.closed.CompareAndSwap(false, true) {
+		dropBitmapSources(t.ID)
 		t.mu.Lock()
 		j := t.js
 		t.js = nil
