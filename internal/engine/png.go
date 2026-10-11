@@ -6,120 +6,197 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
-	"strings"
+
+	fnet "github.com/sweefbrowser/sweef/internal/net"
 )
 
-// PNGScreenshot renders the current document to real PNG bytes using a tiny
-// built-in 5x7 bitmap font + box layout — no CGO, no headless Chromium.
-// width/height<=0 fall back to the context viewport; dsf scales everything
-// (Playwright deviceScaleFactor semantics). This is the honest equivalent of
-// page.screenshot() for our agent-first browser: deterministic, ~20KB output,
-// runs in <16MB RAM.
+// PNGScreenshot renders the page's flow layout (see net/layout.go) to PNG:
+// text in a bitmap font at heading sizes, links in blue, form controls as
+// outlined boxes with their values, images as labelled placeholders. It is a
+// schematic of the page, not a pixel replica, but its geometry is exactly the
+// geometry used for element boxes and coordinate clicks, so an agent can
+// point at what it sees. width/height <= 0 use the viewport; dsf scales.
 func (t *Tab) PNGScreenshot(width, height int, dsf float64) []byte {
+	return t.renderPNG(width, height, dsf, false)
+}
+
+// PNGScreenshotFull renders the whole page height (Playwright fullPage).
+func (t *Tab) PNGScreenshotFull(width int, dsf float64) []byte {
+	return t.renderPNG(width, 0, dsf, true)
+}
+
+var (
+	colInk    = color.RGBA{24, 28, 36, 255}
+	colMuted  = color.RGBA{110, 118, 130, 255}
+	colLink   = color.RGBA{29, 78, 216, 255}
+	colBorder = color.RGBA{160, 168, 180, 255}
+	colFill   = color.RGBA{236, 239, 243, 255}
+	colAccent = color.RGBA{37, 99, 235, 255}
+	colPaper  = color.RGBA{255, 255, 255, 255}
+)
+
+func (t *Tab) renderPNG(width, height int, dsf float64, full bool) []byte {
 	t.mu.RLock()
 	dom := t.dom
 	if width <= 0 {
 		width = t.vpW
 	}
-	if height <= 0 {
+	if height <= 0 && !full {
 		height = t.vpH
 	}
 	if dsf <= 0 {
 		dsf = t.dsf
 	}
-	if dsf <= 0 {
-		dsf = 1
-	}
 	t.mu.RUnlock()
 	if width <= 0 {
 		width = 1280
 	}
+	if dsf <= 0 {
+		dsf = 1
+	}
+	var l *fnet.Layout
+	if dom != nil {
+		l = dom.Layout(width)
+	}
+	if full {
+		height = 200
+		if l != nil && l.Height > height {
+			height = l.Height
+		}
+		if height > 16000 {
+			height = 16000
+		}
+	}
 	if height <= 0 {
 		height = 720
 	}
-	sc := int(dsf)
+	sc := int(dsf + 0.5)
 	if sc < 1 {
 		sc = 1
 	}
-	W, H := width*sc, height*sc
-
-	img := image.NewRGBA(image.Rect(0, 0, W, H))
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
-
-	px := func(x, y int, c color.Color) {
-		if x >= 0 && y >= 0 && x < W && y < H {
-			img.Set(x, y, c)
-		}
+	if sc > 4 {
+		sc = 4
 	}
-	rectFill := func(x0, y0, w, h int, c color.Color) {
-		for y := y0; y < y0+h*sc; y++ {
-			for x := x0; x < x0+w*sc; x++ {
-				px(x, y, c)
+	img := image.NewRGBA(image.Rect(0, 0, width*sc, height*sc))
+	draw.Draw(img, img.Bounds(), &image.Uniform{colPaper}, image.Point{}, draw.Src)
+	p := &painter{img: img, sc: sc, w: width, h: height}
+	if l != nil {
+		for _, it := range l.Items {
+			if it.Y > height {
+				continue
 			}
+			p.item(it)
 		}
 	}
-
-	ink := color.RGBA{20, 24, 33, 255}
-	accent := color.RGBA{37, 99, 235, 255}
-	muted := color.RGBA{120, 128, 140, 255}
-
-	var text string
-	if dom != nil {
-		cols := width / (6 * sc) // 5px glyph + 1px space per char at scale
-		if cols < 20 {
-			cols = 20
-		}
-		text = dom.RenderText(cols)
-	}
-
-	y := 8 * sc
-	lineH := 9 * sc
-	for _, line := range strings.Split(text, "\n") {
-		if y+lineH > H-4*sc {
-			break
-		}
-		line = strings.TrimRight(line, " ")
-		runes := []rune(line)
-		// heading-ish lines (start with # or ALL CAPS short) get accent bar
-		if len(runes) > 0 && (runes[0] == '#' || runes[0] == '█' || runes[0] == '•') {
-			rectFill(2*sc, y+1*sc, 2*sc, lineH-2*sc, accent)
-		}
-		x := 6 * sc
-		for _, r := range runes {
-			if x > W-6*sc {
-				break
-			}
-			if gl, ok := glyph5x7[r]; ok {
-				drawGlyph(img, x, y, gl, ink, sc)
-			} else if r >= 'a' && r <= 'z' {
-				if gl, ok := glyph5x7[r-32]; ok {
-					drawGlyph(img, x, y+1*sc, gl, ink, sc)
-				}
-			}
-			x += 6 * sc
-		}
-		y += lineH
-	}
-
-	// footer status bar like a real browser chrome hint
-	rectFill(0, H-2*sc, W, 2*sc, muted)
-
 	var buf bytes.Buffer
-	_ = png.Encode(&buf, img)
+	_ = (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, img)
 	return buf.Bytes()
 }
 
-func drawGlyph(dst *image.RGBA, ox, oy int, rows [7]uint8, c color.Color, sc int) {
-	for ry := 0; ry < 7; ry++ {
-		bits := rows[ry]
-		for rx := 0; rx < 5; rx++ {
-			if bits&(1<<(4-rx)) != 0 {
-				for dy := 0; dy < sc; dy++ {
-					for dx := 0; dx < sc; dx++ {
-						dst.Set(ox+rx*sc+dx, oy+ry*sc+dy, c)
+type painter struct {
+	img  *image.RGBA
+	sc   int
+	w, h int
+}
+
+func (p *painter) fill(x, y, w, h int, c color.Color) {
+	r := image.Rect(x*p.sc, y*p.sc, (x+w)*p.sc, (y+h)*p.sc).Intersect(p.img.Bounds())
+	draw.Draw(p.img, r, &image.Uniform{c}, image.Point{}, draw.Src)
+}
+
+func (p *painter) rect(x, y, w, h int, c color.Color) {
+	p.fill(x, y, w, 1, c)
+	p.fill(x, y+h-1, w, 1, c)
+	p.fill(x, y, 1, h, c)
+	p.fill(x+w-1, y, 1, h, c)
+}
+
+// text draws s with glyph scale gs (cell 6x8 per scale unit), clipped to maxW.
+func (p *painter) text(x, y int, s string, gs int, c color.Color, bold bool, maxW int) {
+	if gs < 1 {
+		gs = 1
+	}
+	adv := 6 * gs
+	for _, r := range s {
+		if maxW > 0 && x+adv > maxW {
+			break
+		}
+		gl, ok := glyph5x7[r]
+		if !ok {
+			if r > 127 {
+				gl = glyph5x7['?']
+			} else {
+				x += adv
+				continue
+			}
+		}
+		for ry := 0; ry < 7; ry++ {
+			bits := gl[ry]
+			for rx := 0; rx < 5; rx++ {
+				if bits&(1<<(4-rx)) != 0 {
+					p.fill(x+rx*gs, y+ry*gs, gs, gs, c)
+					if bold {
+						p.fill(x+rx*gs+1, y+ry*gs, gs, gs, c)
 					}
 				}
 			}
 		}
+		x += adv
 	}
+}
+
+func (p *painter) item(it fnet.WireItem) {
+	gs := it.Scale
+	if gs < 1 {
+		gs = 2
+	}
+	pad := 2 + gs
+	switch it.Kind {
+	case "text":
+		p.text(it.X, it.Y+2, it.Text, gs, colInk, it.Bold, p.w)
+	case "heading":
+		p.text(it.X, it.Y+2, it.Text, gs, colInk, true, p.w)
+	case "link":
+		p.text(it.X, it.Y+2, it.Text, gs, colLink, it.Bold, p.w)
+		p.fill(it.X, it.Y+2+8*gs, min(it.W, p.w-it.X), 1, colLink)
+	case "button":
+		p.fill(it.X, it.Y, it.W, it.H, colFill)
+		p.rect(it.X, it.Y, it.W, it.H, colBorder)
+		p.text(it.X+8, it.Y+5, it.Text, gs, colInk, false, it.X+it.W-4)
+	case "input", "select":
+		p.rect(it.X, it.Y, it.W, it.H, colBorder)
+		c := colInk
+		p.text(it.X+pad+2, it.Y+5, it.Text, gs, c, false, it.X+it.W-4-boolInt(it.Kind == "select")*14)
+		if it.Kind == "select" {
+			// a small caret
+			cx, cy := it.X+it.W-12, it.Y+it.H/2-1
+			for i := 0; i < 4; i++ {
+				p.fill(cx+i, cy+i, 8-2*i, 1, colMuted)
+			}
+		}
+	case "checkbox", "radio":
+		p.rect(it.X, it.Y, it.W, it.H, colBorder)
+		if it.Filled {
+			p.fill(it.X+3, it.Y+3, it.W-6, it.H-6, colAccent)
+		}
+	case "img":
+		p.fill(it.X, it.Y, it.W, it.H, colFill)
+		p.rect(it.X, it.Y, it.W, it.H, colBorder)
+		label := it.Text
+		if label == "" {
+			label = "img"
+		}
+		p.text(it.X+4, it.Y+4, label, 1, colMuted, false, it.X+it.W-2)
+	case "hr":
+		p.fill(it.X, it.Y, it.W, 1, colBorder)
+	case "marker":
+		p.fill(it.X, it.Y, it.W, it.H, colInk)
+	}
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

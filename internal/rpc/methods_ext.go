@@ -381,6 +381,13 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		if r, ok := p["reply"]; ok {
+			reply, err := replyJSON(r)
+			if err != nil {
+				return nil, err
+			}
+			t.SetBindingReply(str(p, "name"), reply)
+		}
 		if err := t.ExposeBinding(str(p, "name")); err != nil {
 			return nil, err
 		}
@@ -506,6 +513,7 @@ func init() {
 			return nil, err
 		}
 		t.Unroute(str(p, "pattern"))
+		t.RemoveRoutes(str(p, "pattern"))
 		return map[string]bool{"ok": true}, nil
 	})
 

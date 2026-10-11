@@ -1,0 +1,48 @@
+✓ open http://127.0.0.1:18080/ (1ms)  → Acme
+✓ snapshot -i (0ms)  → 
+- banner:
+  - navigation:
+    - link "Home" [ref=e1]:
+      - /url: /
+    - link "Pricing" [ref=e2]:
+      - /url: /pricing
+    - link "Docs" [ref=e3]:
+      - /url: /docs
+    - link "Sign in" [ref=e4]:
+      - /url: /login
+- main:
+  - heading "Ship faster with Acme" [level=1 ref=e5]
+  - heading "Plans" [level=2 ref=e6]
+  - button "Start free" [ref=e7]
+- contentinfo:
+  - link "Terms" [ref=e8]:
+    - /url: /terms
+  - link "Privacy" [ref=e9]:
+    - /url: /privacy
+
+✓ click text=Sign in (0ms)
+✓ snapshot (0ms)  → 
+- heading "Sign in to Acme" [level=1 ref=e1]
+- form:
+  - text: Email
+  - textbox "Email" [required ref=e2]
+  - text: Password
+  - textbox "Password" [type=password ref=e3]
+  - checkbox "Remember me" [ref=e4]
+  - text: Remember me
+  - button "Sign in" [ref=e5]
+- paragraph:
+  - text: New here?
+  - link "Create an account" [ref=e6]:
+    - /url: /signup
+
+✓ fill #email ada@example.com (0ms)
+✓ press Enter #email (0ms)
+✓ get title (0ms)  → Welcome
+✓ open http://127.0.0.1:18080/app (29ms)  → Counter
+✓ click #inc (1ms)
+✗ eval document.querySelector(h1).textContent (0ms): ReferenceError: 'h1' is not defined
+    at <eval> (<eval>:2:24)
+10/10 steps in 34ms  Counter  http://127.0.0.1:18080/app
+- heading "Count: 1" [level=1 ref=e1]
+- button "Increment" [ref=e2]

@@ -194,6 +194,16 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 		} else {
 			href = info.Href
 		}
+		if dl, isDL, _ := t.GetAttributeByBackend(bid, "download"); isDL && href != "" && !strings.HasPrefix(href, "javascript:") {
+			t.mu.RLock()
+			hasJS := t.js != nil
+			t.mu.RUnlock()
+			if !hasJS || !strings.HasPrefix(href, "blob:") {
+				_, err := t.DownloadURL(href, dl)
+				return err
+			}
+			return nil // blob: downloads are saved by the page's default action in JS
+		}
 		if href != "" && !strings.HasPrefix(href, "javascript:") {
 			u, err := resolveURL(t.URL(), href)
 			if err != nil {
@@ -207,8 +217,14 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 		}
 	case "button", "input":
 		typ := strings.ToLower(info.Type)
-		if typ == "submit" || (typ == "image") {
-			return t.SubmitFormFor(sel)
+		// A <button> without a type attribute is a submit button.
+		if typ == "submit" || typ == "image" || (typ == "" && strings.EqualFold(info.Name, "button")) {
+			inForm := false
+			_ = t.withDoc(func(d *fnet.Doc) error { inForm = d.FormOf(bid) != 0; return nil })
+			if inForm {
+				return t.SubmitFormBackend(bid)
+			}
+			return nil
 		}
 		if typ == "checkbox" || typ == "radio" {
 			_ = t.withDoc(func(d *fnet.Doc) error { return d.SetChecked(bid, !(info.Checked)) })
@@ -566,6 +582,9 @@ func truthy(v any) bool {
 func (t *Tab) WaitForLoadState(state string, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
+	}
+	if state == "networkidle" {
+		return t.waitNetworkIdle(timeout)
 	}
 	deadline := time.Now().Add(timeout)
 	for {

@@ -14,12 +14,16 @@ package engine
 
 import (
 	_ "embed"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,17 +42,47 @@ var domPrelude string
 var (
 	preludeOnce     sync.Once
 	preludeBytecode []byte
+	preludeDiskMu   sync.Mutex
+	preludeDiskDir  string
 )
+
+// setPreludeCacheDir lets the first engine point the prelude cache at disk.
+func setPreludeCacheDir(dir string) {
+	preludeDiskMu.Lock()
+	if preludeDiskDir == "" {
+		preludeDiskDir = dir
+	}
+	preludeDiskMu.Unlock()
+}
 
 func compiledPrelude() []byte {
 	preludeOnce.Do(func() {
+		src := domPrelude + "\n" + domPreludeExt
+		preludeDiskMu.Lock()
+		dir := preludeDiskDir
+		preludeDiskMu.Unlock()
+		var file string
+		if dir != "" {
+			key := codeKey(src)
+			file = filepath.Join(dir, "prelude-"+hex.EncodeToString(key[:8])+".qjsbc")
+			if b, err := os.ReadFile(file); err == nil && len(b) > 0 {
+				preludeBytecode = b
+				return
+			}
+		}
 		vm, err := quickjs.NewVM()
 		if err != nil {
 			return
 		}
 		defer vm.Close()
-		if bc, err := vm.Compile(domPrelude, quickjs.EvalGlobal); err == nil {
+		if bc, err := vm.Compile(src, quickjs.EvalGlobal); err == nil {
 			preludeBytecode = bc
+			if file != "" {
+				tmp := file + ".tmp"
+				if os.WriteFile(tmp, bc, 0o600) == nil {
+					_ = os.Rename(tmp, file)
+				}
+			}
 		}
 	})
 	return preludeBytecode
@@ -61,6 +95,9 @@ type jsVM struct {
 	start  time.Time
 	closed bool
 
+	rtOnce   sync.Once
+	realtime *realtime // WebSockets and Workers (lazily created)
+
 	pendingNav  string
 	scriptQueue []int64        // script element ids inserted by page code
 	executed    map[int64]bool // scripts already run
@@ -68,16 +105,15 @@ type jsVM struct {
 	currentDoc  *fnet.Doc
 }
 
-// newJSVM creates a VM bound to the tab's current document, installs the host
-// object and evaluates the prelude. Returns nil (and logs) when the VM cannot
-// be created, in which case the tab works in fetch+DOM mode.
-func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
+// buildVM creates an unbound VM: limits set, host object registered, prelude
+// evaluated. Evaluating the 3,000-line prelude is most of the cost of a
+// JavaScript navigation (~40-60 ms), so the engine keeps a pool of these
+// built ahead of time (see vmPool) and a navigation only binds one.
+func buildVM(o Options) (*jsVM, error) {
 	vm, err := quickjs.NewVM()
 	if err != nil {
-		t.LogConsole("error", "sweef: cannot create JS VM: "+err.Error())
-		return nil
+		return nil, err
 	}
-	o := t.eng.opts
 	mem := o.JSMemoryMiB
 	if mem <= 0 {
 		mem = 64
@@ -88,12 +124,15 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 	if to <= 0 {
 		to = 5 * time.Second
 	}
-	vm.SetEvalTimeout(to)
-	j := &jsVM{vm: vm, tab: t, start: time.Now(), executed: map[int64]bool{}, session: map[string]string{}, currentDoc: doc}
+	// The page's script timeout must not apply to our own prelude: on a slow
+	// or loaded machine it can exceed a short page budget.
+	vm.SetEvalTimeout(60 * time.Second)
+	defer vm.SetEvalTimeout(to)
+	j := &jsVM{vm: vm, start: time.Now(), executed: map[int64]bool{}, session: map[string]string{}}
 	if err := j.registerHost(); err != nil {
-		t.LogConsole("error", "sweef: host registration failed: "+err.Error())
+		vm.Close()
+		return nil, fmt.Errorf("host registration: %w", err)
 	}
-	j.installModuleLoader(docURL)
 	loaded := false
 	if bc := compiledPrelude(); bc != nil {
 		if _, err := vm.EvalBytecode(bc); err == nil {
@@ -101,14 +140,128 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 		}
 	}
 	if !loaded {
-		if _, err := vm.Eval(domPrelude, quickjs.EvalGlobal); err != nil {
-			t.LogConsole("error", "sweef: prelude failed: "+err.Error())
+		if _, err := vm.Eval(domPrelude+"\n"+domPreludeExt, quickjs.EvalGlobal); err != nil {
+			vm.Close()
+			return nil, fmt.Errorf("prelude: %w", err)
 		}
 	}
-	if _, err := vm.Call("__swSetDocument", docURL, "loading"); err != nil {
+	// Never hand out a half-initialised VM.
+	if ok, err := vm.Eval(`typeof __swSetDocument === 'function' && typeof __swWsEvent === 'function'`, quickjs.EvalGlobal); err != nil || ok != true {
+		vm.Close()
+		return nil, fmt.Errorf("prelude did not initialise")
+	}
+	return j, nil
+}
+
+// newJSVM binds a VM (from the warm pool when one is ready) to the tab's
+// current document. Returns nil (and logs) when no VM can be created, in
+// which case the tab works in fetch+DOM mode.
+func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
+	j := t.eng.vms.take()
+	if j == nil {
+		var err error
+		if j, err = buildVM(t.eng.opts); err != nil {
+			t.LogConsole("error", "sweef: cannot create JS VM: "+err.Error())
+			return nil
+		}
+	}
+	t.eng.vms.refill()
+	j.mu.Lock()
+	j.tab, j.currentDoc, j.start = t, doc, time.Now()
+	j.mu.Unlock()
+	j.installModuleLoader(docURL)
+	if _, err := j.call("__swSetDocument", docURL, "loading"); err != nil {
 		t.LogConsole("error", "sweef: __swSetDocument failed: "+err.Error())
 	}
+	j.installBindings()
 	return j
+}
+
+// vmPool keeps a few VMs built ahead of time so navigations never pay for
+// prelude evaluation on the critical path. Refills run in the background
+// between agent commands; a VM is used for exactly one document, because
+// page scripts leave globals behind.
+type vmPool struct {
+	mu      sync.Mutex
+	ready   []*jsVM
+	size    int
+	filling bool
+	opts    Options
+	closed  bool
+}
+
+func newVMPool(o Options) *vmPool {
+	size := o.WarmVMs
+	if o.DisableJS {
+		size = 0
+	}
+	p := &vmPool{size: size, opts: o}
+	p.refill()
+	return p
+}
+
+func (p *vmPool) take() *jsVM {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.ready) == 0 {
+		return nil
+	}
+	j := p.ready[len(p.ready)-1]
+	p.ready = p.ready[:len(p.ready)-1]
+	return j
+}
+
+func (p *vmPool) refill() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	if p.filling || p.closed || len(p.ready) >= p.size {
+		p.mu.Unlock()
+		return
+	}
+	p.filling = true
+	p.mu.Unlock()
+	go func() {
+		for {
+			p.mu.Lock()
+			if p.closed || len(p.ready) >= p.size {
+				p.filling = false
+				p.mu.Unlock()
+				return
+			}
+			p.mu.Unlock()
+			j, err := buildVM(p.opts)
+			p.mu.Lock()
+			if err != nil || p.closed {
+				p.filling = false
+				p.mu.Unlock()
+				if j != nil {
+					j.close()
+				}
+				return
+			}
+			p.ready = append(p.ready, j)
+			p.mu.Unlock()
+		}
+	}()
+}
+
+func (p *vmPool) close() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.closed = true
+	ready := p.ready
+	p.ready = nil
+	p.mu.Unlock()
+	for _, j := range ready {
+		j.close()
+	}
 }
 
 func (j *jsVM) close() {
@@ -121,6 +274,9 @@ func (j *jsVM) close() {
 		return
 	}
 	j.closed = true
+	if j.realtime != nil {
+		j.realtime.closeAll()
+	}
 	j.vm.SetModuleLoader(nil, nil)
 	j.vm.Close()
 }
@@ -140,6 +296,44 @@ func (j *jsVM) run(src, name string) (any, error) {
 	r, err := j.vm.Eval(src, quickjs.EvalGlobal)
 	if err != nil {
 		j.tab.LogConsole("error", jsErrorText(err, name))
+	}
+	return r, err
+}
+
+// runCached executes classic script source through the process-wide code
+// cache: large scripts are compiled to bytecode once and replayed after that.
+func (j *jsVM) runCached(src, name string) (any, error) {
+	if len(src) < 256 {
+		return j.run(src, name)
+	}
+	key := codeKey(src)
+	cache := j.tab.eng.code
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.closed {
+		return nil, ErrClosed
+	}
+	bc := cache.get(key)
+	fromCache := bc != nil
+	if bc == nil {
+		var err error
+		if bc, err = j.vm.Compile(src, quickjs.EvalGlobal); err != nil {
+			j.tab.LogConsole("error", jsErrorText(err, name))
+			return nil, err
+		}
+		cache.put(key, bc)
+	}
+	r, err := j.vm.EvalBytecode(bc)
+	if err != nil {
+		var qe *quickjs.Error
+		if fromCache && !errors.As(err, &qe) {
+			// unreadable cache entry: drop it and run from source
+			cache.forget(key)
+			r, err = j.vm.Eval(src, quickjs.EvalGlobal)
+		}
+		if err != nil {
+			j.tab.LogConsole("error", jsErrorText(err, name))
+		}
 	}
 	return r, err
 }
@@ -250,7 +444,14 @@ func (j *jsVM) pump(budget time.Duration) bool {
 	for {
 		j.drainScripts()
 		j.jobs()
+		delivered := j.drainAsync()
 		next := j.runTimers()
+		if wn := j.pumpWorkers(); wn >= 0 && (next < 0 || wn < next) {
+			next = wn
+		}
+		if j.drainAsync() {
+			delivered = true
+		}
 		j.jobs()
 		j.flushObservers()
 		if nav := j.takeNav(); nav != "" {
@@ -265,7 +466,7 @@ func (j *jsVM) pump(budget time.Duration) bool {
 		j.mu.Lock()
 		more := len(j.scriptQueue) > 0
 		j.mu.Unlock()
-		if more {
+		if more || ((delivered || j.hasLiveWork()) && time.Now().Before(deadline)) {
 			continue
 		}
 		if next < 0 {
@@ -287,6 +488,9 @@ func (j *jsVM) pump(budget time.Duration) bool {
 		}
 	}
 }
+
+// Settle pumps the page's event loop for up to d (exported for RPC waits).
+func (t *Tab) Settle(d time.Duration) { t.settle(d) }
 
 // settle is the short pump used after every action.
 func (t *Tab) settle(d time.Duration) {
@@ -552,6 +756,9 @@ func idsToAny(ids []int64) []any {
 
 func (j *jsVM) withDoc(fn func(d *fnet.Doc) (any, error)) (any, error) {
 	t := j.tab
+	if t == nil { // pooled VM not bound to a tab yet
+		return nil, fmt.Errorf("no document")
+	}
 	t.mu.RLock()
 	d := t.dom
 	t.mu.RUnlock()
@@ -698,7 +905,9 @@ func (j *jsVM) registerHost() error {
 			if level == "" {
 				level = "log"
 			}
-			j.tab.LogConsole(level, argS(a, 1))
+			if j.tab != nil {
+				j.tab.LogConsole(level, argS(a, 1))
+			}
 			return nil, nil
 		}},
 		{"url", func(a []any) (any, error) { return j.tab.URL(), nil }},
@@ -816,6 +1025,49 @@ func (j *jsVM) registerHost() error {
 			return nil, nil
 		}},
 		{"mutation", func(a []any) (any, error) { return nil, nil }},
+		{"wsOpen", func(a []any) (any, error) { return j.wsOpen(argS(a, 0), argS(a, 1)), nil }},
+		{"wsSend", func(a []any) (any, error) { return nil, j.wsSend(argI(a, 0), argS(a, 1), argB(a, 2)) }},
+		{"wsClose", func(a []any) (any, error) { j.wsClose(argI(a, 0)); return nil, nil }},
+		{"workerCreate", func(a []any) (any, error) {
+			id, err := j.workerCreate(argS(a, 0), argS(a, 1), argS(a, 2))
+			return id, err
+		}},
+		{"workerPost", func(a []any) (any, error) { j.workerPost(argI(a, 0), argS(a, 1)); return nil, nil }},
+		{"workerTerminate", func(a []any) (any, error) { j.workerTerminate(argI(a, 0)); return nil, nil }},
+		{"binding", func(a []any) (any, error) {
+			name, args := argS(a, 0), argS(a, 1)
+			if !json.Valid([]byte(args)) {
+				args = "[]"
+			}
+			c := BindingCall{Name: name, Args: json.RawMessage(args), URL: j.tab.URL(), At: time.Now()}
+			j.tab.bindingRing.Push(Event{Tab: j.tab.ID, Kind: EvBinding, At: c.At, Data: c})
+			j.tab.emit(EvBinding, c)
+			if r, ok := j.tab.bindingReply(name); ok {
+				return r, nil
+			}
+			return nil, nil
+		}},
+		{"download", func(a []any) (any, error) {
+			u, name := argS(a, 0), argS(a, 1)
+			if strings.HasPrefix(u, "data:") {
+				mt, data, err := decodeDataURL(u)
+				if err != nil {
+					return nil, err
+				}
+				d := j.tab.SaveDownloadBytes(name, mt, data, "data:")
+				return d.Path, nil
+			}
+			go func() { _, _ = j.tab.DownloadURL(u, name) }()
+			return nil, nil
+		}},
+		{"saveDownload", func(a []any) (any, error) {
+			data, err := base64.StdEncoding.DecodeString(argS(a, 1))
+			if err != nil {
+				return nil, err
+			}
+			d := j.tab.SaveDownloadBytes(argS(a, 0), argS(a, 2), data, argS(a, 3))
+			return d.Path, nil
+		}},
 	}
 	for _, x := range hs {
 		if err := reg(x.name, x.fn); err != nil {
@@ -886,12 +1138,21 @@ func (t *Tab) httpForScript(method, rawurl string, headers map[string]string, bo
 	if t.IsOfflineMode() {
 		return nil, fmt.Errorf("TypeError: Failed to fetch (offline)")
 	}
-	if code, rbody, matched := t.interceptGet(abs); matched {
-		if code == 0 {
-			return nil, fmt.Errorf("TypeError: Failed to fetch (aborted by route)")
-		}
-		return map[string]any{"status": code, "statusText": http.StatusText(code), "headers": map[string]any{}, "body": rbody, "url": abs}, nil
+	synth, m2, target, hdrs2, body2, rerr := t.routedRequest(strings.ToUpper(method), abs, headers, body)
+	if rerr != nil {
+		return nil, fmt.Errorf("TypeError: Failed to fetch (%s)", rerr.Error())
 	}
+	if synth != nil {
+		rb, _ := io.ReadAll(synth.Body)
+		h := map[string]any{}
+		for k, v := range synth.Header {
+			h[strings.ToLower(k)] = strings.Join(v, ", ")
+		}
+		t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: fnet.RequestRecord{Method: m2, URL: abs, FinalURL: abs, Status: synth.StatusCode, Headers: map[string]string{"x-sweef-route": "fulfill"}}})
+		return map[string]any{"status": synth.StatusCode, "statusText": http.StatusText(synth.StatusCode), "headers": h, "body": string(rb), "url": abs}, nil
+	}
+	abs, method, headers, body = target, m2, hdrs2, body2
+	t.touchNet()
 	var rdr io.Reader
 	if body != "" {
 		rdr = strings.NewReader(body)
@@ -941,14 +1202,60 @@ func (t *Tab) httpForScript(method, rawurl string, headers map[string]string, bo
 	return map[string]any{"status": res.StatusCode, "statusText": http.StatusText(res.StatusCode), "headers": hdr, "body": string(data), "url": rec.FinalURL}, nil
 }
 
-// fetchResource GETs a sub-resource (script, module) as text.
+// fetchResource GETs a sub-resource (script, module) as text through the
+// engine's HTTP cache: fresh hits cost nothing, stale ones are revalidated.
 func (t *Tab) fetchResource(rawurl string) (string, int, error) {
-	r, err := t.httpForScript("GET", rawurl, nil, "")
+	abs, err := resolveURL(t.URL(), rawurl)
+	if err != nil {
+		return "", 0, err
+	}
+	now := time.Now()
+	var hdr map[string]string
+	if e := t.eng.res.get(abs); e != nil {
+		if !e.expires.IsZero() && now.Before(e.expires) && !t.IsOfflineMode() {
+			t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: now, Data: fnet.RequestRecord{Method: "GET", URL: abs, FinalURL: abs, Status: e.status, Headers: map[string]string{"x-sweef-cache": "hit"}}})
+			return e.body, e.status, nil
+		}
+		hdr = map[string]string{}
+		if e.etag != "" {
+			hdr["If-None-Match"] = e.etag
+		}
+		if e.lastMod != "" {
+			hdr["If-Modified-Since"] = e.lastMod
+		}
+	}
+	r, err := t.httpForScript("GET", abs, hdr, "")
 	if err != nil {
 		return "", 0, err
 	}
 	status, _ := r["status"].(int)
 	body, _ := r["body"].(string)
+	h, _ := r["headers"].(map[string]any)
+	hv := func(k string) string { s, _ := h[k].(string); return s }
+	if status == http.StatusNotModified {
+		if e := t.eng.res.get(abs); e != nil {
+			hh := http.Header{}
+			hh.Set("Cache-Control", hv("cache-control"))
+			hh.Set("Expires", hv("expires"))
+			e.expires = freshness(hh, now)
+			return e.body, e.status, nil
+		}
+	}
+	if status == http.StatusOK {
+		hh := http.Header{}
+		for k := range h {
+			hh.Set(k, hv(k))
+		}
+		if cacheable(hh) {
+			exp := freshness(hh, now)
+			if exp.IsZero() {
+				// Memory-cache window: a resource fetched for this navigation
+				// (e.g. by the parallel prefetch) is reused by the loader.
+				exp = now.Add(5 * time.Second)
+			}
+			t.eng.res.put(abs, &resEntry{body: body, status: status, etag: hv("etag"), lastMod: hv("last-modified"), expires: exp, storedAt: now})
+		}
+	}
 	return body, status, nil
 }
 

@@ -32,7 +32,7 @@ WORK="$(mktemp -d)"
 mkdir -p bench/last-run
 trap 'kill $SITE_PID 2>/dev/null || true; "$SWEEF" close >/dev/null 2>&1 || true; [ -n "$AB" ] && "$AB" close >/dev/null 2>&1 || true; rm -rf "$WORK"' EXIT
 
-go build -o "$WORK/sweef" ./cmd/sweef || exit 1
+CGO_ENABLED=0 go build -ldflags='-s -w' -o "$WORK/sweef" ./cmd/sweef || exit 1  # release build: static, stripped
 SWEEF="$WORK/sweef"
 export SWEEF_HOME="$WORK/sweef-home"
 
@@ -60,6 +60,16 @@ run_flow_sweef() {
   t0=$(now_ms); "$SWEEF" click "#inc" >/dev/null 2>&1 || true; t1=$(now_ms); echo "click-react $((t1-t0))"
   t0=$(now_ms); "$SWEEF" eval 'document.querySelector("h1").textContent' >/dev/null 2>&1 || true; t1=$(now_ms); echo "eval $((t1-t0))"
   t0=$(now_ms); "$SWEEF" snapshot -i > "$WORK/s3.txt" 2>&1 || true; t1=$(now_ms); echo "snapshot-i-2 $((t1-t0))"
+}
+
+# The same 11 steps as one batch call: one process spawn, one round trip.
+run_flow_sweef_batch() {
+  local t0 t1
+  t0=$(now_ms)
+  "$SWEEF" batch "open $BASE/" "snapshot -i" "click 'text=Sign in'" "snapshot" "fill #email ada@example.com" \
+    "press Enter #email" "get title" "open $BASE/app" "click #inc" 'eval document.querySelector("h1").textContent' \
+    --observe interactive > "$WORK/b1.txt" 2>&1 || true
+  t1=$(now_ms); echo "batch $((t1-t0))"
 }
 
 run_flow_ab() {
@@ -101,6 +111,11 @@ if [ "$ONLY" != "ab" ]; then
   SWEEF_S1=$(wc -c < "$WORK/s1.txt"); SWEEF_S2=$(wc -c < "$WORK/s2.txt"); SWEEF_S3=$(wc -c < "$WORK/s3.txt")
 fi
 
+if [ "$ONLY" != "ab" ]; then
+  echo "Benchmarking sweef batch ($RUNS runs)..." >&2
+  bench sweefbatch run_flow_sweef_batch "$SWEEF close" 'sweef serve'
+fi
+
 if [ "$ONLY" != "sweef" ] && [ -n "$AB" ] && [ -x "$AB" ]; then
   echo "Benchmarking agent-browser ($RUNS runs)..." >&2
   bench ab run_flow_ab "$AB close" 'chrome|agent-browser'
@@ -124,6 +139,11 @@ for s in $steps; do
     echo "| $s | $sw | - | - |"
   fi
 done
+if [ -f "$WORK/sweefbatch.steps" ]; then
+  bt=$(grep "^batch " "$WORK/sweefbatch.steps" | awk '{print $2}' | median)
+  abt=$(grep "^total " "$WORK/ab.steps" 2>/dev/null | awk '{print $2}' | median)
+  echo "| whole flow as one sweef batch | $bt | ${abt:--} | $(awk -v a="${abt:-0}" -v b="$bt" 'BEGIN{ if (b>0 && a>0) printf "%.1fx", a/b; else print "-"}') |"
+fi
 echo
 echo "| snapshot | sweef bytes | agent-browser bytes |"
 echo "|---|---|---|"

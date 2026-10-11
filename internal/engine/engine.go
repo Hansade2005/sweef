@@ -40,11 +40,14 @@ type Options struct {
 	StateRingSize    int  // actionability/state log entries retained
 	DefaultUserAgent string
 	ProxyURL         string
-	ViewportWidth    int // default viewport width (px) for text rendering
-	ViewportHeight   int // default viewport height (px)
-	SettleMs         int // event-loop budget after load and after actions (default 1500)
-	JSMemoryMiB      int // QuickJS heap cap per tab (default 64)
-	JSTimeoutMs      int // single-eval timeout; a looping script is interrupted (default 5000)
+	ViewportWidth    int    // default viewport width (px) for text rendering
+	ViewportHeight   int    // default viewport height (px)
+	SettleMs         int    // event-loop budget after load and after actions (default 1500)
+	JSMemoryMiB      int    // QuickJS heap cap per tab (default 64)
+	JSTimeoutMs      int    // single-eval timeout; a looping script is interrupted (default 5000)
+	WarmVMs          int    // JS VMs kept pre-built so navigations skip prelude setup (default 1)
+	DownloadsDir     string // where downloads are saved (default $TMPDIR/sweef-downloads)
+	CacheDir         string // on-disk bytecode cache ("" = $SWEEF_CACHE_DIR or user cache dir; "off" disables)
 }
 
 func DefaultOptions() Options {
@@ -61,6 +64,7 @@ func DefaultOptions() Options {
 		SettleMs:         1500,
 		JSMemoryMiB:      64,
 		JSTimeoutMs:      5000,
+		WarmVMs:          1,
 	}
 }
 
@@ -79,6 +83,8 @@ const (
 	EvPopup      EventKind = "Page.popup"
 	EvCrash      EventKind = "Page.crashed"
 	EvDownload   EventKind = "Browser.download"
+	EvBinding    EventKind = "Runtime.bindingCalled"
+	EvWebSocket  EventKind = "Network.webSocket"
 )
 
 // Event is one broadcast entry. Ring buffers store these verbatim so history
@@ -151,6 +157,9 @@ type Engine struct {
 	jar        *Jar
 	metrics    *Metrics
 	started    time.Time
+	vms        *vmPool
+	res        *resCache
+	code       *codeCache
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -170,6 +179,16 @@ func New(opts Options) *Engine {
 		ctx:      ctx,
 		cancel:   cancel,
 	}
+	cacheDir := opts.CacheDir
+	if cacheDir == "" {
+		cacheDir = defaultCacheDir()
+	} else if cacheDir == "off" {
+		cacheDir = ""
+	}
+	e.code = newCodeCache(cacheDir)
+	setPreludeCacheDir(e.code.dir)
+	e.res = newResCache(opts.MaxCacheMiB)
+	e.vms = newVMPool(opts)
 	return e
 }
 
@@ -319,6 +338,7 @@ func (e *Engine) Close() error {
 		t.close()
 	}
 	e.cancel()
+	e.vms.close()
 	return nil
 }
 

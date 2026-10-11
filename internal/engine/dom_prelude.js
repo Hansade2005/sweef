@@ -1144,7 +1144,26 @@
     if (tag === 'label') { var c = el.control; if (c) clickElement(c); return; }
     if (tag === 'summary') { var d = el.parentElement; if (d && d.localName === 'details') { d.open = !d.open; fire(d, 'toggle', { bubbles: false, cancelable: false }); } return; }
     var a = el.closest('a[href]') || el.closest('area[href]');
-    if (a) { var href = a.getAttribute('href'); if (href && !/^\s*javascript:/i.test(href)) { if (/^#/.test(href.trim())) { global.location.hash = href.trim(); } else sw.navigate(a.href); } }
+    if (a) {
+      var href = a.getAttribute('href');
+      if (href && !/^\s*javascript:/i.test(href)) {
+        if (a.hasAttribute('download')) { startDownload(a.href, a.getAttribute('download') || ''); return; }
+        if (/^#/.test(href.trim())) { global.location.hash = href.trim(); } else sw.navigate(a.href);
+      }
+    }
+  }
+  // <a download>: blob: URLs are read here (their bytes live in this VM);
+  // everything else is fetched by Go into the downloads directory.
+  function startDownload(url, name) {
+    if (/^blob:/.test(url)) {
+      var blob = blobURLs.get(url);
+      if (!blob) { reportError(new Error('download: unknown blob URL ' + url)); return; }
+      var bytes = blob._bytes || new Uint8Array(0), bin = '';
+      for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      sw.saveDownload(name || 'download', global.btoa(bin), blob.type || '', url);
+      return;
+    }
+    sw.download(url, name);
   }
   function submitFrom(submitter) {
     var form = submitter.form || (submitter.hasAttribute('form') ? documentWrapper.getElementById(submitter.getAttribute('form')) : null);
@@ -3171,8 +3190,11 @@
   exportFn('__swIsThenable', function (v) { return !!v && (typeof v === 'object' || typeof v === 'function') && typeof v.then === 'function'; });
   exportFn('__swTimerCount', function () { return timers.length; });
   exportFn('__swWrap', function (id) { return wrap(+id); });
+  exportFn('__swBlobText', function (u) { var b = blobURLs.get(String(u)); return b ? utf8Decode(b._bytes || new Uint8Array(0)) : null; });
   exportFn('__swIdOf', function (node) { return idOf(node); });
 
-  installDocument();
+  // A pooled VM is built before it is bound to a document; __swSetDocument
+  // installs the real one at bind time.
+  try { installDocument(); } catch (e) { /* unbound VM */ }
   readyState = 'loading';
 })(globalThis);

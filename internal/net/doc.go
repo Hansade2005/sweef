@@ -10,6 +10,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/net/html"
 )
@@ -25,7 +26,22 @@ type Doc struct {
 
 	idMu sync.RWMutex
 	tab  *idTable
+
+	// css holds compiled stylesheet rules and the computed-style cache
+	// (see css.go); nil until first use.
+	cssMu sync.Mutex
+	css   *cssState
+
+	// mutGen counts tree mutations; layout results are cached per value.
+	mutGen         atomic.Uint64
+	layoutMu       sync.Mutex
+	layoutCache    *Layout
+	layoutCacheW   int
+	layoutCacheGen uint64
+	viewportW      atomic.Int64
 }
+
+func (d *Doc) layoutGen() uint64 { return d.mutGen.Load() }
 
 // Mutation describes a DOM change in Playwright-mutation-like terms. The engine
 // subscribes so it can re-run init hooks / notify agents without reparsing.
@@ -49,6 +65,7 @@ func (d *Doc) SetMutationListener(fn func(Mutation)) {
 }
 
 func (d *Doc) note(m Mutation) {
+	d.invalidateStyles()
 	d.mu.RLock()
 	ls := append([]func(Mutation){}, d.listeners...)
 	d.mu.RUnlock()
@@ -169,7 +186,7 @@ func (d *Doc) nodeToInfo(n *html.Node) *Info {
 		Role:      role,
 		Text:      txt,
 		Href:      attr(n, "href"),
-		Visible:   effectivelyVisible(n),
+		Visible:   d.effectivelyVisible(n),
 		Disabled:  hasAttr(n, "disabled"),
 		Checked:   hasAttr(n, "checked"),
 		Focusable: isFocusable(n),
@@ -177,11 +194,12 @@ func (d *Doc) nodeToInfo(n *html.Node) *Info {
 }
 
 // effectivelyVisible walks up the ancestor chain checking the hidden
-// attribute, aria-hidden, inline display:none/visibility:hidden and
+// attribute, aria-hidden, computed display:none/visibility:hidden (inline
+// style plus any stylesheets installed with SetStylesheets) and
 // input[type=hidden].
-func effectivelyVisible(n *html.Node) bool {
+func (d *Doc) effectivelyVisible(n *html.Node) bool {
 	for x := n; x != nil && x.Type == html.ElementNode; x = x.Parent {
-		if pruned(x) {
+		if d.pruned(x) {
 			return false
 		}
 	}
@@ -297,6 +315,7 @@ func (d *Doc) SetInnerHTML(backendID int64, frag string) error {
 	for _, s := range sub {
 		n.AppendChild(s)
 	}
+	d.invalidateStyles()
 	return nil
 }
 
@@ -377,6 +396,7 @@ func (d *Doc) SelectOption(backendID int64, want string) error {
 				}
 			}
 			setAttr(o, "selected", "")
+			d.invalidateStyles()
 			return nil
 		}
 	}
@@ -389,6 +409,7 @@ func (d *Doc) SetChecked(backendID int64, checked bool) error {
 	if n == nil {
 		return fmt.Errorf("no node with backendNodeId %d", backendID)
 	}
+	defer d.invalidateStyles()
 	switch attr(n, "type") {
 	case "checkbox":
 		if checked {
@@ -424,8 +445,9 @@ func (d *Doc) SetChecked(backendID int64, checked bool) error {
 }
 
 // IsVisible approximates CSS visibility without layout: hidden attribute,
-// aria-hidden, inline display:none/visibility:hidden anywhere up the chain,
-// and input[type=hidden] are invisible.
+// aria-hidden, computed display:none/visibility:hidden (inline style and
+// stylesheet rules) anywhere up the chain, and input[type=hidden] are
+// invisible.
 func (d *Doc) IsVisible(backendID int64) (bool, error) {
 	n := d.find(backendID)
 	if n == nil {
@@ -434,20 +456,27 @@ func (d *Doc) IsVisible(backendID int64) (bool, error) {
 	if !d.Attached(n) {
 		return false, nil
 	}
-	return effectivelyVisible(n), nil
+	return d.effectivelyVisible(n), nil
 }
 
-// BoundingBox returns a deterministic pseudo-layout box: elements are laid
-// out in document order, block elements start new rows, inline ones flow
-// left to right, so coordinates are stable, ordered and hit-testable even
-// though Sweef has no real layout engine.
+// LayoutWidth is the viewport width used for boxes and hit-testing.
+func (d *Doc) LayoutWidth() int {
+	if w := int(d.viewportW.Load()); w > 0 {
+		return w
+	}
+	return 1280
+}
+
+// SetLayoutWidth sets the viewport width (from emulation) for layout.
+func (d *Doc) SetLayoutWidth(w int) { d.viewportW.Store(int64(w)) }
+
+// BoundingBox returns the element's box from the flow layout (see layout.go).
 func (d *Doc) BoundingBox(backendID int64) ([4]int, error) {
 	n := d.find(backendID)
 	if n == nil {
 		return [4]int{}, fmt.Errorf("no node with backendNodeId %d", backendID)
 	}
-	boxes := d.layoutBoxes()
-	if b, ok := boxes[n]; ok {
+	if b, ok := d.Layout(d.LayoutWidth()).Boxes[n]; ok {
 		return b, nil
 	}
 	return [4]int{0, 0, 0, 0}, nil
@@ -458,74 +487,7 @@ var blockTags = map[string]bool{
 	"ul": true, "ol": true, "li": true, "table": true, "tr": true, "thead": true, "tbody": true, "section": true, "article": true,
 	"header": true, "footer": true, "nav": true, "main": true, "aside": true, "form": true, "fieldset": true, "pre": true,
 	"blockquote": true, "hr": true, "dl": true, "dt": true, "dd": true, "figure": true, "details": true, "summary": true,
-	"br": true, "textarea": true, "select": true, "option": true, "label": false,
-}
-
-// layoutBoxes computes boxes for every visible element in one pass. It is
-// recomputed per call (O(n)), which is cheap for the page sizes Sweef targets.
-func (d *Doc) layoutBoxes() map[*html.Node][4]int {
-	const lineH, charW, width, pad = 20, 7, 1200, 8
-	boxes := map[*html.Node][4]int{}
-	x, y := pad, pad
-	var walk func(n *html.Node, depth int)
-	walk = func(n *html.Node, depth int) {
-		if n.Type != html.ElementNode || pruned(n) {
-			return
-		}
-		block := blockTags[n.Data]
-		if block && x > pad {
-			x = pad
-			y += lineH
-		}
-		startX, startY := x, y
-		own := 0
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.TextNode {
-				w := len(normWS(c.Data)) * charW
-				for w > 0 {
-					room := width - x
-					if room <= charW {
-						x = pad
-						y += lineH
-						room = width - x
-					}
-					take := w
-					if take > room {
-						take = room
-					}
-					x += take
-					w -= take
-					own += take
-				}
-			} else if c.Type == html.ElementNode {
-				walk(c, depth+1)
-			}
-		}
-		switch n.Data {
-		case "input", "button", "select", "textarea", "img":
-			if own == 0 {
-				x += 120
-				own = 120
-			}
-		}
-		h := y - startY + lineH
-		w := width - startX
-		if !block {
-			if y == startY {
-				w = x - startX
-				if w < 8 {
-					w = 8
-				}
-			}
-		}
-		boxes[n] = [4]int{startX, startY, w, h}
-		if block {
-			x = pad
-			y += lineH
-		}
-	}
-	walk(d.Root, 0)
-	return boxes
+	"address": true, "figcaption": true, "legend": true, "menu": true, "search": true, "dialog": true, "caption": true,
 }
 
 // Count returns how many nodes match a selector (waitForSelector count rule).
@@ -1075,25 +1037,19 @@ func (d *Doc) ByRole(role, name string) []*Info {
 // placeholder or title.
 func (d *Doc) ByLabel(label string) []*Info {
 	var out []*Info
-	for _, n := range d.queryAll("input, textarea, select, button") {
-		l := attr(n, "aria-label")
-		if l == "" {
-			l = attr(n, "placeholder")
+	want := strings.ToLower(strings.TrimSpace(label))
+	for _, n := range d.queryAll("input, textarea, select, button, meter, progress, output, [role=checkbox], [role=switch], [role=textbox], [role=combobox], [role=slider]") {
+		if n.Data == "input" && strings.EqualFold(attr(n, "type"), "hidden") {
+			continue
 		}
-		if l == "" {
-			l = attr(n, "title")
-		}
-		if l == "" {
-			id := attr(n, "id")
-			if id != "" {
-				for _, ln := range d.queryAll("label[for=" + id + "]") {
-					l = innerText(ln)
-					break
-				}
+		// Candidate names: the accessible name (aria-label, aria-labelledby,
+		// <label for>, wrapping <label>, ...) plus placeholder and title.
+		cands := []string{accessibleName(n), labelForControl(n), attr(n, "aria-label"), attr(n, "placeholder"), attr(n, "title")}
+		for _, c := range cands {
+			if c != "" && strings.Contains(strings.ToLower(c), want) {
+				out = append(out, d.nodeToInfo(n))
+				break
 			}
-		}
-		if strings.Contains(strings.ToLower(l), strings.ToLower(label)) {
-			out = append(out, d.nodeToInfo(n))
 		}
 	}
 	return out
@@ -1211,13 +1167,16 @@ func (d *Doc) BackendByEngine(sel string) (int64, string, error) {
 	return infos[0].BackendID, sel, nil
 }
 
-// ElementFromPoint returns the innermost visible element whose pseudo-layout
-// box contains (x, y), or 0.
+// ElementFromPoint returns the innermost element whose layout box contains
+// (x, y), or 0. Smaller boxes win, then later document order (paint order).
 func (d *Doc) ElementFromPoint(x, y int) int64 {
-	boxes := d.layoutBoxes()
+	l := d.Layout(d.LayoutWidth())
 	var best *html.Node
 	bestArea := -1
-	for n, b := range boxes {
+	for n, b := range l.Boxes {
+		if n.Data == "html" || n.Data == "body" {
+			continue
+		}
 		if x >= b[0] && x < b[0]+b[2] && y >= b[1] && y < b[1]+b[3] {
 			area := b[2] * b[3]
 			if bestArea < 0 || area < bestArea || (area == bestArea && d.idOf(n) > d.idOf(best)) {

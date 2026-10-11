@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"os"
 	"runtime"
 	"strings"
@@ -120,6 +119,16 @@ func (s *Server) Call(method string, raw json.RawMessage) (json.RawMessage, *pro
 		return nil, internal(merr.Error())
 	}
 	return b, nil
+}
+
+func snapshotOptions(p Params) engine.SnapshotOptions {
+	return engine.SnapshotOptions{
+		MaxChars:        int(num(p, "maxChars")),
+		Selector:        str(p, "selector"),
+		InteractiveOnly: p["interactiveOnly"] == true,
+		MaxTextLen:      int(num(p, "maxTextLen")),
+		MaxDepth:        int(num(p, "maxDepth")),
+	}
 }
 
 func (s *Server) dispatch(method string, p Params) (any, error) {
@@ -237,18 +246,17 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		opts := engine.SnapshotOptions{
-			MaxChars:        int(num(p, "maxChars")),
-			Selector:        str(p, "selector"),
-			InteractiveOnly: p["interactiveOnly"] == true,
-			MaxTextLen:      int(num(p, "maxTextLen")),
-			MaxDepth:        int(num(p, "maxDepth")),
-		}
-		yaml, err := t.AriaSnapshotV2(opts)
+		yaml, err := t.AriaSnapshotV2(snapshotOptions(p))
 		if err != nil {
 			return nil, err
 		}
+		if p["delta"] == true {
+			return map[string]any{"yaml": deltaFor(t.ID, yaml)}, nil
+		}
+		rememberSnap(t.ID, yaml)
 		return map[string]any{"yaml": yaml}, nil
+	case "Batch.run", "Batch":
+		return s.batch(p)
 	case "Page.screenshot": // PNG bytes (base64) + structured text render; width/height/dsf per Playwright
 		t, err := s.tab(p)
 		if err != nil {
@@ -261,6 +269,9 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		out := map[string]any{"text": t.Screenshot(w)}
 		if format == "png" {
 			pb := t.PNGScreenshot(w, h, dsf)
+			if p["fullPage"] == true {
+				pb = t.PNGScreenshotFull(w, dsf)
+			}
 			out["pngBase64"] = base64.StdEncoding.EncodeToString(pb)
 			out["bytes"] = len(pb)
 		}
@@ -345,22 +356,17 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		status := int(num(p, "status"))
-		body := str(p, "body")
-		abort := str(p, "action") == "abort"
-		t.Route(str(p, "pattern"), func(req *http.Request) (int, string, bool) {
-			if abort {
-				return http.StatusServiceUnavailable, "", true
-			}
-			return status, body, true
-		})
-		return map[string]bool{"ok": true}, nil
+		if err := t.AddRoute(routeFromParams(p)); err != nil {
+			return nil, err
+		}
+		return map[string]any{"ok": true, "routes": len(t.Routes())}, nil
 	case "Network.unrouteAll":
 		t, err := s.tab(p)
 		if err != nil {
 			return nil, err
 		}
 		t.UnrouteAll()
+		t.RemoveRoutes("")
 		return map[string]bool{"ok": true}, nil
 
 	default:
