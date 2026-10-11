@@ -634,6 +634,9 @@ func (c *ctx) installHit(rb *lbox) {
 					continue
 				}
 				px, py = (inv[0]*x+inv[1]*y+inv[2])/w, (inv[3]*x+inv[4]*y+inv[5])/w
+				if h.hp[6]*px+h.hp[7]*py+h.hp[8] <= 0 {
+					continue // behind the camera
+				}
 			} else if h.hasM {
 				inv, ok := invert(h.m)
 				if !ok {

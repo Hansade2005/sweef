@@ -412,12 +412,7 @@ func (p *painter) flushCtx(ctx *ctx3) {
 	parts := ctx.parts
 	sort.SliceStable(parts, func(i, j int) bool { return parts[i].seq < parts[j].seq })
 	var polys []*poly3
-	hitOnly := map[*part3]bool{}
 	for _, pt := range parts {
-		if len(pt.ops) <= 2 {
-			hitOnly[pt] = true
-			continue
-		}
 		if q := quadPoly(pt); q != nil {
 			polys = append(polys, q)
 		}
@@ -437,7 +432,9 @@ func (p *painter) flushCtx(ctx *ctx3) {
 				ops[0] = pu
 			}
 		}
-		p.ops = append(p.ops, ops...)
+		if len(pc.part.ops) > 2 {
+			p.ops = append(p.ops, ops...)
+		}
 		if lastPiece[pc.part] == i {
 			p.hits = append(p.hits, pc.part.hits...)
 		}

@@ -1,9 +1,7 @@
 package raster
 
 import (
-	"fmt"
 	"math"
-	"os"
 
 	"github.com/sweefbrowser/sweef/internal/render"
 )
@@ -66,11 +64,6 @@ type projRec struct {
 // rasterScale picks the scale the layer is rasterized at. total maps the plane
 // to device pixels.
 func rasterScale(total Mat3, persp bool, base float64, b render.Rect) float64 {
-	if f := os.Getenv("SWEEF_RSFORCE"); f != "" {
-		var v float64
-		fmt.Sscanf(f, "%g", &v)
-		return v
-	}
 	if persp || math.Abs(total[6]) > 1e-9 || math.Abs(total[7]) > 1e-9 {
 		return base * perspMagnification(total, b, base)
 	}

@@ -187,12 +187,7 @@ func (c *cabac) terminate() int {
 }
 
 // bytePos returns the byte offset at which data following a terminating bin
-// equal to 1 (pcm samples, the next substream) begins: the spec engine has
-// consumed 8*pos+need+1 bits and then reads one more (the stop bit) before
-// aligning to a byte.
-func (c *cabac) bytePos() int {
-	if c.need == -1 {
-		return c.pos + 1
-	}
-	return c.pos
-}
+// equal to 1 (pcm samples, the next substream) begins. The last bit consumed
+// by the arithmetic decoder is the final bit of the flush sequence, so the
+// following data starts at the first byte that has not been (partly) read.
+func (c *cabac) bytePos() int { return c.pos }

@@ -204,6 +204,9 @@ func (d *Decoder) finishFrame() error {
 			d.refOrderHint[i] = fh.orderHint
 		}
 	}
+	if !d.LargeScale {
+		d.recordAnchor(rf)
+	}
 	if fh.showFrame {
 		d.output(rf, &fh.film)
 	}

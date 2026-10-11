@@ -87,25 +87,25 @@ type Decoder struct {
 	decIdx   int
 
 	// per picture tables
-	cuTab     []cuInfo
-	ipm       []uint8
-	edge      []uint8
-	cbfTab    []uint8
+	cuTab        []cuInfo
+	ipm          []uint8
+	edge         []uint8
+	cbfTab       []uint8
 	ctbSliceIdx  []int32
 	ctbSliceAddr []int32
-	lastMerge bool
-	sao       []saoParams
-	slices    []*sliceHeader
-	tabSPS    *SPS
-	lastIndep *sliceHeader
-	picInit   bool
-	decodedCtbs int
+	lastMerge    bool
+	sao          []saoParams
+	slices       []*sliceHeader
+	tabSPS       *SPS
+	lastIndep    *sliceHeader
+	picInit      bool
+	decodedCtbs  int
 
 	// slice decoding state
-	sh  *sliceHeader
-	sp   *SPS
-	pp   *PPS
-	cab  cabac
+	sh        *sliceHeader
+	sp        *SPS
+	pp        *PPS
+	cab       cabac
 	statCoeff [4]uint8
 	wppCtx    [numCtx]uint8
 	wppStat   [4]uint8
@@ -117,15 +117,15 @@ type Decoder struct {
 	ctbX, ctbY           int
 
 	// QP state
-	isCuQpDeltaCoded bool
-	cuQpDeltaVal     int
-	qgPred           int
-	qpY              int
-	lastQpY          int
-	isCuChromaQpOffsetCoded bool
+	isCuQpDeltaCoded           bool
+	cuQpDeltaVal               int
+	qgPred                     int
+	qpY                        int
+	lastQpY                    int
+	isCuChromaQpOffsetCoded    bool
 	cuQpOffsetCb, cuQpOffsetCr int
-	log2MinCuQpDeltaSize     int
-	log2MinCuChromaQpSize    int
+	log2MinCuQpDeltaSize       int
+	log2MinCuChromaQpSize      int
 
 	cu cuState
 
@@ -133,16 +133,16 @@ type Decoder struct {
 }
 
 type cuState struct {
-	x0, y0, log2   int
-	intra          bool
-	partMode       int
-	bypass         bool
-	pcm            bool
-	maxTrafoDepth  int
-	intraSplit     bool
-	chromaMode     [4]int // final chroma prediction mode (after 4:2:2 mapping)
-	chromaModeSyn  [4]int // intra_chroma_pred_mode syntax value
-	rqtRoot        bool
+	x0, y0, log2  int
+	intra         bool
+	partMode      int
+	bypass        bool
+	pcm           bool
+	maxTrafoDepth int
+	intraSplit    bool
+	chromaMode    [4]int // final chroma prediction mode (after 4:2:2 mapping)
+	chromaModeSyn [4]int // intra_chroma_pred_mode syntax value
+	rqtRoot       bool
 }
 
 // NewDecoder returns an empty decoder.

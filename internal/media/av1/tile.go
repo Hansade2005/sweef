@@ -10,7 +10,7 @@ func (f *frameDec) decodeTile(data []byte, tileNum, tileRow, tileCol int) error 
 	f.miColEnd = fh.miColStarts[tileCol+1]
 	f.currentQIndex = fh.baseQIdx
 	f.tcdf = f.cdf
-	f.sym.init(data, fh.disableCdfUpd)
+	f.sym.init(data, fh.disableCdfUpd || f.largeScale)
 	// clear_above_context
 	for p := 0; p < 3; p++ {
 		clear(f.aboveLevelCtx[p])
@@ -42,9 +42,13 @@ func (f *frameDec) decodeTile(data []byte, tileNum, tileRow, tileCol int) error 
 		clear(f.leftSegPred)
 		for c := f.miColStart; c < f.miColEnd; c += sbSize4 {
 			f.readDeltas = fh.deltaQPresent
-			f.clearCdef(r, c)
+			if !f.largeScale {
+				f.clearCdef(r, c)
+			}
 			f.clearBlockDecodedFlags(r, c, sbSize4)
-			f.readLr(r, c, sbSize)
+			if !f.largeScale {
+				f.readLr(r, c, sbSize)
+			}
 			f.decodePartition(r, c, sbSize)
 		}
 	}

@@ -189,4 +189,36 @@ func TestCubicLab2(t *testing.T) {
 		t.Logf("%-8s ink %6d mean %.3f >8 %5.2f%% >24 %5.2f%%", k, a.ink, float64(a.se)/float64(a.ink), 100*float64(a.n8)/float64(a.ink), 100*float64(a.n24)/float64(a.ink))
 	}
 	t.Logf("ALL      ink %6d mean %.3f >8 %5.2f%% >24 %5.2f%%", all.ink, float64(all.se)/float64(all.ink), 100*float64(all.n8)/float64(all.ink), 100*float64(all.n24)/float64(all.ink))
+	if float64(all.se)/float64(all.ink) > 0.6 || float64(all.n8)/float64(all.ink) > 0.004 || float64(all.n24)/float64(all.ink) > 0.001 {
+		t.Errorf("cubic shapes drift from Chromium's canvas AA")
+	}
+}
+
+func TestPathIsConvex(t *testing.T) {
+	cub := NewPath()
+	cub.MoveTo(0, 0)
+	cub.CubicTo(10, 20, 30, 20, 40, 0) // arch and chord: convex
+	cub.Close()
+	s := NewPath()
+	s.MoveTo(0, 0)
+	s.CubicTo(10, 20, 30, -20, 40, 0) // S curve: the control polygon turns both ways
+	s.Close()
+	two := NewPath()
+	two.MoveTo(0, 0)
+	two.LineTo(10, 0)
+	two.LineTo(10, 10)
+	two.Close()
+	two.MoveTo(20, 0)
+	two.LineTo(30, 0)
+	two.LineTo(30, 10)
+	two.Close()
+	for _, c := range []struct {
+		name string
+		p    *Path
+		want bool
+	}{{"arch", cub, true}, {"S", s, false}, {"two contours", two, false}} {
+		if got := pathIsConvex(c.p); got != c.want {
+			t.Errorf("%s: convex %v, want %v", c.name, got, c.want)
+		}
+	}
 }

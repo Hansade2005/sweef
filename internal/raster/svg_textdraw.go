@@ -56,15 +56,25 @@ type fragXf struct {
 // space and that is painted rotated by angle and scaled by sx.
 func (t svgTextXf) frag(x, y, angle, sx float64) fragXf {
 	a, b, c, d := t.a, t.b, t.c, t.d
-	if angle != 0 || sx != 1 {
-		s, cs := math.Sincos(angle)
-		ra, rb, rc, rd := float32(cs*sx), float32(s*sx), float32(-s), float32(cs)
-		a, b, c, d = t.a*ra+t.c*rb, t.b*ra+t.d*rb, t.a*rc+t.c*rd, t.b*rc+t.d*rd
-	}
+	tx0, ty0 := float32(t.m[4]), float32(t.m[5])
 	// the fragment origin is a LayoutUnit: floored to 1/64
 	X, Y := lu64(x), lu64(y)
-	px := float32(t.m[4]) + (t.a*X + t.c*Y)
-	py := float32(t.m[5]) + (t.b*X + t.d*Y)
+	if angle != 0 || sx != 1 {
+		// the canvas is concatenated with translate(P) rotate scale translate(-P)
+		// about the unquantized origin P (float matrix product)
+		s, cs := math.Sincos(angle)
+		Px, Py := float64(float32(x)), float64(float32(y))
+		ra, rb, rc, rd := cs*sx, s*sx, -s, cs
+		e := Px - (ra*Px + rc*Py)
+		f := Py - (rb*Px + rd*Py)
+		fa, fb, fc, fd, fe, ff := float32(ra), float32(rb), float32(rc), float32(rd), float32(e), float32(f)
+		na, nb := a*fa+c*fb, b*fa+d*fb
+		nc, nd := a*fc+c*fd, b*fc+d*fd
+		tx0, ty0 = (a*fe+c*ff)+tx0, (b*fe+d*ff)+ty0
+		a, b, c, d = na, nb, nc, nd
+	}
+	px := tx0 + (a*X + c*Y)
+	py := ty0 + (b*X + d*Y)
 	axis := xfAxis(float64(a), float64(b), float64(c), float64(d))
 	hx, hy := float32(0.125), float32(0.125)
 	switch axis {

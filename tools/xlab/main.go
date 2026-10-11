@@ -27,6 +27,7 @@ func main() {
 	dpr := flag.Float64("dpr", 1, "dpr")
 	crop := flag.String("crop", "", "x,y,w,h region to score")
 	pt := flag.String("hit", "", "x,y: print elementFromPoint tag")
+	grid := flag.String("grid", "", "x0,y0,x1,y1,step: print hit signatures")
 	flag.Parse()
 	b, _ := os.ReadFile(*file)
 	doc, err := snet.ParseDocument(string(b), "file://"+*file)
@@ -59,6 +60,27 @@ func main() {
 		} else {
 			fmt.Println("hit: nil")
 		}
+	}
+	if *grid != "" {
+		var x0, y0, x1, y1, st int
+		fmt.Sscanf(*grid, "%d,%d,%d,%d,%d", &x0, &y0, &x1, &y1, &st)
+		var out []string
+		for y := y0; y < y1; y += st {
+			for x := x0; x < x1; x += st {
+				sig := "-"
+				if n := res.Hit(float64(x), float64(y)); n != nil {
+					sig = n.Data
+					for _, a := range n.Attr {
+						if a.Key == "class" {
+							sig += "." + strings.ReplaceAll(a.Val, " ", ".")
+						}
+					}
+				}
+				out = append(out, sig)
+			}
+		}
+		fmt.Println(strings.Join(out, "|"))
+		return
 	}
 	img := raster.Paint(res.List, int(float64(*w)**dpr), int(float64(*h)**dpr), *dpr, raster.PaintEnv{Background: raster.RGBA8(255, 255, 255, 255)})
 	f, _ := os.Create(*out)

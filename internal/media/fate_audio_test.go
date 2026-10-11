@@ -43,22 +43,55 @@ func TestFateAudioConformance(t *testing.T) {
 			}
 			ch := len(pcm.Data)
 			n := len(ref) / 2 / ch
+			if n != pcm.Frames() {
+				t.Errorf("length %d frames, reference %d", pcm.Frames(), n)
+			}
 			if n > pcm.Frames() {
 				n = pcm.Frames()
+			}
+			refAt := func(i, k int) float64 {
+				return float64(int16(binary.LittleEndian.Uint16(ref[(i*ch+k)*2:]))) / 32768
+			}
+			// The reference decoders do not agree on the channel order of PCE
+			// layouts, so pair every decoded channel with the reference channel
+			// it is closest to (one to one) and report the pairing.
+			perm := make([]int, ch)
+			used := make([]bool, ch)
+			for k := 0; k < ch; k++ {
+				if ch <= 2 { // stereo and mono have a fixed order
+					perm[k], used[k] = k, true
+					continue
+				}
+				best, bi := math.Inf(1), -1
+				for j := 0; j < ch; j++ {
+					if used[j] {
+						continue
+					}
+					var e float64
+					for i := 0; i < n && i < 200000; i++ {
+						d := float64(pcm.Data[k][i]) - refAt(i, j)
+						e += d * d
+					}
+					if e < best {
+						best, bi = e, j
+					}
+				}
+				perm[k] = bi
+				used[bi] = true
 			}
 			var sig, noise float64
 			for i := 0; i < n; i++ {
 				for k := 0; k < ch; k++ {
-					r := float64(int16(binary.LittleEndian.Uint16(ref[(i*ch+k)*2:]))) / 32768
+					r := refAt(i, perm[k])
 					d := float64(pcm.Data[k][i]) - r
 					sig += r * r
 					noise += d * d
 				}
 			}
 			snr := 10 * math.Log10(sig/(noise+1e-30))
-			t.Logf("%s: rate=%d ch=%d frames=%d (ref %d) SNR=%.1f dB", c.stream, pcm.SampleRate, ch, pcm.Frames(), len(ref)/2/ch, snr)
-			if snr < 40 {
-				t.Errorf("SNR %.1f dB below 40", snr)
+			t.Logf("%s: rate=%d ch=%d frames=%d (ref %d) SNR=%.1f dB channel map %v", c.stream, pcm.SampleRate, ch, pcm.Frames(), len(ref)/2/ch, snr, perm)
+			if snr < 60 {
+				t.Errorf("SNR %.1f dB below 60", snr)
 			}
 		})
 	}

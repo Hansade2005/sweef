@@ -1,9 +1,6 @@
 package raster
 
-import (
-	"math"
-	"os"
-)
+import "math"
 
 // Fixed-point edge setup after Skia's SkAnalyticEdge / SkEdge (SkFixed 16.16,
 // FDot6 26.6, forward differencing for quads and cubics), which Chromium uses
@@ -486,7 +483,7 @@ func fxFillUnion(p, q *Path, flipP bool, clip IRect) *Mask {
 	}
 	ox, oy := float64(bounds.X0), float64(bounds.Y0)
 	var fb fxBuilder
-	fb.cont = !pathIsConvex(p) && os.Getenv("NOCONT") == ""
+	fb.cont = !pathIsConvex(p)
 	fxPathEdges(&fb, p, ox, oy, flipP)
 	if q != nil {
 		fb.cont = !pathIsConvex(q)

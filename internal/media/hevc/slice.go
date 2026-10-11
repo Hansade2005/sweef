@@ -46,27 +46,27 @@ type sliceHeader struct {
 	pocLsb        int
 	rps           stRPS
 	// long-term pictures
-	numLT        int
-	ltPocLsb     [33]int
-	ltUsed       [33]bool
-	ltMsbPresent [33]bool
-	ltMsbCycle   [33]int
-	temporalMvp  bool
-	saoLuma      bool
-	saoChroma    bool
-	numRefIdx    [2]int
-	listMod      [2]bool
-	listEntry    [2][16]int
-	mvdL1Zero    bool
-	cabacInit    bool
-	colFromL0    bool
-	colRefIdx    int
-	pw           *predWeights
-	maxMergeCand int
-	qpDelta      int
-	sliceQp      int
-	cbQpOffset   int
-	crQpOffset   int
+	numLT                   int
+	ltPocLsb                [33]int
+	ltUsed                  [33]bool
+	ltMsbPresent            [33]bool
+	ltMsbCycle              [33]int
+	temporalMvp             bool
+	saoLuma                 bool
+	saoChroma               bool
+	numRefIdx               [2]int
+	listMod                 [2]bool
+	listEntry               [2][16]int
+	mvdL1Zero               bool
+	cabacInit               bool
+	colFromL0               bool
+	colRefIdx               int
+	pw                      *predWeights
+	maxMergeCand            int
+	qpDelta                 int
+	sliceQp                 int
+	cbQpOffset              int
+	crQpOffset              int
 	cuChromaQpOffsetEnabled bool
 	deblockDisabled         bool
 	betaOffsetDiv2          int
@@ -74,6 +74,7 @@ type sliceHeader struct {
 	loopFilterAcross        bool
 	dataOffset              int // byte offset of slice data in the unescaped NAL payload
 	numPicTotalCurr         int
+	entry                   []int
 
 	// derived per picture
 	sliceAddrRs int // first CTB address (raster) of the slice containing this segment
@@ -315,7 +316,7 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, tid int, prev *sliceHe
 				return nil, errBitstream
 			}
 			for i := 0; i < n; i++ {
-				r.skip(l)
+				sh.entry = append(sh.entry, int(r.u(l))+1)
 				if r.err {
 					return nil, errBitstream
 				}

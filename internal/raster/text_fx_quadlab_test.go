@@ -429,7 +429,7 @@ func TestCubicLab(t *testing.T) {
 		}
 	}
 	t.Logf("cubics: ink %d mean %.3f  >8 %.2f%%  >24 %.2f%%", ink, float64(tot)/float64(ink), 100*float64(n8)/float64(ink), 100*float64(n24)/float64(ink))
-	if float64(tot)/float64(ink) > 2.2 || float64(n24)/float64(ink) > 0.012 {
+	if float64(tot)/float64(ink) > 1.0 || float64(n24)/float64(ink) > 0.002 {
 		t.Errorf("cubic shapes drift from Chromium's canvas AA")
 	}
 }

@@ -22,111 +22,111 @@ type scalingFactor struct {
 }
 
 type SPS struct {
-	id                  int
-	maxSubLayers        int
-	chromaFormat        int
-	chromaArrayType     int
-	width, height       int
-	cropL, cropR        int // in luma samples
-	cropT, cropB        int
+	id                   int
+	maxSubLayers         int
+	chromaFormat         int
+	chromaArrayType      int
+	width, height        int
+	cropL, cropR         int // in luma samples
+	cropT, cropB         int
 	bitDepthY, bitDepthC int
-	log2MaxPocLsb       int
-	maxDecPicBuf        [8]int
-	maxNumReorder       [8]int
-	maxLatencyPlus1     [8]int
-	log2MinCb, log2Ctb  int
+	log2MaxPocLsb        int
+	maxDecPicBuf         [8]int
+	maxNumReorder        [8]int
+	maxLatencyPlus1      [8]int
+	log2MinCb, log2Ctb   int
 	log2MinTb, log2MaxTb int
-	maxTHDepthInter     int
-	maxTHDepthIntra     int
-	scalingEnabled      bool
-	scaling             *scalingLists
-	amp                 bool
-	sao                 bool
-	pcm                 bool
-	pcmBitDepthY        int
-	pcmBitDepthC        int
-	log2MinPcm          int
-	log2MaxPcm          int
-	pcmLoopFilterOff    bool
-	stRPS               []stRPS
-	ltPresent           bool
-	ltPocLsb            []int
-	ltUsed              []bool
-	temporalMvp         bool
-	strongIntra         bool
+	maxTHDepthInter      int
+	maxTHDepthIntra      int
+	scalingEnabled       bool
+	scaling              *scalingLists
+	amp                  bool
+	sao                  bool
+	pcm                  bool
+	pcmBitDepthY         int
+	pcmBitDepthC         int
+	log2MinPcm           int
+	log2MaxPcm           int
+	pcmLoopFilterOff     bool
+	stRPS                []stRPS
+	ltPresent            bool
+	ltPocLsb             []int
+	ltUsed               []bool
+	temporalMvp          bool
+	strongIntra          bool
 
 	// range extension
 	tsRotation, tsContext, implicitRdpcm, explicitRdpcm bool
-	extPrecision, intraSmoothingOff, highPrecOffsets      bool
-	persistentRice, cabacBypassAlign                     bool
+	extPrecision, intraSmoothingOff, highPrecOffsets    bool
+	persistentRice, cabacBypassAlign                    bool
 
 	fullRange bool
 	matrix    int
 
 	// derived
-	subW, subH                 uint // chroma shifts
-	ctbSize                    int
-	wCtb, hCtb                 int
-	wMinCb, hMinCb             int
-	qpBdOffY, qpBdOffC         int
-	wTb4, hTb4                 int // size in 4x4 units
-	minTbSzLog2                int
+	subW, subH         uint // chroma shifts
+	ctbSize            int
+	wCtb, hCtb         int
+	wMinCb, hMinCb     int
+	qpBdOffY, qpBdOffC int
+	wTb4, hTb4         int // size in 4x4 units
+	minTbSzLog2        int
 }
 
 type PPS struct {
-	id, spsID                  int
-	dependentSlices            bool
-	outputFlagPresent          bool
-	numExtraSliceHdrBits       int
-	signHiding                 bool
-	cabacInitPresent           bool
-	numRefIdxDefault           [2]int
-	initQp                     int
-	constrainedIntra           bool
-	transformSkip              bool
-	cuQpDelta                  bool
-	diffCuQpDeltaDepth         int
-	cbQpOffset, crQpOffset     int
-	sliceChromaQpOffsets       bool
-	weightedPred, weightedBi   bool
-	transquantBypass           bool
-	tiles                      bool
-	wpp                        bool
-	numTileCols, numTileRows   int
-	uniformSpacing             bool
-	colWidthMinus1             []int
-	rowHeightMinus1            []int
-	loopFilterAcrossTiles      bool
-	loopFilterAcrossSlices     bool
-	deblockControl             bool
-	deblockOverride            bool
-	deblockDisabled            bool
+	id, spsID                    int
+	dependentSlices              bool
+	outputFlagPresent            bool
+	numExtraSliceHdrBits         int
+	signHiding                   bool
+	cabacInitPresent             bool
+	numRefIdxDefault             [2]int
+	initQp                       int
+	constrainedIntra             bool
+	transformSkip                bool
+	cuQpDelta                    bool
+	diffCuQpDeltaDepth           int
+	cbQpOffset, crQpOffset       int
+	sliceChromaQpOffsets         bool
+	weightedPred, weightedBi     bool
+	transquantBypass             bool
+	tiles                        bool
+	wpp                          bool
+	numTileCols, numTileRows     int
+	uniformSpacing               bool
+	colWidthMinus1               []int
+	rowHeightMinus1              []int
+	loopFilterAcrossTiles        bool
+	loopFilterAcrossSlices       bool
+	deblockControl               bool
+	deblockOverride              bool
+	deblockDisabled              bool
 	betaOffsetDiv2, tcOffsetDiv2 int
-	scaling                    *scalingLists
-	listsModification          bool
-	log2ParMrgLevel            int
-	sliceHeaderExt             bool
+	scaling                      *scalingLists
+	listsModification            bool
+	log2ParMrgLevel              int
+	sliceHeaderExt               bool
 
 	// range extension
-	log2MaxTsSize          int
-	crossComponentPred     bool
-	chromaQpOffsetList     bool
+	log2MaxTsSize             int
+	crossComponentPred        bool
+	chromaQpOffsetList        bool
 	diffCuChromaQpOffsetDepth int
-	chromaQpOffsetListLen  int
-	cbQpOffsetList         [6]int
-	crQpOffsetList         [6]int
-	log2SaoOffsetScaleY    int
-	log2SaoOffsetScaleC    int
+	chromaQpOffsetListLen     int
+	cbQpOffsetList            [6]int
+	crQpOffsetList            [6]int
+	log2SaoOffsetScaleY       int
+	log2SaoOffsetScaleC       int
 
 	// derived for the active SPS (setup)
-	setupFor      *SPS
-	colBd, rowBd  []int // tile boundaries in CTBs
+	setupFor       *SPS
+	colBd, rowBd   []int // tile boundaries in CTBs
 	rsToTs, tsToRs []int
-	tileID        []int // by ts address
-	tileRs        []int // by raster address
-	minTbZs       []int32
-	zsW           int
-	factor        *scalingFactor
+	tileID         []int // by ts address
+	tileRs         []int // by raster address
+	minTbZs        []int32
+	zsW            int
+	factor         *scalingFactor
 }
 
 func parseProfileTierLevel(r *bitReader, profilePresent bool, maxSubLayersMinus1 int) {
@@ -234,7 +234,7 @@ func parseVUI(r *bitReader, s *SPS) {
 		r.ue()
 		r.ue()
 	}
-	r.skip(3) // neutral_chroma_indication, field_seq, frame_field_info_present
+	r.skip(3)     // neutral_chroma_indication, field_seq, frame_field_info_present
 	if r.flag() { // default_display_window_flag
 		r.ue()
 		r.ue()

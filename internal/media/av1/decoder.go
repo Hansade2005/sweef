@@ -110,6 +110,11 @@ type Decoder struct {
 	OperatingPoint int
 	AllLayers      bool
 
+	// LargeScale selects large scale tile decoding (see largescale.go).
+	LargeScale bool
+	anchors    []*refFrame
+	camera     *cameraState
+
 	newTU bool     // the next output picture is the first of a temporal unit
 	cache *Picture // spatial layer picture waiting for a higher layer
 }
@@ -142,7 +147,7 @@ func NewDecoder() *Decoder { return &Decoder{} }
 
 // Reset discards all decoding state (call before decoding from a key frame).
 func (d *Decoder) Reset() {
-	*d = Decoder{OperatingPoint: d.OperatingPoint, AllLayers: d.AllLayers}
+	*d = Decoder{OperatingPoint: d.OperatingPoint, AllLayers: d.AllLayers, LargeScale: d.LargeScale}
 }
 
 // Decode decodes one temporal unit (a sequence of OBUs in the low-overhead
@@ -231,6 +236,14 @@ func (d *Decoder) decodeOBU(data []byte) (int, error) {
 		if d.seq == nil {
 			return 0, errNoSeq
 		}
+		if d.LargeScale {
+			if obuType == obuFrameHeader {
+				if err := d.cameraHeaderOBU(payload); err != nil {
+					return 0, err
+				}
+			}
+			break
+		}
 		if d.seenFrameHeader {
 			break // frame_header_copy
 		}
@@ -241,6 +254,12 @@ func (d *Decoder) decodeOBU(data []byte) (int, error) {
 	case obuFrame:
 		if d.seq == nil {
 			return 0, errNoSeq
+		}
+		if d.LargeScale {
+			if err := d.cameraHeaderOBU(payload); err != nil {
+				return 0, err
+			}
+			break
 		}
 		pb := &bitReader{buf: payload}
 		if err := d.frameHeaderOBU(pb); err != nil {
@@ -260,8 +279,14 @@ func (d *Decoder) decodeOBU(data []byte) (int, error) {
 		if err := d.tileGroupOBU(payload); err != nil {
 			return 0, err
 		}
+	case obuTileList:
+		if d.LargeScale {
+			if err := d.tileListOBU(payload); err != nil {
+				return 0, err
+			}
+		}
 	default:
-		// metadata, padding, tile list, reserved: ignored
+		// metadata, padding, reserved: ignored
 	}
 	return total, nil
 }

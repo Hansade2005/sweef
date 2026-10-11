@@ -17,9 +17,10 @@ package raster
 // accumulates along the curve (up to a tenth of a pixel for a long arc). The
 // convex walker never calls keepContinuous, and quadratic edges keep their
 // forward-difference chain separate from the snapped x, so neither shows it.
-// Measured against Chromium 1194 (text_fxcubic_lab_test.go): the same cubic
-// is 0.15% off with an extra, convex-breaking contour absent and 6% off when
-// the drift is not modelled.
+// Measured against Chromium 1194 (text_fxcubic_lab_test.go, TestCubicLab,
+// TestXfLab/cff): without the drift cubic shapes were 4.5% (lab 1) and 5.2%
+// (lab 2) of pixels off by more than 8/255 and Inter 3.1%; with it 0.4%,
+// 0.16% and 0.34%. An arc alone (convex) was 0.15% either way.
 
 // fxAdvanceX is the x an edge starting at (x, y0) with slope reaches at y1
 // when the general walker steps it row by row: goY(nextY, yShift) adds the
