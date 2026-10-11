@@ -57,7 +57,7 @@ func setPreludeCacheDir(dir string) {
 
 func compiledPrelude() []byte {
 	preludeOnce.Do(func() {
-		src := domPrelude + "\n" + domPreludeExt
+		src := domPrelude + "\n" + domPreludeExt + extPreludes()
 		preludeDiskMu.Lock()
 		dir := preludeDiskDir
 		preludeDiskMu.Unlock()
@@ -140,7 +140,7 @@ func buildVM(o Options) (*jsVM, error) {
 		}
 	}
 	if !loaded {
-		if _, err := vm.Eval(domPrelude+"\n"+domPreludeExt, quickjs.EvalGlobal); err != nil {
+		if _, err := vm.Eval(domPrelude+"\n"+domPreludeExt+extPreludes(), quickjs.EvalGlobal); err != nil {
 			vm.Close()
 			return nil, fmt.Errorf("prelude: %w", err)
 		}
@@ -274,6 +274,9 @@ func (j *jsVM) close() {
 		return
 	}
 	j.closed = true
+	if j.currentDoc != nil {
+		disposeExt(j.currentDoc)
+	}
 	if j.realtime != nil {
 		j.realtime.closeAll()
 	}
@@ -1068,6 +1071,9 @@ func (j *jsVM) registerHost() error {
 			d := j.tab.SaveDownloadBytes(argS(a, 0), argS(a, 2), data, argS(a, 3))
 			return d.Path, nil
 		}},
+	}
+	for _, x := range j.extHostFuncs() {
+		hs = append(hs, h{x.name, x.fn})
 	}
 	for _, x := range hs {
 		if err := reg(x.name, x.fn); err != nil {

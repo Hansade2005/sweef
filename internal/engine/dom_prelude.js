@@ -3193,6 +3193,10 @@
   exportFn('__swBlobText', function (u) { var b = blobURLs.get(String(u)); return b ? utf8Decode(b._bytes || new Uint8Array(0)) : null; });
   exportFn('__swIdOf', function (node) { return idOf(node); });
 
+  // Internals for jsext extension preludes (canvas, WebGL, media); the
+  // engine deletes this after they have run.
+  global.__swInternals = { ID: ID, idOf: idOf, wrap: wrap, slots: slots, getters: getters, methods: methods, setTimeout: setTimeoutImpl, now: nowMs, currentURL: currentURL, makeEvent: makeEventFor, sw: sw, global: global };
+
   // A pooled VM is built before it is bound to a document; __swSetDocument
   // installs the real one at bind time.
   try { installDocument(); } catch (e) { /* unbound VM */ }

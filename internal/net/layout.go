@@ -35,7 +35,18 @@ type Layout struct {
 	Width, Height int
 	Boxes         map[*html.Node][4]int
 	Items         []WireItem
+	// Hit, when set by a layout engine, returns the topmost element at a
+	// page point in paint order (elementFromPoint, coordinate clicks).
+	Hit func(x, y float64) *html.Node
+	// Engine carries the layout engine's own result (render/layout's
+	// fragment tree) for painting; nil for the built-in flow layout.
+	Engine any
 }
+
+// LayoutEngine, when set (by render/layout at init), replaces the built-in
+// flow layout. It must fill Width, Height and Boxes (border boxes in page
+// px, rounded) for every rendered element.
+var LayoutEngine func(d *Doc, width, height int) *Layout
 
 type lctx struct {
 	d     *Doc
@@ -88,8 +99,18 @@ func (d *Doc) Layout(width int) *Layout {
 	d.layoutMu.Lock()
 	defer d.layoutMu.Unlock()
 	gen := d.layoutGen()
+	gen += uint64(d.viewportH.Load()) << 40
 	if d.layoutCache != nil && d.layoutCacheW == width && d.layoutCacheGen == gen {
 		return d.layoutCache
+	}
+	if LayoutEngine != nil {
+		h := int(d.viewportH.Load())
+		if h <= 0 {
+			h = 720
+		}
+		l := LayoutEngine(d, width, h)
+		d.layoutCache, d.layoutCacheW, d.layoutCacheGen = l, width, gen
+		return l
 	}
 	l := &Layout{Width: width, Boxes: map[*html.Node][4]int{}}
 	c := &lctx{d: d, l: l, x: 8, y: 8, left: 8, right: width - 8, scale: 2}

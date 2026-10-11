@@ -78,6 +78,12 @@ func (d *Doc) idOf(n *html.Node) int64 {
 	return id
 }
 
+// NodeByID resolves a node id (backend id) to its node, nil when unknown.
+func (d *Doc) NodeByID(id int64) *html.Node { return d.find(id) }
+
+// IDOf returns n's node id, assigning one on first touch.
+func (d *Doc) IDOf(n *html.Node) int64 { return d.idOf(n) }
+
 // find resolves an id to its node in O(1). nil when the id was never issued
 // by this document.
 func (d *Doc) find(id int64) *html.Node {

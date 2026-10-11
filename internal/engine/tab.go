@@ -99,6 +99,9 @@ type NodeInfo struct {
 // state + a mutex; JS evaluation happens on demand.
 type Tab struct {
 	ID      string
+	// renderGen counts rendering changes outside the DOM (canvas draws,
+	// video frames) so cached frames can be invalidated.
+	renderGen atomic.Uint64
 	mu      sync.RWMutex
 	eng     *Engine
 	ctx     *BrowserContext // isolation context (nil = engine default)
@@ -364,8 +367,9 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 		t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(), Data: m})
 		t.emit(EvDomMutated, m)
 	})
-	if w, _, _, _, _ := t.Viewport(); w > 0 {
+	if w, h, _, _, _ := t.Viewport(); w > 0 {
 		doc.SetLayoutWidth(w)
+		doc.SetLayoutHeight(h)
 	}
 	t.applyStyles(doc)
 	t.mu.Lock()
@@ -875,6 +879,7 @@ func (t *Tab) SetViewport(w, h int, dsf float64, mobile, landscape bool) {
 	t.mobile, t.landscape = mobile, landscape
 	if t.dom != nil {
 		t.dom.SetLayoutWidth(t.vpW)
+		t.dom.SetLayoutHeight(t.vpH)
 	}
 	t.mu.Unlock()
 	t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(),

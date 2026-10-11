@@ -39,9 +39,16 @@ type Doc struct {
 	layoutCacheW   int
 	layoutCacheGen uint64
 	viewportW      atomic.Int64
+	viewportH      atomic.Int64
+	// layoutExtra is bumped by the engine when something layout depends
+	// on changes outside the tree (images decoded, canvas resized).
+	layoutExtra atomic.Uint64
 }
 
-func (d *Doc) layoutGen() uint64 { return d.mutGen.Load() }
+func (d *Doc) layoutGen() uint64 { return d.mutGen.Load() + d.layoutExtra.Load()<<20 }
+
+// InvalidateLayout drops cached layout (resources finished loading).
+func (d *Doc) InvalidateLayout() { d.layoutExtra.Add(1) }
 
 // Mutation describes a DOM change in Playwright-mutation-like terms. The engine
 // subscribes so it can re-run init hooks / notify agents without reparsing.
@@ -469,6 +476,17 @@ func (d *Doc) LayoutWidth() int {
 
 // SetLayoutWidth sets the viewport width (from emulation) for layout.
 func (d *Doc) SetLayoutWidth(w int) { d.viewportW.Store(int64(w)) }
+
+// SetLayoutHeight sets the viewport height (vh units, fixed positioning).
+func (d *Doc) SetLayoutHeight(h int) { d.viewportH.Store(int64(h)) }
+
+// LayoutHeight is the viewport height used for layout (720 by default).
+func (d *Doc) LayoutHeight() int {
+	if h := int(d.viewportH.Load()); h > 0 {
+		return h
+	}
+	return 720
+}
 
 // BoundingBox returns the element's box from the flow layout (see layout.go).
 func (d *Doc) BoundingBox(backendID int64) ([4]int, error) {
@@ -1171,6 +1189,12 @@ func (d *Doc) BackendByEngine(sel string) (int64, string, error) {
 // (x, y), or 0. Smaller boxes win, then later document order (paint order).
 func (d *Doc) ElementFromPoint(x, y int) int64 {
 	l := d.Layout(d.LayoutWidth())
+	if l.Hit != nil {
+		if n := l.Hit(float64(x)+0.5, float64(y)+0.5); n != nil {
+			return d.idOf(n)
+		}
+		return 0
+	}
 	var best *html.Node
 	bestArea := -1
 	for n, b := range l.Boxes {
