@@ -78,7 +78,9 @@ func (t *Tab) geomOf(d *fnet.Doc, id int64) map[string]any {
 	return out
 }
 
-func isRootScroller(d *fnet.Doc, n *html.Node) bool { return n.Parent != nil && n.Parent.Data == "html" }
+func isRootScroller(d *fnet.Doc, n *html.Node) bool {
+	return n.Parent != nil && n.Parent.Data == "html"
+}
 
 // offsetParent implements CSSOM View's offsetParent and offsetTop/Left.
 func offsetParent(d *fnet.Doc, r *layout.Result, n *html.Node, x, y float64) (int64, float64, float64) {

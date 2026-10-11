@@ -98,20 +98,20 @@ type NodeInfo struct {
 // Tab is one browsing context. Goroutine-light: no dedicated thread, just
 // state + a mutex; JS evaluation happens on demand.
 type Tab struct {
-	ID      string
+	ID string
 	// renderGen counts rendering changes outside the DOM (canvas draws,
 	// video frames) so cached frames can be invalidated.
 	renderGen atomic.Uint64
 	// window scroll position (CSS px), guarded by mu
 	scrollX, scrollY float64
-	mu      sync.RWMutex
-	eng     *Engine
-	ctx     *BrowserContext // isolation context (nil = engine default)
-	title   string
-	url     *url.URL
-	html    string
-	dom     *fnet.Doc // parsed tree held by our DOM layer
-	scripts []*CompiledScript
+	mu               sync.RWMutex
+	eng              *Engine
+	ctx              *BrowserContext // isolation context (nil = engine default)
+	title            string
+	url              *url.URL
+	html             string
+	dom              *fnet.Doc // parsed tree held by our DOM layer
+	scripts          []*CompiledScript
 
 	consoleRing *Ring
 	netRing     *Ring

@@ -90,7 +90,9 @@ func RegisterWebFont(family string, weight int, italic bool, data []byte) error 
 }
 
 // HasWebFont reports whether family was registered as a web font.
-func HasWebFont(family string) bool { return len(webFamily(strings.ToLower(strings.TrimSpace(family)))) > 0 }
+func HasWebFont(family string) bool {
+	return len(webFamily(strings.ToLower(strings.TrimSpace(family)))) > 0
+}
 
 func webFamily(lower string) []*source {
 	webMu.RLock()
