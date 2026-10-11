@@ -1,4 +1,4 @@
-✓ open http://127.0.0.1:18080/ (4ms)  → Acme
+✓ open http://127.0.0.1:18080/ (3ms)  → Acme
 ✓ snapshot -i (0ms)  → 
 - banner:
   - navigation:
@@ -39,10 +39,10 @@
 ✓ fill #email ada@example.com (0ms)
 ✓ press Enter #email (0ms)
 ✓ get title (0ms)  → Welcome
-✓ open http://127.0.0.1:18080/app (48ms)  → Counter
-✓ click #inc (1ms)
+✓ open http://127.0.0.1:18080/app (55ms)  → Counter
+✓ click #inc (2ms)
 ✗ eval document.querySelector(h1).textContent (0ms): ReferenceError: 'h1' is not defined
     at <eval> (<eval>:2:24)
-10/10 steps in 56ms  Counter  http://127.0.0.1:18080/app
+10/10 steps in 62ms  Counter  http://127.0.0.1:18080/app
 - heading "Count: 1" [level=1 ref=e1]
 - button "Increment" [ref=e2]

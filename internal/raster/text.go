@@ -355,6 +355,16 @@ func normalizeText(s string) string {
 // standard ligatures (when letterSpacing is zero, as in browsers) from the
 // font's OpenType tables, shaped word by word like canvas text in Chromium.
 func Shape(spec FontSpec, text string, letterSpacing, wordSpacing float64, kern bool) *Shaped {
+	return ShapeDir(spec, text, letterSpacing, wordSpacing, kern, false)
+}
+
+var bracketMirror = map[rune]rune{'(': ')', ')': '(', '[': ']', ']': '[', '{': '}', '}': '{', '<': '>', '>': '<', '«': '»', '»': '«', '‹': '›', '›': '‹'}
+
+// ShapeDir is Shape for a paragraph whose base direction is rtl when set.
+// Text containing right-to-left characters is reordered with the Unicode
+// bidirectional algorithm and Arabic letters take their joined forms; the
+// glyphs of the result are in visual order.
+func ShapeDir(spec FontSpec, text string, letterSpacing, wordSpacing float64, kern bool, rtl bool) *Shaped {
 	fs := resolveFaces(spec.Families, spec.Weight, spec.Italic)
 	sh := &Shaped{Size: spec.Size, Set: fs}
 	if len(fs.faces) > 0 {
@@ -370,7 +380,35 @@ func Shape(spec FontSpec, text string, letterSpacing, wordSpacing float64, kern 
 			}
 		}
 	}
-	opts := font.ShapeOptions{Kern: kern, Liga: letterSpacing == 0}
+	liga := letterSpacing == 0
+	needBidi := rtl
+	for _, r := range rs {
+		if font.IsRTLRune(r) {
+			needBidi = true
+			break
+		}
+	}
+	if needBidi {
+		var vis []rune
+		for _, run := range font.BidiRuns(rs, rtl) {
+			seg := rs[run.Start:run.End]
+			if !run.RTL {
+				vis = append(vis, seg...)
+				continue
+			}
+			seg = font.ShapeArabic(seg)
+			for k := len(seg) - 1; k >= 0; k-- {
+				r := seg[k]
+				if m, ok := bracketMirror[r]; ok {
+					r = m
+				}
+				vis = append(vis, r)
+			}
+			liga = false
+		}
+		rs = vis
+	}
+	opts := font.ShapeOptions{Kern: kern, Liga: liga}
 	var x float64
 	for i := 0; i < len(rs); {
 		f := fs.faceFor(rs[i])
@@ -433,7 +471,7 @@ type TextMetrics struct {
 // MeasureText measures text under the context's text state.
 func (c *Context) MeasureText(text string) TextMetrics {
 	t := &c.st.text
-	sh := Shape(t.font, normalizeText(text), t.letterSpacing, t.wordSpacing, t.kerning != "none")
+	sh := ShapeDir(t.font, normalizeText(text), t.letterSpacing, t.wordSpacing, t.kerning != "none", t.direction == "rtl")
 	asc, desc := sh.FontMetrics()
 	var m TextMetrics
 	m.Width = sh.Width
@@ -706,7 +744,7 @@ func (c *Context) textPath(sh *Shaped, x, y, sx float64) *Path {
 
 func (c *Context) prepText(text string, x, y, maxWidth float64) (*Shaped, float64, float64, float64) {
 	t := &c.st.text
-	sh := Shape(t.font, normalizeText(text), t.letterSpacing, t.wordSpacing, t.kerning != "none")
+	sh := ShapeDir(t.font, normalizeText(text), t.letterSpacing, t.wordSpacing, t.kerning != "none", t.direction == "rtl")
 	sx := 1.0
 	if maxWidth > 0 && sh.Width > maxWidth {
 		sx = maxWidth / sh.Width

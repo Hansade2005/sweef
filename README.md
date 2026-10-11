@@ -173,11 +173,12 @@ Measured against Chromium 1194 on this repo's fixtures (`go run ./tools/fidelity
 
 | Area | Result |
 |---|---|
-| Element boxes, 41 pages from basic CSS to shop, dashboard, email, docs, Bootstrap | mean IoU 0.999, 99.5% of boxes within 1 px, 99.8% within 4 px |
-| Same pages at 1920x1080 | mean IoU 0.999, 99.5% within 1 px |
-| Same pages at 390x844 | mean IoU 0.979, 95.6% within 1 px |
-| Page painter, 8 display-list fixtures | 96% to 100% of pixels within 8/255 |
-| Canvas 2D, 38 fixtures | shapes and gradients 99.1%, text 96.1% within 8/255 |
+| Element boxes, 64 pages (basic CSS through shop, dashboard, email, docs, Bootstrap, container queries, subgrid, writing modes, multicol) at 1280x800 | mean IoU 0.996, 98.6% of boxes within 1 px, 99.6% within 4 px |
+| Same pages at 390x844 | mean IoU 0.996, 98.2% within 1 px |
+| Pixels (ink agreement with Chromium screenshots) | 97.7% overall; blog and landing pages 99.6% and 99.9% |
+| Page painter, 8 display-list fixtures | 96% to 100% of pixels within 8/255 (text case 99.9%) |
+| Canvas 2D, 40 fixtures | shapes and gradients 99.1%, text 99.2% within 8/255 |
+| SVG (paths, gradients, clips, masks, filters, markers) | icons page 97.6% ink, feature page 99.5% |
 | WebGL, 76 fixtures | mean 99.9% of pixels within 4/255 (three.js 99.9%, PixiJS 99.99%, regl 100%) |
 | Web Audio, 26 offline graphs | sample-exact for filters, delay, convolver and panner; oscillators within 6e-4 |
 | Media elements, 21 scenarios | event order identical to Chromium; `canPlayType` matches in 67 of 67 recorded answers |
@@ -186,12 +187,13 @@ A 1280x800 text page paints in about 21 ms. A 100k-triangle WebGL frame at 512x5
 
 What is still different, honestly:
 
-- **Text pixels.** Glyphs are unhinted and have no ligatures, bidi or complex shaping, so text ink agrees at 92 to 97%, not 99%. Layout boxes still match.
-- **Not supported yet:** `::first-letter` and `::first-line`, container queries, subgrid, vertical writing modes, SVG painting (SVG geometry works), backdrop-filter, and per-column multicol backgrounds.
+- **Glyph edges.** Text uses Skia's analytic anti-aliasing, its coverage tables and GPOS kerning, so most glyphs match. About 1 to 3% of glyph pixels still differ on curve tops, and strokes and synthetic bold are approximations. HTML text does not yet use ligatures, bidi or Arabic joining (canvas text does).
+- **CSS not done:** per-column multicol backgrounds and borders, `content-visibility: auto` skipping, `@container style()` queries, subgrid line names, CJK fallback metrics (WenQuanYi is not matched), vertical text with RTL or nested orthogonal flows.
+- **SVG not done:** `foreignObject`, `textPath`, `feTurbulence`, lighting and a few other filters, CSS `clip-path` and `mask` on HTML elements.
 - **Codecs.** MP3, Vorbis, FLAC and PCM decode in pure Go. AAC, Opus, H.264, VP9 and AV1 need `ffmpeg` on the machine; without it they report unsupported like a browser without the codec. Video without ffmpeg shows VP8 key frames only.
 - **WebGL.** No compressed textures, `EXT_sRGB` or multi-draw; lines are 1 px; `sin` differs from SwiftShader in the last digit.
-- **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.8 s. `MediaRecorder`, EME and picture-in-picture reject.
-- **Exact pixel identity with Chromium is not a goal.** Skia's anti-aliasing and hinting are not reproduced, and screenshots are not byte-identical.
+- **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.8 s because QuickJS cannot share typed arrays with Go. `MediaRecorder`, EME and picture-in-picture reject.
+- **Exact pixel identity with Chromium is not a goal.** Screenshots are not byte-identical.
 
 Set `SWEEF_RENDERER=flow` to fall back to the old schematic layout.
 

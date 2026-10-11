@@ -2,8 +2,6 @@ package raster
 
 import (
 	"math"
-	"os"
-	"strconv"
 	"sync"
 
 	"github.com/sweefbrowser/sweef/internal/font"
@@ -17,13 +15,9 @@ import (
 // unhinted and sit on FreeType's 26.6 grid, translated by the 1/4 pixel
 // subpixel position.
 
-var aaaDelta = func() int { v, _ := strconv.Atoi(os.Getenv("AAA_D")); return v }()
-
-var aaaOff = func() float64 { v, _ := strconv.ParseFloat(os.Getenv("AAA_O"), 64); return v }()
-
 func aaaSnapY(y float64) float64 {
 	y = math.Floor(y*256+0.5) / 256
-	return math.Floor(y*4+0.5+aaaOff) / 4
+	return math.Floor(y*4+0.5) / 4
 }
 
 func aaaSnapX(x float64) float64 { return math.Floor(x*256+0.5) / 256 }
@@ -78,7 +72,7 @@ func aaaQuad(dst []Pt, x0, y0, x1, y1, x2, y2 float64) []Pt {
 	} else if sh > 6 {
 		sh = 6
 	}
-	n := 1 << (sh + aaaDelta)
+	n := 1 << sh
 	// Skia's analytic quad edge walks the curve from its top end: the
 	// forward differencing starts at the snapped top y, interior vertices are
 	// snapped to 1/4 pixel (never past the snapped bottom y) and the bottom
@@ -180,7 +174,7 @@ func aaaCubic(dst []Pt, c [4]Pt) []Pt {
 	if sh > 6 {
 		sh = 6
 	}
-	n := 1 << (sh + aaaDelta)
+	n := 1 << sh
 	rev := false
 	if c[0].Y > c[3].Y {
 		c[0], c[3] = c[3], c[0]

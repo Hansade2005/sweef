@@ -1,0 +1,9 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);x.fillStyle='#000';x.font='20px "DejaVu Sans"';
+x.textAlign='left';x.fillText('العربية لا كتاب',8,26);
+x.fillText('abc אבג def 123',8,56);
+x.direction='rtl';x.textAlign='start';x.fillText('(abc) שלום, world!',232,88);
+x.fillText('rtl text.',232,118);
+x.direction='ltr';x.textAlign='left';x.font='20px "Liberation Sans"';x.fillText('مرحبا hello محمد',8,148);
+</script>

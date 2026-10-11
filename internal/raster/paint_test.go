@@ -34,9 +34,14 @@ func rad(r float64) render.Radii {
 func textRun(face *font.Face, s string, x, y, size float64, c render.Color) render.TextRun {
 	run := render.TextRun{X: x, Y: y, Size: size, Color: c}
 	var pen float64
-	for _, r := range s {
+	var prev rune
+	for i, r := range s {
+		if i > 0 {
+			pen += face.KernF(prev, r, size) // glyph X includes kerning (displaylist contract)
+		}
 		run.Glyphs = append(run.Glyphs, render.Glyph{R: r, X: pen, Face: face})
-		pen += face.Advance(r, 2048) * size / 2048
+		pen += face.AdvanceF(r, size)
+		prev = r
 	}
 	run.Width = pen
 	return run

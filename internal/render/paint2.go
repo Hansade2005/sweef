@@ -157,7 +157,7 @@ func (p *painter) paintTextFrag(b *lbox, ln *line, fr *frag) {
 			continue
 		}
 		if r != ' ' && r != 0xa0 {
-			gl = append(gl, Glyph{R: r, X: sh.x[k] - sh.x[fr.a] + extra, Face: sh.faces[k]})
+			gl = append(gl, Glyph{R: r, X: sh.x[k] - sh.x[fr.a] + extra + sh.kernAt(k), Face: sh.faces[k]})
 		}
 		if r == ' ' {
 			extra += fr.justSp
@@ -398,7 +398,7 @@ func (p *painter) emitSimpleText(st *style.Computed, fs *fontSpec, txt string, x
 		if r == ' ' {
 			continue
 		}
-		gl = append(gl, Glyph{R: r, X: sh.x[i], Face: sh.faces[i]})
+		gl = append(gl, Glyph{R: r, X: sh.x[i] + sh.kernAt(i), Face: sh.faces[i]})
 	}
 	p.emit(TextRun{X: x, Y: y, Size: fs.size, Color: col, Glyphs: gl, Width: sh.x[len(rs)], Bold: fs.synthBold})
 }

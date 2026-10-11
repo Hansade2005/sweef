@@ -117,6 +117,14 @@ type shaped struct {
 	r     []rune
 	faces []*font.Face
 	x     []float64 // cumulative advance; x[i] = start of rune i; len = n+1
+	kn    []float64 // kerning applied before rune i (glyph origin offset); may be nil
+}
+
+func (sh *shaped) kernAt(i int) float64 {
+	if sh == nil || i < 0 || i >= len(sh.kn) {
+		return 0
+	}
+	return sh.kn[i]
 }
 
 // shape computes glyph positions for runes in the given style.
@@ -126,8 +134,8 @@ func (c *ctx) shape(fs *fontSpec, st *style.Computed, rs []rune) *shaped {
 
 // shapeWith shapes rs continuing a text run whose previous glyph was prev in face prevFace.
 func (c *ctx) shapeWith(fs *fontSpec, st *style.Computed, rs []rune, prev rune, prevFace *font.Face) *shaped {
-	sh := &shaped{r: rs, faces: make([]*font.Face, len(rs)), x: make([]float64, len(rs)+1)}
-	kern := st.LetterSpacing == 0 && st.FontKerning != "none" && st.TextRendering != "optimizespeed"
+	sh := &shaped{r: rs, faces: make([]*font.Face, len(rs)), x: make([]float64, len(rs)+1), kn: make([]float64, len(rs))}
+	kern := st.FontKerning != "none" && st.TextRendering != "optimizespeed"
 	x := 0.0
 	for i, r := range rs {
 		f := fs.faceFor(r)
@@ -150,7 +158,9 @@ func (c *ctx) shapeWith(fs *fontSpec, st *style.Computed, rs []rune, prev rune, 
 				adv = fs.size // upright glyphs advance by an em in vertical text
 			}
 			if kern && prev != 0 && prevFace == f {
-				adv += f.KernF(prev, r, fs.size)
+				kv := f.KernF(prev, r, fs.size)
+				adv += kv
+				sh.kn[i] = kv
 			}
 		default:
 			adv = fs.size * 0.5
