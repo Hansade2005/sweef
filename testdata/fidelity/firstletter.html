@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>firstletter</title>
+<style>
+body { margin: 0; padding: 20px; font-family: "Times New Roman", serif; font-size: 18px; line-height: 1.5; color: #222; }
+p { margin: 0 0 16px; max-width: 520px; }
+.a::first-letter { font-size: 3.2em; float: left; line-height: .85; padding: 2px 8px 0 0; color: #b00; }
+.b::first-letter { font-size: 2em; font-weight: bold; color: #06c; }
+.c::first-line { font-weight: bold; color: #070; text-transform: uppercase; }
+.d::first-letter { font-size: 2.4em; float: left; margin-right: 6px; line-height: 1; }
+.d::first-line { font-variant: small-caps; }
+.e::first-letter { color: #c60; font-size: 150%; }
+.f::first-letter { font-size: 3em; float: left; line-height: .8; margin: 0 .1em 0 0; }
+blockquote { margin: 0 0 16px; max-width: 400px; }
+blockquote::first-letter { font-size: 2em; }
+</style></head><body>
+<p class="a">"Quoted drop cap begins here and runs on for a good number of words so that several lines wrap around the floated initial letter on the left side of this paragraph, which is the classic editorial flourish."</p>
+<p class="b">Inline initial that is only larger and bold, which raises the first line height of this paragraph while the rest stays normal, wrapping over a couple of lines.</p>
+<p class="c">First line styled in uppercase bold green, then the remaining lines keep the normal style because only the first formatted line is affected by the pseudo element rule here.</p>
+<p class="d">Both pseudo elements together on one paragraph of text that continues for a long while so that it reaches a third and a fourth line in the box.</p>
+<p class="e">(Punctuation) first letter after a parenthesis should include the parenthesis and the letter that follows in the styled run of text.</p>
+<p class="f">Another drop cap with a three em letter and tight line height, followed by plenty of text to wrap around it for a number of lines in the narrow measure.</p>
+<blockquote>Blockquote with a plain larger first letter that grows the line box height.</blockquote>
+</body></html>

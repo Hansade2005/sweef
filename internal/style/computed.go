@@ -1,5 +1,7 @@
 package style
 
+import "strings"
+
 // Shadow is one box-shadow or text-shadow.
 type Shadow struct {
 	DX, DY, Blur, Spread float64
@@ -191,6 +193,8 @@ type Inherited struct {
 	FontVariantNum          string
 	UserSelect              string
 	WritingMode             string
+	TextOrientation         string // mixed | upright | sideways
+	VertFrame               int8   // set on transposed copies: the vertical mode of the original box
 	TextUnderlineOffset     Length
 	TextDecorationThickness Length
 	TextUnderlinePos        string
@@ -201,6 +205,7 @@ type Inherited struct {
 	ImageRendering          string
 	LineClamp               int
 	Orphans                 int
+	Widows                  int
 	CaretColor              Color
 	CaretSet                bool
 }
@@ -216,6 +221,15 @@ type Computed struct {
 	BoxSizing            string
 	OverflowX, OverflowY string
 	Contain              string
+	ContentVisibility    string // visible | hidden | auto
+	QuirkMarginTop       bool   // quirks mode: margin-top comes from the UA sheet of p, h1, ul ... (ignored at the start of body/td)
+	QuirkMarginBottom    bool
+	BreakBefore          string // auto | avoid | column | page ...
+	BreakAfter           string
+	BreakInside          string // auto | avoid
+	CIntrW, CIntrH       Length // contain-intrinsic-width/height (LNone when unset)
+	CIntrAutoW           bool
+	CIntrAutoH           bool
 	Isolation            string
 	Appearance           string
 	Resize               string
@@ -297,6 +311,10 @@ type Computed struct {
 
 	// table
 	TableLayout string
+
+	// containment
+	ContainerType string   // "" / normal, size, inline-size
+	ContainerName []string // container-name idents
 
 	// multi-column
 	ColumnCount     int
@@ -384,6 +402,7 @@ func Initial() *Computed {
 	c.JustifyItems, c.JustifySelf = "legacy", "auto"
 	c.GridAutoFlow = "row"
 	c.TableLayout = "auto"
+	c.ContentVisibility = "visible"
 	c.MixBlend = "normal"
 	c.TransformOrigin = [2]Length{Pct(50), Pct(50)}
 	c.OutlineStyle = "none"
@@ -406,5 +425,92 @@ func Initial() *Computed {
 		c.Padding[i] = Px(0)
 	}
 	c.Orphans = 2
+	c.Widows = 2
 	return c
+}
+
+// ContainsInlineSize reports inline-size containment (container-type
+// inline-size/size, contain: size / inline-size / strict, content-visibility
+// hidden).
+func (c *Computed) ContainsInlineSize() bool {
+	if c.ContainerType == "size" || c.ContainerType == "inline-size" || c.ContentVisibility == "hidden" {
+		return true
+	}
+	return containTok(c.Contain, "size") || containTok(c.Contain, "inline-size") || containTok(c.Contain, "strict")
+}
+
+// ContainsBlockSize reports block-size containment.
+func (c *Computed) ContainsBlockSize() bool {
+	if c.ContainerType == "size" || c.ContentVisibility == "hidden" {
+		return true
+	}
+	return containTok(c.Contain, "size") || containTok(c.Contain, "strict")
+}
+
+// ContainsLayout reports layout containment (independent formatting context,
+// containing block for positioned descendants).
+func (c *Computed) ContainsLayout() bool {
+	if c.ContentVisibility == "hidden" || c.ContentVisibility == "auto" {
+		return true
+	}
+	return containTok(c.Contain, "layout") || containTok(c.Contain, "paint") || containTok(c.Contain, "strict") || containTok(c.Contain, "content")
+}
+
+func containTok(s, tok string) bool {
+	if s == "" || s == "none" {
+		return false
+	}
+	for _, f := range strings.Fields(s) {
+		if f == tok {
+			return true
+		}
+	}
+	return false
+}
+
+// VerticalMode returns 0 for horizontal writing modes, 1 for vertical-rl and
+// sideways-rl, 2 for vertical-lr and sideways-lr.
+func (c *Computed) VerticalMode() int {
+	switch c.WritingMode {
+	case "vertical-rl", "sideways-rl":
+		return 1
+	case "vertical-lr", "sideways-lr":
+		return 2
+	}
+	return 0
+}
+
+// Transposed returns a copy of c as seen from the logical (flow-relative)
+// frame of a vertical writing mode: the box is laid out by the horizontal
+// engine with width and height, margins, paddings, borders and offsets
+// exchanged. mode is VerticalMode() (1 rl, 2 lr).
+func (c *Computed) Transposed(mode int) *Computed {
+	t := *c
+	t.id = 0
+	t.WritingMode = "horizontal-tb"
+	t.VertFrame = int8(mode)
+	t.Width, t.Height = c.Height, c.Width
+	t.MinWidth, t.MinHeight = c.MinHeight, c.MinWidth
+	t.MaxWidth, t.MaxHeight = c.MaxHeight, c.MaxWidth
+	t.OverflowX, t.OverflowY = c.OverflowY, c.OverflowX
+	if c.AspectRatio > 0 {
+		t.AspectRatio = 1 / c.AspectRatio
+	}
+	// logical index -> physical index (top right bottom left)
+	m := [4]int{1, 2, 3, 0}
+	if mode == 2 {
+		m = [4]int{3, 2, 1, 0}
+	}
+	for l := 0; l < 4; l++ {
+		p := m[l]
+		t.Margin[l], t.Padding[l], t.Inset[l] = c.Margin[p], c.Padding[p], c.Inset[p]
+		t.BorderWidth[l], t.BorderStyle[l], t.BorderColor[l], t.bcSet[l] = c.BorderWidth[p], c.BorderStyle[p], c.BorderColor[p], c.bcSet[p]
+	}
+	switch c.TextAlign {
+	case "left":
+		t.TextAlign = "start"
+	case "right":
+		t.TextAlign = "end"
+	}
+	return &t
 }

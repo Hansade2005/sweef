@@ -34,9 +34,14 @@ func rad(r float64) render.Radii {
 func textRun(face *font.Face, s string, x, y, size float64, c render.Color) render.TextRun {
 	run := render.TextRun{X: x, Y: y, Size: size, Color: c}
 	var pen float64
-	for _, r := range s {
+	var prev rune
+	for i, r := range s {
+		if i > 0 {
+			pen += face.KernF(prev, r, size) // glyph X includes kerning (displaylist contract)
+		}
 		run.Glyphs = append(run.Glyphs, render.Glyph{R: r, X: pen, Face: face})
-		pen += face.Advance(r, 2048) * size / 2048
+		pen += face.AdvanceF(r, size)
+		prev = r
 	}
 	run.Width = pen
 	return run
@@ -105,6 +110,79 @@ func paintCases() []paintCase {
 		}
 		return ops
 	}})
+	{
+		type bc struct {
+			w     float64
+			style string
+			rad   float64
+		}
+		var bcs []bc
+		for _, st := range []string{"dashed", "dotted"} {
+			for _, w := range []float64{1, 2, 3, 5, 8} {
+				bcs = append(bcs, bc{w, st, 14})
+			}
+		}
+		bcs = append(bcs, bc{4, "dashed", 30}, bc{4, "dotted", 30})
+		pos := func(i int) (float64, float64) { return 8 + float64(i%6)*48, 8 + float64(i/6)*60 }
+		var sb strings.Builder
+		for i, b := range bcs {
+			x, y := pos(i)
+			sb.WriteString(box(x, y, 42, 52, fmt.Sprintf("border:%gpx %s #c33;border-radius:%gpx;", b.w, b.style, b.rad)))
+		}
+		cases = append(cases, paintCase{"borders_round", sb.String(), func() []render.Op {
+			var ops []render.Op
+			for i, b := range bcs {
+				x, y := pos(i)
+				c := rc(204, 51, 51)
+				ops = append(ops, render.Border{Rect: render.Rect{X: x, Y: y, W: 42, H: 52}, Widths: [4]float64{b.w, b.w, b.w, b.w}, Colors: [4]render.Color{c, c, c, c}, Styles: [4]string{b.style, b.style, b.style, b.style}, Radii: rad(b.rad)})
+			}
+			return ops
+		}})
+	}
+	{
+		svgA := `<svg xmlns="http://www.w3.org/2000/svg" width="140" height="90" viewBox="0 0 140 90"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f80"/><stop offset="1" stop-color="#08f"/></linearGradient><clipPath id="c"><circle cx="105" cy="30" r="22"/></clipPath></defs><rect x="5" y="5" width="60" height="40" rx="6" fill="url(#g)" stroke="#222" stroke-width="2"/><path d="M10 80 C 30 50 50 50 70 80 S 110 90 130 60" fill="none" stroke="#c33" stroke-width="3" stroke-dasharray="6 3" stroke-linecap="round"/><rect x="80" y="5" width="50" height="50" fill="#3a7" clip-path="url(#c)"/><g transform="translate(75 62) rotate(20)" opacity=".6"><rect width="30" height="14" fill="#a05"/></g></svg>`
+		svgB := `<svg xmlns="http://www.w3.org/2000/svg" width="140" height="90" viewBox="0 0 140 90"><defs><filter id="b"><feGaussianBlur stdDeviation="3"/></filter><filter id="d" x="-20%" y="-20%" width="150%" height="150%"><feDropShadow dx="4" dy="4" stdDeviation="2" flood-opacity=".5"/></filter><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 10 5 0 10z" fill="#c22"/></marker><mask id="k"><rect width="140" height="90" fill="#fff"/><circle cx="110" cy="60" r="14" fill="#000"/></mask></defs><rect x="8" y="8" width="35" height="35" fill="#c33" filter="url(#b)"/><rect x="55" y="8" width="35" height="35" fill="#36c" filter="url(#d)"/><path d="M10 80 L50 60 L90 80" fill="none" stroke="#333" stroke-width="2" marker-end="url(#m)" marker-mid="url(#m)"/><rect x="95" y="45" width="40" height="40" fill="#909" mask="url(#k)"/><text x="100" y="20" font-size="14" font-family="sans-serif" fill="#036">Txt</text></svg>`
+		parse := func(m string) *render.SVGDoc { return render.ParseSVG(m) }
+		cases = append(cases, paintCase{"svg_basic",
+			`<div style="position:absolute;left:5px;top:5px">` + svgA + `</div><div style="position:absolute;left:150px;top:5px">` + svgB + `</div>`,
+			func() []render.Op {
+				return []render.Op{
+					render.SVGDraw{Dst: render.Rect{X: 5, Y: 5, W: 140, H: 90}, Doc: parse(svgA), Color: rc(0, 0, 0), FontSize: 16, Family: "serif", Weight: 400},
+					render.SVGDraw{Dst: render.Rect{X: 150, Y: 5, W: 140, H: 90}, Doc: parse(svgB), Color: rc(0, 0, 0), FontSize: 16, Family: "serif", Weight: 400},
+				}
+			}})
+		cases = append(cases, paintCase{"scrollbars",
+			box(10, 10, 100, 80, "overflow:scroll;") + box(130, 10, 100, 80, "overflow-y:scroll;") + box(10, 110, 60, 80, "overflow-y:scroll;") +
+				`<div style="position:absolute;left:130px;top:110px;width:100px;height:80px;overflow:auto"><div style="height:300px;width:300px"></div></div>`,
+			func() []render.Op {
+				return []render.Op{
+					render.Scrollbar{Rect: render.Rect{X: 95, Y: 10, W: 15, H: 65}, Vertical: true},
+					render.Scrollbar{Rect: render.Rect{X: 10, Y: 75, W: 85, H: 15}},
+					render.ScrollCorner{Rect: render.Rect{X: 95, Y: 75, W: 15, H: 15}},
+					render.Scrollbar{Rect: render.Rect{X: 215, Y: 10, W: 15, H: 80}, Vertical: true},
+					render.Scrollbar{Rect: render.Rect{X: 55, Y: 110, W: 15, H: 80}, Vertical: true},
+					render.Scrollbar{Rect: render.Rect{X: 215, Y: 110, W: 15, H: 65}, Vertical: true, ThumbOff: 18, ThumbLen: 17},
+					render.Scrollbar{Rect: render.Rect{X: 130, Y: 175, W: 85, H: 15}, ThumbOff: 18, ThumbLen: 17},
+					render.ScrollCorner{Rect: render.Rect{X: 215, Y: 175, W: 15, H: 15}},
+				}
+			}})
+	}
+	cases = append(cases, paintCase{"backdrop",
+		box(10, 10, 130, 80, "background:linear-gradient(90deg,#e33 0 25%,#3a3 25% 50%,#33e 50% 75%,#fc0 75%);") +
+			box(30, 25, 90, 50, "backdrop-filter:blur(6px);background:rgba(255,255,255,.25);border-radius:12px;") +
+			box(160, 10, 130, 80, "background:linear-gradient(90deg,#e33 0 25%,#3a3 25% 50%,#33e 50% 75%,#fc0 75%);") +
+			box(180, 25, 90, 50, "backdrop-filter:grayscale(1) contrast(1.4);"),
+		func() []render.Op {
+			st := func(p float64, c render.Color) render.GradientStop { return render.GradientStop{Pos: p, Color: c} }
+			stops := []render.GradientStop{st(0, rc(238, 51, 51)), st(0.25, rc(238, 51, 51)), st(0.25, rc(51, 170, 51)), st(0.5, rc(51, 170, 51)), st(0.5, rc(51, 51, 238)), st(0.75, rc(51, 51, 238)), st(0.75, rc(255, 204, 0)), st(1, rc(255, 204, 0))}
+			return []render.Op{
+				render.Gradient{Rect: render.Rect{X: 10, Y: 10, W: 130, H: 80}, Kind: "linear", Angle: 90, Stops: stops},
+				render.BackdropFilter{Rect: render.Rect{X: 30, Y: 25, W: 90, H: 50}, Radii: rad(12), Filter: []render.Filter{{Name: "blur", Args: []float64{6}}}},
+				render.FillRect{Rect: render.Rect{X: 30, Y: 25, W: 90, H: 50}, Color: render.Color{R: 255, G: 255, B: 255, A: 64}, Radii: rad(12)},
+				render.Gradient{Rect: render.Rect{X: 160, Y: 10, W: 130, H: 80}, Kind: "linear", Angle: 90, Stops: stops},
+				render.BackdropFilter{Rect: render.Rect{X: 180, Y: 25, W: 90, H: 50}, Filter: []render.Filter{{Name: "grayscale", Args: []float64{1}}, {Name: "contrast", Args: []float64{1.4}}}},
+			}
+		}})
 	cases = append(cases, paintCase{"radii",
 		box(10, 10, 130, 80, "background:#69c;border-radius:40px 10px / 20px 30px;") +
 			box(160, 10, 130, 80, "background:#c96;border-radius:50%;") +

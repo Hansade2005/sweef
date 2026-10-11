@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"image"
 	"math"
 	"strings"
@@ -156,7 +157,7 @@ func (p *painter) paintTextFrag(b *lbox, ln *line, fr *frag) {
 			continue
 		}
 		if r != ' ' && r != 0xa0 {
-			gl = append(gl, Glyph{R: r, X: sh.x[k] - sh.x[fr.a] + extra, Face: sh.faces[k]})
+			gl = append(gl, Glyph{R: r, X: sh.x[k] - sh.x[fr.a] + extra + sh.kernAt(k), Face: sh.faces[k]})
 		}
 		if r == ' ' {
 			extra += fr.justSp
@@ -191,6 +192,12 @@ func (p *painter) paintTextFrag(b *lbox, ln *line, fr *frag) {
 		tr.Overline = d.lines&style.DecoOverline != 0
 		tr.LineThrough = d.lines&style.DecoLineThrough != 0
 		tr.DecoStyle, tr.DecoColor = d.style, d.color
+		tr.DecoThick = d.thick
+		if o := st.TextUnderlineOffset; o.K == style.LPx {
+			tr.UnderOffset = o.V
+		} else if o.K == style.LPct {
+			tr.UnderOffset = o.V / 100 * fs.size
+		}
 	}
 	if len(gl) == 0 && len(decos) == 0 {
 		return
@@ -198,7 +205,7 @@ func (p *painter) paintTextFrag(b *lbox, ln *line, fr *frag) {
 	p.emit(tr)
 	for _, d := range decos[min(1, len(decos)):] {
 		p.emit(TextRun{X: x, Y: y, Size: fs.size, Color: d.color, Width: w, Underline: d.lines&style.DecoUnderline != 0,
-			Overline: d.lines&style.DecoOverline != 0, LineThrough: d.lines&style.DecoLineThrough != 0, DecoStyle: d.style, DecoColor: d.color})
+			Overline: d.lines&style.DecoOverline != 0, LineThrough: d.lines&style.DecoLineThrough != 0, DecoStyle: d.style, DecoColor: d.color, DecoThick: d.thick})
 	}
 	if owner.n != nil {
 		p.hits = append(p.hits, hitRec{n: owner.n, rects: []Rect{{x, y - fs.asc, w, fs.asc + fs.desc}}, clips: p.clips, m: p.m, hasM: p.hasM, noPE: owner.st.PointerEvents == "none"})
@@ -246,7 +253,14 @@ func (p *painter) paintReplaced(b *lbox) {
 		}
 		return
 	}
+	if r.kind == "svg" {
+		p.paintInlineSVG(b, cr, rad)
+		return
+	}
 	if r.img == nil {
+		if r.kind == "img" && r.url != "" {
+			p.paintSVGImg(b, r, cr, rad)
+		}
 		return
 	}
 	iw, ih := r.iw, r.ih
@@ -346,8 +360,7 @@ func (p *painter) paintMarker(b *lbox) {
 			bw = 1
 		}
 		yo := math.Floor(3 * (asc - math.Floor(asc*2/3)) / 2)
-		w := bw + 7
-		x := content - w + 1
+		x := content - (math.Floor(asc*2/3) + 7)
 		y := base - asc + yo
 		r := Rect{x, y, bw, bw}
 		switch kind {
@@ -355,9 +368,10 @@ func (p *painter) paintMarker(b *lbox) {
 			rad := bw / 2
 			p.emit(FillRect{Rect: r, Color: st.Color, Radii: Radii{{rad, rad}, {rad, rad}, {rad, rad}, {rad, rad}}})
 		case "circle":
-			rad := bw / 2
-			p.emit(Border{Rect: r, Widths: [4]float64{1, 1, 1, 1}, Colors: [4]Color{st.Color, st.Color, st.Color, st.Color},
-				Styles: [4]string{"solid", "solid", "solid", "solid"}, Radii: Radii{{rad, rad}, {rad, rad}, {rad, rad}, {rad, rad}}})
+			// outline stroke is centred on the bullet's edge (extends 0.5px out)
+			sz := bw + 2
+			body := fmt.Sprintf(`<circle cx="%s" cy="%s" r="%s" fill="none" stroke="rgba(%d,%d,%d,%s)" stroke-width="1"/>`, f(sz/2), f(sz/2), f(bw/2), st.Color.R, st.Color.G, st.Color.B, f(float64(st.Color.A)/255))
+			p.emitCtl(Rect{r.X - 1, r.Y - 1, sz, sz}, svgWrap(sz, sz, body), b)
 		default:
 			p.emit(FillRect{Rect: r, Color: st.Color})
 		}
@@ -384,7 +398,7 @@ func (p *painter) emitSimpleText(st *style.Computed, fs *fontSpec, txt string, x
 		if r == ' ' {
 			continue
 		}
-		gl = append(gl, Glyph{R: r, X: sh.x[i], Face: sh.faces[i]})
+		gl = append(gl, Glyph{R: r, X: sh.x[i] + sh.kernAt(i), Face: sh.faces[i]})
 	}
 	p.emit(TextRun{X: x, Y: y, Size: fs.size, Color: col, Glyphs: gl, Width: sh.x[len(rs)], Bold: fs.synthBold})
 }
@@ -427,14 +441,42 @@ func (p *painter) authorStyled(b *lbox, btn bool) bool {
 func (p *painter) paintThemedBox(b *lbox, btn bool) {
 	r := rectOf(b)
 	bg := Color{255, 255, 255, 255}
-	rad := 2.0
+	bd := ctlBorder
 	if btn {
 		bg = ctlFace
-		rad = 3
 	}
-	p.emit(FillRect{Rect: r, Color: bg, Radii: uniform(rad)})
-	p.emit(Border{Rect: r, Widths: [4]float64{1, 1, 1, 1}, Colors: [4]Color{ctlBorder, ctlBorder, ctlBorder, ctlBorder},
-		Styles: [4]string{"solid", "solid", "solid", "solid"}, Radii: uniform(rad)})
+	if b.n != nil && hasAttr(b.n, "disabled") {
+		switch {
+		case btn:
+			bg, bd = Color{238, 238, 238, 255}, Color{208, 208, 208, 255}
+		case b.n.Data == "select":
+			bg, bd = Color{250, 250, 250, 255}, Color{221, 221, 221, 255}
+		default:
+			bg, bd = Color{248, 248, 248, 255}, Color{208, 208, 208, 255}
+		}
+	}
+	if btn {
+		rr := p.snapRect(r)
+		if rr.W >= 3 && rr.H >= 3 {
+			body := fmt.Sprintf(`<rect x=".5" y=".5" width="%s" height="%s" rx="2.25" fill="rgb(%d,%d,%d)" stroke="rgb(%d,%d,%d)"/>`,
+				f(rr.W-1), f(rr.H-1), bg.R, bg.G, bg.B, bd.R, bd.G, bd.B)
+			p.emitCtl(rr, svgWrap(rr.W, rr.H, body), b)
+		}
+		return
+	}
+	// fields, selects and textareas: 1px border with the four corner pixels
+	// cut (Chromium paints these with a 1px aliased radius)
+	rr := p.snapRect(r)
+	if rr.W < 3 || rr.H < 3 {
+		p.emit(FillRect{Rect: r, Color: bg})
+		return
+	}
+	p.emit(FillRect{Rect: Rect{rr.X + 1, rr.Y, rr.W - 2, rr.H}, Color: bg})
+	p.emit(FillRect{Rect: Rect{rr.X, rr.Y + 1, rr.W, rr.H - 2}, Color: bg})
+	p.emit(FillRect{Rect: Rect{rr.X + 1, rr.Y, rr.W - 2, 1}, Color: bd})
+	p.emit(FillRect{Rect: Rect{rr.X + 1, rr.Y + rr.H - 1, rr.W - 2, 1}, Color: bd})
+	p.emit(FillRect{Rect: Rect{rr.X, rr.Y + 1, 1, rr.H - 2}, Color: bd})
+	p.emit(FillRect{Rect: Rect{rr.X + rr.W - 1, rr.Y + 1, 1, rr.H - 2}, Color: bd})
 }
 
 func (p *painter) paintButtonChrome(b *lbox) {}
@@ -442,7 +484,7 @@ func (p *painter) paintButtonChrome(b *lbox) {}
 func (p *painter) paintControl(b *lbox) {
 	st := b.st
 	r := b.rep
-	box := rectOf(b)
+	_ = rectOf(b)
 	cr := p.contentRect(b)
 	fs := p.c.spec(st)
 	ci := p.c.controlInfo(b)
@@ -456,36 +498,9 @@ func (p *painter) paintControl(b *lbox) {
 	case "input":
 		switch r.ctrl {
 		case "checkbox", "radio":
-			checked := hasAttr(b.n, "checked")
-			sq := Rect{b.ax, b.ay, b.w, b.h}
-			if r.ctrl == "checkbox" {
-				if checked {
-					p.emit(FillRect{Rect: sq, Color: ctlAccent, Radii: uniform(2)})
-					fsz := 11.0
-					gl := []Glyph{{R: '✓', X: 0, Face: fontFor('✓', fs)}}
-					p.emit(TextRun{X: sq.X + 1.5, Y: sq.Y + sq.H - 2, Size: fsz, Color: Color{255, 255, 255, 255}, Glyphs: gl, Width: fsz})
-				} else {
-					p.emit(FillRect{Rect: sq, Color: Color{255, 255, 255, 255}, Radii: uniform(2)})
-					p.emit(Border{Rect: sq, Widths: [4]float64{1, 1, 1, 1}, Colors: [4]Color{ctlBorder, ctlBorder, ctlBorder, ctlBorder}, Styles: [4]string{"solid", "solid", "solid", "solid"}, Radii: uniform(2)})
-				}
-			} else {
-				rr := uniform(sq.W / 2)
-				if checked {
-					p.emit(FillRect{Rect: sq, Color: Color{255, 255, 255, 255}, Radii: rr})
-					p.emit(Border{Rect: sq, Widths: [4]float64{1, 1, 1, 1}, Colors: [4]Color{ctlAccent, ctlAccent, ctlAccent, ctlAccent}, Styles: [4]string{"solid", "solid", "solid", "solid"}, Radii: rr})
-					in := Rect{sq.X + 3, sq.Y + 3, sq.W - 6, sq.H - 6}
-					p.emit(FillRect{Rect: in, Color: ctlAccent, Radii: uniform(in.W / 2)})
-				} else {
-					p.emit(FillRect{Rect: sq, Color: Color{255, 255, 255, 255}, Radii: rr})
-					p.emit(Border{Rect: sq, Widths: [4]float64{1, 1, 1, 1}, Colors: [4]Color{ctlBorder, ctlBorder, ctlBorder, ctlBorder}, Styles: [4]string{"solid", "solid", "solid", "solid"}, Radii: rr})
-				}
-			}
+			p.paintCheckRadio(b, r.ctrl == "radio")
 		case "range":
-			tr := Rect{cr.X, cr.Y + cr.H/2 - 2, cr.W, 4}
-			p.emit(FillRect{Rect: tr, Color: Color{176, 176, 176, 255}, Radii: uniform(2)})
-			val := 0.5
-			p.emit(FillRect{Rect: Rect{tr.X, tr.Y, tr.W * val, 4}, Color: ctlAccent, Radii: uniform(2)})
-			p.emit(FillRect{Rect: Rect{cr.X + (cr.W-16)*val, cr.Y, 16, 16}, Color: ctlAccent, Radii: uniform(8)})
+			p.paintRange(b)
 		case "color":
 			p.paintThemedBox(b, true)
 			col := Color{0, 0, 0, 255}
@@ -494,7 +509,12 @@ func (p *painter) paintControl(b *lbox) {
 					col = c
 				}
 			}
-			p.emit(FillRect{Rect: Rect{cr.X, cr.Y, cr.W, cr.H}, Color: col})
+			// swatch: 4px/5px inside the 1px border, 1px #777 frame
+			sw := Rect{b.ax + 5, b.ay + 6, b.w - 10, b.h - 12}
+			if sw.W > 0 && sw.H > 0 {
+				p.emit(FillRect{Rect: sw, Color: Color{119, 119, 119, 255}})
+				p.emit(FillRect{Rect: Rect{sw.X + 1, sw.Y + 1, sw.W - 2, sw.H - 2}, Color: col})
+			}
 		case "button", "submit", "reset":
 			txt := ci.text
 			w := p.c.textWidth(st, txt)
@@ -503,7 +523,9 @@ func (p *painter) paintControl(b *lbox) {
 			bw := p.c.textWidth(st, "Choose File") + 16
 			p.paintThemedBox(&lbox{ax: b.ax, ay: b.ay, w: bw, h: b.h, st: st}, true)
 			p.emitSimpleText(st, fs, "Choose File", b.ax+8, baseY, txtCol)
-			p.emitSimpleText(st, fs, "No file chosen", b.ax+bw+8, baseY, txtCol)
+			p.emitSimpleText(st, fs, "No file chosen", b.ax+bw+4, baseY, txtCol)
+		case "date", "datetime-local", "month", "week", "time":
+			p.paintDateTime(b, st, fs, cr, baseY, txtCol)
 		default:
 			txt := ci.text
 			col := txtCol
@@ -533,6 +555,18 @@ func (p *painter) paintControl(b *lbox) {
 			p.emitClippedText(st, fs, line, cr, y+half+fs.asc, col)
 			y += lhOf(st, fs)
 		}
+		if st.Resize == "both" || st.Resize == "horizontal" || st.Resize == "vertical" {
+			// resize grip: two 1px diagonals in the bottom-right corner
+			rr := p.snapRect(Rect{b.ax, b.ay, b.w, b.h})
+			gc := Color{102, 102, 102, 255}
+			rx, by := rr.X+rr.W, rr.Y+rr.H
+			for i := 0; i < 7; i++ {
+				p.emit(FillRect{Rect: Rect{rx - 9 + float64(i), by - 3 - float64(i), 1, 1}, Color: gc})
+			}
+			for i := 0; i < 3; i++ {
+				p.emit(FillRect{Rect: Rect{rx - 5 + float64(i), by - 3 - float64(i), 1, 1}, Color: gc})
+			}
+		}
 	case "select":
 		sel := ""
 		for i, o := range ci.options {
@@ -546,43 +580,29 @@ func (p *painter) paintControl(b *lbox) {
 			for _, o := range ci.options {
 				t := collapseSpaces(textContent(o))
 				if hasAttr(o, "selected") {
-					p.emit(FillRect{Rect: Rect{cr.X, y, cr.W - 15, ci.optH}, Color: Color{181, 213, 255, 255}})
+					p.emit(FillRect{Rect: Rect{cr.X, y, cr.W - 15, ci.optH}, Color: Color{206, 206, 206, 255}})
 				}
 				p.emitClippedText(st, fs, t, Rect{cr.X + 2, y, cr.W - 19, ci.optH}, y+1+fs.asc+math.Floor((lhOf(st, fs)-(fs.asc+fs.desc))/2), txtCol)
 				y += ci.optH
 			}
+			// listboxes always carry a classic vertical scrollbar
+			bx := b.ax + b.bor[3]
+			by := b.ay + b.bor[0]
+			bwid := b.w - b.bor[1] - b.bor[3]
+			bh := b.h - b.bor[0] - b.bor[2]
+			p.emit(Scrollbar{Rect: Rect{bx + bwid - 15, by, 15, bh}, Vertical: true})
 		} else {
 			p.emitClippedText(st, fs, sel, Rect{cr.X + 4, cr.Y, cr.W - 20, cr.H}, baseY, txtCol)
-			// arrow
-			ax := b.ax + b.w - 14
-			ay := b.ay + b.h/2
-			p.emitSimpleText(st, fs, "▾", ax, ay+4, Color{16, 16, 16, 255})
+			c := st.Color
+			if disabled {
+				c = Color{109, 109, 109, 255}
+			}
+			p.paintSelectChevron(b, fmt.Sprintf("rgb(%d,%d,%d)", c.R, c.G, c.B))
 		}
 	case "progress":
-		p.emit(FillRect{Rect: box, Color: Color{230, 230, 230, 255}, Radii: uniform(b.h / 2)})
-		if v := attr(b.n, "value"); v != "" {
-			mx := 1.0
-			if m := attr(b.n, "max"); m != "" {
-				if f, ok := parseDim(m); ok && f > 0 {
-					mx = f
-				}
-			}
-			if f, ok := parseDim(v); ok {
-				frac := math.Max(0, math.Min(1, f/mx))
-				p.emit(FillRect{Rect: Rect{box.X, box.Y, box.W * frac, box.H}, Color: ctlAccent, Radii: uniform(b.h / 2)})
-			}
-		}
+		p.paintProgress(b)
 	case "meter":
-		p.emit(FillRect{Rect: box, Color: Color{230, 230, 230, 255}, Radii: uniform(b.h / 2)})
-		frac := 0.0
-		if v, ok := parseDim(attr(b.n, "value")); ok {
-			mx := 1.0
-			if m, ok := parseDim(attr(b.n, "max")); ok && m > 0 {
-				mx = m
-			}
-			frac = math.Max(0, math.Min(1, v/mx))
-		}
-		p.emit(FillRect{Rect: Rect{box.X, box.Y, box.W * frac, box.H}, Color: Color{16, 163, 70, 255}, Radii: uniform(b.h / 2)})
+		p.paintMeter(b)
 	}
 }
 

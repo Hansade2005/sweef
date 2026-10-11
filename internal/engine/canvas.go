@@ -29,6 +29,7 @@ import (
 	"modernc.org/quickjs"
 
 	"github.com/sweefbrowser/sweef/internal/raster"
+	"github.com/sweefbrowser/sweef/internal/render"
 )
 
 //go:embed canvas_prelude.js
@@ -399,11 +400,10 @@ func (h *cvHost) fns() map[string]hostFn {
 		},
 		"cvImgDecode": func(a []any) (any, error) {
 			b := unlatin1(cvS(a, 0))
-			img, _, err := image.Decode(bytes.NewReader(b))
-			if err != nil {
+			s := decodeSurface(b)
+			if s == nil {
 				return nil, nil
 			}
-			s := raster.FromImage(img)
 			return []any{h.put(s), s.W(), s.H()}, nil
 		},
 		"cvImgFromData": func(a []any) (any, error) {
@@ -731,11 +731,10 @@ func (h *cvHost) loadURL(u string) *raster.Surface {
 		}
 		data = []byte(body)
 	}
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
+	s := decodeSurface(data)
+	if s == nil {
 		return nil
 	}
-	s := raster.FromImage(img)
 	h.mu.Lock()
 	if len(h.imgOrd) > 64 {
 		delete(h.imgs, h.imgOrd[0])
@@ -855,3 +854,30 @@ func unlatin1(s string) []byte {
 }
 
 var _ = color.NRGBA{}
+
+// decodeSurface decodes raster image bytes, or rasterizes SVG markup at its
+// intrinsic size (300x150 when the SVG declares none).
+func decodeSurface(b []byte) *raster.Surface {
+	if img, _, err := image.Decode(bytes.NewReader(b)); err == nil {
+		return raster.FromImage(img)
+	}
+	head := b
+	if len(head) > 2048 {
+		head = head[:2048]
+	}
+	if !bytes.Contains(bytes.ToLower(head), []byte("<svg")) {
+		return nil
+	}
+	doc := render.ParseSVG(string(b))
+	if doc == nil {
+		return nil
+	}
+	w, h := doc.IntrinsicSize()
+	if w <= 0 {
+		w = 300
+	}
+	if h <= 0 {
+		h = 150
+	}
+	return raster.RenderSVG(doc, int(math.Ceil(w)), int(math.Ceil(h)), render.Color{A: 1})
+}

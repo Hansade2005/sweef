@@ -1,0 +1,73 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>cascade2</title>
+<style>
+body { margin: 0; padding: 8px; font: 14px/1.2 Arial, sans-serif; }
+.t { height: 14px; margin: 0 0 4px; background: #cde; width: 10px; }
+@layer reset, base, comp, util;
+/* c1: later layer wins */
+@layer base { .c1 { width: 50px; } } @layer comp { .c1 { width: 70px; } } @layer reset { .c1 { width: 30px; } }
+/* c2: unlayered beats layered regardless of specificity */
+@layer util { #c2 { width: 40px; } } .c2 { width: 90px; }
+/* c3: !important in layers reverses order: earlier layer wins */
+@layer base { .c3 { width: 60px !important; } } @layer comp { .c3 { width: 120px !important; } }
+/* c4: important layered loses to important unlayered? unlayered important is lowest among important */
+@layer base { .c4 { width: 33px !important; } } .c4 { width: 99px !important; }
+/* c5: nested layers */
+@layer comp { @layer inner { .c5 { width: 20px; } } .c5 { width: 80px; } }
+/* c6: dotted layer names */
+@layer comp.card { .c6 { width: 45px; } } @layer comp { .c6 { width: 25px; } }
+/* c7: :is specificity takes the most specific argument */
+:is(#c7, .zz) { width: 77px; } div.t.c7 { width: 66px; }
+/* c8: :where adds nothing */
+:where(#c8) { width: 66px; } .c8 { width: 88px; }
+/* c9: :not specificity */
+.c9:not(#nope) { width: 55px; } .t.c9 { width: 95px; }
+/* c10: :has specificity */
+.c10:has(> i) { width: 105px; } .t.c10 { width: 35px; }
+/* c11: @supports */
+@supports (display: grid) and (not (display: nonsense)) { .c11 { width: 111px; } }
+@supports (display: nonsense) or (width: foo) { .c11 { width: 22px; } }
+@supports not (display: grid) { .c11 { width: 12px; } }
+@supports selector(:is(a, b)) { .c12 { width: 112px; } }
+@supports font-tech(color-COLRv1) { .c13 { width: 113px; } }
+@supports (width: calc(1px + 2px)) { .c14 { width: 114px; } }
+@supports (--custom: 1) { .c15 { width: 115px; } }
+@supports (color: lab(50% 0 0)) { .c16 { width: 116px; } }
+@supports (aspect-ratio: 1) { .c17 { width: 117px; } }
+@supports (container-type: inline-size) { .c18 { width: 118px; } }
+@supports (text-wrap: balance) { .c19 { width: 119px; } }
+@supports (inset: 0) { .c20 { width: 120px; } }
+@supports (display: nonsensevalue) { .c21 { width: 10px; } } .c21 { width: 121px; }
+/* nesting */
+.n1 { width: 30px; & { width: 131px; } }
+.n2 { width: 30px; &.t { width: 132px; } }
+.n3 { width: 30px; .t& { width: 133px; } }
+.n4 { & + & { width: 134px; } }
+.n5 { width: 30px; @media (min-width: 100px) { width: 135px; } }
+.n5b { width: 30px; @supports (display: grid) { width: 136px; } }
+.n6 { width: 30px; & > i { display: block; width: 50px; height: 5px; background: red; } }
+.n7 { color: red; :is(&, .x) { width: 137px; } }
+.n8 { width: 30px; & .t { width: 138px; } }
+.n9 { width: 139px; & { width: 140px; } & { width: 141px; } }
+.n10 { & { width: 142px; } width: 143px; }
+@scope (.sc) { .t { width: 144px; } }
+@scope (.sc) to (.lim) { .t2 { width: 145px; } }
+.sc2 > .t { width: 30px; } @layer base { .c22 { width: 146px; } }
+@media (min-width: 600px) { @layer comp { .c23 { width: 147px; } } }
+@media screen and (min-width: 1000px) and (max-width: 1500px) { .c24 { width: 148px; } }
+@media (min-resolution: 1dppx) { .c25 { width: 149px; } }
+@media (prefers-color-scheme: dark) { .c26 { width: 10px; } } .c26 { width: 150px; }
+@media (hover: hover) and (pointer: fine) { .c27 { width: 151px; } }
+@media (aspect-ratio > 1) { .c28 { width: 152px; } }
+@media (400px <= width <= 2000px) { .c29 { width: 153px; } }
+@media not (min-width: 5000px) { .c30 { width: 154px; } }
+@media (orientation: landscape) { .c31 { width: 155px; } }
+@media (min-width: 1px) { @media (min-width: 2px) { .c32 { width: 156px; } } }
+</style></head><body>
+<div class="t c1"></div><div class="t c2" id="c2"></div><div class="t c3"></div><div class="t c4"></div><div class="t c5"></div><div class="t c6"></div>
+<div class="t c7" id="c7"></div><div class="t c8" id="c8"></div><div class="t c9"></div><div class="t c10"><i></i></div>
+<div class="t c11"></div><div class="t c12"></div><div class="t c13"></div><div class="t c14"></div><div class="t c15"></div><div class="t c16"></div><div class="t c17"></div><div class="t c18"></div><div class="t c19"></div><div class="t c20"></div><div class="t c21"></div>
+<div class="n1 t"></div><div class="n2 t"></div><div class="n3 t"></div><div class="n4 t"></div><div class="n4 t"></div><div class="n5 t"></div><div class="n5b t"></div><div class="n6 t"><i></i></div><div class="n7 t x"></div><div class="n8"><div class="t"></div></div><div class="n9 t"></div><div class="n10 t"></div>
+<div class="sc"><div class="t"></div><div class="lim"><div class="t2 t"></div></div><div class="t2 t"></div></div>
+<div class="t c22"></div><div class="t c23"></div><div class="t c24"></div><div class="t c25"></div><div class="t c26"></div><div class="t c27"></div><div class="t c28"></div><div class="t c29"></div><div class="t c30"></div><div class="t c31"></div><div class="t c32"></div>
+</body></html>

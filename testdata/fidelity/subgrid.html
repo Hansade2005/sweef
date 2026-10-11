@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>subgrid</title>
+<style>
+body { margin: 0; padding: 16px; font: 16px/1.4 Arial, sans-serif; }
+.g { display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 10px 20px; width: 700px; background: #eee; }
+.sub { display: grid; grid-column: 1 / 4; grid-template-columns: subgrid; background: #cde; padding: 0; }
+.sub > div { background: #fff; border: 1px solid #999; padding: 4px; }
+.g2 { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: auto auto auto; gap: 8px; width: 640px; margin-top: 20px; background: #eee; }
+.card { display: grid; grid-row: span 3; grid-template-rows: subgrid; background: #fed; border: 1px solid #c96; padding: 0 6px; row-gap: 0; }
+.card h3 { margin: 4px 0; font-size: 16px; } .card p { margin: 0; } .card small { margin: 4px 0; }
+.g3 { display: grid; grid-template-columns: 100px 1fr 100px; width: 600px; margin-top: 20px; }
+.in { grid-column: 2 / 4; display: grid; grid-template-columns: subgrid; gap: 0 10px; background: #dfd; }
+</style></head><body>
+<div class="g"><div>A</div><div>B is longer text here</div><div>C</div>
+<div class="sub"><div>sub 1</div><div>sub 2 with more words in it to wrap around</div><div>sub 3</div></div></div>
+<div class="g2">
+<div class="card"><h3>Title one</h3><p>Short.</p><small>foot</small></div>
+<div class="card"><h3>A much longer title that wraps in the card</h3><p>Body with more text that spans a couple of lines in the narrow card.</p><small>foot</small></div>
+<div class="card"><h3>Three</h3><p>Medium text here.</p><small>foot</small></div>
+<div class="card"><h3>Four</h3><p>x</p><small>foot</small></div></div>
+<div class="g3"><div>L</div><div class="in"><span>in a</span><span>in b</span></div><div>R</div></div>
+</body></html>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>writingmode</title>
+<style>
+body { margin: 0; padding: 16px; font: 16px/1.4 Arial, sans-serif; }
+.row { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 20px; }
+.v1 { writing-mode: vertical-rl; height: 200px; border: 1px solid #333; padding: 4px; background: #eef; }
+.v2 { writing-mode: vertical-lr; height: 160px; border: 1px solid #333; padding: 4px; background: #efe; }
+.v3 { writing-mode: vertical-rl; text-orientation: upright; height: 180px; border: 1px solid #333; background: #fee; }
+.v4 { writing-mode: vertical-rl; height: 120px; width: 120px; border: 1px solid #333; }
+.h { width: 200px; border: 1px solid #333; }
+.lab { writing-mode: vertical-rl; transform: rotate(180deg); background: #ddd; padding: 6px 2px; }
+.sw { writing-mode: sideways-rl; height: 100px; border: 1px solid #333; }
+.jp { writing-mode: vertical-rl; height: 150px; border: 1px solid #333; font-size: 18px; line-height: 1.6; padding: 6px; background: #ffe; }
+.ib { display: inline-block; writing-mode: vertical-rl; height: 90px; border: 1px solid #090; margin: 0 4px; vertical-align: top; }
+.fl { writing-mode: vertical-lr; display: flex; gap: 8px; height: 120px; border: 1px solid #a0a; padding: 3px; }
+.fl > span { background: #dff; padding: 2px; }
+.wide { writing-mode: vertical-rl; width: 140px; height: 160px; border: 1px solid #900; padding: 5px; }
+.wide p { margin: 0 0 6px; background: #fdd; }
+.mix { writing-mode: vertical-rl; height: 130px; border: 1px solid #333; }
+</style></head><body>
+<div class="row"><div class="v1">Vertical RL text that wraps across columns</div><div class="v2">Vertical LR text wrapping across columns</div><div class="v3">UPRIGHT text</div><div class="v4"><p style="margin:0">Block in box</p><p style="margin:0">Second</p></div></div>
+<div class="row"><div class="h">Horizontal reference text for comparison</div><div class="lab">Rotated label</div><div class="sw">Sideways</div></div>
+<div class="row"><div class="jp">The quick brown fox jumps over the lazy dog, again and again.</div><div class="mix">Digits 123 and Words mixed in vertical text</div><span class="ib">inline block</span><span class="ib">second box</span><div class="fl"><span>one</span><span>two three</span></div><div class="wide"><p>First paragraph in a wide vertical box</p><p>Second</p></div></div>
+</body></html>

@@ -3,6 +3,7 @@ package render
 import (
 	"math"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/sweefbrowser/sweef/internal/font"
@@ -29,6 +30,7 @@ type textItem struct {
 	fs     *fontSpec
 	st     *style.Computed
 	marker bool
+	off    int // offset of runes within the source text box's collapsed text (small-caps segments)
 }
 
 type atom struct {
@@ -88,6 +90,7 @@ type flatState struct {
 	lastFace  *font.Face
 	open      []*lbox
 	any       bool
+	flRoot    *lbox // building the ::first-line variant of this IFC root
 }
 
 func (c *ctx) buildAtoms(b *lbox) []atom {
@@ -141,6 +144,9 @@ func (f *flatState) walk(parent, owner *lbox) {
 
 func (f *flatState) text(t *lbox, owner *lbox) {
 	st := t.st
+	if f.flRoot != nil {
+		st = f.flStyleOf(owner)
+	}
 	s := t.text
 	if st.TextTransform != "none" && st.TextTransform != "" {
 		s = transformText(s, st.TextTransform, f.prevRune)
@@ -185,6 +191,31 @@ func (f *flatState) text(t *lbox, owner *lbox) {
 	if len(out) == 0 {
 		return
 	}
+	if st.SmallCaps {
+		// synthesized small caps: lowercase letters become capitals at 0.7 size
+		small := f.c.smallCapsStyle(st)
+		for a := 0; a < len(out); {
+			lower := unicode.IsLower(out[a])
+			e := a
+			for e < len(out) && unicode.IsLower(out[e]) == lower {
+				e++
+			}
+			seg := append([]rune(nil), out[a:e]...)
+			sst := st
+			if lower {
+				for k, r := range seg {
+					seg[k] = unicode.ToUpper(r)
+				}
+				sst = small
+			}
+			sfs := f.c.spec(sst)
+			sh := f.c.shapeWith(sfs, sst, seg, f.lastRune, f.lastFace)
+			f.lastRune, f.lastFace = seg[len(seg)-1], sh.faces[len(seg)-1]
+			f.addTextAtoms(&textItem{owner: owner, src: t, runes: seg, sh: sh, fs: sfs, st: sst, off: a})
+			a = e
+		}
+		return
+	}
 	fs := f.c.spec(st)
 	sh := f.c.shapeWith(fs, st, out, f.lastRune, f.lastFace)
 	if n := len(out); n > 0 {
@@ -192,6 +223,20 @@ func (f *flatState) text(t *lbox, owner *lbox) {
 	}
 	it := &textItem{owner: owner, src: t, runes: out, sh: sh, fs: fs, st: st}
 	f.addTextAtoms(it)
+}
+
+// smallCapsStyle is st with the font size of synthesized small capitals.
+func (c *ctx) smallCapsStyle(st *style.Computed) *style.Computed {
+	if c.smallCaps == nil {
+		c.smallCaps = map[*style.Computed]*style.Computed{}
+	}
+	if s, ok := c.smallCaps[st]; ok {
+		return s
+	}
+	cp := *st
+	cp.FontSize = st.FontSize * 0.7
+	c.smallCaps[st] = &cp
+	return &cp
 }
 
 func (f *flatState) prevSpaceFromOutside(n int) bool { return false }
@@ -295,16 +340,38 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 	b.lines = b.lines[:0]
 	b.hasBase = false
 	st := b.st
-	rootFS := c.spec(st)
-	rootLH := lhOf(st, rootFS)
-	// root strut
-	rootAsc, rootDesc := rootFS.asc, rootFS.desc
-	{
-		half := (rootLH - (rootAsc + rootDesc)) / 2
+	strut := func(s *style.Computed) (*fontSpec, float64, float64) {
+		fs := c.spec(s)
+		lh := lhOf(s, fs)
+		asc, desc := fs.asc, fs.desc
+		half := (lh - (asc + desc)) / 2
 		fl := math.Floor(half)
-		rootAsc += fl
-		rootDesc = rootLH - rootAsc
+		asc += fl
+		desc = lh - asc
+		return fs, asc, desc
 	}
+	rootFS, rootAsc, rootDesc := strut(st)
+	inFL := false
+	var flRootFS *fontSpec
+	var flAsc, flDesc float64
+	var baseAtoms []atom
+	if b.flSt != nil {
+		inFL = true
+		baseAtoms = atoms
+		atoms = c.buildAtomsFL(b)
+		flRootFS, flAsc, flDesc = strut(b.flSt)
+		rootFS, rootAsc, rootDesc = flRootFS, flAsc, flDesc
+		c.curFL = b
+	}
+	setAtoms := func(na []atom) {
+		atoms = na
+		if inFL {
+			b.atomsFL = na
+		} else {
+			b.atoms = na
+		}
+	}
+	defer func() { c.curFL = nil }()
 	// resolve edges of inline boxes
 	for _, a := range atoms {
 		if a.kind == aOpen {
@@ -322,6 +389,7 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 	}
 	nlines := 0
 	lastForced := true
+	var lstarts []int
 	var floatsDeferred []*lbox
 	for i < len(atoms) {
 		// leading skip: whitespace-only text at line start
@@ -355,6 +423,10 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 		moved := false
 		for i < len(atoms) && !endLine {
 			a := atoms[i]
+			if b.force != nil && b.force[i] && i > startI && (hasContent || len(items) > 0) {
+				endLine = true
+				continue
+			}
 			switch a.kind {
 			case aOpen:
 				bx := a.box
@@ -526,8 +598,7 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 							na = append(na, atoms[:i]...)
 							na = append(na, a1, rest)
 							na = append(na, atoms[i+1:]...)
-							atoms = na
-							b.atoms = na
+							setAtoms(na)
 							continue
 						}
 					}
@@ -562,6 +633,7 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 				ob.staticY = b.bor[0] + b.pad[0] + y + ln.h
 			}
 			b.lines = append(b.lines, ln)
+			lstarts = append(lstarts, startI)
 			// place floats that were deferred below this line
 			y += ln.h
 			nlines++
@@ -576,6 +648,21 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 			}
 			floatsDeferred = nil
 			first = false
+			if inFL {
+				// the remaining lines use the normal style
+				inFL = false
+				c.curFL = nil
+				ncur := atoms
+				var ni int
+				ni = i
+				nb, j := remapAtoms(ncur, ni, baseAtoms)
+				if len(nb) != len(baseAtoms) {
+					b.atoms = nb
+				}
+				atoms = nb
+				i = j
+				rootFS, rootAsc, rootDesc = strut(st)
+			}
 		}
 		// recompute the open stack after this line
 		openStack = c.stackAfter(openStack, items)
@@ -601,8 +688,19 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 		b.lastBase = l.y + l.baseline
 	}
 	b.mtopOut, b.mbotOut = b.mar[0], b.mar[2]
-	if st.TextWrap == "balance" && len(b.lines) > 1 && len(b.lines) <= 6 && !b.balancing {
-		c.balance(b, cw, cx, cy, bfc, cbh, len(b.lines), y)
+	if (st.TextWrap == "balance" || st.TextWrap == "pretty") && len(b.lines) > 1 && !b.balancing && b.force == nil {
+		plan, ok := c.planBreaks(b, atoms, lstarts, cw, indent, st.TextWrap, bfc)
+		switch {
+		case plan != nil:
+			b.balancing = true
+			b.force = plan
+			y2 := c.layoutInlineContent(b, cw, cx, cy, bfc, cbh)
+			b.force = nil
+			b.balancing = false
+			return y2
+		case !ok && st.TextWrap == "balance" && len(b.lines) <= 6:
+			c.balance(b, cw, cx, cy, bfc, cbh, len(b.lines), y)
+		}
 	}
 	return y
 }
@@ -804,13 +902,19 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 		if ib, ok := boxes[bx]; ok {
 			return ib
 		}
-		fs := c.spec(bx.st)
-		lh := lhOf(bx.st, fs)
+		bst := bx.st
+		if c.curFL != nil {
+			if o, ok := c.curFL.flMap[bx]; ok {
+				bst = o
+			}
+		}
+		fs := c.spec(bst)
+		lh := lhOf(bst, fs)
 		asc, desc := fs.asc, fs.desc
 		half := math.Floor((lh - (asc + desc)) / 2)
 		asc += half
 		desc = lh - asc
-		ib := &ibox{box: bx, fs: fs, ascL: asc, descL: desc, valign: bx.st.VerticalAlign}
+		ib := &ibox{box: bx, fs: fs, ascL: asc, descL: desc, valign: bst.VerticalAlign}
 		boxes[bx] = ib
 		order = append(order, bx)
 		return ib

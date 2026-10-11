@@ -1,0 +1,561 @@
+package render
+
+import (
+	"encoding/base64"
+	"math"
+	"net/url"
+	"sort"
+	"strings"
+	"sync"
+
+	"golang.org/x/net/html"
+
+	"github.com/sweefbrowser/sweef/internal/style"
+)
+
+// SVGNode is one element of a resolved SVG scene. A holds the element's
+// attributes (lower-cased keys, xlink:href normalised to "href") overlaid by
+// the declarations of the page cascade (author rules, then the style
+// attribute) for every SVG property, so the rasterizer sees one flat map.
+// Text content appears as children with Tag "#text".
+type SVGNode struct {
+	Tag  string
+	A    map[string]string
+	Kids []*SVGNode
+	Text string
+	dom  *html.Node
+}
+
+// SVGDoc is a resolved SVG scene.
+type SVGDoc struct {
+	Root *SVGNode
+	ByID map[string]*SVGNode
+	// Inherit carries inherited SVG properties declared on HTML ancestors of
+	// an inline <svg> (fill, stroke, ...).
+	Inherit map[string]string
+	// IntrW/IntrH are the intrinsic size from width/height (0 = none) and
+	// Ratio the viewBox aspect ratio (0 = none).
+	IntrW, IntrH, Ratio float64
+	dom                 map[*html.Node]*SVGNode
+	base                *style.Computed
+}
+
+// SVGDraw paints an SVG scene. The root's viewBox / preserveAspectRatio map
+// onto Dst (CSS px). This op was added for SVG painting; it is additive.
+type SVGDraw struct {
+	Dst      Rect
+	Doc      *SVGDoc
+	Color    Color // computed `color` of the embedding element (currentColor)
+	FontSize float64
+	Family   string
+	Weight   int
+	Italic   bool
+}
+
+func (SVGDraw) isOp() {}
+
+// BackdropFilter blurs/filters what is already painted behind Rect (clipped
+// to the rounded rect) before the element's own content is drawn.
+// Additive op for backdrop-filter.
+type BackdropFilter struct {
+	Rect   Rect
+	Radii  Radii
+	Filter []Filter
+}
+
+func (BackdropFilter) isOp() {}
+
+// SVGSourcer is an optional Env extension: it returns the markup of an SVG
+// resource (for <img src=*.svg> and CSS backgrounds) when the host has
+// fetched one.
+type SVGSourcer interface {
+	SVGSource(url string) (string, bool)
+}
+
+// svgPropNames are the declarations copied from the cascade into SVGNode.A.
+var svgPropNames = map[string]bool{
+	"fill": true, "fill-opacity": true, "fill-rule": true, "stroke": true, "stroke-width": true, "stroke-opacity": true,
+	"stroke-linecap": true, "stroke-linejoin": true, "stroke-miterlimit": true, "stroke-dasharray": true, "stroke-dashoffset": true,
+	"opacity": true, "color": true, "display": true, "visibility": true, "transform": true, "transform-origin": true, "transform-box": true,
+	"clip-path": true, "clip-rule": true, "mask": true, "filter": true, "mix-blend-mode": true, "isolation": true,
+	"font-size": true, "font-family": true, "font-weight": true, "font-style": true, "text-anchor": true, "letter-spacing": true,
+	"word-spacing": true, "dominant-baseline": true, "alignment-baseline": true, "baseline-shift": true, "text-decoration": true,
+	"stop-color": true, "stop-opacity": true, "flood-color": true, "flood-opacity": true, "lighting-color": true,
+	"marker": true, "marker-start": true, "marker-mid": true, "marker-end": true, "paint-order": true, "vector-effect": true,
+	"shape-rendering": true, "color-interpolation-filters": true, "color-interpolation": true, "overflow": true,
+	"cx": true, "cy": true, "r": true, "rx": true, "ry": true, "x": true, "y": true, "width": true, "height": true, "d": true,
+	"mask-type": true, "image-rendering": true, "font": true,
+}
+
+var svgInheritedProps = map[string]bool{
+	"fill": true, "fill-opacity": true, "fill-rule": true, "stroke": true, "stroke-width": true, "stroke-opacity": true,
+	"stroke-linecap": true, "stroke-linejoin": true, "stroke-miterlimit": true, "stroke-dasharray": true, "stroke-dashoffset": true,
+	"visibility": true, "clip-rule": true, "text-anchor": true, "letter-spacing": true, "word-spacing": true,
+	"marker-start": true, "marker-mid": true, "marker-end": true, "paint-order": true, "shape-rendering": true,
+	"color-interpolation-filters": true, "image-rendering": true,
+}
+
+// svgCascade matches author rules against SVG elements.
+type svgCascade struct {
+	rules  []*style.Rule
+	custom map[string]string
+}
+
+func newSVGCascade(sheets []Sheet, env *style.Env, extra []string) *svgCascade {
+	sc := &svgCascade{}
+	order := 0
+	layers := map[string]int{}
+	for _, s := range sheets {
+		if s.UserAgent {
+			continue
+		}
+		if s.Media != "" && !style.MediaMatches(s.Media, env) {
+			continue
+		}
+		sc.rules = append(sc.rules, style.ParseSheet(s.Text, env, style.OriginAuthor, &order, layers).Rules...)
+	}
+	for _, t := range extra {
+		sc.rules = append(sc.rules, style.ParseSheet(t, env, style.OriginAuthor, &order, layers).Rules...)
+	}
+	return sc
+}
+
+type svgDecl struct {
+	d    style.Decl
+	imp  bool
+	lay  int
+	spec uint32
+	ord  int
+}
+
+// declsFor returns the cascaded declarations for n, lowest priority first.
+func (sc *svgCascade) declsFor(n *html.Node) []style.Decl {
+	var ds []svgDecl
+	for _, r := range sc.rules {
+		var best uint32
+		matched := false
+		for _, en := range r.Entries {
+			if en.Pseudo != "" {
+				continue
+			}
+			if en.Sel.Match(n, nil) {
+				if !matched || en.Spec > best {
+					best = en.Spec
+				}
+				matched = true
+			}
+		}
+		if !matched {
+			continue
+		}
+		lay := r.Layer
+		if lay == 0 {
+			lay = 1 << 30
+		}
+		for _, d := range r.Decls {
+			ds = append(ds, svgDecl{d: d, imp: d.Imp, lay: lay, spec: best, ord: r.Order})
+		}
+	}
+	sort.SliceStable(ds, func(i, j int) bool {
+		a, b := ds[i], ds[j]
+		if a.imp != b.imp {
+			return !a.imp
+		}
+		if a.lay != b.lay {
+			if a.imp {
+				return a.lay > b.lay
+			}
+			return a.lay < b.lay
+		}
+		if a.spec != b.spec {
+			return a.spec < b.spec
+		}
+		return a.ord < b.ord
+	})
+	out := make([]style.Decl, 0, len(ds)+4)
+	for _, d := range ds {
+		out = append(out, d.d)
+	}
+	for _, a := range n.Attr {
+		if a.Key == "style" {
+			var norm, imp []style.Decl
+			for _, d := range style.ParseInline(a.Val) {
+				if d.Imp {
+					imp = append(imp, d)
+				} else {
+					norm = append(norm, d)
+				}
+			}
+			// inline style beats author rules except !important rules
+			var impRules, rest []style.Decl
+			for i, d := range out {
+				if ds[i].imp {
+					impRules = append(impRules, d)
+				} else {
+					rest = append(rest, d)
+				}
+			}
+			out = append(append(append(rest, norm...), impRules...), imp...)
+		}
+	}
+	return out
+}
+
+func substVars(v string, custom map[string]string, depth int) string {
+	for depth < 8 {
+		i := strings.Index(v, "var(")
+		if i < 0 {
+			return v
+		}
+		d, j := 1, i+4
+		for j < len(v) && d > 0 {
+			switch v[j] {
+			case '(':
+				d++
+			case ')':
+				d--
+			}
+			j++
+		}
+		body := v[i+4 : j-1]
+		name, fb := body, ""
+		if k := strings.IndexByte(body, ','); k >= 0 {
+			name, fb = body[:k], strings.TrimSpace(body[k+1:])
+		}
+		name = strings.TrimSpace(name)
+		val, ok := custom[name]
+		if !ok {
+			val = fb
+		}
+		v = v[:i] + val + v[j:]
+		depth++
+	}
+	return v
+}
+
+// buildSVGScene converts the DOM subtree rooted at root into a scene.
+func buildSVGScene(root *html.Node, sc *svgCascade) *SVGDoc {
+	doc := &SVGDoc{ByID: map[string]*SVGNode{}, dom: map[*html.Node]*SVGNode{}}
+	doc.Root = sc.node(root, doc)
+	if doc.Root == nil {
+		return nil
+	}
+	w, okw := svgAbsLen(doc.Root.A["width"])
+	h, okh := svgAbsLen(doc.Root.A["height"])
+	if okw {
+		doc.IntrW = w
+	}
+	if okh {
+		doc.IntrH = h
+	}
+	if vb := strings.Fields(strings.ReplaceAll(doc.Root.A["viewbox"], ",", " ")); len(vb) == 4 {
+		vw, vh := svgNum(vb[2], 0), svgNum(vb[3], 0)
+		if vw > 0 && vh > 0 {
+			doc.Ratio = vw / vh
+		}
+	}
+	return doc
+}
+
+func svgAbsLen(s string) (float64, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" || strings.HasSuffix(s, "%") {
+		return 0, false
+	}
+	v := svgLen(s, 0, -1)
+	if v < 0 {
+		return 0, false
+	}
+	return v, true
+}
+
+func (sc *svgCascade) node(n *html.Node, doc *SVGDoc) *SVGNode {
+	if n.Type == html.TextNode {
+		return &SVGNode{Tag: "#text", Text: n.Data}
+	}
+	if n.Type != html.ElementNode {
+		return nil
+	}
+	tag := strings.ToLower(n.Data)
+	switch tag {
+	case "style", "script", "title", "desc", "metadata":
+		return nil
+	}
+	sn := &SVGNode{Tag: tag, A: map[string]string{}, dom: n}
+	doc.dom[n] = sn
+	for _, a := range n.Attr {
+		k := strings.ToLower(a.Key)
+		if a.Namespace == "xlink" || k == "xlink:href" {
+			k = "href"
+		}
+		if k == "href" && sn.A["href"] != "" && a.Namespace == "xlink" {
+			continue
+		}
+		sn.A[k] = a.Val
+	}
+	// "font" shorthand is reduced to size/family below
+	for _, d := range sc.declsFor(n) {
+		name := d.Name
+		if !svgPropNames[name] {
+			continue
+		}
+		v := d.Val
+		if strings.Contains(v, "var(") {
+			v = substVars(v, sc.custom, 0)
+		}
+		v = strings.TrimSpace(v)
+		if name == "font" {
+			parseFontShorthand(v, sn.A)
+			continue
+		}
+		if name == "marker" {
+			sn.A["marker-start"], sn.A["marker-mid"], sn.A["marker-end"] = v, v, v
+			continue
+		}
+		sn.A[name] = v
+	}
+	if id := sn.A["id"]; id != "" {
+		if _, dup := doc.ByID[id]; !dup {
+			doc.ByID[id] = sn
+		}
+	}
+	for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
+		if k := sc.node(ch, doc); k != nil {
+			sn.Kids = append(sn.Kids, k)
+		}
+	}
+	return sn
+}
+
+func parseFontShorthand(v string, a map[string]string) {
+	toks := strings.Fields(v)
+	for i, t := range toks {
+		sz := t
+		if k := strings.IndexByte(t, '/'); k > 0 {
+			sz = t[:k]
+		}
+		if len(sz) > 0 && (sz[0] >= '0' && sz[0] <= '9' || sz[0] == '.') && (strings.HasSuffix(sz, "px") || strings.HasSuffix(sz, "pt") || strings.HasSuffix(sz, "em") || strings.HasSuffix(sz, "rem") || strings.HasSuffix(sz, "%")) {
+			a["font-size"] = sz
+			a["font-family"] = strings.Join(toks[i+1:], " ")
+			for _, p := range toks[:i] {
+				switch {
+				case p == "italic" || p == "oblique":
+					a["font-style"] = p
+				case p == "bold" || p == "bolder" || p == "lighter" || (len(p) == 3 && p[0] >= '1' && p[0] <= '9' && p[1:] == "00"):
+					a["font-weight"] = p
+				}
+			}
+			return
+		}
+	}
+}
+
+// ---- entry points used by the painter ------------------------------------------------
+
+var svgShared struct {
+	sync.Mutex
+	c    *ctx
+	sc   *svgCascade
+	docs map[*html.Node]*SVGDoc
+	imgs map[string]*SVGDoc
+}
+
+// svgDocFor returns the (cached) resolved scene of an inline <svg> element.
+func (c *ctx) svgDocFor(n *html.Node, st *style.Computed) *SVGDoc {
+	svgShared.Lock()
+	defer svgShared.Unlock()
+	if svgShared.c != c || svgShared.sc == nil {
+		scheme := c.opts.ColorScheme
+		if scheme == "" {
+			scheme = "light"
+		}
+		env := &style.Env{Width: c.opts.Width, Height: c.opts.Height, DPR: c.opts.DPR, ColorScheme: scheme, Print: c.opts.Print}
+		if svgShared.c != c {
+			svgShared.imgs = nil
+		}
+		svgShared.c = c
+		svgShared.sc = newSVGCascade(c.opts.Sheets, env, nil)
+		svgShared.docs = map[*html.Node]*SVGDoc{}
+	}
+	if d, ok := svgShared.docs[n]; ok {
+		return d
+	}
+	sc := svgShared.sc
+	if st != nil {
+		sc.custom = st.Custom
+	}
+	doc := buildSVGScene(n, sc)
+	if doc != nil {
+		var chain []*html.Node
+		for a := n.Parent; a != nil && a.Type == html.ElementNode; a = a.Parent {
+			chain = append([]*html.Node{a}, chain...)
+		}
+		inh := map[string]string{}
+		for _, a := range chain {
+			for _, d := range sc.declsFor(a) {
+				if svgInheritedProps[d.Name] {
+					v := d.Val
+					if strings.Contains(v, "var(") {
+						v = substVars(v, sc.custom, 0)
+					}
+					inh[d.Name] = strings.TrimSpace(v)
+				}
+			}
+		}
+		doc.Inherit = inh
+	}
+	if doc != nil {
+		doc.base = st
+	}
+	svgShared.docs[n] = doc
+	return doc
+}
+
+// inlineSVGDoc builds (and caches) the scene of an inline <svg> element.
+func (p *painter) inlineSVGDoc(n *html.Node, st *style.Computed) *SVGDoc {
+	return p.c.svgDocFor(n, st)
+}
+
+// svgImageDocFor resolves a url to an SVG scene (data: URIs, or the Env's
+// SVGSourcer), cached per layout pass. nil when the url is not an SVG
+// resource.
+func (c *ctx) svgImageDocFor(u string) *SVGDoc {
+	svgShared.Lock()
+	defer svgShared.Unlock()
+	if svgShared.c != c {
+		svgShared.c, svgShared.sc, svgShared.docs = c, nil, map[*html.Node]*SVGDoc{}
+		svgShared.imgs = nil
+	}
+	if d, ok := svgShared.imgs[u]; ok {
+		return d
+	}
+	if svgShared.imgs == nil {
+		svgShared.imgs = map[string]*SVGDoc{}
+	}
+	var markup string
+	found := false
+	if strings.HasPrefix(u, "data:") {
+		if i := strings.IndexByte(u, ','); i > 0 {
+			meta, body := u[5:i], u[i+1:]
+			if strings.Contains(meta, "image/svg+xml") {
+				if strings.Contains(meta, ";base64") {
+					if b, err := base64.StdEncoding.DecodeString(body); err == nil {
+						markup, found = string(b), true
+					}
+				} else if s, err := url.PathUnescape(body); err == nil {
+					markup, found = s, true
+				}
+			}
+		}
+	} else if ss, ok := c.env.(SVGSourcer); ok {
+		markup, found = ss.SVGSource(u)
+	}
+	var doc *SVGDoc
+	if found {
+		doc = parseStandaloneSVG(markup, nil, c)
+	}
+	svgShared.imgs[u] = doc
+	return doc
+}
+
+// svgImageIntrinsic reports the intrinsic dimensions of an SVG image for
+// replaced-element sizing (width/height attributes, else the viewBox ratio).
+// Layout can call this from loadImage when Env.Image returned nil:
+//
+//	if w, h, hasW, hasH, ratio, ok := c.svgImageIntrinsic(r.url); ok { ... }
+func (c *ctx) svgImageIntrinsic(u string) (w, h float64, hasW, hasH bool, ratio float64, ok bool) {
+	d := c.svgImageDocFor(u)
+	if d == nil {
+		return
+	}
+	w, h, hasW, hasH, ratio = svgIntrinsic(d)
+	if !hasW && !hasH {
+		w, h = 300, 150
+		hasW, hasH = true, true
+		if ratio > 0 {
+			h = 300 / ratio
+		}
+	}
+	return w, h, hasW, hasH, ratio, true
+}
+
+// ParseSVG parses standalone SVG markup (an .svg file, a data: URI payload or
+// an <img>/canvas source) into a scene. Returns nil when no <svg> root is
+// found. The scene is styled only by its own <style> elements and attributes.
+func ParseSVG(markup string) *SVGDoc {
+	return parseStandaloneSVG(markup, nil, nil)
+}
+
+// IntrinsicSize reports the image's natural size the way <img>/drawImage see
+// it (width/height, else viewBox ratio against 300x150).
+func (d *SVGDoc) IntrinsicSize() (w, h float64) { return svgImageSize(d) }
+
+func parseStandaloneSVG(markup string, outer *svgCascade, c *ctx) *SVGDoc {
+	dn, err := html.Parse(strings.NewReader(markup))
+	if err != nil {
+		return nil
+	}
+	var root *html.Node
+	var styles []string
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			if n.Data == "svg" && root == nil {
+				root = n
+			}
+			if n.Data == "style" {
+				var sb strings.Builder
+				for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
+					sb.WriteString(ch.Data)
+				}
+				styles = append(styles, sb.String())
+			}
+		}
+		for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
+			walk(ch)
+		}
+	}
+	walk(dn)
+	if root == nil {
+		return nil
+	}
+	env := &style.Env{Width: 1280, Height: 800, DPR: 1, ColorScheme: "light"}
+	if c != nil {
+		env = &style.Env{Width: c.opts.Width, Height: c.opts.Height, DPR: c.opts.DPR, ColorScheme: "light"}
+	}
+	// standalone SVG images do not see the embedding page's rules
+	sc := newSVGCascade(nil, env, styles)
+	sc.custom = map[string]string{}
+	return buildSVGScene(root, sc)
+}
+
+// svgIntrinsic returns the intrinsic size of an SVG image the way <img>
+// sizing sees it: width/height when absolute, otherwise derived from the
+// viewBox ratio, falling back to 300x150.
+func svgIntrinsic(d *SVGDoc) (w, h float64, hasW, hasH bool, ratio float64) {
+	w, h = d.IntrW, d.IntrH
+	hasW, hasH = w > 0, h > 0
+	ratio = d.Ratio
+	if ratio == 0 && hasW && hasH {
+		ratio = w / h
+	}
+	switch {
+	case hasW && !hasH && ratio > 0:
+		h, hasH = w/ratio, true
+	case hasH && !hasW && ratio > 0:
+		w, hasW = h*ratio, true
+	}
+	return
+}
+
+// svgImageSize is the concrete default object size (CSS 2.1 rules).
+func svgImageSize(d *SVGDoc) (float64, float64) {
+	w, h, hw, hh, ratio := svgIntrinsic(d)
+	if hw && hh {
+		return w, h
+	}
+	if ratio > 0 {
+		return math.Round(300), math.Round(300 / ratio)
+	}
+	return 300, 150
+}

@@ -259,6 +259,7 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 	if n.Data == "br" {
 		b.kind = kBreak
 		b.inlineLv = true
+		c.finishCommon(b)
 		*out = append(*out, b)
 		return
 	}
@@ -270,6 +271,7 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 		return
 	}
 	b.inlineLv = (b.kind == kInline || b.kind == kAtomic) && !b.floated && !b.oof
+	c.markVertical(b, pst)
 	if n.Data == "button" {
 		b.isBtn = true
 	}
@@ -287,6 +289,20 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 	for _, k := range kids {
 		b.addKid(k)
 	}
+	if kind == kBlock || st.Display == "inline-block" || st.Display == "list-item" {
+		c.applyFirstLetter(b, n, st)
+	}
+	if st.ContentVisibility == "hidden" {
+		// skipped contents: laid out (for geometry) but neither take space nor paint
+		var keep []*lbox
+		for _, k := range b.kids {
+			if k.kind == kBlock && !k.oof && !k.floated {
+				k.hiddenFlow = true
+				keep = append(keep, k)
+			}
+		}
+		b.kids = keep
+	}
 	if n.Data == "details" && !hasAttr(n, "open") {
 		seenSummary := false
 		for _, k := range b.kids {
@@ -298,9 +314,45 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 				k.hiddenFlow = true
 			}
 		}
+		// loose inline content of a closed details is not rendered either
+		var keep []*lbox
+		seenS := false
+		for _, k := range b.kids {
+			if k.n != nil && k.n.Data == "summary" && !seenS && k.pseudo == "" {
+				seenS = true
+				keep = append(keep, k)
+				continue
+			}
+			if k.kind == kBlock || k.kind == kAtomic || k.oof || k.floated {
+				keep = append(keep, k)
+			}
+		}
+		b.kids = keep
 	}
 	c.finishCommon(b)
 	c.fixupChildren(b)
+	if c.quirks && (n.Data == "body" || n.Data == "td" || n.Data == "th") {
+		var first, last *lbox
+		for _, k := range b.kids {
+			if k.kind == kBlock && !k.floated && !k.oof && !k.hiddenFlow {
+				if first == nil {
+					first = k
+				}
+				last = k
+			}
+		}
+		if first != nil && first.st.QuirkMarginTop {
+			first.quirkMT = true
+		}
+		if last != nil && last.st.QuirkMarginBottom {
+			last.quirkMB = true
+		}
+	}
+	if (kind == kBlock || st.Display == "inline-block") && b.inner == iFlow {
+		if fls := c.eng.Compute(n, st, "first-line"); fls != nil {
+			c.setFirstLine(b, fls)
+		}
+	}
 	if b.kind == kInline && !b.floated && !b.oof {
 		// block-in-inline splitting
 		if pieces := c.splitInline(b); pieces != nil {
@@ -446,6 +498,46 @@ func (c *ctx) addMarker(b *lbox, st *style.Computed) {
 	m.liIndex = val
 	m.markerOutside = st.ListStylePos != "inside"
 	b.marker = m
+	if !m.markerOutside && st.ListStyleImage.IsNone() {
+		// an inside marker is inline content at the start of the item
+		var txt string
+		t := st.ListStyleType
+		switch {
+		case strings.HasPrefix(t, "\x00"):
+			txt = t[1:]
+		case t == "disc":
+			txt = "\u2022 "
+		case t == "circle":
+			txt = "\u25e6 "
+		case t == "square":
+			txt = "\u25aa "
+		case t == "disclosure-closed":
+			txt = "\u25b8 "
+		case t == "disclosure-open":
+			txt = "\u25be "
+		default:
+			txt = formatCounter(val, t) + ". "
+		}
+		// the marker's own box has line-height 0 so a fallback font cannot grow the line
+		mst := *st
+		mst.LineHeight = style.Px(0)
+		if strings.HasPrefix(t, "disclosure") {
+			// Chromium sizes the disclosure marker at 1.059375em
+			mst.LetterSpacing = 0
+			nat := c.textWidth(&mst, txt)
+			mst.LetterSpacing = (st.FontSize*1.059375 - nat) / float64(len([]rune(txt)))
+		}
+		mb := newBox(b.n, &mst, kInline)
+		mb.inlineLv = true
+		mb.pseudo = "marker"
+		tb := newBox(b.n, &mst, kText)
+		tb.text = txt
+		tb.inlineLv = true
+		tb.pseudo = "marker"
+		mb.addKid(tb)
+		b.addKid(mb)
+		b.marker = nil
+	}
 }
 
 // ---- anonymous box fixup -----------------------------------------------------------

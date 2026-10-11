@@ -9,6 +9,7 @@
 package font
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -46,6 +47,8 @@ type Face struct {
 	data   []byte
 	adv    map[rune]float64 // advance in font units (-1 = no glyph)
 	kern   map[[2]rune]float64
+	idx    int
+	ot     otCache
 	mOK    bool
 	mU     [5]float64
 }
@@ -78,7 +81,7 @@ func newFaceIdx(family string, st Style, data []byte, mono bool, idx int) (*Face
 		return nil, err
 	}
 	return &Face{Family: family, Style: st, Mono: mono, font: f, upm: int(f.UnitsPerEm()), data: data,
-		adv: map[rune]float64{}, kern: map[[2]rune]float64{}}, nil
+		adv: map[rune]float64{}, kern: map[[2]rune]float64{}, idx: idx}, nil
 }
 
 // UnitsPerEm of the face.
@@ -102,32 +105,55 @@ func (f *Face) AdvanceUnits(r rune) float64 {
 	return v
 }
 
-// AdvanceF is the exact (unrounded) advance of r at size px, or -1.
+// FTSize is the font size as FreeType (and so Skia and Chromium) sees it:
+// requested in 26.6 fixed point with truncation, e.g. 21.6px is 21.59375px.
+// Advances and kerning are linear in this size, so layout and painting that
+// want to agree with Chromium to a fraction of a pixel over a long line must
+// use it.
+func FTSize(size float64) float64 {
+	if size <= 0 || size != size {
+		return size
+	}
+	return math.Floor(size*64) / 64
+}
+
+// AdvanceF is the exact (unrounded) advance of r at size px, or -1. The size
+// is quantized like FreeType's (see FTSize).
 func (f *Face) AdvanceF(r rune, size float64) float64 {
 	u := f.AdvanceUnits(r)
 	if u < 0 {
 		return -1
 	}
-	return u * size / float64(f.upm)
+	return u * FTSize(size) / float64(f.upm)
+}
+
+// kernUnits is the pair kerning between a and b in font units: GPOS pair
+// adjustment when the font has a kern feature (as HarfBuzz), else the legacy
+// kern table.
+func (f *Face) kernUnits(a, b rune) float64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := [2]rune{a, b}
+	if k, ok := f.kern[key]; ok {
+		return k
+	}
+	k := 0.0
+	ga, err1 := f.font.GlyphIndex(&f.buf, a)
+	gb, err2 := f.font.GlyphIndex(&f.buf, b)
+	if err1 == nil && err2 == nil && ga != 0 && gb != 0 {
+		if ot := f.loadOT(); ot.kern != nil {
+			k = float64(ot.kern.pairAdjust(int(ga), int(gb)))
+		} else if v, err := f.font.Kern(&f.buf, ga, gb, fixed.Int26_6(f.upm*64), xfont.HintingNone); err == nil {
+			k = float64(v) / 64
+		}
+	}
+	f.kern[key] = k
+	return k
 }
 
 // KernF is the exact kerning adjustment between a and b at size px.
 func (f *Face) KernF(a, b rune, size float64) float64 {
-	f.mu.Lock()
-	k, ok := f.kern[[2]rune{a, b}]
-	if !ok {
-		k = 0
-		ga, err1 := f.font.GlyphIndex(&f.buf, a)
-		gb, err2 := f.font.GlyphIndex(&f.buf, b)
-		if err1 == nil && err2 == nil && ga != 0 && gb != 0 {
-			if v, err := f.font.Kern(&f.buf, ga, gb, fixed.Int26_6(f.upm*64), xfont.HintingNone); err == nil {
-				k = float64(v) / 64
-			}
-		}
-		f.kern[[2]rune{a, b}] = k
-	}
-	f.mu.Unlock()
-	return k * size / float64(f.upm)
+	return f.kernUnits(a, b) * FTSize(size) / float64(f.upm)
 }
 
 // RawMetrics returns unscaled hhea ascent/descent/lineGap and OS/2 values in font units.
@@ -244,20 +270,7 @@ func (f *Face) HasGlyph(r rune) bool {
 }
 
 // Kern returns the kerning adjustment between two runes in px.
-func (f *Face) Kern(a, b rune, size float64) float64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	ga, err1 := f.font.GlyphIndex(&f.buf, a)
-	gb, err2 := f.font.GlyphIndex(&f.buf, b)
-	if err1 != nil || err2 != nil {
-		return 0
-	}
-	k, err := f.font.Kern(&f.buf, ga, gb, f.scale(size), xfont.HintingNone)
-	if err != nil {
-		return 0
-	}
-	return float64(k) / 64
-}
+func (f *Face) Kern(a, b rune, size float64) float64 { return f.KernF(a, b, size) }
 
 // Segment is one outline command in pixel space, y down, origin at the
 // baseline-left of the glyph.
@@ -276,6 +289,10 @@ func (f *Face) Outline(r rune, size float64) []Segment {
 	if err != nil || gi == 0 {
 		return nil
 	}
+	return f.outlineLocked(gi, size)
+}
+
+func (f *Face) outlineLocked(gi sfnt.GlyphIndex, size float64) []Segment {
 	segs, err := f.font.LoadGlyph(&f.buf, gi, f.scale(size), nil)
 	if err != nil {
 		return nil
@@ -646,3 +663,31 @@ func Families() []string {
 	sort.Strings(out)
 	return out
 }
+
+// TypoMetrics returns the OS/2 typographic ascender and descender (the
+// descender as a positive distance below the baseline) scaled to size px,
+// unrounded; ok is false when the face has no usable OS/2 table. Chromium
+// derives the canvas "top", "middle" and "bottom" text baselines from them.
+func (f *Face) TypoMetrics(size float64) (asc, desc float64, ok bool) {
+	os2 := findTable(f.data, f.idx, "OS/2")
+	if len(os2) < 72 {
+		return 0, 0, false
+	}
+	a, d := bei16(os2, 68), bei16(os2, 70)
+	if a == 0 && d == 0 {
+		return 0, 0, false
+	}
+	k := FTSize(size) / float64(f.upm)
+	return float64(a) * k, float64(-d) * k, true
+}
+
+func be16(b []byte, o int) int {
+	if o < 0 || o+2 > len(b) {
+		return 0
+	}
+	return int(b[o])<<8 | int(b[o+1])
+}
+
+func bei16(b []byte, o int) int { return int(int16(be16(b, o))) }
+
+func glyphIndex(g int) sfnt.GlyphIndex { return sfnt.GlyphIndex(g) }

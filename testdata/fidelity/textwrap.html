@@ -1,0 +1,20 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>textwrap</title>
+<style>
+body { margin: 0; padding: 16px; font: 16px/1.4 Arial, sans-serif; }
+.b { text-wrap: balance; width: 420px; background: #eef; margin: 0 0 12px; font-size: 28px; line-height: 1.2; }
+.n { width: 420px; background: #efe; margin: 0 0 12px; font-size: 28px; line-height: 1.2; }
+.p { text-wrap: pretty; width: 300px; background: #fee; margin: 0 0 12px; }
+.c { text-wrap: balance; text-align: center; width: 360px; background: #eee; margin: 0 0 12px; font-size: 24px; }
+.s { text-wrap: nowrap; width: 100px; background: #ffd; border: 1px solid #aa0; margin: 0 0 12px; }
+.w { overflow-wrap: anywhere; width: 120px; background: #dff; margin: 0 0 12px; }
+.h { hyphens: manual; width: 140px; background: #fdf; margin: 0 0 12px; }
+</style></head><body>
+<h2 class="b">A fairly long heading that balances its lines evenly</h2>
+<h2 class="n">A fairly long heading that balances its lines evenly</h2>
+<p class="p">Pretty wrapping avoids a single orphaned word on the final line of a paragraph of text like this one okay.</p>
+<p class="c">Centered balanced text spanning a few lines of output here</p>
+<p class="s">no wrap at all in here</p>
+<p class="w">Supercalifragilisticexpialidocious_word</p>
+<p class="h">Hy&shy;phen&shy;ation exam&shy;ple of manu&shy;al soft hyphens</p>
+</body></html>

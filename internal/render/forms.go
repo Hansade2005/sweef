@@ -121,10 +121,14 @@ func (c *ctx) controlInfo(b *lbox) ctrlInfo {
 			ci = ctrlInfo{cw: c.textWidth(st, txt), ch: lineH, base: textBase, text: txt}
 		case "date", "datetime-local", "month", "week", "time":
 			w := 117.328125
+			ch := lineH + 0.328125
+			bs := textBase
 			if t == "time" {
-				w = 80
+				w = 96
+				ch += 2.671875
+				bs += 1.5
 			}
-			ci = ctrlInfo{cw: w, ch: lineH + 0.328125, base: textBase}
+			ci = ctrlInfo{cw: w, ch: ch, base: bs}
 		default:
 			avg, mx := avgMax()
 			size := attrInt(n, "size", 20)

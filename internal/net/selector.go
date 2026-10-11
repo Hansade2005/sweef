@@ -24,6 +24,7 @@ type complexSel struct {
 }
 
 type compoundSel struct {
+	ci      bool // quirks mode: class and id selectors match ASCII case-insensitively
 	comb    byte // 0 (first), ' ', '>', '+', '~'
 	tag     string
 	id      string
@@ -40,18 +41,30 @@ type attrSel struct {
 type pseudoSel struct {
 	name string
 	arg  string
-	sub  selGroup // for :not/:is/:where/:has
+	sub  selGroup // for :not/:is/:where/:has; the "of S" filter of :nth-child
+	rel  []relSel // for :has
 	a, b int      // for nth-*
 }
 
+// relSel is one relative selector of :has(): a leading combinator and the
+// complex selector it applies to.
+type relSel struct {
+	lead byte // ' ', '>', '+', '~'
+	sel  complexSel
+}
+
 type selParser struct {
-	s   string
-	pos int
+	s      string
+	pos    int
+	quirks bool
 }
 
 // compileSelector parses sel or returns a SyntaxError.
-func compileSelector(sel string) (selGroup, error) {
-	p := &selParser{s: strings.TrimSpace(sel)}
+func compileSelector(sel string) (selGroup, error) { return compileSelectorQ(sel, false) }
+
+// compileSelectorQ is compileSelector with quirks-mode class/id matching.
+func compileSelectorQ(sel string, quirks bool) (selGroup, error) {
+	p := &selParser{s: strings.TrimSpace(sel), quirks: quirks}
 	if p.s == "" {
 		return nil, fmt.Errorf("SyntaxError: '%s' is not a valid selector", sel)
 	}
@@ -168,6 +181,7 @@ func unescapeCSS(s string) string {
 
 func (p *selParser) compound() (compoundSel, error) {
 	var c compoundSel
+	c.ci = p.quirks
 	any := false
 	if p.peek() == '*' {
 		p.pos++
@@ -284,14 +298,34 @@ func (p *selParser) pseudo() (pseudoSel, error) {
 		arg := p.balanced()
 		ps.arg = strings.TrimSpace(arg)
 		switch ps.name {
-		case "not", "is", "where", "has", "matches", "-webkit-any":
-			sub, err := compileSelector(strings.TrimPrefix(strings.TrimPrefix(ps.arg, "> "), ">"))
+		case "not", "is", "where", "matches", "-webkit-any":
+			sub, err := compileSelectorQ(ps.arg, p.quirks)
 			if err != nil {
 				return ps, err
 			}
 			ps.sub = sub
+		case "has":
+			rels, err := p.relSelectors(ps.arg)
+			if err != nil {
+				return ps, err
+			}
+			ps.rel = rels
+			// the plain group is kept for specificity (see compoundSpecificity)
+			for _, r := range rels {
+				ps.sub = append(ps.sub, r.sel)
+			}
 		case "nth-child", "nth-last-child", "nth-of-type", "nth-last-of-type":
-			a, b, err := parseNth(ps.arg)
+			arg := ps.arg
+			if (ps.name == "nth-child" || ps.name == "nth-last-child") && strings.Contains(strings.ToLower(arg), " of ") {
+				i := strings.Index(strings.ToLower(arg), " of ")
+				sub, err := compileSelectorQ(arg[i+4:], p.quirks)
+				if err != nil {
+					return ps, err
+				}
+				ps.sub = sub
+				arg = arg[:i]
+			}
+			a, b, err := parseNth(arg)
 			if err != nil {
 				return ps, err
 			}
@@ -299,6 +333,44 @@ func (p *selParser) pseudo() (pseudoSel, error) {
 		}
 	}
 	return ps, nil
+}
+
+// relSelectors parses the argument of :has() into relative selectors.
+func (p *selParser) relSelectors(arg string) ([]relSel, error) {
+	var out []relSel
+	depth := 0
+	start := 0
+	parts := []string{}
+	for i := 0; i < len(arg); i++ {
+		switch arg[i] {
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, arg[start:i])
+				start = i + 1
+			}
+		}
+	}
+	parts = append(parts, arg[start:])
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		lead := byte(' ')
+		if part != "" && (part[0] == '>' || part[0] == '+' || part[0] == '~') {
+			lead = part[0]
+			part = strings.TrimSpace(part[1:])
+		}
+		g, err := compileSelectorQ(part, p.quirks)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range g {
+			out = append(out, relSel{lead: lead, sel: c})
+		}
+	}
+	return out, nil
 }
 
 // balanced consumes "( ... )" with nesting and returns the inner text.
@@ -431,13 +503,15 @@ func matchCompound(n *html.Node, c compoundSel, scope *html.Node) bool {
 	if c.tag != "" && c.tag != "*" && n.Data != c.tag {
 		return false
 	}
-	if c.id != "" && attr(n, "id") != c.id {
-		return false
+	if c.id != "" {
+		if id := attr(n, "id"); id != c.id && !(c.ci && strings.EqualFold(id, c.id)) {
+			return false
+		}
 	}
 	if len(c.classes) > 0 {
 		cls := attr(n, "class")
 		for _, k := range c.classes {
-			if !hasClass(cls, k) {
+			if !hasClass(cls, k) && !(c.ci && hasClassFold(cls, k)) {
 				return false
 			}
 		}
@@ -475,6 +549,15 @@ func hasClass(cls, k string) bool {
 			return true
 		}
 		i = j
+	}
+	return false
+}
+
+func hasClassFold(cls, k string) bool {
+	for _, f := range strings.Fields(cls) {
+		if strings.EqualFold(f, k) {
+			return true
+		}
 	}
 	return false
 }
@@ -545,6 +628,29 @@ func childIndex(n *html.Node, fromEnd, ofType bool) int {
 	return idx
 }
 
+// childIndexOf is the index of n among the siblings that match filter
+// (:nth-child(an+b of S)); 0 when n itself does not match.
+func childIndexOf(n *html.Node, fromEnd bool, filter selGroup, scope *html.Node) int {
+	if !matchGroup(n, filter, scope) {
+		return 0
+	}
+	idx := 1
+	if fromEnd {
+		for s := n.NextSibling; s != nil; s = s.NextSibling {
+			if s.Type == html.ElementNode && matchGroup(s, filter, scope) {
+				idx++
+			}
+		}
+		return idx
+	}
+	for s := n.PrevSibling; s != nil; s = s.PrevSibling {
+		if s.Type == html.ElementNode && matchGroup(s, filter, scope) {
+			idx++
+		}
+	}
+	return idx
+}
+
 func matchPseudo(n *html.Node, ps pseudoSel, scope *html.Node) bool {
 	switch ps.name {
 	case "::":
@@ -554,24 +660,12 @@ func matchPseudo(n *html.Node, ps pseudoSel, scope *html.Node) bool {
 	case "is", "where", "matches", "-webkit-any":
 		return matchGroup(n, ps.sub, scope)
 	case "has":
-		relChild := strings.HasPrefix(ps.arg, ">")
-		var found bool
-		var walk func(*html.Node, bool)
-		walk = func(x *html.Node, direct bool) {
-			for c := x.FirstChild; c != nil && !found; c = c.NextSibling {
-				if c.Type == html.ElementNode {
-					if matchGroup(c, ps.sub, n) {
-						found = true
-						return
-					}
-					if !relChild {
-						walk(c, false)
-					}
-				}
+		for _, r := range ps.rel {
+			if matchRelative(n, r, scope) {
+				return true
 			}
 		}
-		walk(n, relChild)
-		return found
+		return false
 	case "first-child":
 		return prevElement(n) == nil
 	case "last-child":
@@ -579,8 +673,16 @@ func matchPseudo(n *html.Node, ps pseudoSel, scope *html.Node) bool {
 	case "only-child":
 		return prevElement(n) == nil && nextElement(n) == nil
 	case "nth-child":
+		if len(ps.sub) > 0 {
+			i := childIndexOf(n, false, ps.sub, scope)
+			return i > 0 && nthMatches(ps.a, ps.b, i)
+		}
 		return nthMatches(ps.a, ps.b, childIndex(n, false, false))
 	case "nth-last-child":
+		if len(ps.sub) > 0 {
+			i := childIndexOf(n, true, ps.sub, scope)
+			return i > 0 && nthMatches(ps.a, ps.b, i)
+		}
 		return nthMatches(ps.a, ps.b, childIndex(n, true, false))
 	case "nth-of-type":
 		return nthMatches(ps.a, ps.b, childIndex(n, false, true))
@@ -696,4 +798,95 @@ func matchesSelector(n *html.Node, sel string) (bool, error) {
 		return false, err
 	}
 	return matchGroup(n, g, nil), nil
+}
+
+// matchRelative reports whether a relative selector of :has() matches with
+// anchor as its left end.
+func matchRelative(anchor *html.Node, r relSel, scope *html.Node) bool {
+	last := len(r.sel.parts) - 1
+	var try func(x *html.Node) bool
+	try = func(x *html.Node) bool {
+		return matchComplexRel(x, r.sel, last, scope, anchor, r.lead)
+	}
+	var walk func(x *html.Node) bool
+	walk = func(x *html.Node) bool {
+		for c := x.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type != html.ElementNode {
+				continue
+			}
+			if try(c) || walk(c) {
+				return true
+			}
+		}
+		return false
+	}
+	switch r.lead {
+	case '+', '~':
+		for s := anchor.NextSibling; s != nil; s = s.NextSibling {
+			if s.Type != html.ElementNode {
+				continue
+			}
+			if try(s) || walk(s) {
+				return true
+			}
+			if r.lead == '+' && len(r.sel.parts) == 1 {
+				break
+			}
+		}
+		return false
+	}
+	return walk(anchor)
+}
+
+// matchComplexRel is matchComplex for a relative selector: once the leftmost
+// compound is reached, its element must stand in the leading combinator's
+// relation to anchor.
+func matchComplexRel(n *html.Node, c complexSel, i int, scope, anchor *html.Node, lead byte) bool {
+	if !matchCompound(n, c.parts[i], scope) {
+		return false
+	}
+	if i == 0 {
+		switch lead {
+		case '>':
+			return n.Parent == anchor
+		case '+':
+			return prevElement(n) == anchor
+		case '~':
+			for p := prevElement(n); p != nil; p = prevElement(p) {
+				if p == anchor {
+					return true
+				}
+			}
+			return false
+		default:
+			for p := n.Parent; p != nil; p = p.Parent {
+				if p == anchor {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	switch c.parts[i].comb {
+	case '>':
+		p := n.Parent
+		return p != nil && p.Type == html.ElementNode && matchComplexRel(p, c, i-1, scope, anchor, lead)
+	case '+':
+		p := prevElement(n)
+		return p != nil && matchComplexRel(p, c, i-1, scope, anchor, lead)
+	case '~':
+		for p := prevElement(n); p != nil; p = prevElement(p) {
+			if matchComplexRel(p, c, i-1, scope, anchor, lead) {
+				return true
+			}
+		}
+		return false
+	default:
+		for p := n.Parent; p != nil && p.Type == html.ElementNode; p = p.Parent {
+			if matchComplexRel(p, c, i-1, scope, anchor, lead) {
+				return true
+			}
+		}
+		return false
+	}
 }

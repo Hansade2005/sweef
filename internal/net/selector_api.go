@@ -24,6 +24,16 @@ func CompileSelector(s string) (*Selector, error) {
 	return &Selector{g: g}, nil
 }
 
+// CompileSelectorQ is CompileSelector with quirks-mode matching: class and id
+// selectors compare ASCII case-insensitively.
+func CompileSelectorQ(s string, quirks bool) (*Selector, error) {
+	g, err := compileSelectorQ(s, quirks)
+	if err != nil {
+		return nil, err
+	}
+	return &Selector{g: g}, nil
+}
+
 // Entries returns the alternatives of the list, each matchable on its own.
 func (s *Selector) Entries() []SelectorEntry {
 	out := make([]SelectorEntry, len(s.g))

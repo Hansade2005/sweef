@@ -22,7 +22,7 @@ blockquote, figure { margin: 1em 40px }
 center { text-align: -webkit-center }
 hr { overflow: hidden; margin: 0.5em auto; border-style: inset; border-width: 1px; color: gray }
 legend { padding-inline: 2px }
-fieldset { margin: 0 2px; padding: 0.35em 0.75em 0.625em; border: 2px groove rgb(192,192,192); min-width: min-content }
+fieldset { margin: 0 2px; padding: 0.35em 0.75em 0.625em; border: 2px groove rgb(239,239,239); min-width: min-content }
 details > summary:first-of-type { display: list-item; list-style-type: disclosure-closed; list-style-position: inside }
 details[open] > summary:first-of-type { list-style-type: disclosure-open }
 h1 { display: block; font-size: 2em; margin: 0.67em 0; font-weight: bold }
@@ -103,6 +103,7 @@ option { font-weight: normal; display: block; white-space: pre; min-height: 1.2e
 progress { appearance: auto; display: inline-block; box-sizing: border-box; vertical-align: -0.2em; width: 10em; height: 1em }
 meter { appearance: auto; display: inline-block; box-sizing: border-box; vertical-align: -0.2em; width: 5em; height: 1em }
 button, input[type="button" i], input[type="submit" i], input[type="reset" i], select { cursor: default }
+button:disabled, input:is([type="button" i], [type="submit" i], [type="reset" i]):disabled { color: rgba(16,16,16,0.3); background-color: rgba(239,239,239,0.3); border-color: rgba(118,118,118,0.3) }
 `
 
 // needsHints reports whether presentational attributes may affect n.

@@ -2,6 +2,7 @@ package style
 
 import (
 	"hash/fnv"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -32,6 +33,10 @@ type Engine struct {
 	share     map[uint64]*Computed
 	scratch   []*Entry
 	hasPseudo bool
+	contSize  map[*html.Node]ContSize
+	conts     map[*html.Node]*contInfo
+	hasCQ     bool
+	curCont   *html.Node
 }
 
 var (
@@ -75,7 +80,7 @@ func NewEngineQ(env *Env, sheets []SheetIn, quirks bool) *Engine {
 		if sh.Media != "" && !MediaMatches(sh.Media, env) {
 			continue
 		}
-		p := ParseSheet(sh.Text, env, OriginAuthor, &order, layers)
+		p := ParseSheetQ(sh.Text, env, OriginAuthor, &order, layers, quirks)
 		for _, r := range p.Rules {
 			e.addRule(r)
 		}
@@ -90,6 +95,9 @@ func (e *Engine) addRule(r *Rule) {
 	e.rules = append(e.rules, r)
 	for _, en := range r.Entries {
 		k, v := bucketKey(en.key)
+		if e.Quirks && (k == 'i' || k == 'c') {
+			v = strings.ToLower(v)
+		}
 		switch k {
 		case 'i':
 			e.byID[v] = append(e.byID[v], en)
@@ -102,6 +110,9 @@ func (e *Engine) addRule(r *Rule) {
 		}
 		if en.Pseudo != "" {
 			e.hasPseudo = true
+		}
+		if r.Cont != nil {
+			e.hasCQ = true
 		}
 	}
 }
@@ -217,16 +228,34 @@ func (e *Engine) collect(n *html.Node, pseudo string) []*Entry {
 			if en.Pseudo != pseudo {
 				continue
 			}
-			if en.Sel.Match(n, nil) {
+			var scopeEl *html.Node
+			if en.Rule.Scope != nil {
+				if scopeEl = scopeRootFor(n, en.Rule.Scope); scopeEl == nil {
+					continue
+				}
+				if scopeEl == n && !strings.Contains(en.key, ":scope") {
+					continue
+				}
+			}
+			if en.Sel.Match(n, scopeEl) {
+				if en.Rule.Cont != nil && !e.contMatches(n, en.Rule.Cont, pseudo) {
+					continue
+				}
 				out = append(out, en)
 			}
 		}
 	}
 	if id, ok := attrOf(n, "id"); ok && id != "" {
+		if e.Quirks {
+			id = strings.ToLower(id)
+		}
 		try(e.byID[id])
 	}
 	if cl, ok := attrOf(n, "class"); ok && cl != "" {
 		for _, c := range strings.Fields(cl) {
+			if e.Quirks {
+				c = strings.ToLower(c)
+			}
 			try(e.byClass[c])
 		}
 	}
@@ -247,6 +276,14 @@ func layerKey(r *Rule) int {
 // pseudo-elements. parent is the parent element's computed style (nil for the
 // root). A nil result for a pseudo means no rule applies.
 func (e *Engine) Compute(n *html.Node, parent *Computed, pseudo string) *Computed {
+	c := e.compute(n, parent, pseudo)
+	if c != nil && pseudo == "" && c.ContainerType != "" {
+		e.noteContainer(n, c)
+	}
+	return c
+}
+
+func (e *Engine) compute(n *html.Node, parent *Computed, pseudo string) *Computed {
 	if parent == nil {
 		parent = e.initial
 	}
@@ -295,6 +332,13 @@ func (e *Engine) Compute(n *html.Node, parent *Computed, pseudo string) *Compute
 		}
 		put(uint64(ptrID(parent)))
 		h.Write([]byte(n.Data))
+		if e.hasCQ || len(e.conts) > 0 {
+			if an, _ := e.nearestContainer(n, "", false); an != nil {
+				sz := e.contSize[an]
+				put(math.Float64bits(sz.W))
+				put(math.Float64bits(sz.H))
+			}
+		}
 		for _, en := range ents {
 			put(uint64(en.Rule.Order)<<8 | uint64(en.Rule.Origin))
 			put(uint64(en.Spec))
@@ -310,11 +354,15 @@ func (e *Engine) Compute(n *html.Node, parent *Computed, pseudo string) *Compute
 	var impRules []*Rule
 	last := (*Rule)(nil)
 	hintDone := false
+	uaEnd := -1
 	flushHints := func() {
 		if hintDone {
 			return
 		}
 		hintDone = true
+		if uaEnd < 0 {
+			uaEnd = len(normal)
+		}
 		if pseudo == "" {
 			normal = append(normal, e.hints(n)...)
 		}
@@ -325,6 +373,9 @@ func (e *Engine) Compute(n *html.Node, parent *Computed, pseudo string) *Compute
 			continue
 		}
 		last = r
+		if r.Origin != OriginUA && uaEnd < 0 {
+			uaEnd = len(normal)
+		}
 		if r.Origin == OriginAuthor {
 			flushHints()
 		}
@@ -353,6 +404,40 @@ func (e *Engine) Compute(n *html.Node, parent *Computed, pseudo string) *Compute
 			}
 		}
 	}
+	qTop, qBot := false, false
+	if e.Quirks && pseudo == "" && quirkMarginTag(n.Data) {
+		qTop, qBot = true, true
+		scan := func(ds []Decl) {
+			for _, d := range ds {
+				switch d.Name {
+				case "margin", "margin-block":
+					qTop, qBot = false, false
+				case "margin-top", "margin-block-start":
+					qTop = false
+				case "margin-bottom", "margin-block-end":
+					qBot = false
+				}
+			}
+		}
+		if uaEnd >= 0 && uaEnd <= len(normal) {
+			scan(normal[uaEnd:])
+		}
+		scan(inl)
+	}
+	if len(impRules) > 1 {
+		// !important reverses the layer order: unlayered is weakest, then the
+		// last layer ... the first layer
+		impKey := func(r *Rule) int {
+			if r.Origin != OriginAuthor {
+				return -1
+			}
+			if r.Layer == 0 {
+				return 0
+			}
+			return 1<<20 - r.Layer
+		}
+		sort.SliceStable(impRules, func(i, j int) bool { return impKey(impRules[i]) < impKey(impRules[j]) })
+	}
 	var uaImp []Decl
 	for _, r := range impRules {
 		for _, d := range r.Decls {
@@ -376,7 +461,19 @@ func (e *Engine) Compute(n *html.Node, parent *Computed, pseudo string) *Compute
 	if len(impl) > 0 {
 		decls = append(decls, impl...)
 	}
+	e.curCont = nil
+	if len(e.conts) > 0 {
+		if pseudo == "" {
+			e.curCont, _ = e.nearestContainer(n, "", false)
+		} else {
+			e.curCont, _ = e.nearestContainer(n, "", false)
+			if _, ok := e.conts[n]; ok {
+				e.curCont = n
+			}
+		}
+	}
 	c := e.computeFrom(decls, parent, pseudo)
+	c.QuirkMarginTop, c.QuirkMarginBottom = qTop, qBot
 	if canShare {
 		e.share[key] = c
 	}
@@ -429,6 +526,10 @@ func (e *Engine) computeFrom(decls []Decl, parent *Computed, pseudo string) *Com
 	s := &cstate{c: c, p: parent, env: e.env, eng: e}
 	s.uc = unitCtx{em: parent.FontSize, rem: e.RootFont, vw: e.env.Width, vh: e.env.Height}
 	s.uc.containerW, s.uc.cqH = e.env.Width, e.env.Height
+	if e.curCont != nil {
+		sz := e.contSize[e.curCont]
+		s.uc.containerW, s.uc.cqH = sz.W, sz.H
+	}
 	// custom properties
 	vars := parent.Custom
 	own := false
@@ -621,6 +722,9 @@ func (e *Engine) finalize(c, parent *Computed, pseudo string) {
 	if c.Float != "none" || c.Position == "absolute" || c.Position == "fixed" {
 		c.Display = blockify(c.Display)
 	}
+	if c.OverflowX == "visible" && c.OverflowY == "visible" && (containTok(c.Contain, "paint") || containTok(c.Contain, "strict") || containTok(c.Contain, "content") || c.ContentVisibility != "visible") && c.Display != "inline" {
+		c.OverflowX, c.OverflowY = "clip", "clip"
+	}
 	if c.OverflowX == "visible" && c.OverflowY != "visible" && c.OverflowY != "clip" {
 		c.OverflowX = "auto"
 	}
@@ -667,8 +771,8 @@ func isInheritedProp(name string) bool {
 	case "color", "font", "font-family", "font-size", "font-weight", "font-style", "font-variant", "font-variant-caps", "font-stretch", "line-height",
 		"letter-spacing", "word-spacing", "text-align", "text-align-last", "text-indent", "text-transform", "white-space", "word-break", "overflow-wrap",
 		"word-wrap", "direction", "visibility", "cursor", "pointer-events", "list-style", "list-style-type", "list-style-position", "list-style-image",
-		"quotes", "border-collapse", "border-spacing", "caption-side", "empty-cells", "tab-size", "text-shadow", "hyphens", "line-break", "text-wrap",
-		"user-select", "writing-mode", "color-scheme", "image-rendering", "text-rendering", "font-kerning", "-webkit-text-fill-color", "-webkit-text-stroke",
+		"quotes", "widows", "border-collapse", "border-spacing", "caption-side", "empty-cells", "tab-size", "text-shadow", "hyphens", "line-break", "text-wrap",
+		"user-select", "writing-mode", "text-orientation", "color-scheme", "image-rendering", "text-rendering", "font-kerning", "-webkit-text-fill-color", "-webkit-text-stroke",
 		"-webkit-text-stroke-width", "-webkit-text-stroke-color", "accent-color", "caret-color", "text-underline-offset", "orphans":
 		return true
 	}
@@ -863,3 +967,13 @@ func (e *Engine) Anonymous(parent *Computed, display string) *Computed {
 
 // Initial returns the engine's initial-values style (parent of the root).
 func (e *Engine) InitialStyle() *Computed { return e.initial }
+
+// quirkMarginTag lists the elements whose UA margins are "quirky" (Blink's
+// 1__qem): ignored at the start/end of body and table cells in quirks mode.
+func quirkMarginTag(tag string) bool {
+	switch tag {
+	case "p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "menu", "dir", "dl", "blockquote", "pre", "listing", "xmp", "plaintext":
+		return true
+	}
+	return false
+}

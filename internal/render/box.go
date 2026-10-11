@@ -133,6 +133,7 @@ type lbox struct {
 	contBlocks                       []*lbox
 	hiddenFlow                       bool
 	mcN                              int
+	mcSegs                           []mcSeg // vertical ranges where the columns apply (column-span splits them)
 	mcW, mcGap                       float64
 	legend                           *lbox
 	legendPad                        float64
@@ -140,6 +141,20 @@ type lbox struct {
 	borOv, borMin                    [4]float64
 	hasBorOv                         bool
 	cl                               *collapsed
+	flSt                             *style.Computed // ::first-line style of an inline formatting context root
+	atomsFL                          []atom
+	flMap                            map[*lbox]*style.Computed
+	vflow, vt, vmode                 int8 // orthogonal flow root mode / mode of the logical frame being laid out / mode of a converted IFC root
+	ost                              *style.Computed
+	noFrags                          bool // synthetic box: its inline boxes report no fragments
+	vlines                           []*line
+	force                            map[int]bool // atom indices that must start a new line (text-wrap: balance / pretty)
+	quirkMT, quirkMB                 bool         // quirks mode: UA margin ignored at the start/end of body or a table cell
+	forceCols, forceRows             []float64    // subgrid: track sizes taken from the parent grid
+	forceCGap, forceRGap             float64
+	natColN, natRowN                 int // subgrid intrinsic pass: number of auto tracks
+	gridNat                          bool
+	gridColSz, gridRowSz             []float64 // track sizes after the last grid layout
 }
 
 func (b *lbox) shiftFrags(dx, dy float64) {

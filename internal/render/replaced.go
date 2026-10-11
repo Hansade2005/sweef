@@ -37,6 +37,10 @@ func (c *ctx) loadImage(r *replacedInfo) {
 		if r.ih > 0 {
 			r.ratio = r.iw / r.ih
 		}
+		return
+	}
+	if w, h, hasW, hasH, ratio, ok := c.svgImageIntrinsic(r.url); ok {
+		r.iw, r.ih, r.hasIW, r.hasIH, r.ratio = w, h, hasW, hasH, ratio
 	}
 }
 
@@ -224,6 +228,10 @@ func (c *ctx) replacedUsedSize(b *lbox, cbw, cbh float64, intrinsicOnly bool) (f
 		switch {
 		case hasW && hasH:
 			w, h = iw, ih
+			if st.AspectRatio > 0 && !st.AspectAuto {
+				// a preferred aspect ratio replaces the natural one: keep the width
+				h = w / ratio
+			}
 		case hasW:
 			w = iw
 			if ratio > 0 {

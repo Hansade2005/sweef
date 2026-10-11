@@ -33,6 +33,7 @@ type tabEnv struct {
 	doc  *fnet.Doc
 	mu   sync.Mutex
 	imgs map[string]image.Image
+	svgs map[string]string
 }
 
 func (e *tabEnv) source(n *html.Node) BitmapSource {
@@ -85,6 +86,38 @@ func (e *tabEnv) IntrinsicSize(n *html.Node) (float64, float64, bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+// SVGSource lets layout paint <img src=x.svg> and CSS background SVGs.
+func (e *tabEnv) SVGSource(u string) (string, bool) {
+	base := strings.ToLower(u)
+	if i := strings.IndexAny(base, "?#"); i >= 0 {
+		base = base[:i]
+	}
+	if !strings.HasSuffix(base, ".svg") && !strings.HasPrefix(base, "data:image/svg") {
+		return "", false
+	}
+	e.mu.Lock()
+	if v, ok := e.svgs[u]; ok {
+		e.mu.Unlock()
+		return v, v != ""
+	}
+	e.mu.Unlock()
+	var markup string
+	if strings.HasPrefix(u, "data:") {
+		if _, b, err := decodeDataURL(u); err == nil {
+			markup = string(b)
+		}
+	} else if body, status, err := e.t.fetchResource(u); err == nil && status < 400 {
+		markup = body
+	}
+	if !strings.Contains(strings.ToLower(markup), "<svg") {
+		markup = ""
+	}
+	e.mu.Lock()
+	e.svgs[u] = markup
+	e.mu.Unlock()
+	return markup, markup != ""
 }
 
 func (e *tabEnv) Focused() *html.Node { return nil }
@@ -150,7 +183,7 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 	if !renderEnabled() {
 		return
 	}
-	env := &tabEnv{t: t, doc: doc, imgs: map[string]image.Image{}}
+	env := &tabEnv{t: t, doc: doc, imgs: map[string]image.Image{}, svgs: map[string]string{}}
 	doc.SetLayoutProvider(func(width int) *fnet.Layout {
 		_, vh, dsf, _, _ := t.Viewport()
 		if vh <= 0 {
@@ -236,7 +269,29 @@ func (t *Tab) paintPage(width, height int, dsf float64, full bool) (*image.RGBA,
 	if height <= 0 {
 		height = 720
 	}
-	return raster.Paint(ext.res.List, width, height, dsf, raster.PaintEnv{
+	list := ext.res.List
+	if full {
+		// a full-page capture is not scrolled, so it carries no page scrollbar
+		kept := make([]render.Op, 0, len(list))
+		for _, op := range list {
+			switch o := op.(type) {
+			case render.Scrollbar:
+				if o.Vertical && o.Rect.Y == 0 && o.Rect.X+o.Rect.W >= float64(width)-0.5 {
+					continue
+				}
+				if !o.Vertical && o.Rect.Y+o.Rect.H >= ext.res.Viewport.H-0.5 && o.Rect.X == 0 {
+					continue
+				}
+			case render.ScrollCorner:
+				if o.Rect.X+o.Rect.W >= float64(width)-0.5 && o.Rect.Y+o.Rect.H >= ext.res.Viewport.H-0.5 {
+					continue
+				}
+			}
+			kept = append(kept, op)
+		}
+		list = kept
+	}
+	return raster.Paint(list, width, height, dsf, raster.PaintEnv{
 		Bitmap:     ext.env.Bitmap,
 		Background: raster.Color{R: 1, G: 1, B: 1, A: 1},
 	}), true

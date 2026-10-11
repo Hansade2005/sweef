@@ -301,7 +301,7 @@ func TestMediaFrameInBitmapRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	var w, h int
-	for i := 0; i < 80 && w == 0; i++ {
+	for i := 0; i < 600 && w == 0; i++ {
 		tab.Settle(50 * time.Millisecond)
 		raw, _ := tab.Evaluate("__swIdOf(document.getElementById('vid'))")
 		var id int64

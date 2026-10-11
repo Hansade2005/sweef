@@ -1,0 +1,20 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>snap</title>
+<style>
+body { margin: 0; padding: 16px; font: 16px/1.4 Arial, sans-serif; }
+.s { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 20px; width: 400px; gap: 10px; border: 1px solid #000; }
+.s > div { flex: 0 0 300px; height: 80px; scroll-snap-align: start; background: #cde; scroll-margin-left: 10px; }
+.y { height: 120px; overflow-y: scroll; scroll-snap-type: y proximity; width: 300px; border: 1px solid #000; margin-top: 16px; scroll-behavior: smooth; overscroll-behavior: contain; }
+.y > div { height: 100px; scroll-snap-align: center; scroll-snap-stop: always; background: #fdc; margin-bottom: 4px; }
+.cv { content-visibility: auto; contain-intrinsic-size: auto 200px; background: #efe; margin-top: 16px; }
+.cv2 { content-visibility: hidden; height: 50px; background: #fee; margin-top: 16px; }
+.cv3 { content-visibility: auto; contain-intrinsic-size: 300px 80px; background: #eef; margin-top: 16px; }
+.ct { contain: layout paint; width: 100px; height: 50px; background: #ffd; margin-top: 16px; overflow: visible; }
+.ct2 { contain: size; width: 100px; background: #dff; margin-top: 16px; }
+.ct3 { contain: strict; width: 120px; height: 40px; background: #fdf; margin-top: 16px; }
+</style></head><body>
+<div class="s"><div>1</div><div>2</div><div>3</div></div>
+<div class="y"><div>a</div><div>b</div><div>c</div></div>
+<div class="cv">cv auto</div><div class="cv2"><p>hidden child content</p></div><div class="cv3">cv auto size</div>
+<div class="ct"><div style="width:200px;height:100px;background:red;opacity:.2">overflow</div></div><div class="ct2"><p>child</p></div><div class="ct3">strict</div>
+</body></html>

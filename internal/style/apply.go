@@ -90,6 +90,9 @@ func (s *cstate) fontMetrics() (ex, ch, capH float64) {
 }
 
 func (s *cstate) length(v string, allowNum bool) (Length, bool) {
+	if strings.Contains(v, "lh") {
+		s.uc.lh = s.lineHeightPx()
+	}
 	if strings.Contains(v, "ex") || strings.Contains(v, "ch") || strings.Contains(v, "cap") {
 		if !s.metricsDone {
 			s.uc.exH, s.uc.chW, s.uc.capH = s.fontMetrics()
@@ -97,6 +100,27 @@ func (s *cstate) length(v string, allowNum bool) (Length, bool) {
 		}
 	}
 	return s.uc.parseLength(v, allowNum)
+}
+
+// lineHeightPx is the element's computed line-height in px (for the lh unit).
+func (s *cstate) lineHeightPx() float64 {
+	lh := s.c.LineHeight
+	var v float64
+	switch lh.K {
+	case LNumber:
+		v = lh.V * s.c.FontSize
+	case LPx:
+		v = lh.V
+	default:
+		st := font.Style{Weight: s.c.FontWeight, Italic: s.c.FontStyle != 0}
+		if f := font.Resolve(s.c.FontFamily, st); f != nil {
+			m := f.Metrics(s.c.FontSize)
+			v = m.Ascent + m.Descent + m.LineGap
+		} else {
+			v = s.c.FontSize * 1.2
+		}
+	}
+	return math.Floor(v*64) / 64
 }
 
 func (s *cstate) nonNegLen(v string) (Length, bool) {
@@ -343,8 +367,69 @@ func (s *cstate) apply(name, v, l string) bool {
 		return s.setLen(&c.Inset[s.inlineStart()], v, true)
 	case "inset-inline-end":
 		return s.setLen(&c.Inset[s.inlineEnd()], v, true)
+	case "text-orientation":
+		switch l {
+		case "mixed", "upright", "sideways", "sideways-right":
+			c.TextOrientation = l
+		default:
+			return false
+		}
 	case "contain":
 		c.Contain = l
+	case "content-visibility":
+		switch l {
+		case "visible", "hidden", "auto":
+			c.ContentVisibility = l
+		default:
+			return false
+		}
+	case "contain-intrinsic-width", "contain-intrinsic-height", "contain-intrinsic-size", "contain-intrinsic-inline-size", "contain-intrinsic-block-size":
+		parts := fields(l)
+		parse := func(p string) (Length, bool, bool) {
+			auto := false
+			if strings.HasPrefix(p, "auto ") {
+				auto = true
+				p = strings.TrimSpace(p[5:])
+			}
+			if p == "none" {
+				return Length{K: LNone}, auto, true
+			}
+			x, ok := s.length(p, false)
+			return x, auto, ok
+		}
+		// "auto 200px" arrives as two fields: re-join an auto prefix
+		var vals []string
+		for i := 0; i < len(parts); i++ {
+			if parts[i] == "auto" && i+1 < len(parts) {
+				vals = append(vals, "auto "+parts[i+1])
+				i++
+			} else {
+				vals = append(vals, parts[i])
+			}
+		}
+		if len(vals) == 0 || len(vals) > 2 {
+			return false
+		}
+		w, wa, ok := parse(vals[0])
+		if !ok {
+			return false
+		}
+		h, ha := w, wa
+		if len(vals) == 2 {
+			var ok2 bool
+			h, ha, ok2 = parse(vals[1])
+			if !ok2 {
+				return false
+			}
+		}
+		switch name {
+		case "contain-intrinsic-width", "contain-intrinsic-inline-size":
+			c.CIntrW, c.CIntrAutoW = w, wa
+		case "contain-intrinsic-height", "contain-intrinsic-block-size":
+			c.CIntrH, c.CIntrAutoH = w, wa
+		default:
+			c.CIntrW, c.CIntrAutoW, c.CIntrH, c.CIntrAutoH = w, wa, h, ha
+		}
 	case "isolation":
 		c.Isolation = l
 	case "appearance", "-webkit-appearance", "-moz-appearance":
@@ -647,6 +732,25 @@ func (s *cstate) apply(name, v, l string) bool {
 		c.CaptionSide = l
 	case "empty-cells":
 		c.EmptyCellsHide = l == "hide"
+	case "container-type":
+		switch l {
+		case "normal", "size", "inline-size":
+			c.ContainerType = l
+		default:
+			return false
+		}
+	case "container-name":
+		c.ContainerName = parseContainerNames(l)
+	case "container":
+		nm, ty := l, "normal"
+		if i := strings.IndexByte(l, '/'); i >= 0 {
+			nm, ty = strings.TrimSpace(l[:i]), strings.TrimSpace(l[i+1:])
+		}
+		if ty != "normal" && ty != "size" && ty != "inline-size" {
+			return false
+		}
+		c.ContainerType = ty
+		c.ContainerName = parseContainerNames(nm)
 	case "table-layout":
 		if l != "auto" && l != "fixed" {
 			return false
@@ -923,7 +1027,7 @@ func (s *cstate) apply(name, v, l string) bool {
 			return false
 		}
 		c.Direction = l
-	case "unicode-bidi", "text-orientation":
+	case "unicode-bidi":
 	case "writing-mode", "-webkit-writing-mode":
 		c.WritingMode = l
 	case "tab-size", "-moz-tab-size":
@@ -1025,7 +1129,22 @@ func (s *cstate) apply(name, v, l string) bool {
 		} else if n, ok := parseInt(l); ok {
 			c.LineClamp = n
 		}
-	case "orphans", "widows", "page-break-before", "page-break-after", "page-break-inside", "break-before", "break-after", "break-inside":
+	case "orphans", "widows":
+		n, ok := parseInt(l)
+		if !ok || n < 1 {
+			return false
+		}
+		if name == "orphans" {
+			c.Orphans = n
+		} else {
+			c.Widows = n
+		}
+	case "break-before", "page-break-before":
+		c.BreakBefore = normBreak(l)
+	case "break-after", "page-break-after":
+		c.BreakAfter = normBreak(l)
+	case "break-inside", "page-break-inside":
+		c.BreakInside = normBreak(l)
 	case "object-fit":
 		c.ObjectFit = l
 	case "object-position":
@@ -1331,11 +1450,10 @@ func (s *cstate) apply(name, v, l string) bool {
 			return true
 		}
 		switch name {
-		case "will-change", "backface-visibility", "transform-style", "transform-box", "content-visibility", "contain-intrinsic-size", "contain-intrinsic-width",
-			"contain-intrinsic-height", "shape-outside", "shape-margin", "shape-image-threshold", "fill", "stroke", "stroke-width", "fill-opacity", "stroke-opacity",
+		case "will-change", "backface-visibility", "transform-style", "transform-box", "shape-outside", "shape-margin", "shape-image-threshold", "fill", "stroke", "stroke-width", "fill-opacity", "stroke-opacity",
 			"stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset", "fill-rule", "clip-rule", "stop-color", "stop-opacity", "vector-effect", "paint-order",
 			"text-emphasis", "text-emphasis-color", "text-emphasis-style", "text-emphasis-position", "ruby-position", "hanging-punctuation", "forced-color-adjust", "print-color-adjust",
-			"image-orientation", "mask-type", "anchor-name", "position-anchor", "interpolate-size", "field-sizing", "cx", "cy", "r", "rx", "ry", "x", "y", "d", "marker", "marker-start", "marker-mid", "marker-end", "dominant-baseline", "alignment-baseline", "baseline-shift", "text-anchor", "shape-rendering", "color-interpolation", "color-interpolation-filters", "flood-color", "flood-opacity", "lighting-color", "clip", "container", "container-type", "container-name", "math-style", "math-depth", "initial-letter", "offset", "offset-path", "text-justify", "text-combine-upright", "speak", "src", "unicode-range", "font-display", "ascent-override", "descent-override", "line-gap-override", "size-adjust", "page", "size", "marks", "bleed", "caret", "caret-shape", "nav-up", "nav-down", "nav-left", "nav-right", "zoom-x":
+			"image-orientation", "mask-type", "anchor-name", "position-anchor", "interpolate-size", "field-sizing", "cx", "cy", "r", "rx", "ry", "x", "y", "d", "marker", "marker-start", "marker-mid", "marker-end", "dominant-baseline", "alignment-baseline", "baseline-shift", "text-anchor", "shape-rendering", "color-interpolation", "color-interpolation-filters", "flood-color", "flood-opacity", "lighting-color", "clip", "math-style", "math-depth", "initial-letter", "offset", "offset-path", "text-justify", "text-combine-upright", "speak", "src", "unicode-range", "font-display", "ascent-override", "descent-override", "line-gap-override", "size-adjust", "page", "size", "marks", "bleed", "caret", "caret-shape", "nav-up", "nav-down", "nav-left", "nav-right", "zoom-x":
 			return true
 		}
 		return false
@@ -2003,4 +2121,15 @@ func (s *cstate) inlineEnd() int {
 		return 3
 	}
 	return 1
+}
+
+// normBreak maps break-* keywords onto auto, avoid or a forced break.
+func normBreak(l string) string {
+	switch l {
+	case "avoid", "avoid-page", "avoid-column", "avoid-region":
+		return "avoid"
+	case "column", "page", "always", "left", "right", "recto", "verso", "region":
+		return "column"
+	}
+	return "auto"
 }

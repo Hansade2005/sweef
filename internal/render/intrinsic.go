@@ -23,6 +23,19 @@ func (c *ctx) intrinsic(b *lbox) {
 	}
 	b.hasIntr = true // guards recursion
 	var mn, mx float64
+	if b.vflow != 0 && b.vt == 0 {
+		// orthogonal flow root: its width is its block size, found by laying it out
+		b.hasIntr = false
+		saved := *b
+		c.vIntrinsic = true
+		defer func() { c.vIntrinsic = false }()
+		c.layoutVertical(b, layoutIn{cbw: c.vw, cbh: -1, fixW: -1, fixH: -1, shrink: true, availW: c.vw, bfc: &bfcState{}})
+		w := b.w - b.hExtra()
+		*b = saved
+		b.hasIntr = true
+		b.minW, b.maxW = w, w
+		return
+	}
 	switch b.inner {
 	case iReplaced, iControl:
 		mn, mx = c.replacedIntrinsic(b)
@@ -37,6 +50,12 @@ func (c *ctx) intrinsic(b *lbox) {
 			mn, mx = c.ifcIntrinsic(b)
 		} else {
 			mn, mx = c.blockIntrinsic(b)
+		}
+	}
+	if b.st.ContainsInlineSize() && b.st.WritingMode != "vertical-rl" && b.st.WritingMode != "vertical-lr" {
+		mn, mx = 0, 0
+		if b.st.CIntrW.K == style.LPx {
+			mn, mx = b.st.CIntrW.V, b.st.CIntrW.V
 		}
 	}
 	// scrollbars

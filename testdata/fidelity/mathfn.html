@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>mathfn</title>
+<style>
+body { margin: 0; padding: 16px; font: 16px/1.4 Arial, sans-serif; }
+div { margin-bottom: 6px; background: #cde; height: 24px; }
+.a { width: min(50%, 300px); } .b { width: max(30%, 200px); } .c { width: clamp(100px, 40vw, 400px); }
+.d { width: calc(100% - 2 * 20px); } .e { width: calc(50% + 10px - 3em); } .f { width: calc((100% - 30px) / 3); }
+.g { width: min(10vw, 5em, 400px); } .h { width: clamp(10%, 50vw, 600px); } .i { width: calc(100% * 2 / 5); }
+.j { width: calc(var(--w, 120px) + 1rem); } .k { width: max(1px, calc(10% - 5px)); }
+.l { width: calc(infinity * 1px); max-width: 250px; } .m { width: calc(1px * sin(30deg) * 200); }
+.n { width: round(up, 33.3px, 10px); } .o { width: calc(abs(-80px) + sign(-3) * 10px); }
+.p { width: calc(1px * pow(2, 6)); }
+.q { width: min(100%, 500px); height: max(10px, 2lh); } .r { width: calc(10px + 5%); padding: calc(2px + 1em); }
+.ar1 { aspect-ratio: 16/9; width: 320px; height: auto; background: #fcd; }
+.ar2 { aspect-ratio: 1; height: 80px; width: auto; background: #fdc; }
+.ar3 { aspect-ratio: 2 / 1; width: 50%; background: #dfc; min-height: 0; }
+.ar4 { aspect-ratio: 3/2; width: 200px; max-height: 60px; background: #cfd; }
+.flexar { display: flex; gap: 8px; height: auto; background: none; }
+.flexar > div { aspect-ratio: 1; flex: 1; background: #ddf; height: auto; margin: 0; }
+img.ar { aspect-ratio: 2; width: 100px; height: auto; display: block; }
+.ar5 { aspect-ratio: auto 4/3; width: 120px; background: #fde; }
+</style></head><body>
+<div class="a">a</div><div class="b">b</div><div class="c">c</div><div class="d">d</div><div class="e">e</div><div class="f">f</div>
+<div class="g">g</div><div class="h">h</div><div class="i">i</div><div class="j">j</div><div class="k">k</div><div class="l">l</div>
+<div class="m">m</div><div class="n">n</div><div class="o">o</div><div class="p">p</div><div class="q">q</div><div class="r">r</div>
+<div class="ar1"></div><div class="ar2"></div><div class="ar3"></div><div class="ar4"></div>
+<div class="flexar"><div></div><div></div><div></div></div>
+<img class="ar" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+<div class="ar5"></div>
+</body></html>

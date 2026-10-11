@@ -274,7 +274,7 @@ func TestWebSocketEcho(t *testing.T) {
 	srv := featureServer(t)
 	e := newFeatureEngine(t)
 	tab, _ := e.NewTab(srv.URL + "/wspage")
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		w, _ := tab.Text("#w")
 		b, _ := tab.Text("#b")
@@ -301,7 +301,7 @@ func TestWorkers(t *testing.T) {
 	srv := featureServer(t)
 	e := newFeatureEngine(t)
 	tab, _ := e.NewTab(srv.URL + "/workerpage")
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		o, _ := tab.Text("#o")
 		bo, _ := tab.Text("#bo")

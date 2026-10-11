@@ -3,6 +3,10 @@ package render
 // placeInline converts line data of an IFC root b into absolute fragments for
 // its inline boxes and collects the atomic/float children for placement.
 func (c *ctx) placeInline(b *lbox) {
+	if b.vlines != nil && b.vmode != 0 {
+		c.placeVerticalInline(b)
+		return
+	}
 	// reset inline boxes' fragments
 	var reset func(x *lbox)
 	reset = func(x *lbox) {
@@ -10,11 +14,19 @@ func (c *ctx) placeInline(b *lbox) {
 			if k.kind == kInline {
 				k.absFrags = k.absFrags[:0]
 				reset(k)
+			} else if k.kind == kBreak {
+				k.absFrags = k.absFrags[:0]
 			}
 		}
 	}
 	reset(b)
 	for _, ln := range b.lines {
+		for _, fr := range ln.frags {
+			if fr.kind == aBreak && fr.box != nil && fr.box.kind == kBreak {
+				fs := c.spec(fr.box.st)
+				fr.box.absFrags = append(fr.box.absFrags, Rect{b.ax + ln.x + fr.x, b.ay + ln.y + fr.base - fs.asc, 0, fs.asc + fs.desc})
+			}
+		}
 		for li := range ln.boxes {
 			lb := &ln.boxes[li]
 			bx := lb.box
@@ -24,7 +36,9 @@ func (c *ctx) placeInline(b *lbox) {
 			w := lb.x1 - lb.x0
 			h := fs.asc + fs.desc + bx.pad[0] + bx.pad[2] + bx.bor[0] + bx.bor[2]
 			lb.rect = Rect{x, y, w, h}
-			bx.absFrags = append(bx.absFrags, lb.rect)
+			if !b.noFrags {
+				bx.absFrags = append(bx.absFrags, lb.rect)
+			}
 		}
 	}
 }

@@ -1,0 +1,27 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>logical</title>
+<style>
+body { margin: 0; padding: 16px; font: 16px/1.4 Arial, sans-serif; }
+.a { margin-inline: 40px 10px; margin-block: 8px 16px; padding-inline: 12px 4px; padding-block: 6px; border-inline-start: 6px solid red; border-block-end: 3px solid blue; background: #eef; inline-size: 300px; block-size: 40px; }
+.b { margin-inline: auto; inline-size: 50%; min-inline-size: 200px; max-block-size: 30px; background: #efe; padding: 4px; }
+.c { position: relative; inset-inline-start: 30px; inset-block-start: 5px; background: #fee; width: 200px; }
+.d { position: absolute; inset-inline: 20px 60%; inset-block: auto 10px; background: #ffd; height: 30px; }
+.e { border-start-start-radius: 20px; border-end-end-radius: 20px; background: #dde; padding: 10px; width: 200px; }
+.f { overflow-inline: hidden; text-align: start; width: 200px; background: #eee; }
+.g { float: inline-end; width: 60px; height: 30px; background: #cdf; }
+.h { margin-inline-start: 30px; padding-inline: 1em; margin-block-start: 10px; border-width: 1px; border-style: solid; border-inline-width: 8px 2px; width: 150px; }
+.i { direction: rtl; margin-inline-start: 50px; padding-inline-start: 20px; background: #fed; width: 300px; border-inline-start: 5px solid #000; }
+.j { inset: 0; }
+.k { writing-mode: horizontal-tb; width: 200px; inline-size: 150px; background: #def; }
+.rel { position: relative; height: 90px; border: 1px solid #000; margin-top: 20px; }
+</style></head><body>
+<div class="a">logical box</div>
+<div class="b">auto inline margins</div>
+<div class="c">relative inset</div>
+<div class="rel"><div class="d">abs</div></div>
+<div class="e">radius</div>
+<div class="f">start aligned <span class="g"></span></div>
+<div class="h">mixed</div>
+<div class="i">rtl logical</div>
+<div class="k">inline-size overrides width</div>
+</body></html>
