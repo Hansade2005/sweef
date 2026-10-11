@@ -29,7 +29,9 @@ func TestBinaryFetchAndXHRAreByteExact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum := func(u8 string) string { return `(function(b){var s=0,h=0;for(var i=0;i<b.length;i++){s+=b[i];h=(h*31+b[i])>>>0}return b.length+':'+s+':'+h})(` + u8 + `)` }
+	sum := func(u8 string) string {
+		return `(function(b){var s=0,h=0;for(var i=0;i<b.length;i++){s+=b[i];h=(h*31+b[i])>>>0}return b.length+':'+s+':'+h})(` + u8 + `)`
+	}
 	var want string
 	{
 		s, h := 0, uint32(0)
