@@ -17,9 +17,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/engine"
@@ -28,9 +30,21 @@ import (
 
 type Server struct {
 	eng *engine.Engine
+
+	// IdleTimeout, when > 0, makes ServeTCP return after that long without a
+	// request (session daemons started by the CLI use it).
+	IdleTimeout time.Duration
+	// OnShutdown is invoked by the Browser.shutdown method (CLI `close`).
+	OnShutdown func()
+
+	lastActivity atomic.Int64
 }
 
-func NewServer(e *engine.Engine) *Server { return &Server{eng: e} }
+func NewServer(e *engine.Engine) *Server {
+	s := &Server{eng: e}
+	s.lastActivity.Store(time.Now().UnixNano())
+	return s
+}
 
 // ---- dispatch --------------------------------------------------------------
 
@@ -88,6 +102,7 @@ func (s *Server) tab(p Params) (*engine.Tab, error) {
 
 // Call executes one method and returns a JSON result or an RpcError.
 func (s *Server) Call(method string, raw json.RawMessage) (json.RawMessage, *protocol.RpcError) {
+	s.lastActivity.Store(time.Now().UnixNano())
 	var p Params
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &p); err != nil {
@@ -135,6 +150,11 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 			out = append(out, tb{t.ID, t.URL(), t.Title()})
 		}
 		return out, nil
+	case "Browser.shutdown":
+		if s.OnShutdown != nil {
+			go func() { time.Sleep(50 * time.Millisecond); s.OnShutdown() }()
+		}
+		return map[string]bool{"ok": true}, nil
 	case "Browser.stats":
 		var ms runtime.MemStats
 		runtime.ReadMemStats(&ms)
@@ -436,15 +456,43 @@ func (s *Server) ServePipe(ctx context.Context, rw io.ReadWriteCloser, busEvents
 // ServeTCP listens for SDK connections. One goroutine per client; each is a
 // few KB of stack until it starts working — fine even at hundreds of agents.
 func (s *Server) ServeTCP(ctx context.Context, addr string) error {
-	ln, err := net.Listen("tcp", addr)
+	network := "tcp"
+	if strings.HasPrefix(addr, "unix:") {
+		network, addr = "unix", strings.TrimPrefix(addr, "unix:")
+		_ = os.Remove(addr)
+	}
+	ln, err := net.Listen(network, addr)
 	if err != nil {
 		return err
 	}
 	defer ln.Close()
+	if network == "unix" {
+		defer os.Remove(addr)
+		_ = os.Chmod(addr, 0o600)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	go func() {
 		<-ctx.Done()
 		ln.Close()
 	}()
+	if s.IdleTimeout > 0 {
+		go func() {
+			tick := time.NewTicker(time.Second)
+			defer tick.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-tick.C:
+					if time.Since(time.Unix(0, s.lastActivity.Load())) > s.IdleTimeout {
+						cancel()
+						return
+					}
+				}
+			}
+		}()
+	}
 	for {
 		c, err := ln.Accept()
 		if err != nil {

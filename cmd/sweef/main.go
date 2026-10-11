@@ -35,6 +35,10 @@ func main() {
 	cmd := os.Args[1]
 	args := os.Args[2:]
 
+	if isSessionCommand(cmd, args) {
+		cmdSession(cmd, args)
+		return
+	}
 	switch cmd {
 	case "mcp":
 		cmdMCP(args)
@@ -62,15 +66,28 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `sweef - the lightweight agent-first browser
+	fmt.Fprint(os.Stderr, `sweef - the agent browser that costs nothing to run
 
-usage:
-  sweef mcp                          MCP server over stdio (for AI agents)
-  sweef serve [--addr host:port]     RPC server for SDKs (Node/Python)
-  sweef fetch <url> [--html|--text]  print page text (default) or HTML
-  sweef snapshot <url>               accessibility tree as JSON
-  sweef eval <url> <js-expression>   evaluate JS after load
-  sweef call <Method> [params-json]  invoke RPC against --addr server
+session commands (a daemon keeps the page alive between calls; refs come from snapshot):
+  sweef open <url>                       navigate (starts the session daemon on first use)
+  sweef snapshot [-i] [-c] [-d n] [-s sel] [--delta]
+  sweef click @e3 | fill @e5 <text> | type | press <key> | hover | focus | check | uncheck | select
+  sweef get text|html|value|attr|title|url|count [sel] [name]
+  sweef is visible|enabled|checked <sel>
+  sweef wait <sel|ms> | --text t | --url glob | --fn js | --load state
+  sweef eval <js> | console | network | back | forward | reload | tab | screenshot [path]
+  sweef find role button click --name "Sign in" | set viewport 390 844 | cookies | storage | state save f
+  sweef close                            stop the session daemon
+  global flags: --session <name> --json --timeout 30s
+
+one-shot and server commands:
+  sweef fetch <url> [--html]             print page text (default) or HTML
+  sweef snapshot <url> [--aria]          accessibility tree of a URL
+  sweef eval <url> <js-expression>       evaluate JS after load
+  sweef shot <url> [--out page.png]      PNG render
+  sweef mcp                              MCP server over stdio (for AI agents)
+  sweef serve [--addr host:port|unix:path] [--idle-timeout 1h]
+  sweef call <Method> [params-json]      raw RPC against a running server
   sweef version
 `)
 }
@@ -106,13 +123,17 @@ func cmdMCP(args []string) {
 
 func cmdServe(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	addr := fs.String("addr", "127.0.0.1:9222", "listen address")
+	addr := fs.String("addr", "127.0.0.1:9222", "listen address (host:port or unix:/path)")
+	idle := fs.Duration("idle-timeout", 0, "exit after this long without a request (0 = never)")
+	addCommonFlags(fs)
 	_ = fs.Parse(args)
 	e := engine.New(engineOptsFrom(fs))
 	defer e.Close()
 	srv := rpc.NewServer(e)
+	srv.IdleTimeout = *idle
 	ctx, cancel := withSignals(context.Background())
 	defer cancel()
+	srv.OnShutdown = cancel
 	fmt.Fprintf(os.Stderr, "sweef serving %s (SDK protocol SWF1)\n", *addr)
 	if err := srv.ServeTCP(ctx, *addr); err != nil {
 		fmt.Fprintln(os.Stderr, "serve:", err)

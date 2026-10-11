@@ -113,8 +113,8 @@ func TestSnapshotRefsResolveAndSurviveMutation(t *testing.T) {
 	if _, err := d.ResolveEngine(ref); err == nil || !strings.Contains(err.Error(), "detached") {
 		t.Fatalf("want detached error, got %v", err)
 	}
-	if _, err := d.ResolveEngine("e9999"); err == nil || !strings.Contains(err.Error(), "previous page") {
-		t.Fatalf("want previous-page error, got %v", err)
+	if _, err := d.ResolveEngine("e9999"); err == nil || !strings.Contains(err.Error(), "not in any snapshot") {
+		t.Fatalf("want unknown-ref error, got %v", err)
 	}
 }
 

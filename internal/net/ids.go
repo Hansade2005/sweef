@@ -14,10 +14,51 @@ type idTable struct {
 	next  int64
 	ids   map[*html.Node]int64
 	nodes map[int64]*html.Node
+
+	// Snapshot refs are a second, denser numbering: a node gets a ref the
+	// first time a snapshot lists it, keeps it for the life of the document,
+	// and only listed nodes can be addressed as eN. Internal ids (scripts,
+	// JS wrappers) therefore never show up in, or collide with, agent refs.
+	nextRef int64
+	refs    map[*html.Node]int64
+	byRef   map[int64]*html.Node
 }
 
 func newIDTable() *idTable {
-	return &idTable{ids: map[*html.Node]int64{}, nodes: map[int64]*html.Node{}}
+	return &idTable{ids: map[*html.Node]int64{}, nodes: map[int64]*html.Node{}, refs: map[*html.Node]int64{}, byRef: map[int64]*html.Node{}}
+}
+
+// refOf returns the node's snapshot ref, assigning the next one on first use.
+func (d *Doc) refOf(n *html.Node) int64 {
+	d.idMu.Lock()
+	defer d.idMu.Unlock()
+	if r, ok := d.tab.refs[n]; ok {
+		return r
+	}
+	d.tab.nextRef++
+	r := d.tab.nextRef
+	d.tab.refs[n] = r
+	d.tab.byRef[r] = n
+	return r
+}
+
+// nodeByRef resolves a snapshot ref; nil when no snapshot of this document
+// ever listed it.
+func (d *Doc) nodeByRef(ref int64) *html.Node {
+	d.idMu.RLock()
+	defer d.idMu.RUnlock()
+	return d.tab.byRef[ref]
+}
+
+// RefForBackend returns the snapshot ref for an internal id, assigning one
+// when the node has not been listed yet (so nodes found through evaluate can
+// be acted on). 0 for unknown ids and non-elements.
+func (d *Doc) RefForBackend(id int64) int64 {
+	n := d.find(id)
+	if n == nil || n.Type != html.ElementNode {
+		return 0
+	}
+	return d.refOf(n)
 }
 
 // idOf returns the node's id, assigning one on first touch.
@@ -55,10 +96,10 @@ func (d *Doc) Attached(n *html.Node) bool {
 	return false
 }
 
-// RefState classifies an id for error messages: "attached", "detached" or
-// "unknown".
-func (d *Doc) RefState(id int64) string {
-	n := d.find(id)
+// RefState classifies a snapshot ref for error messages: "attached",
+// "detached" or "unknown".
+func (d *Doc) RefState(ref int64) string {
+	n := d.nodeByRef(ref)
 	switch {
 	case n == nil:
 		return "unknown"

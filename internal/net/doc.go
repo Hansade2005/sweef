@@ -830,6 +830,7 @@ func currentVal(n *html.Node) string {
 type Info struct {
 	NodeID    int64  `json:"nodeId"`
 	BackendID int64  `json:"backendNodeId"`
+	Ref       int64  `json:"ref,omitempty"` // snapshot ref (eN), 0 if never listed
 	Name      string `json:"name"`
 	ID        string `json:"id,omitempty"`
 	Type      string `json:"type,omitempty"`
@@ -1158,11 +1159,11 @@ func (d *Doc) ResolveEngine(sel string) ([]*Info, error) {
 		if _, err := fmt.Sscanf(refStr, "%d", &id); err == nil {
 			switch d.RefState(id) {
 			case "attached":
-				return []*Info{d.InfoByBackend(id)}, nil
+				return []*Info{d.nodeToInfo(d.nodeByRef(id))}, nil
 			case "detached":
 				return nil, fmt.Errorf("ref e%d is detached from the document; take a new snapshot", id)
 			}
-			return nil, fmt.Errorf("ref e%d is from a previous page; take a new snapshot", id)
+			return nil, fmt.Errorf("ref e%d is not in any snapshot of this page; take a new snapshot", id)
 		}
 	}
 	switch {

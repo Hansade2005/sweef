@@ -145,6 +145,15 @@ func attrKeysOf(d *fnet.Doc, backendID int64) []string {
 // their control.
 func (t *Tab) Click(sel string) error {
 	l := t.Locator(sel)
+	// A ref that resolves to something that can never be clicked fails at
+	// once instead of waiting for it to become visible.
+	if bid, err := l.BackendID(); err == nil {
+		if info := t.infoForBackend(bid); info != nil && nonRenderable[strings.ToLower(info.Name)] {
+			return fmt.Errorf("<%s> is not a visible element; take a new snapshot and use a listed ref", info.Name)
+		}
+	} else if strings.Contains(err.Error(), "snapshot") {
+		return err // unknown or detached ref: no point waiting
+	}
 	if err := l.WaitForCondition("visible", 5*time.Second); err != nil {
 		// fall back to attached-only click (hidden links still navigate)
 		if err2 := l.WaitForCondition("attached", 100*time.Millisecond); err2 != nil {
@@ -157,6 +166,8 @@ func (t *Tab) Click(sel string) error {
 	}
 	return t.clickBackend(bid, sel)
 }
+
+var nonRenderable = map[string]bool{"script": true, "style": true, "head": true, "meta": true, "link": true, "title": true, "template": true, "noscript": true}
 
 func (t *Tab) clickBackend(bid int64, sel string) error {
 	info := t.infoForBackend(bid)

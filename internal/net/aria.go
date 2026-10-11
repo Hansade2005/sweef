@@ -466,7 +466,7 @@ func (d *Doc) buildSnap(n *html.Node, o *SnapshotOptions, depth int) []*snapNode
 	sn.interactive = isInteractiveElement(n, role)
 	sn.heading = role == "heading"
 	if sn.interactive || sn.heading {
-		sn.ref = d.idOf(n)
+		sn.ref = d.refOf(n)
 	}
 
 	// attributes
@@ -526,7 +526,7 @@ func (d *Doc) buildSnap(n *html.Node, o *SnapshotOptions, depth int) []*snapNode
 	if leafRoles[role] {
 		if n.Data == "select" {
 			for _, opt := range optionsOf(n) {
-				on := &snapNode{role: "option", name: normWS(innerText(opt)), interactive: true, ref: d.idOf(opt)}
+				on := &snapNode{role: "option", name: normWS(innerText(opt)), interactive: true, ref: d.refOf(opt)}
 				if hasAttr(opt, "selected") {
 					on.attrs = append(on.attrs, "selected")
 				}
@@ -764,6 +764,9 @@ func (d *Doc) AriaSnapshotV2(o SnapshotOptions) (string, error) {
 			return "", fmt.Errorf("empty document")
 		}
 		// A page with no readable content at all: say so rather than erroring.
+		if o.InteractiveOnly {
+			return "- text: (no interactive elements on this page)\n", nil
+		}
 		return "- text: (page has no visible content; it may require JavaScript or be blank)\n", nil
 	}
 	return out, nil
@@ -781,14 +784,15 @@ func (d *Doc) SnapshotInfos() []*Info {
 			if n.role != "" {
 				var hn *html.Node
 				if n.ref != 0 {
-					hn = d.find(n.ref)
+					hn = d.nodeByRef(n.ref)
 				}
 				info := &Info{Role: n.role, Text: n.name, Href: n.href, Visible: true}
 				if info.Text == "" && n.hasValue {
 					info.Text = n.value
 				}
 				if hn != nil {
-					info.NodeID, info.BackendID = n.ref, n.ref
+					info.NodeID, info.BackendID = d.idOf(hn), d.idOf(hn)
+					info.Ref = n.ref
 					info.Name = hn.Data
 					info.ID = attr(hn, "id")
 					info.Type = attr(hn, "type")
