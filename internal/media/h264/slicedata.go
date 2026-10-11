@@ -78,6 +78,9 @@ func (d *Decoder) decodeMBEntry() error {
 func (d *Decoder) decodeSlice(h *sliceHeader, r *bitReader) error {
 	d.hdr = h
 	d.br = r
+	if h.sps.SeparatePlanes {
+		d.selectPlane(h.colourPlane)
+	}
 	d.sliceNum++
 	d.curSlice = uint16(d.sliceNum)
 	d.slices = append(d.slices, sliceParams{

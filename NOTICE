@@ -7,6 +7,23 @@ libavcodec 6.0 (libavcodec.so.60.31.102). FFmpeg's libavcodec is licensed under
 the GNU Lesser General Public License, version 2.1 or later. The repository
 owner accepted this licensing for these tables. See https://ffmpeg.org/legal.html.
 
+HE-AAC (SBR and parametric stereo) tables
+-----------------------------------------
+internal/media/sbr_tables_gen.go contains the SBR (spectral band replication)
+and PS (parametric stereo) constant tables of ISO/IEC 14496-3: the Huffman
+codebooks for envelope, noise floor, IID, ICC, IPD and OPD data, the 640 tap
+QMF prototype window, the noise table, the SBR start frequency offset table
+and the PS band mapping and dequantisation constants. Like the AAC codebooks
+above they were extracted from the read-only data of FFmpeg's libavcodec 6.0
+(libavcodec.so.60.31.102), which is licensed under the GNU Lesser General
+Public License, version 2.1 or later; the repository owner accepted this
+licensing for these tables too. The generator script verifies every codebook
+(prefix free, Kraft sum 1) and the symmetry of the QMF window. The decoding
+algorithms in sbr.go, sbr_qmf.go and ps.go follow the standard and reproduce
+the behaviour, including implementation details, of FFmpeg's libavcodec
+aacsbr / aacps decoders (LGPL-2.1-or-later), against whose output they were
+verified. See https://ffmpeg.org/legal.html.
+
 Opus decoding
 -------------
 Opus decoding uses github.com/thesyncim/gopus (BSD-3-Clause).

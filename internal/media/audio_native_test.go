@@ -190,7 +190,7 @@ func TestAACNativeWithoutFFmpeg(t *testing.T) {
 	}
 	for mime, want := range map[string]string{
 		`audio/mp4; codecs="mp4a.40.2"`: "probably", `audio/aac`: "maybe", `audio/aac; codecs="mp4a.40.2"`: "probably",
-		`audio/mp4; codecs="mp4a.40.5"`: "", `video/mp4; codecs="avc1.64001e, mp4a.40.2"`: CanPlayType(`video/mp4; codecs="avc1.64001e, mp4a.40.2"`),
+		`audio/mp4; codecs="mp4a.40.5"`: "probably", `audio/mp4; codecs="mp4a.40.29"`: "probably", `audio/mp4; codecs="mp4a.40.17"`: "", `video/mp4; codecs="avc1.64001e, mp4a.40.2"`: CanPlayType(`video/mp4; codecs="avc1.64001e, mp4a.40.2"`),
 	} {
 		if got := CanPlayType(mime); got != want {
 			t.Errorf("canPlayType(%s) = %q want %q", mime, got, want)

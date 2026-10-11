@@ -105,6 +105,8 @@ func classifyCodec(c string) codecInfo {
 		return codecInfo{"audio", ccFree, ""}
 	case lc == "mp4a.40.2" || lc == "mp4a.40.02":
 		return codecInfo{"audio", ccFree, ""} // AAC-LC: pure-Go decoder
+	case lc == "mp4a.40.5" || lc == "mp4a.40.05" || lc == "mp4a.40.29":
+		return codecInfo{"audio", ccFree, ""} // HE-AAC v1/v2 (SBR, PS): pure-Go decoder
 	case strings.HasPrefix(lc, "mp4a.40."):
 		return codecInfo{"audio", ccFFmpeg, ""}
 	case lc == "speex" || lc == "0":

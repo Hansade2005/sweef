@@ -486,8 +486,6 @@ func (g *sbrGen) tryFrame(attempt int) (*bitW, bool) {
 	cfg := &g.cfg
 	// snapshot generator state so a failed attempt can be retried
 	snapCh := g.ch
-	snapRng := g.rng
-	_ = snapRng
 	w := &bitW{}
 	if cfg.crc {
 		w.put(0, 10)
@@ -495,38 +493,14 @@ func (g *sbrGen) tryFrame(attempt int) (*bitW, bool) {
 	sendHdr := g.frame == 0 || (cfg.headerEvery > 0 && g.frame%cfg.headerEvery == 0) || (cfg.switchAt > 0 && g.frame == cfg.switchAt)
 	reset := false
 	if sendHdr {
-		hw := &bitW{}
-		hw.put(cfg.ampRes, 1)
-		hw.put(cfg.startFreq, 4)
-		hw.put(cfg.stopFreq, 4)
-		hw.put(cfg.xover, 3)
-		hw.put(0, 2)
-		hw.flag(cfg.extra1)
-		hw.flag(cfg.extra2)
-		fs, as, nb := 2, 1, 2
-		if cfg.extra1 {
-			hw.put(cfg.freqScale, 2)
-			hw.put(cfg.alterScale, 1)
-			hw.put(cfg.noiseBands, 2)
-			fs, as, nb = cfg.freqScale, cfg.alterScale, cfg.noiseBands
-		}
-		if cfg.extra2 {
-			hw.put(cfg.limBands, 2)
-			hw.put(cfg.limGains, 2)
-			hw.put(cfg.interpol, 1)
-			hw.put(cfg.smoothing, 1)
-		}
+		hw := g.headerBits()
 		old := g.sh.spec
 		tmp := newSBRElem(cfg.cpe, g.coreRate, false)
-		r := &aacBits{b: hw.b}
-		tmp.readHeader(r)
+		tmp.readHeader(&aacBits{b: hw.b})
 		if err := tmp.resetTables(); err != nil {
 			return nil, false
 		}
 		reset = tmp.spec != old
-		_ = fs
-		_ = as
-		_ = nb
 		w.put(1, 1)
 		w.append(hw)
 	} else {
@@ -704,8 +678,17 @@ type sbrSizing struct {
 
 // sizing returns the band counts valid for the header most recently written.
 func (g *sbrGen) sizing() *sbrSizing {
+	tmp := newSBRElem(g.cfg.cpe, g.coreRate, false)
+	tmp.readHeader(&aacBits{b: g.headerBits().b})
+	if tmp.resetTables() != nil {
+		return nil
+	}
+	return &sbrSizing{n: tmp.n, nQ: tmp.nQ}
+}
+
+// headerBits writes sbr_header() for the current configuration.
+func (g *sbrGen) headerBits() *bitW {
 	cfg := g.cfg
-	tmp := newSBRElem(cfg.cpe, g.coreRate, false)
 	hw := &bitW{}
 	hw.put(cfg.ampRes, 1)
 	hw.put(cfg.startFreq, 4)
@@ -725,12 +708,7 @@ func (g *sbrGen) sizing() *sbrSizing {
 		hw.put(cfg.interpol, 1)
 		hw.put(cfg.smoothing, 1)
 	}
-	r := &aacBits{b: hw.b}
-	tmp.readHeader(r)
-	if tmp.resetTables() != nil {
-		return nil
-	}
-	return &sbrSizing{n: tmp.n, nQ: tmp.nQ}
+	return hw
 }
 
 // ---- stream assembly -----------------------------------------------------------
@@ -902,7 +880,13 @@ type psGenCfg struct {
 	switchAt         int // frame at which both modes change to switchIID/switchICC
 	switchIID        int
 	switchICC        int
-	flat             bool // all parameters zero (neutral)
+	flat             bool  // all parameters zero (neutral)
+	constICC         int   // >0: constant icc value+1 (debugging)
+	constIID         int   // >0: constant iid value+100
+	iidPattern       []int // per band iid values (debugging)
+	iccPattern       []int
+	ipdPattern       []int
+	opdPattern       []int
 }
 
 type psGen struct {
@@ -1071,6 +1055,12 @@ func (g *psGen) try() *bitW {
 				} else {
 					v = g.walk(base, -lim, lim)
 				}
+				if cfg.constIID > 0 {
+					v = cfg.constIID - 100
+				}
+				if len(cfg.iidPattern) > 0 {
+					v = cfg.iidPattern[b%len(cfg.iidPattern)]
+				}
 				delta := v - base
 				if delta+off < 0 || delta+off >= len(psHuffLen[bk]) {
 					return nil
@@ -1104,6 +1094,12 @@ func (g *psGen) try() *bitW {
 				v := g.walk(base, 0, 7)
 				if cfg.flat {
 					v = 0
+				}
+				if cfg.constICC > 0 {
+					v = cfg.constICC - 1
+				}
+				if len(cfg.iccPattern) > 0 {
+					v = cfg.iccPattern[b%len(cfg.iccPattern)]
 				}
 				delta := v - base
 				if delta+off < 0 || delta+off >= len(psHuffLen[bk]) {
@@ -1156,6 +1152,12 @@ func (g *psGen) try() *bitW {
 							base = last
 						}
 						v := g.rng.Intn(8)
+						if k == 0 && len(cfg.ipdPattern) > 0 {
+							v = cfg.ipdPattern[b%len(cfg.ipdPattern)]
+						}
+						if k == 1 && len(cfg.opdPattern) > 0 {
+							v = cfg.opdPattern[b%len(cfg.opdPattern)]
+						}
 						sym := (v - base) & 7
 						ew.huff(psHuffLen[bk], psHuffCode[bk], sym)
 						par[e][b] = v

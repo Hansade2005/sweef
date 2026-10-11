@@ -307,6 +307,11 @@ func (d *Decoder) fillCaches(mbType uint32) {
 					}
 				}
 			}
+			refc[c0+4] = refNotAvail
+			refc[c0+4+8] = refNotAvail
+			refc[c0+4+16] = refNotAvail
+			refc[c0+2] = refNotAvail
+			refc[c0+2+16] = refNotAvail
 			if mbType&(mbSkip|mbDirect2) != 0 && !d.mbaffFrame {
 				continue
 			}
@@ -319,7 +324,7 @@ func (d *Decoder) fillCaches(mbType uint32) {
 				if cabac {
 					if usesList(topType, list) {
 						for x := 0; x < 4; x++ {
-							mvdc[4+x] = d.mvd[list][(nb.topXY*16+12+x)]
+							mvdc[4+x] = d.mvd[list][(nb.topXY*16 + 12 + x)]
 						}
 					} else {
 						for x := 0; x < 4; x++ {

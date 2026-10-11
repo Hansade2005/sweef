@@ -44,10 +44,10 @@ func newFmtInfo(s *SPS) fmtInfo {
 }
 
 type sliceParams struct {
-	disable        int
-	alpha, beta    int
-	cbOff, crOff   int
-	listCount      int
+	disable      int
+	alpha, beta  int
+	cbOff, crOff int
+	listCount    int
 }
 
 // Decoder decodes an H.264 stream access unit by access unit.
@@ -101,6 +101,8 @@ type Decoder struct {
 	slices             []sliceParams
 	sliceNum           int
 	decodedMB          int
+	cplane             int // active colour plane (separate planes)
+	planeTab           [3]planeTables
 	curSlice           uint16
 
 	// current slice
@@ -132,6 +134,7 @@ type Decoder struct {
 	// current macroblock
 	mbx, mby, mbIdx int
 	mbField         bool
+	mbTypeCur       uint32
 	nb              nbState
 	availA, availB  bool
 	availC, availD  bool
@@ -248,6 +251,7 @@ func (d *Decoder) DecodeFrame(data []byte) (img *yuv.Frame, err error) {
 			if DebugPanic != nil {
 				DebugPanic(r, debug.Stack())
 			}
+			d.selectPlane(0)
 			d.picActive = false
 			d.curPic, d.cur = nil, nil
 			d.firstField = false
@@ -376,8 +380,9 @@ func (d *Decoder) handleSlice(n []byte, typ, refIdc int) error {
 }
 
 // isNewPicture implements the first-slice-of-a-picture detection of 7.4.1.2.4.
-func (d *Decoder) isNewPicture(h *sliceHeader) bool {
-	f := d.first
+func (d *Decoder) isNewPicture(h *sliceHeader) bool { return d.isNewPictureFrom(d.first, h) }
+
+func (d *Decoder) isNewPictureFrom(f, h *sliceHeader) bool {
 	switch {
 	case f.frameNum != h.frameNum, f.pps.ID != h.pps.ID, f.fieldPic != h.fieldPic, f.bottom != h.bottom:
 		return true
@@ -417,6 +422,25 @@ func (d *Decoder) allocTables(sps *SPS) {
 	d.directTable = make([]uint8, n*4)
 	d.mbNZMask = make([]uint16, n)
 	d.mbBypass = make([]bool, n)
+	d.cplane = 0
+	d.planeTab = [3]planeTables{}
+	if sps.SeparatePlanes {
+		for k := 1; k < 3; k++ {
+			t := &d.planeTab[k]
+			t.sliceTable = make([]uint16, n)
+			t.qpTable = make([]int8, n)
+			t.nz = make([]uint8, n*48)
+			t.cbpTable = make([]uint16, n)
+			t.chromaPredTable = make([]uint8, n)
+			t.ipm = make([]int8, n*16)
+			for l := 0; l < 2; l++ {
+				t.mvd[l] = make([][2]uint8, n*16)
+			}
+			t.directTable = make([]uint8, n*4)
+			t.mbNZMask = make([]uint16, n)
+			t.mbBypass = make([]bool, n)
+		}
+	}
 }
 
 // startPicture begins a new frame, field or second field.
@@ -425,7 +449,7 @@ func (d *Decoder) startPicture(h *sliceHeader) error {
 	if d.first != nil && d.first.sps != sps && (d.mbW != sps.MbW || d.mbH != sps.MbH || d.f.cf != sps.ChromaFormat || d.f.bdY != sps.BitDepthLuma || d.f.bdC != sps.BitDepthChroma) {
 		d.flushForNewSequence()
 	}
-	if d.sliceTable == nil || d.mbW != sps.MbW || d.mbH != sps.MbH {
+	if d.sliceTable == nil || d.mbW != sps.MbW || d.mbH != sps.MbH || sps.SeparatePlanes != d.f.sep {
 		d.allocTables(sps)
 		d.flushForNewSequence()
 	}
@@ -512,20 +536,23 @@ func (d *Decoder) startPicture(h *sliceHeader) error {
 	}
 	d.lastStruct, d.lastDrop = d.picStructure, d.droppable
 	// reset the slice table of this picture / field
-	if d.fieldPic {
-		for r := btoi(d.picStructure == picBottom); r < d.mbH; r += 2 {
-			base := (r + 2) * d.mbStride
-			for i := 0; i < d.mbStride; i++ {
-				d.sliceTable[base+i] = 0xffff
+	for k := 0; k < d.numPlanes(); k++ {
+		d.selectPlane(k)
+		if d.fieldPic {
+			for r := btoi(d.picStructure == picBottom); r < d.mbH; r += 2 {
+				base := (r + 2) * d.mbStride
+				for i := 0; i < d.mbStride; i++ {
+					d.sliceTable[base+i] = 0xffff
+				}
+			}
+		} else {
+			for i := range d.sliceTable {
+				d.sliceTable[i] = 0xffff
 			}
 		}
-	} else {
-		for i := range d.sliceTable {
-			d.sliceTable[i] = 0xffff
-		}
 	}
+	d.selectPlane(0)
 	d.initPOC(d.curPic, sps, d.picStructure, h.nalRefIdc)
-	d.curPic.reference = d.curPic.reference // keep marking of an already decoded first field
 	if h.nalRefIdc != 0 && d.picStructure != picFrame && d.curPic.reference == 0 {
 		// marked at the end of the field
 	}
@@ -595,10 +622,14 @@ func (d *Decoder) finishPicture() {
 	d.picActive = false
 	pic := d.curPic
 	h := d.first
-	if d.decodedMB < d.mbCountPicture() {
-		d.conceal(pic)
+	for k := 0; k < d.numPlanes(); k++ {
+		d.selectPlane(k)
+		if d.decodedMB < d.numPlanes()*d.mbCountPicture() {
+			d.conceal(pic)
+		}
+		d.deblockPicture(pic)
 	}
-	d.deblockPicture(pic)
+	d.selectPlane(0)
 	st := &d.poc
 	if !d.droppable {
 		if d.executeRefMarking(h, d.picStructure, d.firstField) {

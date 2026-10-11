@@ -124,6 +124,7 @@ func (d *Decoder) mcParts(mbType uint32, out *[16]rect) int {
 }
 
 func (d *Decoder) motionComp(mbType uint32) {
+	d.mbTypeCur = mbType
 	var parts [16]rect
 	n := d.mcParts(mbType, &parts)
 	for i := 0; i < n; i++ {
@@ -419,9 +420,6 @@ func (d *Decoder) decodeMB() error {
 				c := scan8[4*i]
 				r := int8(ref[list][i])
 				d.refCache[list][c+1], d.refCache[list][c+8], d.refCache[list][c+9] = r, r, r
-				if !cabac {
-					d.refCache[list][c] = r
-				}
 			}
 		}
 		if dct8x8Allowed {
@@ -437,9 +435,7 @@ func (d *Decoder) decodeMB() error {
 					}
 					continue
 				}
-				if cabac {
-					d.refCache[list][c] = d.refCache[list][c+1]
-				}
+				d.refCache[list][c] = d.refCache[list][c+1]
 				if isDir(d.subMbType[i], 0, list) {
 					st := d.subMbType[i]
 					bw := 1

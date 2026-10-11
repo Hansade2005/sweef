@@ -2,6 +2,7 @@ package media
 
 import (
 	"math"
+	"math/cmplx"
 	"sync"
 )
 
@@ -18,15 +19,26 @@ var (
 	sbrQMFOnce sync.Once
 	sbrWinUS   [640]float64 // c[n]
 	sbrWinDS   [320]float64 // c[2n]
-	// analysis: exp(i pi/64 (k+1/2)(2n-1)) for k<32, n<64
-	sbrAnaCos, sbrAnaSin [32 * 64]float64
-	// synthesis 64: exp(i pi/128 (k+1/2)(2n-255)) for n<128, k<64
-	sbrSynCos, sbrSynSin [128 * 64]float64
-	// synthesis 32 (downsampled): exp(i pi/64 (k+1/2)(2n-127)) n<64, k<32
+	// synthesis 32 (downsampled): exp(i pi/64 (k+1/2)(2n+sbrSyn32Off)) n<64, k<32
 	sbrSyn32Cos, sbrSyn32Sin [64 * 32]float64
+	// fast transform helpers
+	sbrFFT32Tw, sbrFFT64Tw [32]complex128 // forward FFT twiddles exp(-2 pi i k/N)
+	sbrDCT4Tw, sbrDCT4Post [32]complex128 // exp(-i pi (n+1/4)/64), exp(-i pi n/64)
+	sbrAnaPre, sbrAnaPost  [64]complex128 // exp(-i pi n/64), exp(-i pi (k+1/2)/128)
 )
 
-var sbrAnaOff, sbrSynOff, sbrSyn32Off, sbrDsShift = -0.5, -255.0, -127.5, 0
+// Modulation phases of the QMF banks (the half sample offsets reproduce the
+// delay and the inter band phase relation of the reference decoder, which
+// matter for the HF generation):
+//
+//	analysis      X[k] = sum_n u[n] exp(i pi/64  (k+1/2)(2n+sbrAnaOff))
+//	synthesis 64  v[n] = Re sum_k X[k] exp(i pi/128 (k+1/2)(2n+sbrSynOff))
+//	synthesis 32  v[n] = Re sum_k X[k] exp(i pi/64  (k+1/2)(2n+sbrSyn32Off))
+const (
+	sbrAnaOff   = -0.5
+	sbrSynOff   = -255.0
+	sbrSyn32Off = -127.5
+)
 
 func sbrQMFInit() {
 	sbrQMFOnce.Do(func() {
@@ -34,21 +46,7 @@ func sbrQMFInit() {
 			sbrWinUS[i] = float64(v)
 		}
 		for i := range sbrWinDS {
-			sbrWinDS[i] = sbrWinUS[2*i+sbrDsShift]
-		}
-		for k := 0; k < 32; k++ {
-			for n := 0; n < 64; n++ {
-				a := math.Pi / 64 * (float64(k) + 0.5) * (float64(2*n) + sbrAnaOff)
-				sbrAnaCos[k*64+n] = math.Cos(a)
-				sbrAnaSin[k*64+n] = math.Sin(a)
-			}
-		}
-		for n := 0; n < 128; n++ {
-			for k := 0; k < 64; k++ {
-				a := math.Pi / 128 * (float64(k) + 0.5) * (float64(2*n) + sbrSynOff)
-				sbrSynCos[n*64+k] = math.Cos(a)
-				sbrSynSin[n*64+k] = math.Sin(a)
-			}
+			sbrWinDS[i] = sbrWinUS[2*i]
 		}
 		for n := 0; n < 64; n++ {
 			for k := 0; k < 32; k++ {
@@ -57,7 +55,60 @@ func sbrQMFInit() {
 				sbrSyn32Sin[n*32+k] = math.Sin(a)
 			}
 		}
+		for k := 0; k < 32; k++ {
+			sbrFFT32Tw[k] = cmplx.Exp(complex(0, -2*math.Pi*float64(k)/32))
+			sbrFFT64Tw[k] = cmplx.Exp(complex(0, -2*math.Pi*float64(k)/64))
+			sbrDCT4Tw[k] = cmplx.Exp(complex(0, -math.Pi*float64(4*k+1)/256))
+			sbrDCT4Post[k] = cmplx.Exp(complex(0, -math.Pi*float64(k)/64))
+		}
+		for n := 0; n < 64; n++ {
+			sbrAnaPre[n] = cmplx.Exp(complex(0, -math.Pi*float64(n)/64))
+			sbrAnaPost[n] = cmplx.Exp(complex(0, -math.Pi*(float64(n)+0.5)/128))
+		}
 	})
+}
+
+// sbrFFT runs an in place radix-2 forward FFT of n (32 or 64) points.
+func sbrFFT(x []complex128, tw *[32]complex128) {
+	n := len(x)
+	// bit reversal
+	for i, j := 1, 0; i < n; i++ {
+		bit := n >> 1
+		for ; j&bit != 0; bit >>= 1 {
+			j ^= bit
+		}
+		j ^= bit
+		if i < j {
+			x[i], x[j] = x[j], x[i]
+		}
+	}
+	for l := 2; l <= n; l <<= 1 {
+		half := l >> 1
+		stride := n / l
+		for i := 0; i < n; i += l {
+			for k := 0; k < half; k++ {
+				w := tw[k*stride]
+				u := x[i+k]
+				v := x[i+k+half] * w
+				x[i+k] = u + v
+				x[i+k+half] = u - v
+			}
+		}
+	}
+}
+
+// sbrDCT4 computes the 64 point DCT-IV out[m] = sum_k x[k] cos(pi/64 (m+1/2)(k+1/2)).
+func sbrDCT4(x *[64]float64, out *[64]float64) {
+	var t [32]complex128
+	for n := 0; n < 32; n++ {
+		t[n] = complex(x[2*n], x[63-2*n]) * sbrDCT4Tw[n]
+	}
+	sbrFFT(t[:], &sbrFFT32Tw)
+	for k := 0; k < 32; k++ {
+		y := t[k] * sbrDCT4Post[k]
+		out[2*k] = real(y)
+		out[63-2*k] = -imag(y)
+	}
 }
 
 // sbrAnalysis holds the analysis filterbank history of one channel.
@@ -74,7 +125,7 @@ func (a *sbrAnalysis) run(in []float32, w *[32][32][2]float64) {
 	for i := 0; i < 1024; i++ {
 		a.x[288+i] = float64(in[i])
 	}
-	var u [64]float64
+	var z [64]complex128
 	for l := 0; l < 32; l++ {
 		xx := a.x[32*l : 32*l+320]
 		for n := 0; n < 64; n++ {
@@ -83,18 +134,15 @@ func (a *sbrAnalysis) run(in []float32, w *[32][32][2]float64) {
 				idx := n + 64*j
 				s += sbrWinDS[idx] * xx[319-idx]
 			}
-			u[n] = s
+			z[n] = complex(s, 0) * sbrAnaPre[n]
 		}
+		sbrFFT(z[:], &sbrFFT64Tw)
 		for k := 0; k < 32; k++ {
-			re, im := 0.0, 0.0
-			c := sbrAnaCos[k*64 : k*64+64]
-			s := sbrAnaSin[k*64 : k*64+64]
-			for n := 0; n < 64; n++ {
-				re += u[n] * c[n]
-				im += u[n] * s[n]
-			}
-			w[l][k][0] = re * sbrAnaScale
-			w[l][k][1] = im * sbrAnaScale
+			// the transform above ran with a negative exponent on the conjugate
+			// of the wanted sum: sum_n u[n] e^{+i pi n/64} e^{+2 pi i k n/64}
+			y := cmplx.Conj(z[k]) * sbrAnaPost[k]
+			w[l][k][0] = real(y) * sbrAnaScale
+			w[l][k][1] = imag(y) * sbrAnaScale
 		}
 	}
 }
@@ -130,16 +178,35 @@ func (s *sbrSynthesis) run(x *[38][64][2]float64, out []float32, down bool) {
 		}
 		return
 	}
+	var ci, si, cc, ss [64]float64
 	for l := 0; l < 32; l++ {
 		copy(s.v[128:1280], s.v[:1152])
-		for n := 0; n < 128; n++ {
-			sum := 0.0
-			c := sbrSynCos[n*64 : n*64+64]
-			sn := sbrSynSin[n*64 : n*64+64]
-			for k := 0; k < 64; k++ {
-				sum += x[l][k][0]*c[k] - x[l][k][1]*sn[k]
+		// v[64+j] = S[j]+C[j], v[63-j] = C[j]-S[j] with DCT-IV / DST-IV of
+		// (-1)^k Xi[k] and (-1)^k Xr[k]
+		for k := 0; k < 64; k++ {
+			sign := 1.0
+			if k&1 == 1 {
+				sign = -1
 			}
-			s.v[n] = sum * sbrSynScale
+			ci[k] = sign * x[l][k][1]
+		}
+		for m := 0; m < 64; m++ {
+			// s_in[m] = -(-1)^m Xr[63-m]
+			sign := 1.0
+			if m&1 == 1 {
+				sign = -1
+			}
+			si[m] = -sign * x[l][63-m][0]
+		}
+		sbrDCT4(&ci, &cc)
+		sbrDCT4(&si, &ss)
+		for j := 0; j < 64; j++ {
+			sj := ss[j]
+			if j&1 == 1 {
+				sj = -sj
+			}
+			s.v[64+j] = (sj + cc[j]) * sbrSynScale
+			s.v[63-j] = (cc[j] - sj) * sbrSynScale
 		}
 		for k := 0; k < 64; k++ {
 			sum := 0.0

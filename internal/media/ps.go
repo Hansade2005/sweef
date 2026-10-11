@@ -29,6 +29,7 @@ var (
 	psNumEnvTab   = [2][4]int{{0, 1, 2, 4}, {1, 2, 3, 4}}
 	psNrIIDICC    = [6]int{10, 20, 34, 10, 20, 34}
 	psNrIPDOPD    = [6]int{5, 11, 17, 5, 11, 17}
+	psNrIPDBands  = [2]int{11, 17}
 	psHuffOffset  = [10]int{30, 30, 14, 14, 7, 7, 0, 0, 0, 0}
 )
 
@@ -77,7 +78,7 @@ func psInitTables() {
 		psF34_0_12 = psMakeFilters(&psG0Q12, 12)
 		psF34_1_8 = psMakeFilters(&psG1Q8, 8)
 		psF34_2_4 = psMakeFilters(&psG2Q4, 4)
-		links := [3]float64{float64(float32(0.43)), float64(float32(0.75)), float64(float32(0.347))}
+		links := [3]float64{float64(psFracDelayLinks[0]), float64(psFracDelayLinks[1]), float64(psFracDelayLinks[2])}
 		gain := float64(float32(0.39))
 		for k := 0; k < 30; k++ {
 			var fc float64
@@ -444,8 +445,8 @@ func mapIdx20_34(out, par *[psMaxPar]int8, full bool) {
 	out[8] = par[5]
 	out[7] = par[4]
 	out[6] = par[4]
-	out[5] = int8((int(par[2]) + int(par[3])) / 2)
-	out[4] = int8((int(par[1]) + int(par[2])) / 2)
+	out[5] = par[3]
+	out[4] = int8((int(par[2]) + int(par[3])) / 2)
 	out[3] = par[2]
 	out[2] = par[1]
 	out[1] = int8((int(par[0]) + int(par[1])) / 2)
@@ -538,8 +539,8 @@ func mapVal20to34(par *[psMaxPar]float64) {
 	par[8] = par[5]
 	par[7] = par[4]
 	par[6] = par[4]
-	par[5] = (par[3] + par[2]) * 0.5
-	par[4] = (par[2] + par[1]) * 0.5
+	par[5] = par[3]
+	par[4] = (par[2] + par[3]) * 0.5
 	par[3] = par[2]
 	par[2] = par[1]
 	par[1] = (par[1] + par[0]) * 0.5
@@ -602,7 +603,7 @@ func psHybridN(in *[44][2]float64, out [][32][2]float64, filter [][8][2]float64)
 
 func psHybrid2(in *[44][2]float64, out [][32][2]float64, reverse int) {
 	// g1_Q2: only the odd taps and the centre tap are non zero
-	filt := [7]float64{0, float64(psG1Q2[1]), 0, float64(psG1Q2[3]), 0, float64(psG1Q2[5]), float64(psG1Q2[6])}
+	filt := [7]float64{0, float64(psG1Q2Odd[0]), 0, float64(psG1Q2Odd[1]), 0, float64(psG1Q2Odd[2]), 0.5}
 	for n := 0; n < 32; n++ {
 		x := in[n : n+13]
 		reIn := filt[6] * x[6][0]
@@ -618,8 +619,6 @@ func psHybrid2(in *[44][2]float64, out [][32][2]float64, reverse int) {
 		out[1-reverse][n] = [2]float64{reIn - reOp, imIn - imOp}
 	}
 }
-
-var psG1Q2 = [7]float32{0, 0.01899487526049, 0, -0.07293139167538, 0, 0.30596630545168, 0.5}
 
 func (p *psState) hybridAnalysis(x *[38][64][2]float64, out *[91][32][2]float64, is34 bool) {
 	for i := 0; i < 5; i++ {
@@ -731,7 +730,7 @@ func (p *psState) decorrelation(out, s *[91][32][2]float64, is34 bool) {
 		}
 	}
 	const (
-		peakDecay       = float64(float32(0.76592833836465))
+		peakDecay       = float64(psPeakDecay)
 		transientImpact = 1.5
 		aSmooth         = 0.25
 	)
@@ -753,7 +752,7 @@ func (p *psState) decorrelation(out, s *[91][32][2]float64, is34 bool) {
 			}
 		}
 	}
-	a := [3]float64{float64(float32(0.65143905753106)), float64(float32(0.56471812200776)), float64(float32(0.48954165955695))}
+	a := [3]float64{float64(psAllpassA[0]), float64(psAllpassA[1]), float64(psAllpassA[2])}
 	k := 0
 	for ; k < psNrAllpass[idx]; k++ {
 		b := kToI[k]
@@ -825,7 +824,7 @@ func (p *psState) stereoProcessing(l, r *[91][32][2]float64, is34 bool) {
 	}
 	var iidBuf, iccBuf, ipdBuf, opdBuf [psMaxEnv][psMaxPar]int8
 	iid := psRemap(&iidBuf, &p.iidPar, p.nrIID, p.numEnv, is34, true)
-	icc := psRemap(&iccBuf, &p.iccPar, p.nrICC, p.numEnv, is34, true)
+	iccm := psRemap(&iccBuf, &p.iccPar, p.nrICC, p.numEnv, is34, true)
 	ipd, opd := &p.ipdPar, &p.opdPar
 	if p.enableIPD {
 		ipd = psRemap(&ipdBuf, &p.ipdPar, p.nrIPD, p.numEnv, is34, false)
@@ -848,15 +847,37 @@ func (p *psState) stereoProcessing(l, r *[91][32][2]float64, is34 bool) {
 		for b := 0; b < psNrPar[idx]; b++ {
 			iidv := int(iid[e][b])
 			c := float64(psIIDParDequant[iidv+7+23*p.iidQuant])
-			c1 := math.Sqrt2 / math.Sqrt(1+c*c)
-			c2 := c1 * c
-			alpha := 0.5 * float64(psACosICCInvq[icc[e][b]])
-			beta := alpha * (c1 - c2) * math.Sqrt2 / 2
-			h11 := c2 * math.Cos(beta+alpha)
-			h12 := c1 * math.Cos(beta-alpha)
-			h21 := c2 * math.Sin(beta+alpha)
-			h22 := c1 * math.Sin(beta-alpha)
-			if b < p.nrIPD {
+			icc := int(iccm[e][b])
+			var h11, h12, h21, h22 float64
+			if p.iccMode < 3 {
+				// mixing procedure A
+				c1 := math.Sqrt2 / math.Sqrt(1+c*c)
+				c2 := c1 * c
+				alpha := 0.5 * float64(psACosICCInvq[icc])
+				beta := alpha * (c1 - c2) * math.Sqrt2 / 2
+				h11 = c2 * math.Cos(beta+alpha)
+				h12 = c1 * math.Cos(beta-alpha)
+				h21 = c2 * math.Sin(beta+alpha)
+				h22 = c1 * math.Sin(beta-alpha)
+			} else {
+				// mixing procedure B (ICC modes 3 to 5)
+				rho := float64(psICCInvq[icc])
+				if rho < 0.05 {
+					rho = float64(float32(0.05))
+				}
+				alpha := 0.5 * math.Atan2(2*c*rho, c*c-1)
+				mu := c + 1/c
+				mu = math.Sqrt(1 + (4*rho*rho-4)/(mu*mu))
+				gamma := math.Atan(math.Sqrt((1 - mu) / (1 + mu)))
+				if alpha < 0 {
+					alpha += math.Pi / 2
+				}
+				h11 = math.Sqrt2 * math.Cos(alpha) * math.Cos(gamma)
+				h12 = math.Sqrt2 * math.Sin(alpha) * math.Cos(gamma)
+				h21 = -math.Sqrt2 * math.Sin(alpha) * math.Sin(gamma)
+				h22 = math.Sqrt2 * math.Cos(alpha) * math.Sin(gamma)
+			}
+			if b < psNrIPDBands[idx] {
 				opdIdx := p.opdHist[b]*8 + int(opd[e][b])
 				ipdIdx := p.ipdHist[b]*8 + int(ipd[e][b])
 				opdRe, opdIm := psPdRe[opdIdx&511], psPdIm[opdIdx&511]
@@ -889,16 +910,19 @@ func (p *psState) stereoProcessing(l, r *[91][32][2]float64, is34 bool) {
 		for k := 0; k < psNrBands[idx]; k++ {
 			b := int(kToI[k])
 			var h, hs [4][2]float64
+			// The reference decoder negates only the start value of the
+			// imaginary gains of the negative frequency sub-subbands, the
+			// interpolation target is left alone.
+			neg := (!is34 && k <= 1) || (is34 && k >= 9 && k <= 13)
 			for m := 0; m < 4; m++ {
-				for c := 0; c < 2; c++ {
-					h[m][c] = p.h[m][c][e][b]
-					if !p.enableIPD && c == 1 {
-						h[m][c] = 0
+				h[m][0] = p.h[m][0][e][b]
+				hs[m][0] = (p.h[m][0][e+1][b] - h[m][0]) * width
+				if p.enableIPD {
+					h[m][1] = p.h[m][1][e][b]
+					if neg {
+						h[m][1] = -h[m][1]
 					}
-					hs[m][c] = (p.h[m][c][e+1][b] - p.h[m][c][e][b]) * width
-					if !p.enableIPD && c == 1 {
-						hs[m][c] = 0
-					}
+					hs[m][1] = (p.h[m][1][e+1][b] - h[m][1]) * width
 				}
 			}
 			for n := start + 1; n <= stop; n++ {

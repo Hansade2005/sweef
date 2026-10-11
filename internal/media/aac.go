@@ -125,19 +125,21 @@ type aacDecoder struct {
 	stats            aacStats // feature usage counters (tests)
 
 	// HE-AAC
-	sbr    bool // SBR output (explicit signalling or detected)
-	ps     bool // PS: mono core, stereo output
-	down   bool // downsampled SBR: output rate == core rate
-	probe  bool // detection pass: count SBR/PS, no output
-	sbrEl  []*sbrElem
-	sbrBuf [2][]float32
-	sawSBR bool
-	sawPS  bool
-	endBit int // bit position of the END element of the last frame (tests)
-	outN   int // output samples per core frame
+	sbr      bool // SBR output (explicit signalling or detected)
+	ps       bool // PS: mono core, stereo output
+	down     bool // downsampled SBR: output rate == core rate
+	probe    bool // detection pass: count SBR/PS, no output
+	sbrEl    []*sbrElem
+	sbrBuf   [2][]float32
+	sawSBR   bool
+	sawPS    bool
+	endBit   int   // bit position of the END element of the last frame (tests)
+	elemEnds []int // bit positions after each SCE/CPE/LFE of the last frame (tests)
+	elemKind []int // 0 SCE, 1 CPE, 2 LFE (tests)
+	outN     int   // output samples per core frame
 }
 
-type aacStats struct{ ms, is, pns, tns, pulse, short, start, stop int }
+type aacStats struct{ ms, is, pns, tns, pulse, short, start, stop, faults int }
 
 type aacConfig struct {
 	aot, sfi, rate, chCfg int
@@ -313,8 +315,8 @@ func (d *aacDecoder) readSections(r *aacBits, c *aacChan) error {
 					break
 				}
 			}
-			if k+l > ics.maxSfb {
-				return fmt.Errorf("media: aac section overrun")
+			if r.err || l == 0 || k+l > ics.maxSfb {
+				return fmt.Errorf("media: aac bad section")
 			}
 			for i := 0; i < l; i++ {
 				c.cb[g][k+i] = uint8(cb)
@@ -782,6 +784,18 @@ func (d *aacDecoder) synth(ch int, c *aacChan, out []float32) {
 
 var errAACEnd = errors.New("end")
 
+// decodeFrameSafe decodes a frame, turning a panic caused by a damaged
+// bitstream into an error.
+func (d *aacDecoder) decodeFrameSafe(data []byte) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.stats.faults++
+			err = fmt.Errorf("media: aac decoder fault: %v", r)
+		}
+	}()
+	return d.decodeFrame(data)
+}
+
 // aacElem records an element of the frame being decoded (for SBR).
 type aacElem struct {
 	first, n int
@@ -794,6 +808,8 @@ func (d *aacDecoder) decodeFrame(data []byte) error {
 	r := &aacBits{b: data}
 	var frame [8][1024]float32
 	var elems []aacElem
+	d.elemEnds = d.elemEnds[:0]
+	d.elemKind = d.elemKind[:0]
 	nextCh := 0
 	last := -1 // index of the SCE/CPE a following fill element belongs to
 	for {
@@ -816,6 +832,8 @@ func (d *aacDecoder) decodeFrame(data []byte) error {
 			}
 			d.finishChannel(nextCh, c, frame[nextCh][:])
 			elems = append(elems, aacElem{nextCh, 1, id == 3})
+			d.elemEnds = append(d.elemEnds, r.pos)
+			d.elemKind = append(d.elemKind, id/3*2)
 			if id == 0 {
 				last = len(elems) - 1
 			} else {
@@ -864,6 +882,8 @@ func (d *aacDecoder) decodeFrame(data []byte) error {
 			d.finishChannel(nextCh, l, frame[nextCh][:])
 			d.finishChannel(nextCh+1, rt, frame[nextCh+1][:])
 			elems = append(elems, aacElem{nextCh, 2, false})
+			d.elemEnds = append(d.elemEnds, r.pos)
+			d.elemKind = append(d.elemKind, 1)
 			last = len(elems) - 1
 			nextCh += 2
 		case 4: // DSE
@@ -1075,7 +1095,7 @@ func decodeAACStream(data []byte, as *audioStream) (*PCM, error) {
 				if i >= 8 || (pd.sawSBR && (pd.sawPS || cfg.chCfg != 1)) {
 					break
 				}
-				pd.decodeFrame(p)
+				pd.decodeFrameSafe(p)
 			}
 			if pd.sawSBR && !cfg.sbr {
 				cfg.sbr = true
@@ -1103,7 +1123,7 @@ func decodeAACStream(data []byte, as *audioStream) (*PCM, error) {
 		d.pcm[i] = make([]float32, 0, len(as.packets)*d.outN)
 	}
 	for _, p := range as.packets {
-		if err := d.decodeFrame(p); err != nil {
+		if err := d.decodeFrameSafe(p); err != nil {
 			if errors.Is(err, ErrUnsupported) {
 				return nil, err
 			}

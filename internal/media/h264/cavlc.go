@@ -29,13 +29,13 @@ func buildVLC(lens, codes []uint8, maxBits uint) *vlcTable {
 }
 
 var (
-	coeffTokenVLC    [3]*vlcTable
-	chromaDCTokenVLC *vlcTable
+	coeffTokenVLC       [3]*vlcTable
+	chromaDCTokenVLC    *vlcTable
 	chroma422DCTokenVLC *vlcTable
 	chroma422DCZerosVLC [8]*vlcTable
-	totalZerosVLC    [16]*vlcTable
-	chromaDCZerosVLC [4]*vlcTable
-	runBeforeVLC     [8]*vlcTable
+	totalZerosVLC       [16]*vlcTable
+	chromaDCZerosVLC    [4]*vlcTable
+	runBeforeVLC        [8]*vlcTable
 )
 
 var vlcOnce sync.Once

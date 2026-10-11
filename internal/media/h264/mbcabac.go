@@ -42,12 +42,12 @@ func (d *Decoder) cabacSkipFlag(mbx, mby int) bool {
 
 func (d *Decoder) cabacFieldDecodingFlag() bool {
 	pic := d.curPic
-	b := d.mbIdx - 2*d.mbStride
+	top := pic.mbIdx(d.mbx, d.mby&^1)
 	ctx := 0
-	if d.mbx > 0 && d.mbField {
+	if a := top - 1; d.sliceTable[a] == d.curSlice && pic.mbType[a]&mbInterlaced != 0 {
 		ctx++
 	}
-	if pic.mbType[b]&mbInterlaced != 0 && d.sliceTable[b] == d.curSlice {
+	if b := top - 2*d.mbStride; d.sliceTable[b] == d.curSlice && pic.mbType[b]&mbInterlaced != 0 {
 		ctx++
 	}
 	return d.cab.bin(70+ctx) != 0

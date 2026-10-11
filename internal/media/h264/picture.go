@@ -19,16 +19,16 @@ const (
 type Picture struct {
 	id int32
 
-	mbW, mbH int // frame macroblock grid
-	mbStride int // mbW + 1
-	w, h     int // luma frame size in samples
-	cw, ch   int // chroma plane size (0 for monochrome)
-	cf       int // chroma_format_idc
-	bdY, bdC int
+	mbW, mbH  int // frame macroblock grid
+	mbStride  int // mbW + 1
+	w, h      int // luma frame size in samples
+	cw, ch    int // chroma plane size (0 for monochrome)
+	cf        int // chroma_format_idc
+	bdY, bdC  int
 	y, cb, cr []uint16
-	ys, cs   int
-	crop     [4]int
-	colorMtx int
+	ys, cs    int
+	crop      [4]int
+	colorMtx  int
 	fullRange bool
 
 	// per-macroblock data, indexed by the padded macroblock index
@@ -36,6 +36,7 @@ type Picture struct {
 	mv     [2][]mv16 // 16 entries (raster 4x4) per macroblock
 	refIdx [2][]int8 // 4 entries (raster 8x8) per macroblock
 	refID  [2][]int32
+	sep    [3]picMB // per-colour-plane macroblock data (separate planes)
 
 	fieldPicture bool // coded as field pictures
 	mbaff        bool
@@ -93,6 +94,22 @@ func newPicture(id int32, sps *SPS) *Picture {
 			p.refIdx[l][i] = -1
 			p.refID[l][i] = -1
 		}
+	}
+	if sps.SeparatePlanes {
+		for k := 1; k < 3; k++ {
+			m := &p.sep[k]
+			m.mbType = make([]uint32, n)
+			for l := 0; l < 2; l++ {
+				m.mv[l] = make([]mv16, n*16)
+				m.refIdx[l] = make([]int8, n*4)
+				m.refID[l] = make([]int32, n*4)
+				for i := range m.refIdx[l] {
+					m.refIdx[l][i] = -1
+					m.refID[l][i] = -1
+				}
+			}
+		}
+		p.savePlane(0)
 	}
 	p.fieldPOC = [2]int{pocInvalid, pocInvalid}
 	return p

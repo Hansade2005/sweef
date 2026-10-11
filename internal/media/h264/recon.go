@@ -92,6 +92,11 @@ func (d *Decoder) mcRect(r rect) {
 	h := d.hdr
 	ci := c0 + r.y*8 + r.x
 	refs := [2]int{int(d.refCache[0][ci]), int(d.refCache[1][ci])}
+	for l := 0; l < 2; l++ {
+		if !usesList(d.mbTypeCur, l) {
+			refs[l] = -1
+		}
+	}
 	mvs := [2]mv16{d.mvCache[0][ci], d.mvCache[1][ci]}
 	// position in the macroblock's own (frame or field) plane coordinates
 	mbY0 := d.mby * 16
@@ -376,10 +381,37 @@ func (d *Decoder) intraAvail(t uint32) bool {
 	return true
 }
 
+// leftRows reports, for each 4-row group of the macroblock, whether its left
+// neighbour samples may be used for intra prediction. The groups differ only
+// for MBAFF pairs of different field/frame mode with constrained intra
+// prediction.
+func (d *Decoder) leftRows() [4]bool {
+	nb := &d.nb
+	a0 := d.intraAvail(nb.leftType[0])
+	if !d.mbaffFrame || !a0 && !d.hdr.pps.ConstrainedIntra {
+		return [4]bool{a0, a0, a0, a0}
+	}
+	pic := d.curPic
+	leftField := pic.mbType[d.mbIdx-1]&mbInterlaced != 0
+	if leftField == d.mbField || nb.leftType[0] == 0 {
+		return [4]bool{a0, a0, a0, a0}
+	}
+	if d.mbField {
+		a1 := d.intraAvail(nb.leftType[1])
+		return [4]bool{a0, a0, a1, a1}
+	}
+	// frame macroblock beside a field pair: rows alternate between both
+	// macroblocks of the pair
+	top := d.mbIdx - 1 - (d.mby&1)*d.mbStride
+	a := d.intraAvail(pic.mbType[top]) && d.intraAvail(pic.mbType[top+d.mbStride])
+	return [4]bool{a, a, a, a}
+}
+
 func (d *Decoder) reconIntra(mbt uint32, i16Mode, chromaMode, cbp int, t8 bool) {
 	idx := d.mbIdx
 	nb := &d.nb
-	aA := d.intraAvail(nb.leftType[0]) && d.intraAvail(nb.leftType[1])
+	lrows := d.leftRows()
+	aA := lrows[0] && lrows[1] && lrows[2] && lrows[3]
 	aB := d.intraAvail(nb.topType)
 	aC := d.intraAvail(nb.topRightType)
 	aD := d.intraAvail(nb.topLeftType)
@@ -422,7 +454,7 @@ func (d *Decoder) reconIntra(mbt uint32, i16Mode, chromaMode, cbp int, t8 bool) 
 			if t8 {
 				for b8 := 0; b8 < 4; b8++ {
 					bx, by := (b8&1)*2, (b8>>1)*2
-					left := bx > 0 || aA
+					left := bx > 0 || lrows[by]
 					top := by > 0 || aB
 					var tl, tr bool
 					switch {
@@ -431,7 +463,7 @@ func (d *Decoder) reconIntra(mbt uint32, i16Mode, chromaMode, cbp int, t8 bool) 
 					case bx > 0:
 						tl = aB
 					case by > 0:
-						tl = aA
+						tl = lrows[by-1]
 					default:
 						tl = aD
 					}
@@ -455,7 +487,7 @@ func (d *Decoder) reconIntra(mbt uint32, i16Mode, chromaMode, cbp int, t8 bool) 
 			} else {
 				for blk := 0; blk < 16; blk++ {
 					bx, by := blkX[blk], blkY[blk]
-					left := bx > 0 || aA
+					left := bx > 0 || lrows[by]
 					top := by > 0 || aB
 					var tl, tr bool
 					switch {
@@ -464,7 +496,7 @@ func (d *Decoder) reconIntra(mbt uint32, i16Mode, chromaMode, cbp int, t8 bool) 
 					case bx > 0:
 						tl = aB
 					case by > 0:
-						tl = aA
+						tl = lrows[by-1]
 					default:
 						tl = aD
 					}
@@ -491,9 +523,13 @@ func (d *Decoder) reconIntra(mbt uint32, i16Mode, chromaMode, cbp int, t8 bool) 
 		}
 	}
 	if d.f.cat == 1 || d.f.cat == 2 {
-			for c := 1; c <= 2; c++ {
+		cLeft := lrows
+		if d.f.mbHC == 8 {
+			cLeft = [4]bool{lrows[0], lrows[2], false, false}
+		}
+		for c := 1; c <= 2; c++ {
 			pl, _ := d.planeOf(c)
-			predChroma(pl, d.blockOff(c, 0, 0), d.mbStr[c], chromaMode, aA, aB, d.f.bdC, 8, d.f.mbHC)
+			predChroma(pl, d.blockOff(c, 0, 0), d.mbStr[c], chromaMode, cLeft, aB, d.f.bdC, 8, d.f.mbHC)
 		}
 		dpcm := 0
 		if chromaMode == 1 {

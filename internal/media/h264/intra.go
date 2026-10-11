@@ -444,7 +444,9 @@ func pred16x16(pl []uint16, off, stride, mode int, left, top bool, bd int) {
 
 // predChroma predicts a chroma macroblock of w x h samples (8x8 for 4:2:0,
 // 8x16 for 4:2:2). Modes: 0 DC, 1 H, 2 V, 3 plane.
-func predChroma(pl []uint16, off, stride, mode int, left, top bool, bd, w, h int) {
+// leftBy gives the availability of the left neighbours of each 4-row group
+// (they differ only for MBAFF with constrained intra prediction).
+func predChroma(pl []uint16, off, stride, mode int, leftBy [4]bool, top bool, bd, w, h int) {
 	maxv := int32(1)<<uint(bd) - 1
 	switch mode {
 	case 0:
@@ -456,8 +458,8 @@ func predChroma(pl []uint16, off, stride, mode int, left, top bool, bd, w, h int
 				sT[x>>2] += int32(pl[off+x-stride])
 			}
 		}
-		if left {
-			for y := 0; y < h; y++ {
+		for y := 0; y < h; y++ {
+			if leftBy[y>>2] {
 				sL[y>>2] += int32(pl[off+y*stride-1])
 			}
 		}
@@ -465,6 +467,7 @@ func predChroma(pl []uint16, off, stride, mode int, left, top bool, bd, w, h int
 		for by := 0; by < h/4; by++ {
 			for bx := 0; bx < 2; bx++ {
 				var v int32
+				left := leftBy[by]
 				switch {
 				case bx == 0 && by == 0, bx > 0 && by > 0:
 					switch {

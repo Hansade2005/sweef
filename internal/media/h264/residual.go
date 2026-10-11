@@ -115,8 +115,8 @@ func (d *Decoder) readBlock(p, cat, ci, maxNum int) int {
 func (d *Decoder) residualLuma(p int, intra, i16 bool, cbp int, t8 bool) error {
 	pps := d.hdr.pps
 	qp := d.qpOfPlane(p)
-	list4 := p
-	list8 := 2 * p
+	list4 := p + d.cplane
+	list8 := 2 * (p + d.cplane)
 	if !intra {
 		list4 += 3
 		list8++
