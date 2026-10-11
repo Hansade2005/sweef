@@ -80,6 +80,8 @@ type mp4Track struct {
 	mdhdDur   uint64
 	samples   []mp4Sample
 	fourcc    string
+	editStart int    // elst media_time of the first non-empty edit (-1 none)
+	cfg       []byte // esds payload (AAC) or dOps (Opus) of the first sample entry
 	// fragmented
 	trex struct{ dur, size, flags uint32 }
 }
@@ -210,6 +212,34 @@ func parseTrak(b []byte) (*mp4Track, error) {
 				n = n[1:]
 			}
 			t.Name = n
+		}
+	}
+	t.editStart = -1
+	if edts := findBox(kids, "edts"); edts != nil {
+		if el := findBox(parseBoxes(edts.data), "elst"); el != nil && len(el.data) >= 8 {
+			n := int(be32(el.data[4:]))
+			ver := el.data[0]
+			p := 8
+			for i := 0; i < n; i++ {
+				var mt int64
+				if ver == 1 {
+					if p+20 > len(el.data) {
+						break
+					}
+					mt = int64(be64(el.data[p+8:]))
+					p += 20
+				} else {
+					if p+12 > len(el.data) {
+						break
+					}
+					mt = int64(int32(be32(el.data[p+4:])))
+					p += 12
+				}
+				if mt >= 0 {
+					t.editStart = int(mt)
+					break
+				}
+			}
 		}
 	}
 	minf := findBox(mk, "minf")
@@ -392,6 +422,7 @@ func (t *mp4Track) parseAudioConfig(typ string, kids []mp4box) {
 		t.CodecName = "aac"
 		t.Codec = "mp4a.40.2"
 		if e := findBox(kids, "esds"); e != nil && len(e.data) > 4 {
+			t.cfg = e.data[4:]
 			oti, aot := parseEsds(e.data[4:])
 			switch oti {
 			case 0x40:
@@ -418,6 +449,7 @@ func (t *mp4Track) parseAudioConfig(typ string, kids []mp4box) {
 	case "Opus":
 		t.CodecName, t.Codec = "opus", "opus"
 		if d := findBox(kids, "dOps"); d != nil && len(d.data) >= 4 {
+			t.cfg = d.data
 			t.Channels = int(d.data[1])
 			t.SampleRate = 48000
 		}

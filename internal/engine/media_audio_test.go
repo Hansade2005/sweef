@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/sweefbrowser/sweef/internal/media"
 )
 
 type waResult struct {
@@ -240,4 +242,33 @@ func finite(f []float32) []float32 {
 		out[i] = v
 	}
 	return out
+}
+
+// Opus (Ogg, WebM and MP4) must decode through decodeAudioData with ffmpeg
+// disabled: the native decoders run before any ffmpeg fallback.
+func TestWebAudioDecodeOpusWithoutFFmpeg(t *testing.T) {
+	media.SetFFmpegEnabled(false)
+	defer media.SetFFmpegEnabled(true)
+	cases := []struct {
+		file string
+		ch   float64
+		dur  float64
+	}{
+		{"opus_celt_st.opus", 2, 1.0}, {"opus_silk_nb.opus", 1, 1.0}, {"opus_st.webm", 2, 0.6}, {"opus_st.mp4", 2, 0.6}, {"opus_51.opus", 6, 0.5},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.file, func(t *testing.T) {
+			got := runWA(t, "decode_file&f="+c.file)
+			if got.Error != "" {
+				t.Fatalf("decodeAudioData failed without ffmpeg: %s", got.Error)
+			}
+			if got.Extra["ch"] != c.ch {
+				t.Errorf("channels %v want %v", got.Extra["ch"], c.ch)
+			}
+			if d, _ := got.Extra["dur"].(float64); math.Abs(d-c.dur) > 0.02 {
+				t.Errorf("duration %v want %v", d, c.dur)
+			}
+		})
+	}
 }

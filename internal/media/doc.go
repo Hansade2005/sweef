@@ -11,7 +11,7 @@ package media
 //
 // Audio decoded in pure Go: PCM WAV (8/16/24/32-bit int, float32/64, A-law,
 // mu-law), MP3 (go-mp3, trimmed like ffmpeg), Ogg Vorbis, FLAC. Everything else
-// (AAC, Opus, WebM/MP4 audio, ...) is decoded only when ffmpeg is installed;
+// (AAC, ...) is decoded only when ffmpeg is installed; Opus decodes natively;
 // without it decodeAudioData rejects with EncodingError.
 //
 // Video frames (shown through the engine bitmap registry):

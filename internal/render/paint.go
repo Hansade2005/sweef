@@ -29,15 +29,18 @@ type hitRec struct {
 }
 
 type painter struct {
-	c       *ctx
-	ops     []Op
-	clips   []clipRec
-	m       [6]float64
-	hasM    bool
-	hits    []hitRec
-	outl    []*lbox
-	active  map[*lbox]bool
-	svgdocs map[string]*SVGDoc
+	c     *ctx
+	ops   []Op
+	clips []clipRec
+	m     [6]float64
+	hasM  bool
+	// latX, latY is the origin of the pixel lattice rectangles snap to (the
+	// box origin of the nearest lattice-opening ancestor), see paint_snap.go
+	latX, latY float64
+	hits       []hitRec
+	outl       []*lbox
+	active     map[*lbox]bool
+	svgdocs    map[string]*SVGDoc
 	// fragShift is non-zero while painting a continuing fragment of a sliced box
 	fragShift float64
 }
@@ -224,13 +227,19 @@ func (p *painter) paintSC(b *lbox, isRoot bool) {
 func (p *painter) beginEffects(b *lbox) func() {
 	st := b.st
 	layer := st.OpacitySet && st.Opacity < 1 || len(st.Filter) > 0 || st.MixBlend != "normal" && st.MixBlend != ""
-	tx := b.hasTransform()
+	drop := b.dropsFraction()
+	tx := b.hasTransform() || drop
 	saveM, saveHas := p.m, p.hasM
+	saveLX, saveLY := p.latX, p.latY
 	if tx {
-		m := b.fullMatrix()
-		p.emit(PushTransform{M: m})
-		p.m = mulM(p.m, m)
-		p.hasM = true
+		pm, lx, ly := p.frameMatrix(b, drop)
+		p.emit(PushTransform{M: pm, Lattice: true, LatX: lx, LatY: ly})
+		p.latX, p.latY = lx, ly
+		if b.hasTransform() {
+			m := b.fullMatrix()
+			p.m = mulM(p.m, m)
+			p.hasM = true
+		}
 	}
 	if len(st.BackdropFilter) > 0 && st.Visibility != "hidden" {
 		bf := BackdropFilter{Rect: rectOf(b), Radii: p.radii(b)}
@@ -285,6 +294,7 @@ func (p *painter) beginEffects(b *lbox) func() {
 			p.emit(PopTransform{})
 		}
 		p.m, p.hasM = saveM, saveHas
+		p.latX, p.latY = saveLX, saveLY
 	}
 }
 

@@ -103,7 +103,14 @@ func NativeAudio(info *Info) bool {
 	case "mp3":
 		return a.CodecName == "mp3"
 	case "ogg":
+		if a.CodecName == "opus" {
+			return true
+		}
 		return a.CodecName == "vorbis" && !info.HasVideo()
+	case "webm", "matroska", "mp4":
+		return a.CodecName == "opus" || nativeAAC(a)
+	case "aac":
+		return nativeAAC(a)
 	case "flac":
 		return true
 	}
@@ -120,6 +127,9 @@ func DecodeAudio(data []byte) (*PCM, error) {
 		return nil, fmt.Errorf("media: no audio track")
 	}
 	if NativeAudio(info) {
+		if a := info.Audio(); a.CodecName == "opus" || a.CodecName == "aac" {
+			return decodeNativeCodec(data, info)
+		}
 		switch info.Container {
 		case "wav":
 			return decodeWAV(data)
@@ -368,4 +378,19 @@ func Resample(p *PCM, to int) *PCM {
 		out.Data[c] = dst
 	}
 	return out
+}
+
+// decodeNativeCodec decodes the Opus or AAC track of any container natively.
+func decodeNativeCodec(data []byte, info *Info) (*PCM, error) {
+	as, err := loadAudioStream(data, info)
+	if err != nil {
+		return nil, err
+	}
+	switch as.codec {
+	case "opus":
+		return decodeOpusStream(as)
+	case "aac":
+		return decodeAACStream(data, as)
+	}
+	return nil, ErrUnsupported
 }

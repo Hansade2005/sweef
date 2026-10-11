@@ -1,0 +1,62 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>xformsnap</title>
+<style>
+html,body{margin:0;background:#fff;font:16px 'Liberation Sans',Arial,sans-serif}
+.a{position:absolute}
+.box{width:60px;height:30px;background:#fcb;border:2px solid #36c;box-sizing:border-box}
+.k{position:absolute;left:5.4px;top:5.6px;width:20.3px;height:9.7px;background:#6a6}
+.t{white-space:nowrap;line-height:1}
+.img{width:40.5px;height:24.5px}
+</style></head><body>
+<!-- fractional left/top with scale, rotate, skew -->
+<div class="a box" style="left:10.3px;top:10.3px;transform:scale(2);transform-origin:0 0"><i class="k"></i></div>
+<div class="a box" style="left:150.5px;top:10.5px;transform:scale(1.5);transform-origin:0 0"><i class="k"></i></div>
+<div class="a box" style="left:260.7px;top:10.7px;transform:rotate(15deg)"><i class="k"></i></div>
+<div class="a box" style="left:380.2px;top:20.2px;transform:skewX(20deg)"><i class="k"></i></div>
+<!-- translate-only keeps the fraction for content -->
+<div class="a box" style="left:500.3px;top:10.3px;transform:translate(0.4px,0.4px)"><i class="k"></i></div>
+<div class="a box" style="left:580.3px;top:10.3px;transform:scale(1)"><i class="k"></i></div>
+<div class="a box" style="left:660.3px;top:10.3px;transform:translateZ(1px)"><i class="k"></i></div>
+<div class="a box" style="left:740.3px;top:10.3px;will-change:transform"><i class="k"></i></div>
+<div class="a box" style="left:820.3px;top:10.3px;contain:paint"><i class="k"></i></div>
+<div class="a box" style="left:900.3px;top:10.3px;opacity:.99"><i class="k"></i></div>
+<div class="a box" style="left:980.3px;top:10.3px;translate:0.4px 0.4px"><i class="k"></i></div>
+<div class="a box" style="left:1060.3px;top:10.3px;scale:1.2;transform-origin:0 0"><i class="k"></i></div>
+<div class="a box" style="left:1140.3px;top:10.3px;rotate:90deg;transform-origin:0 0"><i class="k"></i></div>
+<!-- text -->
+<div class="a t" style="left:10.3px;top:100.3px;font-size:20px;transform:scale(1.5);transform-origin:0 0">Scaled text 1.5</div>
+<div class="a t" style="left:10.6px;top:140.6px;font-size:20px;transform:scale(1.5);transform-origin:0 0">Scaled text 1.5</div>
+<div class="a t" style="left:300.3px;top:110.3px;font-size:16px;transform:rotate(-12deg)">Rotated minus twelve</div>
+<div class="a t" style="left:520.3px;top:100.3px;font-size:16px;will-change:transform">will-change text</div>
+<div class="a t" style="left:520.3px;top:130.3px;font-size:16px">plain text</div>
+<div class="a t" style="left:520.3px;top:160.3px;font-size:16px;transform:translate(0.4px,0)">translate text</div>
+<div class="a t" style="left:700.45px;top:100.3px;font-size:30px;transform:scale(1.2,1);transform-origin:0 0">Ag Wy</div>
+<!-- images -->
+<img class="a img" style="left:10.3px;top:230.3px;transform:scale(2);transform-origin:0 0" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAJklEQVR4nGJhWMCAAyxg0NA4cUJDA40ESWCKntDQoKIOQAAAAP//YqwqDeuCcdYAAAAASUVORK5CYII=">
+<img class="a img" style="left:120.7px;top:230.7px;transform:rotate(10deg)" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAJklEQVR4nGJhWMCAAyxg0NA4cUJDA40ESWCKntDQoKIOQAAAAP//YqwqDeuCcdYAAAAASUVORK5CYII=">
+<!-- nested: plain wrapper with fraction, then transformed child -->
+<div class="a" style="left:5.3px;top:320.3px;width:300px;height:100px">
+  <div class="a box" style="left:5.3px;top:5.3px;transform:scale(2);transform-origin:0 0"><i class="k"></i></div>
+</div>
+<!-- nested: translate wrapper then scale -->
+<div class="a" style="left:200.3px;top:320.3px;width:300px;height:100px;transform:translate(0.4px,0.4px)">
+  <div class="a box" style="left:5.3px;top:5.3px;transform:scale(2);transform-origin:0 0"><i class="k"></i></div>
+</div>
+<!-- nested: scale wrapper then scale child with fractional offset -->
+<div class="a" style="left:420.3px;top:320.3px;width:300px;height:100px;transform:scale(1.5);transform-origin:0 0">
+  <div class="a box" style="left:5.3px;top:5.3px;transform:scale(1.3);transform-origin:0 0"><i class="k"></i></div>
+  <div class="a t" style="left:70.3px;top:40.3px;font-size:12px">inner text</div>
+</div>
+<!-- nested: rotate wrapper with text and a plain box inside -->
+<div class="a" style="left:700.3px;top:340.3px;width:200px;height:70px;transform:rotate(8deg);background:#eef">
+  <div class="a box" style="left:3.3px;top:3.3px"><i class="k"></i></div>
+  <div class="a t" style="left:70.3px;top:40.3px;font-size:14px">in rotated</div>
+</div>
+<!-- perspective, opacity layer, fixed, border radius -->
+<div class="a" style="left:10.3px;top:470.3px;perspective:300px"><div class="a box" style="left:5.3px;top:5.3px;transform:rotateY(0deg) scale(1.4);transform-origin:0 0"><i class="k"></i></div></div>
+<div class="a" style="left:210.3px;top:470.3px;opacity:.9"><div class="a box" style="left:5.3px;top:5.3px;transform:scale(1.4);transform-origin:0 0;border-radius:8px"><i class="k"></i></div></div>
+<div class="a box" style="position:fixed;left:410.3px;top:470.3px;transform:scale(1.4);transform-origin:0 0"><i class="k"></i></div>
+<div class="a" style="left:610.3px;top:470.3px;width:90px;height:50px;overflow:hidden;transform:scale(1.4);transform-origin:0 0;background:#ddd"><div class="a box" style="left:30.3px;top:10.3px;"><i class="k"></i></div></div>
+<div class="a" style="left:810.3px;top:470.3px;width:90px;height:50px;transform:scale(1.4);transform-origin:0 0;background:#ddd;border:3px double #900"><div class="a t" style="left:7.3px;top:10.3px;font-size:13px;text-decoration:underline">underline</div></div>
+<div class="a" style="left:1010.3px;top:470.3px;width:60px;height:50px;transform:scale(1.4);transform-origin:0 0;background:linear-gradient(90deg,#f00,#00f);box-shadow:3px 3px 5px #000"></div>
+</body></html>

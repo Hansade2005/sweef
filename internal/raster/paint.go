@@ -37,6 +37,14 @@ type Painter struct {
 	c   *Context
 	env PaintEnv
 	dpr float64
+	// lat is the stack of snapping lattices opened by PushTransform ops that
+	// carry one (see render.PushTransform); the top entry applies.
+	lat []latRec
+}
+
+type latRec struct {
+	on   bool
+	x, y float64
 }
 
 // NewPainter creates a painter over a new w x h device pixel surface.
@@ -73,6 +81,17 @@ func (p *Painter) simple() bool {
 
 // snap rounds a CSS rect to device pixel edges when the transform allows.
 func (p *Painter) snap(r render.Rect) render.Rect {
+	if n := len(p.lat); n > 0 && p.lat[n-1].on {
+		// Chromium snaps in the local space of the paint-offset container and
+		// transforms the snapped box afterwards.
+		l := p.lat[n-1]
+		d := p.dpr
+		x0 := math.Round((r.X-l.x)*d) / d
+		x1 := math.Round((r.X+r.W-l.x)*d) / d
+		y0 := math.Round((r.Y-l.y)*d) / d
+		y1 := math.Round((r.Y+r.H-l.y)*d) / d
+		return render.Rect{X: l.x + x0, Y: l.y + y0, W: x1 - x0, H: y1 - y0}
+	}
 	if !p.simple() {
 		return r
 	}
@@ -174,8 +193,12 @@ func (p *Painter) op(op render.Op) {
 	case render.PushTransform:
 		c.Save()
 		c.Concat(Matrix(o.M))
+		p.lat = append(p.lat, latRec{o.Lattice, o.LatX, o.LatY})
 	case render.PopTransform:
 		c.Restore()
+		if n := len(p.lat); n > 0 {
+			p.lat = p.lat[:n-1]
+		}
 	case render.Bitmap:
 		p.bitmap(o)
 	case render.SVGDraw:
@@ -303,6 +326,9 @@ func (p *Painter) border(o render.Border) {
 		return
 	}
 	scale := m[0]
+	if n := len(p.lat); n > 0 && p.lat[n-1].on {
+		scale = p.dpr // widths floor in local pixels, not in the transformed space
+	}
 	var w [4]float64
 	for i := 0; i < 4; i++ {
 		st := o.Styles[i]

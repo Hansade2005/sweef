@@ -308,6 +308,7 @@ func paintCases() []paintCase {
 		}})
 	cases = append(cases, paintClipMaskCases()...)
 	cases = append(cases, paintSVGCases()...)
+	cases = append(cases, paintXformCases()...)
 	return cases
 }
 
