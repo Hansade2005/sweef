@@ -14,6 +14,7 @@ type interMB struct {
 	pm     [2]uint8
 	is8x8  bool
 	direct bool
+	ref0   bool // P_8x8ref0: reference indices are not transmitted
 }
 
 var pMBTypes = [5]interMB{
@@ -21,7 +22,7 @@ var pMBTypes = [5]interMB{
 	{2, 4, 2, [2]uint8{pmL0, pmL0}, false, false},
 	{2, 2, 4, [2]uint8{pmL0, pmL0}, false, false},
 	{4, 2, 2, [2]uint8{}, true, false},
-	{4, 2, 2, [2]uint8{}, true, false}, // P_8x8ref0
+	{4, 2, 2, [2]uint8{}, true, false, true}, // P_8x8ref0
 }
 
 var bMBTypes = [23]interMB{

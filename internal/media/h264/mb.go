@@ -493,10 +493,8 @@ func (d *Decoder) parseInter(it *interMB, parts []rect) (int, bool, error) {
 				continue
 			}
 			ref := 0
-			if nref > 1 && !(it.is8x8 && !isB && subRaw[p] < 0) && !(!isB && it.is8x8 && false) {
-				if !isB && it.is8x8 && d.p8x8ref0 {
-					ref = 0
-				} else if cab {
+			if nref > 1 && !it.ref0 {
+				if cab {
 					ref = d.cabacRefIdx(l, sp.r.x, sp.r.y)
 				} else {
 					ref = int(br.te(uint32(nref - 1)))
@@ -524,17 +522,7 @@ func (d *Decoder) parseInter(it *interMB, parts []rect) (int, bool, error) {
 			if it.is8x8 {
 				s := sub[p]
 				for q := 0; q < s.n; q++ {
-					r := rect{sp.r.x + (q&(2/s.w-1))*s.w, sp.r.y, s.w, s.h}
-					switch {
-					case s.w == 2 && s.h == 1:
-						r = rect{sp.r.x, sp.r.y + q, 2, 1}
-					case s.w == 1 && s.h == 2:
-						r = rect{sp.r.x + q, sp.r.y, 1, 2}
-					case s.w == 1 && s.h == 1:
-						r = rect{sp.r.x + q&1, sp.r.y + q>>1, 1, 1}
-					default:
-						r = sp.r
-					}
+					r := subRect(sp.r, s, q)
 					if err := d.readMVFor(l, ref, r, 0); err != nil {
 						return 0, false, err
 					}
@@ -564,17 +552,7 @@ func (d *Decoder) parseInter(it *interMB, parts []rect) (int, bool, error) {
 				continue
 			}
 			for q := 0; q < s.n; q++ {
-				var r rect
-				switch {
-				case s.w == 2 && s.h == 1:
-					r = rect{sp.r.x, sp.r.y + q, 2, 1}
-				case s.w == 1 && s.h == 2:
-					r = rect{sp.r.x + q, sp.r.y, 1, 2}
-				case s.w == 1 && s.h == 1:
-					r = rect{sp.r.x + q&1, sp.r.y + q>>1, 1, 1}
-				default:
-					r = sp.r
-				}
+				r := subRect(sp.r, s, q)
 				parts[np] = r
 				np++
 			}
@@ -608,4 +586,16 @@ func (d *Decoder) readMVFor(l, ref int, r rect, shape int) error {
 		d.storeMVD(l, r, [2]uint8{uint8(ax), uint8(ay)})
 	}
 	return nil
+}
+
+func subRect(sp rect, s subMB, q int) rect {
+	switch {
+	case s.w == 2 && s.h == 1:
+		return rect{sp.x, sp.y + q, 2, 1}
+	case s.w == 1 && s.h == 2:
+		return rect{sp.x + q, sp.y, 1, 2}
+	case s.w == 1 && s.h == 1:
+		return rect{sp.x + q&1, sp.y + q>>1, 1, 1}
+	}
+	return sp
 }
