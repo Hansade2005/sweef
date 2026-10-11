@@ -517,10 +517,11 @@ func (t *Tab) LogConsole(level, text string) {
 }
 
 // Evaluate runs JS in the tab context and returns a JSON-encoded result.
-// Even in pure-Go / --no-js builds it answers the read-only DOM expression
-// subset (document.title, location.href, querySelector…) against the live DOM.
+// Even in pure-Go / --no-js builds it answers the DOM expression
+// subset (document.title, location.href, querySelector…, console.log,
+// small numeric/string expressions) against the live DOM.
 func (t *Tab) Evaluate(expr string) (json.RawMessage, error) {
-	if t.jsCtx == nil {
+	if t.eng.opts.DisableJS && t.jsCtx == nil {
 		return nil, fmt.Errorf("js disabled")
 	}
 	if !cgoAvailable() {

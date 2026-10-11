@@ -14,6 +14,8 @@ package engine
 
 import (
 	"encoding/json"
+	"math"
+	"strconv"
 	"strings"
 )
 
@@ -72,6 +74,31 @@ func fallbackEval(src string) (string, []string) {
 	}
 
 	switch {
+	case s == "":
+		return "", nil
+	case strings.HasPrefix(s, "console.log(") || strings.HasPrefix(s, "console.info(") ||
+		strings.HasPrefix(s, "console.warn(") || strings.HasPrefix(s, "console.error(") ||
+		strings.HasPrefix(s, "console.debug("):
+		level := "log"
+		switch {
+		case strings.HasPrefix(s, "console.warn("):
+			level = "warning"
+		case strings.HasPrefix(s, "console.error("):
+			level = "error"
+		}
+		msg := evalExprToString(indexParen(s))
+		if currentTab != nil {
+			if tab := currentTab(); tab != nil {
+				tab.LogConsole(level, msg)
+			}
+		}
+		return "null", nil
+	case looksLikeExpr(s):
+		if v, ok := evalNumber(s); ok {
+			b, _ := json.Marshal(v)
+			return string(b), nil
+		}
+		return jsonOr(evalExprToString(s)), nil
 	case s == "document.title" || s == "window.document.title":
 		return jsonOr(t), nil
 	case s == "location.href" || s == "document.URL" || s == "window.location.href":
@@ -149,4 +176,227 @@ func extractStringArg(s, prefix string) string {
 func jsonOr(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+// indexParen returns s starting at the first '(' (for "console.log(...)").
+func indexParen(s string) string {
+	if i := strings.IndexByte(s, '('); i >= 0 {
+		return s[i+1:]
+	}
+	return s
+}
+
+// looksLikeExpr reports whether src is a small literal/numeric/string
+// expression we can evaluate natively (e.g. "1+2", "'a'+'b'", "3*(4-2)").
+func looksLikeExpr(s string) bool {
+	if s == "" {
+		return false
+	}
+	// must not be a known DOM call or identifier expression
+	if strings.ContainsAny(s, "[]{};") || strings.HasPrefix(s, "document.") ||
+		strings.HasPrefix(s, "window.") || strings.HasPrefix(s, "location.") ||
+		strings.HasPrefix(s, "navigator.") || strings.HasPrefix(s, "JSON.") {
+		return false
+	}
+	ok := true
+	for _, c := range s {
+		if !(c >= '0' && c <= '9' || c == '.' || c == '+' || c == '-' || c == '*' ||
+			c == '/' || c == '%' || c == '(' || c == ')' || c == ' ' || c == '\'' ||
+			c == '"' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
+			ok = false
+			break
+		}
+	}
+	if !ok {
+		return false
+	}
+	// numeric if it has operators and only digits/parens/spaces/operators
+	hasOp := strings.ContainsAny(s, "+-*/%")
+	onlyNum := true
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || c == '.' || c == ' ' || c == '(' || c == ')' ||
+			c == '+' || c == '-' || c == '*' || c == '/' || c == '%') {
+			onlyNum = false
+			break
+		}
+	}
+	if hasOp && onlyNum {
+		return true
+	}
+	// string concat of quoted literals
+	return hasOp && (strings.ContainsRune(s, '\'') || strings.ContainsRune(s, '"'))
+}
+
+// evalNumber evaluates + - * / % over float64 with parentheses via recursive
+// descent. Returns ok=false when parsing fails.
+func evalNumber(s string) (float64, bool) {
+	p := &numParser{src: []rune(strings.ReplaceAll(s, " ", ""))}
+	v, ok := p.expr()
+	if !ok || p.pos != len(p.src) {
+		return 0, false
+	}
+	return v, true
+}
+
+type numParser struct {
+	src []rune
+	pos int
+}
+
+func (p *numParser) expr() (float64, bool) { // + -
+	v, ok := p.term()
+	if !ok {
+		return 0, false
+	}
+	for p.pos < len(p.src) && (p.src[p.pos] == '+' || p.src[p.pos] == '-') {
+		op := p.src[p.pos]
+		p.pos++
+		r, ok := p.term()
+		if !ok {
+			return 0, false
+		}
+		if op == '+' {
+			v += r
+		} else {
+			v -= r
+		}
+	}
+	return v, ok
+}
+
+func (p *numParser) term() (float64, bool) { // * / %
+	v, ok := p.unary()
+	if !ok {
+		return 0, false
+	}
+	for p.pos < len(p.src) && (p.src[p.pos] == '*' || p.src[p.pos] == '/' || p.src[p.pos] == '%') {
+		op := p.src[p.pos]
+		p.pos++
+		r, ok := p.unary()
+		if !ok {
+			return 0, false
+		}
+		switch op {
+		case '*':
+			v *= r
+		case '/':
+			if r == 0 {
+				return 0, false
+			}
+			v /= r
+		case '%':
+			if r == 0 {
+				return 0, false
+			}
+			v = math.Mod(v, r)
+		}
+	}
+	return v, ok
+}
+
+func (p *numParser) unary() (float64, bool) {
+	if p.pos < len(p.src) && p.src[p.pos] == '-' {
+		p.pos++
+		v, ok := p.unary()
+		return -v, ok
+	}
+	if p.pos < len(p.src) && p.src[p.pos] == '+' {
+		p.pos++
+		return p.unary()
+	}
+	if p.pos < len(p.src) && p.src[p.pos] == '(' {
+		p.pos++
+		v, ok := p.expr()
+		if !ok || p.pos >= len(p.src) || p.src[p.pos] != ')' {
+			return 0, false
+		}
+		p.pos++
+		return v, ok
+	}
+	start := p.pos
+	for p.pos < len(p.src) && (p.src[p.pos] >= '0' && p.src[p.pos] <= '9' || p.src[p.pos] == '.') {
+		p.pos++
+	}
+	if start == p.pos {
+		return 0, false
+	}
+	f, err := strconv.ParseFloat(string(p.src[start:p.pos]), 64)
+	if err != nil {
+		return 0, false
+	}
+	return f, true
+}
+
+// splitTop splits an argument list on commas that are not inside quotes/parens.
+func splitTop(s string) []string {
+	var parts []string
+	depth := 0
+	var quote byte
+	cur := strings.Builder{}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0:
+			cur.WriteByte(c)
+			if c == quote {
+				quote = 0
+			}
+			continue
+		case c == '\'' || c == '"':
+			quote = c
+		case c == '(' || c == '[':
+			depth++
+		case c == ')' || c == ']':
+			depth--
+		case c == ',' && depth == 0:
+			parts = append(parts, strings.TrimSpace(cur.String()))
+			cur.Reset()
+			continue
+		}
+		cur.WriteByte(c)
+	}
+	parts = append(parts, strings.TrimSpace(cur.String()))
+	return parts
+}
+
+// evalExprToString renders a console.log-style argument list to text,
+// evaluating numbers and stripping quotes from string literals.
+func evalExprToString(args string) string {
+	parts := splitTop(args)
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if v, ok := evalNumber(p); ok {
+			out = append(out, formatNum(v))
+			continue
+		}
+		if len(p) >= 2 && (p[0] == '\'' || p[0] == '"') && p[len(p)-1] == p[0] {
+			out = append(out, p[1:len(p)-1])
+			continue
+		}
+		if currentTab != nil {
+			if tab := currentTab(); tab != nil {
+				switch p {
+				case "document.title":
+					out = append(out, tab.Title())
+					continue
+				case "location.href", "document.URL":
+					out = append(out, tab.URL())
+					continue
+				}
+			}
+		}
+		out = append(out, p)
+	}
+	return strings.Join(out, " ")
+}
+
+func formatNum(f float64) string {
+	if f == math.Trunc(f) && math.Abs(f) < 1e15 {
+		return strconv.FormatInt(int64(f), 10)
+	}
+	return strconv.FormatFloat(f, 'g', -1, 64)
 }
