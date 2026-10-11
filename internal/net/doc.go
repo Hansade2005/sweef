@@ -1209,3 +1209,23 @@ func (d *Doc) BackendByEngine(sel string) (int64, string, error) {
 	}
 	return infos[0].BackendID, sel, nil
 }
+
+// ElementFromPoint returns the innermost visible element whose pseudo-layout
+// box contains (x, y), or 0.
+func (d *Doc) ElementFromPoint(x, y int) int64 {
+	boxes := d.layoutBoxes()
+	var best *html.Node
+	bestArea := -1
+	for n, b := range boxes {
+		if x >= b[0] && x < b[0]+b[2] && y >= b[1] && y < b[1]+b[3] {
+			area := b[2] * b[3]
+			if bestArea < 0 || area < bestArea || (area == bestArea && d.idOf(n) > d.idOf(best)) {
+				best, bestArea = n, area
+			}
+		}
+	}
+	if best == nil {
+		return 0
+	}
+	return d.idOf(best)
+}

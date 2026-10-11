@@ -466,28 +466,15 @@ func (t *Tab) MouseWheel(dx, dy int) error {
 }
 
 func (t *Tab) hitTest(x, y int) (int64, error) {
-	var found int64 = -1
+	var found int64
 	_ = t.withDoc(func(d *fnet.Doc) error {
-		for _, i := range mustAria(d) {
-			b, err := d.BoundingBox(i.BackendID)
-			if err != nil {
-				continue
-			}
-			if x >= b[0] && x < b[0]+b[2] && y >= b[1] && y < b[1]+b[3] {
-				found = i.BackendID // last match wins = topmost paint order
-			}
-		}
+		found = d.ElementFromPoint(x, y)
 		return nil
 	})
-	if found < 0 {
+	if found == 0 {
 		return 0, ErrNotFound
 	}
 	return found, nil
-}
-
-func mustAria(d *fnet.Doc) []*fnet.Info {
-	infos, _ := d.AriaSnapshot()
-	return infos
 }
 
 // ---- waits ------------------------------------------------------------------
