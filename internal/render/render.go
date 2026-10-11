@@ -83,6 +83,25 @@ type Options struct {
 	Clip gfx.Rect
 }
 
+// Prepare runs layout and paint without rasterising, so every image the
+// frame needs has been requested from the loader.
+func Prepare(d *fnet.Doc, o Options) {
+	if o.Width <= 0 {
+		o.Width = 1280
+	}
+	if o.Height <= 0 {
+		o.Height = 720
+	}
+	var r *layout.Result
+	if l := d.Layout(o.Width); l != nil {
+		r, _ = l.Engine.(*layout.Result)
+	}
+	if r == nil {
+		r = LayoutDoc(d, float64(o.Width), float64(o.Height))
+	}
+	paint.Paint(r, loaderFor(d), paint.Options{ScrollX: o.ScrollX, ScrollY: o.ScrollY})
+}
+
 // Render lays out and paints d, returning premultiplied RGBA pixels.
 func Render(d *fnet.Doc, o Options) *image.RGBA {
 	if o.Width <= 0 {

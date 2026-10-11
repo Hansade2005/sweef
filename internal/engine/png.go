@@ -36,6 +36,9 @@ var (
 )
 
 func (t *Tab) renderPNG(width, height int, dsf float64, full bool) []byte {
+	if useRenderPipeline {
+		return t.renderPNGPipeline(width, height, dsf, full)
+	}
 	t.mu.RLock()
 	dom := t.dom
 	if width <= 0 {
@@ -199,4 +202,46 @@ func boolInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// renderPNGPipeline encodes a screenshot from the render pipeline.
+func (t *Tab) renderPNGPipeline(width, height int, dsf float64, full bool) []byte {
+	t.mu.RLock()
+	if width <= 0 {
+		width = t.vpW
+	}
+	if height <= 0 {
+		height = t.vpH
+	}
+	if dsf <= 0 {
+		dsf = t.dsf
+	}
+	t.mu.RUnlock()
+	if width <= 0 {
+		width = 1280
+	}
+	if height <= 0 {
+		height = 720
+	}
+	if dsf <= 0 {
+		dsf = 1
+	}
+	img := t.renderPixels(width, height, dsf, full)
+	var buf bytes.Buffer
+	_ = (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, unpremultiplied(img))
+	return buf.Bytes()
+}
+
+// unpremultiplied returns an opaque image as-is (PNG encoding of
+// premultiplied RGBA is only exact for opaque pixels), converting
+// translucent ones to NRGBA.
+func unpremultiplied(img *image.RGBA) image.Image {
+	for i := 3; i < len(img.Pix); i += 4 {
+		if img.Pix[i] != 255 {
+			n := image.NewNRGBA(img.Bounds())
+			draw.Draw(n, n.Bounds(), img, img.Bounds().Min, draw.Src)
+			return n
+		}
+	}
+	return img
 }

@@ -374,6 +374,7 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 	t.applyStyles(doc)
 	t.mu.Lock()
 	t.html = htmlSrc
+	t.attachRenderer(t.dom, doc)
 	t.dom = doc
 	t.title = doc.Title()
 	u, _ := url.Parse(finalURL)
