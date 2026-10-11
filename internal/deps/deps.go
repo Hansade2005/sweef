@@ -5,6 +5,7 @@ package deps
 import (
 	_ "github.com/hajimehoshi/go-mp3"
 	_ "github.com/jfreymuth/oggvorbis"
+	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/font"
 	_ "golang.org/x/image/font/gofont/gobold"
 	_ "golang.org/x/image/font/gofont/gobolditalic"
@@ -15,8 +16,7 @@ import (
 	_ "golang.org/x/image/font/opentype"
 	_ "golang.org/x/image/font/sfnt"
 	_ "golang.org/x/image/math/fixed"
+	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/vector"
 	_ "golang.org/x/image/webp"
-	_ "golang.org/x/image/bmp"
-	_ "golang.org/x/image/tiff"
 )
