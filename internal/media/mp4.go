@@ -82,6 +82,7 @@ type mp4Track struct {
 	fourcc    string
 	editStart int    // elst media_time of the first non-empty edit (-1 none)
 	cfg       []byte // esds payload (AAC) or dOps (Opus) of the first sample entry
+	vcfg      []byte // avcC / vpcC / av1C payload of a video sample entry
 	// fragmented
 	trex struct{ dur, size, flags uint32 }
 }
@@ -331,6 +332,7 @@ func (t *mp4Track) parseVideoConfig(typ string, kids []mp4box) {
 		t.Codec = typ
 		if c := findBox(kids, "avcC"); c != nil && len(c.data) >= 4 {
 			t.Codec = fmt.Sprintf("%s.%02x%02x%02x", typ, c.data[1], c.data[2], c.data[3])
+			t.vcfg = c.data
 		}
 	case "hvc1", "hev1":
 		t.CodecName = "hevc"
@@ -343,11 +345,13 @@ func (t *mp4Track) parseVideoConfig(typ string, kids []mp4box) {
 	case "vp09":
 		t.CodecName, t.Codec = "vp9", "vp09"
 		if c := findBox(kids, "vpcC"); c != nil && len(c.data) >= 8 {
+			t.vcfg = c.data
 			t.Codec = fmt.Sprintf("vp09.%02d.%02d.%02d", c.data[4], c.data[5], c.data[6]>>4)
 		}
 	case "av01":
 		t.CodecName, t.Codec = "av1", "av01"
 		if c := findBox(kids, "av1C"); c != nil && len(c.data) >= 4 {
+			t.vcfg = c.data
 			prof := c.data[1] >> 5
 			lvl := c.data[1] & 31
 			tier := "M"

@@ -47,7 +47,7 @@ func TestVP8KeyframeVsFFmpeg(t *testing.T) {
 		t.Skip("no ffmpeg")
 	}
 	nat, _ := openFrames(t, "clip.webm", false)
-	if nat.Mode() != "keyframes" {
+	if nat.Mode() != "native" {
 		t.Fatalf("mode %s", nat.Mode())
 	}
 	a, err := nat.Frame(0)
@@ -61,11 +61,13 @@ func TestVP8KeyframeVsFFmpeg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := nat.Frame(0.2) // no later key frame in 2 s clip -> still frame 0
+	c, err := nat.Frame(0.2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("native key frame %v, ffmpeg frame@0.2 %v, native@0.2 %v; diff(native0, ffmpeg0.2)=%.2f", a.Bounds(), b.Bounds(), c.Bounds(), imgDiff(a, b))
+	if d := imgDiff(c, b); d > 3 {
+		t.Errorf("VP8 inter frame native vs ffmpeg @0.2 mean abs diff %.2f", d)
+	}
 	ff0, err := ff.Frame(0)
 	if err != nil {
 		t.Fatal(err)
