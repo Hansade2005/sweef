@@ -28,7 +28,8 @@ var (
 	catOnce sync.Once
 	cat     *fontCatalog
 	// extraDirs are added by SWEEF_FONT_DIRS (colon separated).
-	embedded = map[string][]byte{}
+	embedded   = map[string][]byte{}
+	embeddedMu sync.RWMutex
 )
 
 func catalog() *fontCatalog {
@@ -95,7 +96,9 @@ func scan() *fontCatalog {
 		"go/regular": goregular.TTF, "go/bold": gobold.TTF, "go/italic": goitalic.TTF,
 		"go/bolditalic": gobolditalic.TTF, "gomono/regular": gomono.TTF, "gomono/bold": gomonobold.TTF,
 	} {
+		embeddedMu.Lock()
 		embedded[name] = data
+		embeddedMu.Unlock()
 		for _, s := range describeBytes("embedded:"+name, data) {
 			add(s)
 		}
@@ -205,7 +208,9 @@ func describeBytes(path string, data []byte) []*source {
 func openSource(s *source) (*sfnt.Font, []byte, error) {
 	var data []byte
 	if strings.HasPrefix(s.file, "embedded:") {
+		embeddedMu.RLock()
 		data = embedded[strings.TrimPrefix(s.file, "embedded:")]
+		embeddedMu.RUnlock()
 	} else {
 		var err error
 		if data, err = os.ReadFile(s.file); err != nil {

@@ -531,6 +531,9 @@ func match(st Style) *source {
 			return nil
 		}
 		tried[name] = true
+		if fam := webFamily(name); len(fam) > 0 {
+			return pickStyle(fam, st)
+		}
 		if fam := cat.families[name]; len(fam) > 0 {
 			return pickStyle(fam, st)
 		}

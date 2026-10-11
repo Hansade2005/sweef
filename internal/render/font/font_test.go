@@ -2,6 +2,7 @@ package font
 
 import (
 	"math"
+	"os"
 	"testing"
 )
 
@@ -35,4 +36,21 @@ func TestWeightDistance(t *testing.T) {
 		t.Fatal("700 prefers heavier first")
 	}
 	_ = math.Abs
+}
+
+func TestRegisterWebFont(t *testing.T) {
+	data, err := os.ReadFile("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf")
+	if err != nil {
+		t.Skip("no test font")
+	}
+	if err := RegisterWebFont("My Brand Font", 400, false, data); err != nil {
+		t.Fatal(err)
+	}
+	f := Get(Style{Families: []string{"My Brand Font", "serif"}, Size: 16})
+	if !HasWebFont("my brand font") || f.Measure("iiii") != f.Measure("MMMM") {
+		t.Fatalf("web font not used: %s", f.Family())
+	}
+	if RegisterWebFont("Bad", 400, false, []byte("nope")) == nil {
+		t.Fatal("garbage accepted")
+	}
 }
