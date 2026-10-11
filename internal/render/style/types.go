@@ -178,7 +178,9 @@ const (
 func (w WhiteSpace) CollapsesSpaces() bool { return w == WSNormal || w == WSNowrap || w == WSPreLine }
 
 // PreservesNewlines reports whether segment breaks are kept.
-func (w WhiteSpace) PreservesNewlines() bool { return w == WSPre || w == WSPreWrap || w == WSPreLine || w == WSBreakSpaces }
+func (w WhiteSpace) PreservesNewlines() bool {
+	return w == WSPre || w == WSPreWrap || w == WSPreLine || w == WSBreakSpaces
+}
 
 // Wraps reports whether lines may wrap.
 func (w WhiteSpace) Wraps() bool { return w != WSNowrap && w != WSPre }
@@ -419,10 +421,10 @@ type ListStyleType string
 // ContentItem is one piece of the `content` property for ::before/::after
 // and ::marker.
 type ContentItem struct {
-	Kind    string // string, attr, counter, counters, open-quote, close-quote, url
-	Text    string // string literal, attr name, counter name, URL
-	Sep     string // counters() separator
-	Style   ListStyleType
+	Kind  string // string, attr, counter, counters, open-quote, close-quote, url
+	Text  string // string literal, attr name, counter name, URL
+	Sep   string // counters() separator
+	Style ListStyleType
 }
 
 // CounterOp is a counter-reset/increment/set entry.
@@ -443,13 +445,13 @@ type ComputedStyle struct {
 
 	Top, Right, Bottom, Left Length
 	Width, Height            Length
-	MinWidth, MinHeight      Length // auto computes to Auto (0 except flex/grid items)
-	MaxWidth, MaxHeight      Length // LenNone when none
+	MinWidth, MinHeight      Length  // auto computes to Auto (0 except flex/grid items)
+	MaxWidth, MaxHeight      Length  // LenNone when none
 	AspectRatio              float64 // width/height; 0 = auto
 	AspectRatioAuto          bool    // `auto && <ratio>`: replaced elements prefer their own
 
-	Margin  [4]Length  // top, right, bottom, left; auto allowed
-	Padding [4]Length  // percentages refer to containing block width
+	Margin  [4]Length // top, right, bottom, left; auto allowed
+	Padding [4]Length // percentages refer to containing block width
 	Border  [4]BorderSide
 	Radii   [4][2]Length // tl, tr, br, bl; each {horizontal, vertical}
 
@@ -468,43 +470,43 @@ type ComputedStyle struct {
 	BoxShadow       []Shadow
 
 	// Fonts and text (inherited unless noted).
-	FontFamily     []string
-	FontSize       float64
-	FontWeight     int
-	FontItalic     bool
-	FontSmallCaps  bool
-	LineHeight     LineHeight
-	LetterSpacing  float64
-	WordSpacing    float64
-	TextAlign      TextAlign
-	TextAlignLast  TextAlign
-	TextIndent     Length
-	TextTransform  TextTransform
-	WhiteSpace     WhiteSpace
-	WordBreak      WordBreak
-	OverflowWrap   OverflowWrap
-	Hyphens        bool
-	TabSize        float64 // in spaces
-	Direction      string  // ltr, rtl
-	WritingMode    string  // horizontal-tb only is laid out
-	TextShadow     []Shadow
-	TextOverflow   TextOverflow // not inherited
-	VerticalAlign  VerticalAlign // not inherited
-	TextDecoration TextDecorationStyle // not inherited (propagates per CSS rules in paint)
-	TextFillColor  *gfx.Color          // -webkit-text-fill-color
-	TextStroke     float64
+	FontFamily      []string
+	FontSize        float64
+	FontWeight      int
+	FontItalic      bool
+	FontSmallCaps   bool
+	LineHeight      LineHeight
+	LetterSpacing   float64
+	WordSpacing     float64
+	TextAlign       TextAlign
+	TextAlignLast   TextAlign
+	TextIndent      Length
+	TextTransform   TextTransform
+	WhiteSpace      WhiteSpace
+	WordBreak       WordBreak
+	OverflowWrap    OverflowWrap
+	Hyphens         bool
+	TabSize         float64 // in spaces
+	Direction       string  // ltr, rtl
+	WritingMode     string  // horizontal-tb only is laid out
+	TextShadow      []Shadow
+	TextOverflow    TextOverflow        // not inherited
+	VerticalAlign   VerticalAlign       // not inherited
+	TextDecoration  TextDecorationStyle // not inherited (propagates per CSS rules in paint)
+	TextFillColor   *gfx.Color          // -webkit-text-fill-color
+	TextStroke      float64
 	TextStrokeColor gfx.Color
 
 	ListStyleType     ListStyleType
 	ListStylePosition string // outside, inside
 	ListStyleImage    Image
 
-	Content         []ContentItem // nil = normal/none for elements
-	ContentNone     bool
-	CounterReset    []CounterOp
+	Content          []ContentItem // nil = normal/none for elements
+	ContentNone      bool
+	CounterReset     []CounterOp
 	CounterIncrement []CounterOp
-	CounterSet      []CounterOp
-	Quotes          []string
+	CounterSet       []CounterOp
+	Quotes           []string
 
 	// Flexbox.
 	FlexDirection  string // row, row-reverse, column, column-reverse
@@ -535,12 +537,12 @@ type ComputedStyle struct {
 	GridColumnEnd       GridLine
 
 	// Tables.
-	BorderCollapse  bool
-	BorderSpacingH  float64
-	BorderSpacingV  float64
+	BorderCollapse   bool
+	BorderSpacingH   float64
+	BorderSpacingV   float64
 	TableLayoutFixed bool
-	CaptionSide     string // top, bottom
-	EmptyCellsHide  bool
+	CaptionSide      string // top, bottom
+	EmptyCellsHide   bool
 
 	// Replaced content.
 	ObjectFit      string // fill, contain, cover, none, scale-down
@@ -549,17 +551,17 @@ type ComputedStyle struct {
 	ImageRendering string // auto, pixelated, crisp-edges
 
 	// Effects.
-	Transform       []TransformFn
-	TransformOrigin [2]Length // z ignored
-	Filter          []gfx.FilterOp
-	BackdropFilter  []gfx.FilterOp
-	MixBlendMode    gfx.CompositeOp
-	Isolation       bool
-	ClipPath        string // raw value; paint parses basic shapes
-	Clip            *gfx.Rect // legacy clip: rect(), for absolutely positioned
-	Mask            string    // raw; unsupported values ignored
-	WillChange      string
-	Contain         string
+	Transform               []TransformFn
+	TransformOrigin         [2]Length // z ignored
+	Filter                  []gfx.FilterOp
+	BackdropFilter          []gfx.FilterOp
+	MixBlendMode            gfx.CompositeOp
+	Isolation               bool
+	ClipPath                string    // raw value; paint parses basic shapes
+	Clip                    *gfx.Rect // legacy clip: rect(), for absolutely positioned
+	Mask                    string    // raw; unsupported values ignored
+	WillChange              string
+	Contain                 string
 	ContentVisibilityHidden bool
 
 	// Interaction (hit-testing and form rendering).
@@ -616,7 +618,9 @@ func (s *ComputedStyle) IsFloating() bool {
 }
 
 // IsOutOfFlow reports absolutely/fixed positioned boxes.
-func (s *ComputedStyle) IsOutOfFlow() bool { return s.Position == PosAbsolute || s.Position == PosFixed }
+func (s *ComputedStyle) IsOutOfFlow() bool {
+	return s.Position == PosAbsolute || s.Position == PosFixed
+}
 
 // FontStyle is the font request for this style.
 func (s *ComputedStyle) FontStyle() (families []string, weight int, italic bool, size float64) {

@@ -57,9 +57,9 @@ type Point struct{ X, Y float64 }
 // Rect is an axis-aligned rectangle in float px.
 type Rect struct{ X, Y, W, H float64 }
 
-func (r Rect) Empty() bool       { return r.W <= 0 || r.H <= 0 }
-func (r Rect) Right() float64    { return r.X + r.W }
-func (r Rect) Bottom() float64   { return r.Y + r.H }
+func (r Rect) Empty() bool                   { return r.W <= 0 || r.H <= 0 }
+func (r Rect) Right() float64                { return r.X + r.W }
+func (r Rect) Bottom() float64               { return r.Y + r.H }
 func (r Rect) Translate(dx, dy float64) Rect { return Rect{r.X + dx, r.Y + dy, r.W, r.H} }
 
 // Intersect returns the overlap of r and o (empty when disjoint).

@@ -62,4 +62,4 @@ type Loader interface {
 type NoLoader struct{}
 
 func (NoLoader) Image(string) (image.Image, bool) { return nil, false }
-func (NoLoader) ResolveURL(r string) string      { return r }
+func (NoLoader) ResolveURL(r string) string       { return r }

@@ -477,19 +477,19 @@ func (s *source) metrics(scale float64) Metrics {
 // to the configured font prefs, which fontconfig then maps to metric
 // compatible fonts (Arial -> Liberation Sans and so on).
 var genericAliases = map[string][]string{
-	"serif":           {"times new roman"},
-	"sans-serif":      {"arial"},
-	"monospace":       {"dejavu sans mono", "liberation mono", "courier new"},
-	"cursive":         {"comic sans ms", "dejavu sans"},
-	"fantasy":         {"impact", "dejavu sans"},
-	"system-ui":       {"inter", "dejavu sans", "liberation sans"},
-	"ui-sans-serif":   {"arial"},
-	"ui-serif":        {"times new roman"},
-	"ui-monospace":    {"dejavu sans mono"},
-	"-apple-system":   {"inter", "dejavu sans", "liberation sans"},
+	"serif":              {"times new roman"},
+	"sans-serif":         {"arial"},
+	"monospace":          {"dejavu sans mono", "liberation mono", "courier new"},
+	"cursive":            {"comic sans ms", "dejavu sans"},
+	"fantasy":            {"impact", "dejavu sans"},
+	"system-ui":          {"inter", "dejavu sans", "liberation sans"},
+	"ui-sans-serif":      {"arial"},
+	"ui-serif":           {"times new roman"},
+	"ui-monospace":       {"dejavu sans mono"},
+	"-apple-system":      {"inter", "dejavu sans", "liberation sans"},
 	"blinkmacsystemfont": {"inter", "dejavu sans", "liberation sans"},
-	"math":            {"dejavu serif"},
-	"emoji":           {"noto color emoji"},
+	"math":               {"dejavu serif"},
+	"emoji":              {"noto color emoji"},
 }
 
 // metricAliases are fontconfig's metric-compatible substitutions.

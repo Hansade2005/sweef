@@ -140,11 +140,11 @@ type Replaced struct {
 
 // Control is a form control's paint-relevant state.
 type Control struct {
-	Type        string // text, password, checkbox, radio, button, submit, reset, select, textarea, range, color, file, progress, meter, date, number, search, email, url, tel
-	Value       string // displayed value (password masked)
-	Placeholder bool   // Value is the placeholder text
-	Checked     bool
-	Disabled    bool
+	Type          string // text, password, checkbox, radio, button, submit, reset, select, textarea, range, color, file, progress, meter, date, number, search, email, url, tel
+	Value         string // displayed value (password masked)
+	Placeholder   bool   // Value is the placeholder text
+	Checked       bool
+	Disabled      bool
 	Indeterminate bool
 	// Fraction for range/progress/meter (0..1); -1 when indeterminate.
 	Fraction float64
