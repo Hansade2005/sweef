@@ -210,7 +210,18 @@ func (s *Server) handle(ctx context.Context, req *rpcReq) {
 			return
 		}
 		_ = out
-		reply(map[string]any{"content": []map[string]any{{"type": "text", "text": content}}}, nil)
+		parts := []map[string]any{{"type": "text", "text": content}}
+		// For screenshots, also emit a native MCP image content part so
+		// clients (Claude Desktop, Playwright-MCP-style agents) can render it.
+		if p.Name == "browser_screenshot" {
+			var probe struct {
+				PNGBase64 string `json:"pngBase64"`
+			}
+			if json.Unmarshal([]byte(content), &probe) == nil && probe.PNGBase64 != "" {
+				parts = append(parts, map[string]any{"type": "image", "mimeType": "image/png", "data": probe.PNGBase64})
+			}
+		}
+		reply(map[string]any{"content": parts}, nil)
 	default:
 		reply(nil, &rpcErr{-32601, "method not found: " + req.Method})
 	}
