@@ -2,6 +2,7 @@ package font
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/binary"
 	"errors"
 	"os"
@@ -68,6 +69,23 @@ func scan() *fontCatalog {
 	}
 	if os.Getenv("SWEEF_FONTS_EMBEDDED_ONLY") == "" {
 		seen := map[string]bool{}
+		cache := loadScanCache()
+		fresh := map[string]scanEntry{}
+		defer saveScanCache(cache, fresh)
+		describe := func(p string) []*source {
+			st, err := os.Stat(p)
+			if err != nil {
+				return nil
+			}
+			key := scanKey{Path: p, Size: st.Size(), Mod: st.ModTime().UnixNano()}
+			if e, ok := cache[key.Path]; ok && e.Key == key {
+				fresh[p] = e
+				return e.sources()
+			}
+			srcs := describe(p)
+			fresh[p] = newScanEntry(key, srcs)
+			return srcs
+		}
 		for _, d := range fontDirs() {
 			_ = filepath.WalkDir(d, func(p string, e os.DirEntry, err error) error {
 				if err != nil || e.IsDir() {
@@ -295,3 +313,105 @@ func readOS2(data []byte, idx int) os2Info {
 	o.useTypo = o.fsSelection&(1<<7) != 0
 	return o
 }
+
+// ---- scan cache: describing every font file costs ~150 ms, so the
+// family/style facts are cached on disk keyed by path, size and mtime.
+
+type scanKey struct {
+	Path string
+	Size int64
+	Mod  int64
+}
+
+type scanFace struct {
+	Family, Sub   string
+	Idx, Weight   int
+	Italic, Color bool
+}
+
+type scanEntry struct {
+	Key   scanKey
+	Faces []scanFace
+}
+
+func newScanEntry(k scanKey, srcs []*source) scanEntry {
+	e := scanEntry{Key: k}
+	for _, s := range srcs {
+		e.Faces = append(e.Faces, scanFace{s.family, s.sub, s.idx, s.weight, s.italic, s.color})
+	}
+	return e
+}
+
+func (e scanEntry) sources() []*source {
+	out := make([]*source, 0, len(e.Faces))
+	for _, f := range e.Faces {
+		out = append(out, &source{family: f.Family, sub: f.Sub, file: e.Key.Path, idx: f.Idx, weight: f.Weight, italic: f.Italic, color: f.Color})
+	}
+	return out
+}
+
+func scanCachePath() string {
+	if d := os.Getenv("SWEEF_FONT_CACHE"); d != "" {
+		return d
+	}
+	d, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(d, "sweef", "font-catalog-v1.json")
+}
+
+func loadScanCache() map[string]scanEntry {
+	out := map[string]scanEntry{}
+	p := scanCachePath()
+	if p == "" {
+		return out
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return out
+	}
+	var list []scanEntry
+	if json.Unmarshal(b, &list) == nil {
+		for _, e := range list {
+			out[e.Key.Path] = e
+		}
+	}
+	return out
+}
+
+func saveScanCache(old, fresh map[string]scanEntry) {
+	p := scanCachePath()
+	if p == "" || len(fresh) == 0 {
+		return
+	}
+	same := len(old) == len(fresh)
+	if same {
+		for k, e := range fresh {
+			if o, ok := old[k]; !ok || o.Key != e.Key {
+				same = false
+				break
+			}
+		}
+	}
+	if same {
+		return
+	}
+	list := make([]scanEntry, 0, len(fresh))
+	for _, e := range fresh {
+		list = append(list, e)
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Key.Path < list[j].Key.Path })
+	b, err := json.Marshal(list)
+	if err != nil {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(p), 0o755)
+	tmp := p + ".tmp"
+	if os.WriteFile(tmp, b, 0o644) == nil {
+		_ = os.Rename(tmp, p)
+	}
+}
+
+// Warm builds the font catalog ahead of first use (call in a goroutine).
+func Warm() { catalog() }

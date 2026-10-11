@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/sweefbrowser/sweef/internal/render/font"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -189,6 +190,9 @@ func New(opts Options) *Engine {
 	setPreludeCacheDir(e.code.dir)
 	e.res = newResCache(opts.MaxCacheMiB)
 	e.vms = newVMPool(opts)
+	if useRenderPipeline {
+		go font.Warm()
+	}
 	return e
 }
 
