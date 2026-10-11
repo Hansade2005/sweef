@@ -1,0 +1,179 @@
+package engine
+
+// scripts.go — page script loading and the document lifecycle.
+//
+// Order follows the HTML spec closely enough for real sites:
+//  1. classic scripts without async/defer run in document order as the tree
+//     is walked (inline source, or fetched src);
+//  2. async scripts run next, in document order (we have no parallel fetch
+//     to race them against);
+//  3. defer scripts and type=module scripts run after the tree is complete;
+//  4. DOMContentLoaded fires, then the event loop pumps, then load fires;
+//  5. the loop pumps again until idle or the settle budget is spent.
+// Scripts inserted by page code (createElement('script')) are queued by the
+// bridge and executed by the pump, with load/error events on the element.
+
+import (
+	"strings"
+	"time"
+
+	fnet "github.com/sweefbrowser/sweef/internal/net"
+)
+
+func isJavaScriptType(typ string) bool {
+	t := strings.ToLower(strings.TrimSpace(typ))
+	switch t {
+	case "", "text/javascript", "application/javascript", "text/ecmascript", "application/ecmascript",
+		"module", "text/jscript", "application/x-javascript", "text/x-javascript":
+		return true
+	}
+	return false
+}
+
+// runPageScripts executes the document's scripts and fires the lifecycle.
+// Called by SetDocument with no locks held.
+func (t *Tab) runPageScripts(j *jsVM, doc *fnet.Doc) {
+	scripts := doc.ScriptElements()
+	var async, deferred []fnet.ScriptEl
+	for _, s := range scripts {
+		if !isJavaScriptType(s.Type) || s.NoModule {
+			j.executed[s.ID] = true
+			continue
+		}
+		switch {
+		case s.Module || s.Defer:
+			deferred = append(deferred, s)
+		case s.Async:
+			async = append(async, s)
+		default:
+			t.runScriptEl(j, s)
+		}
+	}
+	for _, s := range async {
+		t.runScriptEl(j, s)
+	}
+	for _, s := range deferred {
+		t.runScriptEl(j, s)
+	}
+	j.lifecycle("DOMContentLoaded")
+	if j.pump(t.settleBudget() / 2) {
+		return // navigated away
+	}
+	j.lifecycle("load")
+	j.pump(t.settleBudget())
+}
+
+func (t *Tab) settleBudget() time.Duration {
+	ms := t.eng.opts.SettleMs
+	if ms <= 0 {
+		ms = 1500
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+// runScriptEl fetches (if needed) and executes one <script> element, then
+// dispatches load or error on it.
+func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {
+	j.mu.Lock()
+	if j.executed[s.ID] || j.closed {
+		j.mu.Unlock()
+		return
+	}
+	j.executed[s.ID] = true
+	j.mu.Unlock()
+
+	src := s.Source
+	name := "<inline script>"
+	if s.Src != "" {
+		abs, err := resolveURL(t.URL(), s.Src)
+		if err != nil {
+			t.LogConsole("error", "script: bad src "+s.Src)
+			j.dispatch(s.ID, "error", nil)
+			return
+		}
+		name = abs
+		body, status, err := t.fetchResource(abs)
+		if err != nil || status >= 400 {
+			msg := "script " + abs + ": "
+			if err != nil {
+				msg += err.Error()
+			} else {
+				msg += "HTTP " + itoa(status)
+			}
+			t.LogConsole("error", msg)
+			j.dispatch(s.ID, "error", nil)
+			return
+		}
+		src = body
+	}
+	_, _ = j.call("__swSetCurrentScript", s.ID)
+	if s.Module {
+		_ = j.runModule(src, name)
+		j.jobs()
+	} else {
+		_, _ = j.run(src, name)
+	}
+	_, _ = j.call("__swSetCurrentScript", 0)
+	if s.Src != "" {
+		j.dispatch(s.ID, "load", nil)
+	}
+}
+
+// drainScripts runs scripts that page code inserted into the document.
+func (j *jsVM) drainScripts() {
+	for {
+		j.mu.Lock()
+		if j.closed || len(j.scriptQueue) == 0 {
+			j.mu.Unlock()
+			return
+		}
+		id := j.scriptQueue[0]
+		j.scriptQueue = j.scriptQueue[1:]
+		if j.executed[id] {
+			j.mu.Unlock()
+			continue
+		}
+		j.mu.Unlock()
+		t := j.tab
+		t.mu.RLock()
+		d := t.dom
+		t.mu.RUnlock()
+		if d == nil {
+			return
+		}
+		el := d.ScriptElement(id)
+		if el == nil || !isJavaScriptType(el.Type) || el.NoModule {
+			j.mu.Lock()
+			j.executed[id] = true
+			j.mu.Unlock()
+			continue
+		}
+		t.runScriptEl(j, *el)
+	}
+}
+
+func itoa(n int) string {
+	return strings.TrimSpace(strings.Replace(fmtInt(n), " ", "", -1))
+}
+
+func fmtInt(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var b [20]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		b[i] = '-'
+	}
+	return string(b[i:])
+}

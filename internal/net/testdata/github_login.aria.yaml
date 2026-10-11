@@ -1,0 +1,34 @@
+- link "Skip to content" [ref=e1]:
+  - /url: "#start-of-content"
+- main:
+  - heading "Sign in to GitHub" [level=1 ref=e2]
+  - form:
+    - text: Username or email address
+    - textbox "Username or email address" [required ref=e3]
+    - text: Password
+    - textbox "Password" [required type=password ref=e4]
+    - link "Forgot password?" [ref=e5]:
+      - /url: /password_reset
+    - button "Sign in" [ref=e6]
+  - paragraph:
+    - text: New to GitHub?
+    - link "Create an account" [ref=e7]:
+      - /url: /signup?source=login
+- contentinfo:
+  - list:
+    - listitem:
+      - link "Terms" [ref=e8]:
+        - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+    - listitem:
+      - link "Privacy" [ref=e9]:
+        - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+    - listitem:
+      - link "Docs" [ref=e10]:
+        - /url: https://docs.github.com
+    - listitem:
+      - link "Contact GitHub Support" [ref=e11]:
+        - /url: https://support.github.com
+    - listitem:
+      - button "Manage cookies" [ref=e12]
+    - listitem:
+      - button "Do not share my personal information" [ref=e13]

@@ -75,18 +75,6 @@ usage:
 `)
 }
 
-func newEngine(fs *flag.FlagSet) *engine.Engine {
-	opts := engine.DefaultOptions()
-	maxRSS := fs.Int("max-rss-mib", opts.MaxRSSMiB, "soft resident-memory budget")
-	noJS := fs.Bool("no-js", false, "disable JavaScript entirely (fetch+DOM only)")
-	ua := fs.String("user-agent", opts.DefaultUserAgent, "default UA string")
-	fs.Parse(os.Args[2:])
-	opts.MaxRSSMiB = *maxRSS
-	opts.DisableJS = *noJS
-	opts.DefaultUserAgent = *ua
-	return engine.New(opts)
-}
-
 func withSignals(ctx context.Context) (context.Context, context.CancelFunc) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

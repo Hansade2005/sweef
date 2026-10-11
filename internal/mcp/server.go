@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	PROTOCOL_VERSION = "2024-11-05"
+	PROTOCOL_VERSION = "2025-06-18"
 	SERVER_NAME      = "sweef-browser"
 	SERVER_VERSION   = "0.1.0"
 )
@@ -61,15 +61,15 @@ var tools = []toolDef{
 		objProps(map[string]map[string]string{"url": {"type": "string", "description": "absolute URL"}, "tab": {"type": "string", "description": "optional tab id"}}, "url")},
 	{"browser_snapshot", "Return the accessibility tree (roles/names/states) of the page. Token-cheap; prefer this over HTML for reasoning.",
 		objProps(map[string]map[string]string{"tab": {"type": "string"}})},
-	{"browser_aria_snapshot", "Return the Playwright-style YAML accessibility tree with [ref=eN] handles on every node — roles, accessible names, states (checked/disabled/expanded/selected), /url and text values. Feed a ref back to any action tool as its selector (e.g. selector=\"e42\") to click/fill that element.",
-		objProps(map[string]map[string]string{"tab": {"type": "string"}})},
+	{"browser_aria_snapshot", "Return the page as a Playwright-style YAML accessibility tree: headings, paragraphs, lists, tables, text and every control with role, accessible name, states (checked/disabled/expanded/selected/required) and /url. Actionable nodes carry [ref=eN]; pass that ref back to any action tool as its selector (e.g. selector=\"e42\"). Options: selector (scope to a CSS selector or ref), interactiveOnly (controls + headings only, much smaller), maxChars (default 60000; output is truncated with a note when hit), maxTextLen (per text node, default 200), maxDepth.",
+		objProps(map[string]map[string]string{"tab": {"type": "string"}, "selector": {"type": "string"}, "interactiveOnly": {"type": "boolean"}, "maxChars": {"type": "number"}, "maxTextLen": {"type": "number"}, "maxDepth": {"type": "number"}})},
 	{"browser_click", "Click the first element matching a CSS selector (links navigate, submit buttons post forms).",
 		objProps(map[string]map[string]string{"selector": {"type": "string"}, "tab": {"type": "string"}}, "selector")},
 	{"browser_fill", "Set the value of an input/textarea/select matched by CSS selector.",
 		objProps(map[string]map[string]string{"selector": {"type": "string"}, "value": {"type": "string"}, "tab": {"type": "string"}}, "selector", "value")},
 	{"browser_press", "Press a key on an element; 'Enter' submits the enclosing form.",
 		objProps(map[string]map[string]string{"selector": {"type": "string"}, "key": {"type": "string"}, "tab": {"type": "string"}}, "selector")},
-	{"browser_evaluate", "Run JavaScript in the page context (QuickJS ES2020) and return the JSON result.",
+	{"browser_evaluate", "Run JavaScript in the page (QuickJS, ES2023, full DOM: document, fetch, localStorage, timers). Expressions and statements both work; a returned promise is awaited (use await). DOM nodes serialise as {nodeType, tagName, id, ref}; pass the ref to action tools.",
 		objProps(map[string]map[string]string{"expression": {"type": "string"}, "tab": {"type": "string"}}, "expression")},
 	{"browser_console_log", "Read buffered console messages (log/warn/error) since a cursor.",
 		objProps(map[string]map[string]string{"since": {"type": "number", "description": "last seen event sid, 0 for all"}, "tab": {"type": "string"}})},
@@ -79,7 +79,7 @@ var tools = []toolDef{
 		objProps(map[string]map[string]string{"tab": {"type": "string"}})},
 	{"browser_get_text", "Return normalised visible text of a selector (default body).",
 		objProps(map[string]map[string]string{"selector": {"type": "string"}, "tab": {"type": "string"}})},
-	{"browser_screenshot", "Capture the page: returns a real PNG (base64, pngBase64 field) plus the structured text render. Supports width, height, deviceScaleFactor (Playwright page.screenshot semantics); defaults come from the context viewport.",
+	{"browser_screenshot", "Capture the page as a PNG image (returned as an image content part) plus a structured text render. Sweef has no pixel layout: the image is a readable text rendering, not a visual replica. Supports width, height, deviceScaleFactor.",
 		objProps(map[string]map[string]string{"width": {"type": "number"}, "height": {"type": "number"}, "deviceScaleFactor": {"type": "number"}, "tab": {"type": "string"}})},
 	{"browser_tab_new", "Open a new tab, optionally at a URL.",
 		objProps(map[string]map[string]string{"url": {"type": "string"}})},
@@ -209,7 +209,27 @@ func (s *Server) handle(ctx context.Context, req *rpcReq) {
 			reply(map[string]any{"isError": true, "content": []map[string]any{{"type": "text", "text": err.Error()}}}, nil)
 			return
 		}
-		_ = out
+		if p.Name == "browser_screenshot" {
+			var r struct {
+				PNG  string `json:"pngBase64"`
+				Text string `json:"text"`
+			}
+			if json.Unmarshal(out, &r) == nil && r.PNG != "" {
+				reply(map[string]any{"content": []map[string]any{
+					{"type": "image", "data": r.PNG, "mimeType": "image/png"},
+					{"type": "text", "text": r.Text},
+				}}, nil)
+				return
+			}
+		}
+		if p.Name == "browser_aria_snapshot" {
+			var r struct {
+				YAML string `json:"yaml"`
+			}
+			if json.Unmarshal(out, &r) == nil && r.YAML != "" {
+				content = r.YAML
+			}
+		}
 		reply(map[string]any{"content": []map[string]any{{"type": "text", "text": content}}}, nil)
 	default:
 		reply(nil, &rpcErr{-32601, "method not found: " + req.Method})

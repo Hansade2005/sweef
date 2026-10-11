@@ -317,6 +317,27 @@ func (c *BrowserContext) GetStorageValue(origin, key string) (string, bool) {
 	return v, ok
 }
 
+// RemoveStorageValue deletes one key from an origin bucket.
+func (c *BrowserContext) RemoveStorageValue(origin, key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if bucket, _ := c.state[origin].(map[string]any); bucket != nil {
+		delete(bucket, key)
+	}
+}
+
+// StorageKeys lists the keys stored for an origin, in insertion-independent order.
+func (c *BrowserContext) StorageKeys(origin string) []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	bucket, _ := c.state[origin].(map[string]any)
+	keys := make([]string, 0, len(bucket))
+	for k := range bucket {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 func (c *BrowserContext) ClearStorage(origin string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -8,22 +8,23 @@ import (
 	"io"
 	"net/http"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 
 	"golang.org/x/net/html"
 )
 
-// Doc owns one parsed HTML tree. Node identity is a deterministic FNV hash of
-// the element's path-in-tree (see nodeIDFor), so no side tables are needed and
-// memory stays O(document) — critical for 50 MB targets.
+// Doc owns one parsed HTML tree. Node identity is a small integer issued by a
+// per-document id table (see ids.go) that survives mutation; see idOf/find.
 type Doc struct {
 	Root *html.Node
 	base string
 
 	mu        sync.RWMutex
 	listeners []func(m Mutation)
+
+	idMu sync.RWMutex
+	tab  *idTable
 }
 
 // Mutation describes a DOM change in Playwright-mutation-like terms. The engine
@@ -61,7 +62,7 @@ func ParseDocument(src, base string) (*Doc, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Doc{Root: hn, base: base}, nil
+	return &Doc{Root: hn, base: base, tab: newIDTable()}, nil
 }
 
 // ---- helpers on html.Node -------------------------------------------------
@@ -145,318 +146,9 @@ func (d *Doc) Serialize(w io.Writer) error {
 	return html.Render(w, d.Root)
 }
 
-// ---- selectors (subset of CSS3 that agents actually use) -------------------
-// Supported: tag, #id, .class, [attr], [attr=val], descendant combinator,
-// child combinator '>', comma groups, :first-child, :not(tag).
+// Selector matching lives in selector.go.
 
-type simpleSel struct {
-	tag       string
-	universal bool
-	id        string
-	classes   []string
-	attrs     []kv
-	notTag    string
-	first     bool
-}
-
-type kv struct{ k, v string }
-
-func parseSelector(sel string) [][]simpleSel {
-	parts := splitTop(sel, ',')
-	out := make([][]simpleSel, 0, len(parts))
-	for _, p := range parts {
-		out = append(out, parseCompoundChain(p))
-	}
-	return out
-}
-
-func splitTop(s string, sep byte) []string {
-	var res []string
-	depth := 0
-	start := 0
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '[':
-			depth++
-		case ']':
-			depth--
-		case sep:
-			if depth == 0 {
-				res = append(res, strings.TrimSpace(s[start:i]))
-				start = i + 1
-			}
-		}
-	}
-	res = append(res, strings.TrimSpace(s[start:]))
-	return res
-}
-
-func parseCompoundChain(s string) []simpleSel {
-	var chain []simpleSel
-	for _, tk := range tokenizeCombinators(s) {
-		if tk == "" || tk == ">" {
-			continue
-		}
-		chain = append(chain, parseSimple(tk))
-	}
-	return chain
-}
-
-// tokenizeCombinators splits a selector into compound tokens, honoring
-// descendant (whitespace) and child ('>') combinators. Bracketed attribute
-// selectors and quoted values are kept intact.
-func tokenizeCombinators(s string) []string {
-	var out []string
-	cur := strings.Builder{}
-	depth := 0
-	flush := func() {
-		t := strings.TrimSpace(cur.String())
-		if t != "" {
-			out = append(out, t)
-		}
-		cur.Reset()
-	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch c {
-		case '[', '(':
-			depth++
-		case ']', ')':
-			if depth > 0 {
-				depth--
-			}
-		case '"', '\'':
-			// consume quoted run verbatim
-			cur.WriteByte(c)
-			i++
-			for i < len(s) && s[i] != c {
-				cur.WriteByte(s[i])
-				i++
-			}
-			if i < len(s) {
-				cur.WriteByte(s[i]) // closing quote
-			}
-			continue
-		}
-		if depth == 0 && (c == ' ' || c == '\t' || c == '>' || c == '+' || c == '~') {
-			flush()
-			continue
-		}
-		cur.WriteByte(c)
-	}
-	flush()
-	return out
-}
-
-func parseSimple(s string) simpleSel {
-	var sl simpleSel
-	i := 0
-	flush := func(buf string) {
-		if buf == "" {
-			return
-		}
-		switch buf[0] {
-		case '#':
-			sl.id = buf[1:]
-		case '.':
-			sl.classes = append(sl.classes, buf[1:])
-		case '[':
-			body := strings.TrimSuffix(buf[1:], "]")
-			if eq := strings.SplitN(body, "=", 2); len(eq) == 2 {
-				sl.attrs = append(sl.attrs, kv{eq[0], strings.Trim(eq[1], `"'`)})
-			} else {
-				sl.attrs = append(sl.attrs, kv{body, ""})
-			}
-		case ':':
-			switch buf {
-			case ":first-child":
-				sl.first = true
-			default:
-				if strings.HasPrefix(buf, ":not(") {
-					sl.notTag = strings.TrimSuffix(buf[5:], ")")
-				}
-			}
-		default:
-			sl.tag = strings.ToLower(buf)
-		}
-	}
-	for i < len(s) {
-		switch s[i] {
-		case '#', '.', '[', ':':
-			flush(s[:i]) // tag prefix, if any (only meaningful at start)
-			j := i + 1
-			if s[i] == '[' {
-				for j < len(s) && s[j] != ']' {
-					j++
-				}
-				if j < len(s) {
-					j++ // include ']'
-				}
-			} else if s[i] == ':' {
-				if j < len(s) && s[j] == ':' {
-					j++ // pseudo-element '::xxx' — consume second colon
-				}
-				for j < len(s) && s[j] != '#' && s[j] != '.' && s[j] != '[' && s[j] != ':' {
-					if s[j] == '(' { // :not(...) style functional pseudo
-						for j < len(s) && s[j] != ')' {
-							j++
-						}
-						if j < len(s) {
-							j++
-						}
-						continue
-					}
-					j++
-				}
-			} else {
-				for j < len(s) && s[j] != '#' && s[j] != '.' && s[j] != '[' && s[j] != ':' {
-					j++
-				}
-			}
-			parseRest := s[i:j]
-			// handle bracket/pseudo content specially
-			if strings.HasPrefix(parseRest, "[") {
-				sl.attrs = append(sl.attrs, parseBracket(parseRest))
-			} else if strings.HasPrefix(parseRest, ":") {
-				switch {
-				case strings.HasPrefix(parseRest, ":first-child"):
-					sl.first = true
-				case strings.HasPrefix(parseRest, ":not("):
-					end := strings.Index(parseRest, ")")
-					if end >= 0 {
-						sl.notTag = parseRest[5:end]
-					}
-				}
-			} else {
-				flush(parseRest)
-			}
-			i = j
-		default:
-			i++
-		}
-	}
-	if sl.tag == "" && s != "" && s[0] != '#' && s[0] != '.' && s[0] != '[' && s[0] != ':' {
-		end := len(s)
-		for k := 0; k < len(s); k++ {
-			if s[k] == '#' || s[k] == '.' || s[k] == '[' || s[k] == ':' {
-				end = k
-				break
-			}
-		}
-		flush(s[:end])
-	}
-	if s == "*" {
-		sl.universal = true
-		sl.tag = ""
-	}
-	return sl
-}
-
-func parseBracket(b string) kv {
-	body := strings.TrimSuffix(strings.TrimPrefix(b, "["), "]")
-	if eq := strings.SplitN(body, "=", 2); len(eq) == 2 {
-		return kv{eq[0], strings.Trim(eq[1], `"'`)}
-	}
-	return kv{body, ""}
-}
-
-func matchSimple(n *html.Node, sl simpleSel) bool {
-	if n.Type != html.ElementNode {
-		return false
-	}
-	// "*" compiles to an empty simpleSel; honor it explicitly.
-	if sl.universal && (sl.id != "" || len(sl.classes) > 0 || len(sl.attrs) > 0 || sl.notTag != "" || sl.first) {
-		sl.universal = false // fall through to the other constraints below
-	} else if sl.universal {
-		return true
-	}
-	if sl.tag != "" && n.Data != sl.tag {
-		return false
-	}
-	if sl.notTag != "" && n.Data == sl.notTag {
-		return false
-	}
-	if sl.id != "" && attr(n, "id") != sl.id {
-		return false
-	}
-	if len(sl.classes) > 0 {
-		cls := " " + strings.ReplaceAll(attr(n, "class"), "\n", " ") + " "
-		for _, c := range sl.classes {
-			if !strings.Contains(cls, " "+c+" ") {
-				return false
-			}
-		}
-	}
-	for _, a := range sl.attrs {
-		v := attr(n, a.k)
-		if a.v == "" && !hasAttr(n, a.k) {
-			return false
-		}
-		if a.v != "" && v != a.v {
-			return false
-		}
-	}
-	if sl.first {
-		p := n.Parent
-		if p == nil || p.FirstChild != n {
-			return false
-		}
-	}
-	return true
-}
-
-// matchesChain checks last compound against node with ancestor walk for earlier ones.
-func matchesChain(n *html.Node, chain []simpleSel) bool {
-	if len(chain) == 0 {
-		return false
-	}
-	if !matchSimple(n, chain[len(chain)-1]) {
-		return false
-	}
-	cur := n.Parent
-	for i := len(chain) - 2; i >= 0; i-- {
-		for cur != nil {
-			if matchSimple(cur, chain[i]) {
-				cur = cur.Parent
-				break
-			}
-			cur = cur.Parent
-		}
-		if cur == nil && i > 0 {
-			return false
-		}
-	}
-	return true
-}
-
-func (d *Doc) queryAll(sel string) []*html.Node {
-	chains := parseSelector(sel)
-	var out []*html.Node
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		for _, ch := range chains {
-			if matchesChain(n, ch) {
-				out = append(out, n)
-				break
-			}
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
-	}
-	walk(d.Root)
-	return out
-}
-
-func (d *Doc) queryOne(sel string) (*html.Node, error) {
-	all := d.queryAll(sel)
-	if len(all) == 0 {
-		return nil, fmt.Errorf("no node matches %q", sel)
-	}
-	return all[0], nil
-}
-
-func nodeToInfo(n *html.Node) *Info {
+func (d *Doc) nodeToInfo(n *html.Node) *Info {
 	role := implicitRole(n)
 	txt := innerText(n)
 	if txt == "" {
@@ -469,19 +161,31 @@ func nodeToInfo(n *html.Node) *Info {
 		}
 	}
 	return &Info{
-		NodeID:    nodeIDFor(n),
-		BackendID: nodeIDFor(n),
+		NodeID:    d.idOf(n),
+		BackendID: d.idOf(n),
 		Name:      n.Data,
 		ID:        attr(n, "id"),
 		Type:      attr(n, "type"),
 		Role:      role,
 		Text:      txt,
 		Href:      attr(n, "href"),
-		Visible:   attr(n, "hidden") == "" && !hasAttr(n, "hidden"),
+		Visible:   effectivelyVisible(n),
 		Disabled:  hasAttr(n, "disabled"),
 		Checked:   hasAttr(n, "checked"),
 		Focusable: isFocusable(n),
 	}
+}
+
+// effectivelyVisible walks up the ancestor chain checking the hidden
+// attribute, aria-hidden, inline display:none/visibility:hidden and
+// input[type=hidden].
+func effectivelyVisible(n *html.Node) bool {
+	for x := n; x != nil && x.Type == html.ElementNode; x = x.Parent {
+		if pruned(x) {
+			return false
+		}
+	}
+	return true
 }
 
 func isFocusable(n *html.Node) bool {
@@ -492,72 +196,7 @@ func isFocusable(n *html.Node) bool {
 	return hasAttr(n, "tabindex")
 }
 
-func implicitRole(n *html.Node) string {
-	switch n.Data {
-	case "a":
-		if hasAttr(n, "href") {
-			return "link"
-		}
-	case "button":
-		return "button"
-	case "input":
-		switch attr(n, "type") {
-		case "checkbox":
-			return "checkbox"
-		case "radio":
-			return "radio"
-		case "submit", "button":
-			return "button"
-		default:
-			return "textbox"
-		}
-	case "select":
-		return "combobox"
-	case "textarea":
-		return "textbox"
-	case "h1", "h2", "h3", "h4", "h5", "h6":
-		return "heading"
-	case "nav":
-		return "navigation"
-	case "main":
-		return "main"
-	case "form":
-		return "form"
-	case "img":
-		return "img"
-	}
-	return ""
-}
-
-// nodeIDFor returns a deterministic id derived from the element's path in the
-// tree (tag + preceding-sibling index at each level), hashed with FNV-1a. It is
-// stable across queries for the lifetime of one parsed document and needs zero
-// extra memory — important on 50 MB machines.
-func nodeIDFor(n *html.Node) int64 {
-	var segs []string
-	for x := n; x != nil && x.Type == html.ElementNode; x = x.Parent {
-		cnt := 0
-		if x.Parent != nil {
-			for c := x.Parent.FirstChild; c != nil && c != x; c = c.NextSibling {
-				if c.Type == html.ElementNode {
-					cnt++
-				}
-			}
-		}
-		segs = append(segs, x.Data+":"+strconv.Itoa(cnt))
-	}
-	h := int64(1469598103934665603)
-	for _, s := range segs {
-		for i := 0; i < len(s); i++ {
-			h ^= int64(s[i])
-			h *= 1099511628211
-		}
-	}
-	if h < 0 {
-		h = -h
-	}
-	return h
-}
+func implicitRole(n *html.Node) string { return computeRole(n) }
 
 // ---- attribute / state accessors (Playwright locator API surface) ---------
 
@@ -784,46 +423,109 @@ func (d *Doc) SetChecked(backendID int64, checked bool) error {
 	return fmt.Errorf("element is not checkable (type=%q)", attr(n, "type"))
 }
 
-// IsVisible approximates CSS visibility: display:none anywhere in the
-// ancestor chain (plus the hidden attribute) means invisible.
+// IsVisible approximates CSS visibility without layout: hidden attribute,
+// aria-hidden, inline display:none/visibility:hidden anywhere up the chain,
+// and input[type=hidden] are invisible.
 func (d *Doc) IsVisible(backendID int64) (bool, error) {
 	n := d.find(backendID)
 	if n == nil {
 		return false, fmt.Errorf("no node with backendNodeId %d", backendID)
 	}
-	for x := n; x != nil && x.Type == html.ElementNode; x = x.Parent {
-		if hasAttr(x, "hidden") {
-			return false, nil
-		}
-		st := attr(x, "style")
-		low := strings.ToLower(st)
-		if strings.Contains(low, "display:none") || strings.Contains(low, "display: none") {
-			return false, nil
-		}
-		if strings.Contains(low, "visibility:hidden") || strings.Contains(low, "visibility: hidden") {
-			return false, nil
-		}
+	if !d.Attached(n) {
+		return false, nil
 	}
-	return true, nil
+	return effectivelyVisible(n), nil
 }
 
-// BoundingBox derives a deterministic pseudo-layout box from the node path so
-// hover/click coordinates are stable across calls (agents use them for logs,
-// not pixels — we are layout-free by design).
+// BoundingBox returns a deterministic pseudo-layout box: elements are laid
+// out in document order, block elements start new rows, inline ones flow
+// left to right, so coordinates are stable, ordered and hit-testable even
+// though Sweef has no real layout engine.
 func (d *Doc) BoundingBox(backendID int64) ([4]int, error) {
 	n := d.find(backendID)
 	if n == nil {
 		return [4]int{}, fmt.Errorf("no node with backendNodeId %d", backendID)
 	}
-	h := uint32(nodeIDFor(n))
-	h ^= h >> 15
-	h *= 2246822519
-	h ^= h >> 13
-	x := int(h%720) + 8
-	y := int((h/720)%1400) + 8
-	w := 40 + int(h%180)
-	ht := 16 + int((h/181)%24)
-	return [4]int{x, y, w, ht}, nil
+	boxes := d.layoutBoxes()
+	if b, ok := boxes[n]; ok {
+		return b, nil
+	}
+	return [4]int{0, 0, 0, 0}, nil
+}
+
+var blockTags = map[string]bool{
+	"html": true, "body": true, "div": true, "p": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
+	"ul": true, "ol": true, "li": true, "table": true, "tr": true, "thead": true, "tbody": true, "section": true, "article": true,
+	"header": true, "footer": true, "nav": true, "main": true, "aside": true, "form": true, "fieldset": true, "pre": true,
+	"blockquote": true, "hr": true, "dl": true, "dt": true, "dd": true, "figure": true, "details": true, "summary": true,
+	"br": true, "textarea": true, "select": true, "option": true, "label": false,
+}
+
+// layoutBoxes computes boxes for every visible element in one pass. It is
+// recomputed per call (O(n)), which is cheap for the page sizes Sweef targets.
+func (d *Doc) layoutBoxes() map[*html.Node][4]int {
+	const lineH, charW, width, pad = 20, 7, 1200, 8
+	boxes := map[*html.Node][4]int{}
+	x, y := pad, pad
+	var walk func(n *html.Node, depth int)
+	walk = func(n *html.Node, depth int) {
+		if n.Type != html.ElementNode || pruned(n) {
+			return
+		}
+		block := blockTags[n.Data]
+		if block && x > pad {
+			x = pad
+			y += lineH
+		}
+		startX, startY := x, y
+		own := 0
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.TextNode {
+				w := len(normWS(c.Data)) * charW
+				for w > 0 {
+					room := width - x
+					if room <= charW {
+						x = pad
+						y += lineH
+						room = width - x
+					}
+					take := w
+					if take > room {
+						take = room
+					}
+					x += take
+					w -= take
+					own += take
+				}
+			} else if c.Type == html.ElementNode {
+				walk(c, depth+1)
+			}
+		}
+		switch n.Data {
+		case "input", "button", "select", "textarea", "img":
+			if own == 0 {
+				x += 120
+				own = 120
+			}
+		}
+		h := y - startY + lineH
+		w := width - startX
+		if !block {
+			if y == startY {
+				w = x - startX
+				if w < 8 {
+					w = 8
+				}
+			}
+		}
+		boxes[n] = [4]int{startX, startY, w, h}
+		if block {
+			x = pad
+			y += lineH
+		}
+	}
+	walk(d.Root, 0)
+	return boxes
 }
 
 // Count returns how many nodes match a selector (waitForSelector count rule).
@@ -849,7 +551,7 @@ func (d *Doc) Predicate(kind, sel string, backendID int64) (bool, error) {
 			if err != nil {
 				return false, nil
 			}
-			id = nodeIDFor(n)
+			id = d.idOf(n)
 		}
 		return d.IsVisible(id)
 	case "hidden":
@@ -865,7 +567,7 @@ func (d *Doc) Predicate(kind, sel string, backendID int64) (bool, error) {
 			if err != nil {
 				return false, err
 			}
-			id = nodeIDFor(n)
+			id = d.idOf(n)
 		}
 		n := d.find(id)
 		if n == nil {
@@ -877,414 +579,35 @@ func (d *Doc) Predicate(kind, sel string, backendID int64) (bool, error) {
 	}
 }
 
-// find locates an element by its hashed path id — O(nodes), zero side tables.
-func (d *Doc) find(backendID int64) *html.Node {
-	var found *html.Node
-	var walk func(*html.Node) bool
-	walk = func(n *html.Node) bool {
-		if n.Type == html.ElementNode && nodeIDFor(n) == backendID {
-			found = n
-			return true
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if walk(c) {
-				return true
-			}
-		}
-		return false
-	}
-	walk(d.Root)
-	return found
-}
-
 func (d *Doc) QuerySelector(sel string) (*Info, error) {
 	n, err := d.queryOne(sel)
 	if err != nil {
 		return nil, err
 	}
-	return nodeToInfo(n), nil
+	return d.nodeToInfo(n), nil
 }
 
 func (d *Doc) QuerySelectorAll(sel string) ([]*Info, error) {
 	ns := d.queryAll(sel)
 	out := make([]*Info, 0, len(ns))
 	for _, n := range ns {
-		out = append(out, nodeToInfo(n))
+		out = append(out, d.nodeToInfo(n))
 	}
 	return out, nil
 }
 
-// AriaSnapshot walks the tree emitting only interesting interactive/content
-// nodes — this is the token-cheap view LLMs consume.
+// AriaSnapshot returns the flattened accessibility tree (roles/names/refs)
+// used by Page.snapshot. It never errors on an empty page.
 func (d *Doc) AriaSnapshot() ([]*Info, error) {
-	var out []*Info
-	var walk func(*html.Node, int)
-	walk = func(n *html.Node, depth int) {
-		if n.Type == html.ElementNode {
-			role := implicitRole(n)
-			interesting := role != "" || n.Data == "p" || n.Data == "li" || n.Data == "td"
-			if interesting {
-				i := nodeToInfo(n)
-				out = append(out, i)
-			}
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c, depth+1)
-		}
-	}
-	walk(d.Root, 0)
-	if len(out) == 0 {
+	if d.Root == nil {
 		return nil, fmt.Errorf("empty document")
 	}
-	return out, nil
-}
-
-// ARIAInfo carries one accessibility-tree entry for the YAML snapshot.
-type ARIAInfo struct {
-	Role      string
-	Name      string // accessible name (aria-label > alt > placeholder > text)
-	Checked   bool
-	Disabled  bool
-	Expanded  bool
-	Selected  bool
-	Href      string
-	Value     string // input/textarea value
-	Key       int    // stable backend node id for interaction
-	Multiline bool
-}
-
-var ariaLandmarkRoles = map[string]string{
-	"header": "banner", "footer": "contentinfo", "main": "main",
-	"nav": "navigation", "aside": "complementary", "form": "form",
-	"section": "region", "article": "article",
-}
-
-// explicitAriaRole returns a valid role="..." attribute value.
-func explicitAriaRole(n *html.Node) string {
-	r := strings.TrimSpace(strings.ToLower(attr(n, "role")))
-	if r == "" || r == "generic" || r == "none" || r == "presentation" {
-		return ""
-	}
-	return r
-}
-
-// accessibleName implements the core WAI-ARIA accname algorithm subset:
-// aria-label > aria-labelledby > <label for> > alt > title > placeholder >
-// button/link text.
-func accessibleName(n *html.Node) string {
-	if v := attr(n, "aria-label"); v != "" {
-		return normWS(v)
-	}
-	if ids := attr(n, "aria-labelledby"); ids != "" {
-		var parts []string
-		for _, id := range strings.Fields(ids) {
-			if ln := findByID(d_rootOf(n), id); ln != nil {
-				parts = append(parts, innerText(ln))
-			}
-		}
-		if s := normWS(strings.Join(parts, " ")); s != "" {
-			return s
-		}
-	}
-	if n.Data == "input" || n.Data == "textarea" || n.Data == "select" {
-		if lab := labelForControl(n); lab != "" {
-			return lab
-		}
-	}
-	if v := attr(n, "alt"); v != "" && n.Data != "img" {
-		return normWS(v)
-	}
-	if v := attr(n, "placeholder"); v != "" {
-		return normWS(v)
-	}
-	switch n.Data {
-	case "button", "a":
-		return truncate(normWS(innerText(n)), 80)
-	case "img":
-		v := attr(n, "alt")
-		if v == "" {
-			v = "(image)"
-		}
-		return normWS(v)
-	}
-	if v := attr(n, "title"); v != "" {
-		return normWS(v)
-	}
-	return ""
-}
-
-func d_rootOf(n *html.Node) *html.Node {
-	for n.Parent != nil {
-		n = n.Parent
-	}
-	return n
-}
-
-func findByID(root *html.Node, id string) *html.Node {
-	var res *html.Node
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if res != nil || n.Type != html.ElementNode {
-			return
-		}
-		if attr(n, "id") == id {
-			res = n
-			return
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
-	}
-	walk(root)
-	return res
-}
-
-func controlID(n *html.Node) string { return attr(n, "id") }
-
-// labelForControl finds <label for=id>, wrapping labels, or aria-labelledby-less
-// adjacent label text.
-func labelForControl(n *html.Node) string {
-	root := d_rootOf(n)
-	id := controlID(n)
-	if id != "" {
-		var lab *html.Node
-		var walk func(*html.Node)
-		walk = func(c *html.Node) {
-			if lab != nil || c.Type != html.ElementNode {
-				return
-			}
-			if c.Data == "label" && attr(c, "for") == id {
-				lab = c
-				return
-			}
-			for k := c.FirstChild; k != nil; k = k.NextSibling {
-				walk(k)
-			}
-		}
-		walk(root)
-		if lab != nil {
-			return truncate(normWS(innerText(lab)), 60)
-		}
-	}
-	// wrapping label
-	for p := n.Parent; p != nil; p = p.Parent {
-		if p.Type == html.ElementNode && p.Data == "label" {
-			return truncate(normWS(innerText(p)), 60)
-		}
-	}
-	return ""
-}
-
-func truncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n]) + "…"
-}
-
-func inputValue(n *html.Node) string {
-	switch n.Data {
-	case "textarea":
-		return normWS(innerText(n))
-	case "input":
-		return attr(n, "value")
-	case "select":
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if c.Data == "option" && hasAttr(c, "selected") {
-				return normWS(innerText(c))
-			}
-		}
-	}
-	return ""
-}
-
-// ariaNode classifies an element for the accessibility tree.
-type ariaNode struct {
-	role, name string
-	ref        int64
-	href       string
-	value      string
-	multiline  bool
-	attrs      []string // level=N, checked, disabled, expanded, selected, type=password
-	leaf       bool     // don't descend into children (button/link/textbox/img...)
-	container  bool     // increases indentation depth for children
-}
-
-func classifyAria(n *html.Node) (*ariaNode, bool) {
-	if n.Type != html.ElementNode {
-		return nil, false
-	}
-	if attr(n, "aria-hidden") == "true" || hasAttr(n, "hidden") {
-		return nil, false
-	}
-	st := strings.ToLower(attr(n, "style"))
-	if strings.Contains(st, "display:none") || strings.Contains(st, "display: none") ||
-		strings.Contains(st, "visibility:hidden") || strings.Contains(st, "visibility: hidden") {
-		return nil, false
-	}
-	role := explicitAriaRole(n)
-	if role == "" {
-		role = implicitRole(n)
-	}
-	if role == "" {
-		if lr, ok := ariaLandmarkRoles[n.Data]; ok {
-			role = lr
-		}
-	}
-	if len(n.Data) == 2 && n.Data[0] == 'h' && n.Data[1] >= '1' && n.Data[1] <= '6' && role == "" {
-		role = "heading"
-	}
-	if role == "" {
-		return nil, false
-	}
-	a := &ariaNode{role: role, ref: nodeIDFor(n), href: attr(n, "href")}
-	name := accessibleName(n)
-	if name == "" && (role == "paragraph" || role == "listitem" || role == "cell") {
-		name = truncate(normWS(innerText(n)), 100)
-	}
-	a.name = name
-	if len(n.Data) == 2 && n.Data[0] == 'h' && n.Data[1] >= '1' && n.Data[1] <= '6' {
-		a.attrs = append(a.attrs, "level="+string(n.Data[1]))
-	}
-	if role == "checkbox" || role == "radio" || hasAttr(n, "checked") {
-		if hasAttr(n, "checked") {
-			a.attrs = append(a.attrs, "checked")
-		}
-	}
-	if hasAttr(n, "disabled") {
-		a.attrs = append(a.attrs, "disabled")
-	}
-	if attr(n, "aria-expanded") == "true" {
-		a.attrs = append(a.attrs, "expanded")
-	}
-	if hasAttr(n, "selected") || attr(n, "aria-selected") == "true" {
-		a.attrs = append(a.attrs, "selected")
-	}
-	if attr(n, "type") == "password" {
-		a.attrs = append(a.attrs, "type=password")
-	}
-	if attr(n, "required") != "" {
-		a.attrs = append(a.attrs, "required")
-	}
-	switch n.Data {
-	case "input", "textarea":
-		a.value = inputValue(n)
-		a.multiline = n.Data == "textarea"
-	case "select":
-		a.value = inputValue(n)
-	}
-	switch role {
-	case "button", "link", "textbox", "combobox", "listbox", "menuitem", "checkbox", "radio", "img", "separator", "slider", "progressbar", "option":
-		a.leaf = true
-	case "navigation", "banner", "main", "contentinfo", "complementary", "region", "form", "list", "table", "row", "grid", "tree", "tablist", "menu", "dialog", "article":
-		a.container = true
-	}
-	return a, true
-}
-
-func yamlEscape(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s)
-}
-
-// AriaSnapshotYAML renders the page as a Playwright-style accessibility tree in
-// YAML — exactly the format AI agents consume to reason about and interact
-// with pages:
-//
-// - heading "Pipilot" [level=1 ref=e3]
-// - navigation [ref=e5]:
-//   - link "Docs" [ref=e6]:
-//   - /url: /docs
-//
-// - textbox "Email" [ref=e9]
-// - button "Sign in" [ref=e12]
-//
-// Every node carries [ref=eN], its stable backend node id; pass it back to any
-// action tool as selector "eN" (or css "#id") to click/fill/select it.
-func (d *Doc) AriaSnapshotYAML() (string, error) {
-	var b strings.Builder
-	var walk func(n *html.Node, indent int)
-	walk = func(n *html.Node, indent int) {
-		childIndent := indent
-		if a, ok := classifyAria(n); ok {
-			pad := strings.Repeat("  ", indent)
-			b.WriteString(pad)
-			b.WriteString("- ")
-			b.WriteString(a.role)
-			if a.name != "" {
-				b.WriteString(" \"" + yamlEscape(a.name) + "\"")
-			}
-			all := append([]string{}, a.attrs...)
-			all = append(all, fmt.Sprintf("ref=e%d", a.ref))
-			b.WriteString(" [" + strings.Join(all, " ") + "]")
-			hasChildLines := a.href != "" || a.value != ""
-			if hasChildLines {
-				b.WriteString(":\n")
-				if a.href != "" {
-					b.WriteString(pad + "  - /url: " + a.href + "\n")
-				}
-				if a.value != "" {
-					v := a.value
-					if a.multiline {
-						lines := strings.Split(v, "\n")
-						b.WriteString(pad + "  - text: |\n")
-						for _, l := range lines {
-							b.WriteString(pad + "    " + l + "\n")
-						}
-					} else {
-						b.WriteString(pad + "  - text: " + v + "\n")
-					}
-				}
-			} else {
-				b.WriteString("\n")
-			}
-			if !a.leaf {
-				if a.container {
-					childIndent = indent + 1
-				}
-				for c := n.FirstChild; c != nil; c = c.NextSibling {
-					walk(c, childIndent)
-				}
-			}
-			return
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c, indent)
-		}
-	}
-	walk(d.Root, 0)
-	out := b.String()
-	if strings.TrimSpace(out) == "" {
-		return "", fmt.Errorf("empty document")
-	}
-	return out, nil
-}
-
-func isContainer(*html.Node) bool { return false }
-func boolToInt(v bool) int {
-	if v {
-		return 1
-	}
-	return 0
+	return d.SnapshotInfos(), nil
 }
 
 // SetValue writes value into input/textarea/select option matching.
 func (d *Doc) SetValue(backendID int64, value string) error {
-	var target *html.Node
-	var walk func(*html.Node) bool
-	walk = func(n *html.Node) bool {
-		if n.Type == html.ElementNode && nodeIDFor(n) == backendID {
-			target = n
-			return true
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if walk(c) {
-				return true
-			}
-		}
-		return false
-	}
-	walk(d.Root)
+	target := d.find(backendID)
 	if target == nil {
 		return fmt.Errorf("node %d vanished", backendID)
 	}
@@ -1327,7 +650,7 @@ func (d *Doc) AppendHTML(sel, frag string) error {
 	for _, s := range sub {
 		n.AppendChild(s)
 	}
-	d.note(Mutation{Op: "inner-html", BackendID: nodeIDFor(n), Value: frag})
+	d.note(Mutation{Op: "inner-html", BackendID: d.idOf(n), Value: frag})
 	return nil
 }
 
@@ -1340,7 +663,7 @@ func (d *Doc) RemoveNode(sel string) error {
 	if n.Parent != nil {
 		n.Parent.RemoveChild(n)
 	}
-	d.note(Mutation{Op: "remove", BackendID: nodeIDFor(n)})
+	d.note(Mutation{Op: "remove", BackendID: d.idOf(n)})
 	return nil
 }
 
@@ -1398,11 +721,37 @@ func clearChildren(n *html.Node) {
 
 // FormFor finds the enclosing form of sel and collects name=value pairs.
 func (d *Doc) FormFor(sel string) (method, action string, values map[string]string, err error) {
-	n, err := d.queryOne(sel)
+	infos, err := d.ResolveEngine(sel)
 	if err != nil {
 		return
 	}
+	n := d.find(infos[0].BackendID)
+	if n == nil {
+		err = fmt.Errorf("no node matches %q", sel)
+		return
+	}
+	return d.formForNode(n)
+}
+
+// FormForBackend is FormFor addressed by node id.
+func (d *Doc) FormForBackend(id int64) (method, action string, values map[string]string, err error) {
+	n := d.find(id)
+	if n == nil {
+		err = fmt.Errorf("no node with id %d", id)
+		return
+	}
+	return d.formForNode(n)
+}
+
+func (d *Doc) formForNode(n *html.Node) (method, action string, values map[string]string, err error) {
 	form := n
+	if n.Type == html.ElementNode && n.Data != "form" {
+		if f := attr(n, "form"); f != "" {
+			if fn := findByID(d.Root, f); fn != nil {
+				form = fn
+			}
+		}
+	}
 	for form != nil && !(form.Type == html.ElementNode && form.Data == "form") {
 		form = form.Parent
 	}
@@ -1619,7 +968,7 @@ func (d *Doc) InfoByBackend(backendID int64) *Info {
 	if n == nil {
 		return nil
 	}
-	return nodeToInfo(n)
+	return d.nodeToInfo(n)
 }
 
 // BackendForSelector resolves a selector to its stable backend node id.
@@ -1628,7 +977,7 @@ func (d *Doc) BackendForSelector(sel string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return nodeIDFor(n), nil
+	return d.idOf(n), nil
 }
 
 // NthForSelector resolves the nth (0-based) match of a selector.
@@ -1637,7 +986,7 @@ func (d *Doc) NthForSelector(sel string, nth int) (int64, error) {
 	if nth < 0 || nth >= len(all) {
 		return 0, fmt.Errorf("no node matches %q at index %d", sel, nth)
 	}
-	return nodeIDFor(all[nth]), nil
+	return d.idOf(all[nth]), nil
 }
 
 // ---- Playwright-style locator engines --------------------------------------
@@ -1670,7 +1019,7 @@ func (d *Doc) ByText(s string, exact bool) []*Info {
 			}
 		}
 		if !hasMatchChild {
-			out = append(out, nodeToInfo(n))
+			out = append(out, d.nodeToInfo(n))
 		}
 	}
 	return out
@@ -1690,10 +1039,7 @@ func htmlSubtreeContains(root, n *html.Node) bool {
 func (d *Doc) ByRole(role, name string) []*Info {
 	var out []*Info
 	for _, n := range d.queryAll("*") {
-		r := attr(n, "role")
-		if r == "" {
-			r = implicitRole(n)
-		}
+		r := computeRole(n)
 		if r != role {
 			continue
 		}
@@ -1719,7 +1065,7 @@ func (d *Doc) ByRole(role, name string) []*Info {
 				continue
 			}
 		}
-		out = append(out, nodeToInfo(n))
+		out = append(out, d.nodeToInfo(n))
 	}
 	return out
 }
@@ -1746,7 +1092,7 @@ func (d *Doc) ByLabel(label string) []*Info {
 			}
 		}
 		if strings.Contains(strings.ToLower(l), strings.ToLower(label)) {
-			out = append(out, nodeToInfo(n))
+			out = append(out, d.nodeToInfo(n))
 		}
 	}
 	return out
@@ -1757,7 +1103,7 @@ func (d *Doc) ByPlaceholder(p string) []*Info {
 	var out []*Info
 	for _, n := range d.queryAll("input, textarea") {
 		if strings.Contains(strings.ToLower(attr(n, "placeholder")), strings.ToLower(p)) {
-			out = append(out, nodeToInfo(n))
+			out = append(out, d.nodeToInfo(n))
 		}
 	}
 	return out
@@ -1768,7 +1114,7 @@ func (d *Doc) ByAlt(a string) []*Info {
 	var out []*Info
 	for _, n := range d.queryAll("img") {
 		if strings.Contains(strings.ToLower(attr(n, "alt")), strings.ToLower(a)) {
-			out = append(out, nodeToInfo(n))
+			out = append(out, d.nodeToInfo(n))
 		}
 	}
 	return out
@@ -1786,7 +1132,7 @@ func (d *Doc) ByTestId(id string) []*Info {
 			v = attr(n, "test-id")
 		}
 		if v == id {
-			out = append(out, nodeToInfo(n))
+			out = append(out, d.nodeToInfo(n))
 		}
 	}
 	return out
@@ -1810,10 +1156,13 @@ func (d *Doc) ResolveEngine(sel string) ([]*Info, error) {
 	if refStr != "" {
 		var id int64
 		if _, err := fmt.Sscanf(refStr, "%d", &id); err == nil {
-			if info := d.InfoByBackend(id); info != nil {
-				return []*Info{info}, nil
+			switch d.RefState(id) {
+			case "attached":
+				return []*Info{d.InfoByBackend(id)}, nil
+			case "detached":
+				return nil, fmt.Errorf("ref e%d is detached from the document; take a new snapshot", id)
 			}
-			return nil, fmt.Errorf("ref %s not found (stale snapshot?)", s)
+			return nil, fmt.Errorf("ref e%d is from a previous page; take a new snapshot", id)
 		}
 	}
 	switch {
@@ -1844,7 +1193,7 @@ func (d *Doc) ResolveEngine(sel string) ([]*Info, error) {
 	}
 	var out []*Info
 	for _, n := range d.queryAll(s) {
-		out = append(out, nodeToInfo(n))
+		out = append(out, d.nodeToInfo(n))
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("no node matches %q", sel)

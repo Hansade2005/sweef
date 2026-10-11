@@ -1,139 +1,141 @@
 # Sweef Browser
 
-**A lightweight, agent-first browser engine — Chromium's feature surface for agentic automation, in a single Go binary that runs on 1 core / 50 MB RAM / 400 MB disk.**
+**The agent browser that costs nothing to run.** Sweef is an independent browser engine written in Go: one static binary, no Chromium, a real ES2023 JavaScript engine, and a Model Context Protocol server built in. It gives AI agents a compact, readable view of a page plus reliable actions, on about 15 MB of RAM.
 
-Sweef is not a fork of Chromium. It is an independent browser engine written from scratch in Go, purpose-built so **AI agents are first-class citizens** and humans get a tiny, fast, scriptable browsing tool. Everything Playwright exposes to drive Chromium — locators, auto-waiting, actions, dialogs, network interception, storage state, multi-context isolation, accessibility snapshots, console/network logs — Sweef offers natively, over its own compact wire protocol and MCP server, at a fraction of the memory footprint.
+Sweef is not a fork of Chromium and does not do pixel layout. It bets that agents need **semantics** (structure, roles, names, text, form state, network truth) more than they need a rasterised screen, and it spends its budget there.
 
-## Why
-
-Driving real Chromium through Playwright/CDP costs ~90–150 MB RSS *per browser*, needs a 200+ MB binary install, and gives agents token-heavy DOM dumps. That is unusable on small VPSes, edge boxes, Raspberry Pi Zero-class hardware, or when you want to run hundreds of parallel agent sessions.
-
-Sweef's bet: agents don't need pixel-perfect rendering. They need **semantics** — structure, roles, names, text, form state, network truth — plus reliable actions. So Sweef implements a full HTML5-compliant-ish DOM, CSS selector engine, ARIA tree, JS execution, and HTTP stack, while replacing the compositor with cheap structured renders and PNG screenshots.
+## What you get
 
 | | Playwright + Chromium | Sweef |
 |---|---|---|
-| Install size | ~250 MB (browser download) | **~8 MB single static binary** |
-| Idle RSS | ~90–150 MB | **~8–15 MB** |
-| CPU cores wanted | 2–4 | **1** |
-| Agent interface | CDP + language bindings | **MCP native + RPC + SDKs** |
-| Page content for LLM | DOM dumps / custom snapshot | **Playwright-format AriaSnapshot YAML with `ref=eN` handles** |
-| JS engine | V8 (~8 MB+ heap/tab) | QuickJS (cgo build) or pure-Go DOM bridge |
-
-## Goals
-
-1. **Runs anywhere** — one portable Go binary; x86-64, ARM, RISC-V; cross-compiles with `GOOS/GOARCH`; no CGO required for the default build.
-2. **Agent-native** — ships an MCP server (`sweef mcp`) so any LLM tool-runner can browse immediately; every page interaction returns bounded, token-cheap results.
-3. **Playwright parity for automation** — locators with all engine prefixes (`text=`, `role=`, `css=`, `label=`, `placeholder=`, `alt=`, `testid=`), auto-waiting, actionability checks, dialogs, downloads-as-blobs, routes/interception, HAR-style network logs, storage-state save/load, multiple isolated contexts, device emulation (viewport, `deviceScaleFactor`, UA, mobile/landscape, geolocation, permissions, offline, color scheme, extra headers), init scripts, exposed bindings.
-4. **Human-usable too** — CLI for fetch/snapshot/screenshot/serve, Node & Python SDKs mirroring the Playwright API shape.
-5. **Bounded by design** — ring buffers for console/network/DOM-mutation events, capped cookie jar, RSS governor (`--max-rss-mib`) with GC pressure valve. No unbounded growth, ever.
-
-## Non-goals
-
-Pixel-perfect layout, GPU compositing, WebGL/WebAssembly, extensions, media codecs. If you need those, use Chromium. Sweef optimizes for *understanding and acting on the web programmatically*.
-
-## Architecture
-
-```
-cmd/sweef              CLI (serve | fetch | snapshot | shot | mcp | call | version)
-internal/engine        Browser, BrowserContext, Tab, Locator, actions, waits,
-                       dialogs, routes, storage_state, PNG screenshot renderer,
-                       metrics governor, event rings
-internal/net           HTML parser, DOM tree, CSS selector engine, locator
-                       engines, ARIA accessible-name computation,
-                       Playwright-format AriaSnapshot YAML, route matching,
-                       RFC-6265 cookie jar
-internal/js            JS runtime abstraction:
-                         -tags quickjs  -> embedded QuickJS (ES2020, cgo)
-                         default        -> pure-Go DOM bridge evaluator
-                                           (document.*, querySelector,
-                                            console.log, numeric/string exprs)
-internal/rpc           SWF1 wire protocol server (framed JSON over TCP/unix)
-internal/mcp           Model Context Protocol server (stdio JSON-RPC, 50+ tools)
-pkg/sdk/node           Node.js SDK (Playwright-shaped, speaks SWF1)
-pkg/sdk/py             Python SDK (Playwright-shaped, speaks SWF1)
-```
-
-- **Wire protocol**: `SWF1` — 4-byte magic, length-prefixed JSON frames. Tiny, debuggable with `nc`, no HTTP overhead.
-- **Concurrency**: one goroutine per tab, locks only inside a tab. Contexts isolate cookies/storage/emulation exactly like Playwright's browser contexts.
+| Install | ~250 MB browser download | **~8 MB static binary** |
+| Idle RSS | ~90 to 150 MB | **~15 MB** measured loading a full Wikipedia article |
+| CPU | 2 to 4 cores wanted | **1 core** |
+| Agent interface | CDP + language bindings | **MCP native**, plus a framed JSON-RPC socket and a Node SDK |
+| Page view for the model | DOM dumps or custom snapshots | **Playwright-format accessibility tree** with small `[ref=eN]` handles |
+| JavaScript | V8 | **QuickJS (ES2023)** via [modernc.org/quickjs](https://pkg.go.dev/modernc.org/quickjs), pure Go, no CGO |
+| Pixels, WebGL, media | Yes | No, by design |
 
 ## Quick start
 
 ```bash
-go build -o sweef ./cmd/sweef          # pure-Go build, no CGO needed
+go build -o sweef ./cmd/sweef          # pure Go; cross-compiles with GOOS/GOARCH
 ./sweef version
 
-# human use
-./sweef fetch https://example.com                 # extracted text
-./sweef snapshot https://example.com --aria       # Playwright-format a11y YAML
-./sweef shot https://example.com --width 800 --height 600 --dsf 2 --out page.png
+./sweef fetch https://example.com                 # visible text
+./sweef snapshot https://example.com --aria       # accessibility tree, YAML
+./sweef eval https://example.com 'document.querySelectorAll("p").length'
+./sweef shot https://example.com --out page.png   # text-rendered PNG
 
-# serve the RPC socket for SDKs
-./sweef serve --addr unix:/tmp/sweef.sock
-./sweef call --addr unix:/tmp/sweef.sock Browser.getVersion
-
-# MCP for AI agents (add to Claude Desktop / any MCP host)
-./sweef mcp
+./sweef mcp                                       # MCP server on stdio
+./sweef serve --addr 127.0.0.1:9222               # socket server for SDKs
 ```
 
-MCP config example:
+MCP configuration for any MCP host:
 
 ```json
 { "mcpServers": { "sweef": { "command": "/usr/local/bin/sweef", "args": ["mcp"] } } }
 ```
 
-### Agent loop, in three calls
+### The agent loop
 
 ```text
-1. browser_navigate   {url}                 → load state + title
-2. browser_aria_snapshot {}                 → YAML tree, every node has [ref=eN]
-3. browser_click      {selector: "e12"}     → act on exactly that element
+1. browser_navigate      {url}                       → title, final URL
+2. browser_aria_snapshot {}                          → YAML tree, controls carry [ref=eN]
+3. browser_click         {selector: "e12"}           → acts on exactly that element
+4. browser_aria_snapshot {interactiveOnly: true}     → re-read, cheaply
 ```
 
-Refs are stable backend node ids; stale refs return a clear error telling the agent to re-snapshot. This is the same contract Playwright MCP ships, without needing Chromium.
+A snapshot of the GitHub login page looks like this:
 
-## Feature map (vs Playwright)
+```yaml
+- link "Skip to content" [ref=e1]:
+  - /url: "#start-of-content"
+- main:
+  - heading "Sign in to GitHub" [level=1 ref=e2]
+  - form:
+    - text: Username or email address
+    - textbox "Username or email address" [required ref=e3]
+    - text: Password
+    - textbox "Password" [required type=password ref=e4]
+    - link "Forgot password?" [ref=e5]:
+      - /url: /password_reset
+    - button "Sign in" [ref=e6]
+```
 
-| Capability | Status |
+Refs are small integers from a per-document table, so they stay valid while scripts mutate the page. A ref from a previous page returns `ref e12 is from a previous page; take a new snapshot`. Paragraphs and plain text carry no ref, which is where most of the token saving comes from. Snapshot options: `selector` to scope, `interactiveOnly` for controls and headings only, `maxChars` (default 60 000, truncated with a note), `maxTextLen`, `maxDepth`.
+
+## How JavaScript works
+
+Each tab owns a QuickJS VM with a 64 MB heap cap and a 5 s per-script timeout. The Go DOM is the source of truth; a prelude implements `window`, `document`, elements, events, timers, `fetch`, `XMLHttpRequest`, `localStorage`, `MutationObserver` and the rest of the browser API on top of a small host bridge (see `internal/engine/jsbridge.md`). Scripts load the way browsers load them: inline and `src` scripts in order, `async` and `defer` after, `type=module` with relative imports, scripts inserted by page code (webpack chunks, tag managers) when they connect. After `load`, the event loop pumps until the page is idle or the settle budget (`--settle-ms`, default 1500) is spent, and again briefly after every action, so a click that triggers a fetch and a re-render is reflected in the next snapshot.
+
+What this means in practice: server-rendered sites, documentation, forms, dashboards and React, Preact or jQuery apps that do not depend on layout measurement run. Pages that need `getBoundingClientRect` to be real, WebGL, canvas painting, video or Web Workers do not, and Sweef says so in the console log rather than pretending.
+
+## Feature map
+
+Three states: **works** (covered by tests), **partial** (works for the common case, gaps noted), **not yet**.
+
+| Capability | State |
 |---|---|
-| Locators: css/text/role/label/placeholder/alt/testid engines, `.nth/.first/.last/.filter(hasText)` | ✅ |
-| Auto-waiting + actionability (visible/enabled/stable-by-dom), waitForSelector/Function/URL/LoadState | ✅ |
-| Actions: click/dblclick/hover/fill/type/press/check/uncheck/selectOption/tap/dragTo/scroll/setInputFiles | ✅ |
-| Keyboard & mouse (down/up/move/click/wheel) with hit-testing | ✅ |
-| Accessibility: Playwright-format `ariaSnapshot()` YAML, accessible names, landmarks, states | ✅ |
-| Screenshots: PNG with width/height/deviceScaleFactor, viewport defaults; text render | ✅ |
-| PDF export of rendered page | ✅ |
-| Console / network / DOM-mutation logs (bounded rings, since-SID queries) | ✅ |
-| Network: routes with fulfill/abort, request interception, HAR-style log, APIRequestContext equivalent (context.Fetch) | ✅ |
-| Cookies: RFC-6265 jar per context, add/clear, Set-Cookie capture | ✅ |
-| Storage state: save/load Playwright-compatible JSON (cookies + localStorage) | ✅ |
-| Multi-context isolation, tabs, history (back/forward/reload) | ✅ |
-| Emulation: viewport+dsf+mobile/landscape, UA, geolocation, permissions, offline, color scheme, extra headers, HTTP basic auth, proxy options | ✅ |
-| Dialogs (alert/confirm/prompt/beforeunload), arm accept/dismiss | ✅ |
-| Init scripts (run before page scripts, every nav), exposed bindings | ✅ |
-| JS eval: QuickJS ES2020 under `-tags quickjs`; pure-Go DOM-bridge subset otherwise | ✅ |
-| MCP server + Node/Python SDKs + CLI | ✅ |
-| Pixel layout / WebGL / extensions / media | ❌ (non-goals) |
+| Locators: css (full selector engine incl. `:has`, `:nth-child`, attribute operators), `text=`, `role=`, `label=`, `placeholder=`, `alt=`, `testid=`, refs, `.nth/.first/.last/.filter` | works |
+| Accessibility snapshot with content, states, refs, scoping and truncation | works |
+| Actions: click, fill, type, press, check, uncheck, selectOption, hover, focus, with events delivered to page listeners and `preventDefault` honoured | works |
+| JavaScript: ES2023, DOM API, events, timers, fetch/XHR, storage, modules, dynamic scripts, eval timeout | works |
+| Forms: GET and POST submission, cookies, redirects | works |
+| Console, network and DOM-mutation logs (bounded rings), HAR export | works |
+| Cookies (RFC 6265 jar per context), storage state save/load | works |
+| Multiple isolated contexts, tabs, history | works |
+| Emulation: viewport, UA, offline, color scheme, extra headers, geolocation, permissions | works |
+| Auto-waiting: attached / visible / hidden / enabled, with the JS event loop pumped while waiting | works |
+| Routes: fulfill and abort by glob for navigations and page fetches | partial (no request body inspection, no continue-with-modifications) |
+| Screenshots: PNG is a text rendering with a bitmap font, not a visual replica | partial |
+| Mouse, drag, wheel, tap: events are dispatched; coordinates map to elements through a deterministic pseudo-layout, not real geometry | partial |
+| Dialogs: alert / confirm / prompt answered from an armed response | works |
+| Init scripts | works |
+| Visibility: attribute and inline-style based; no stylesheet cascade | partial |
+| `getBoundingClientRect`, `offsetWidth`: deterministic non-zero boxes, not layout | partial |
+| Exposed bindings, downloads, PDF export, WebSocket, Web Workers, networkidle | not yet |
+| Pixel layout, WebGL, canvas painting, media, extensions | not planned |
 
-## Building
+## Architecture
+
+```
+cmd/sweef              CLI (mcp | serve | fetch | snapshot | shot | eval | call | version)
+internal/engine        Browser, BrowserContext, Tab, Locator, actions, waits,
+                       dialogs, routes, storage state, PNG renderer, RSS governor,
+                       jsvm.go (QuickJS VM + host bridge), scripts.go (loader + lifecycle),
+                       dom_prelude.js (browser API in JavaScript), jsbridge.md (contract)
+internal/net           HTML parser, DOM tree with stable ids, CSS selector engine,
+                       locator engines, accessible names, snapshot v2, routes, cookie jar
+internal/rpc           SWF1 wire protocol server (framed JSON over TCP/unix)
+internal/mcp           MCP server (stdio JSON-RPC, 40+ tools)
+pkg/sdk/node           Node.js SDK (Playwright-shaped)
+pkg/sdk/py             Python SDK: README and packaging only, no code yet
+```
+
+Concurrency: one VM per tab, serialised; the DOM is behind a tab lock; code that holds the DOM lock never calls into the VM.
+
+Memory: ring buffers for events, 8 MiB cap per document, 64 MiB cap per VM, an RSS governor (`--max-rss-mib`) that trims rings under pressure.
+
+## Building and testing
 
 ```bash
-go build ./...                      # default: pure Go, fully portable
-go test ./...
-GOOS=linux GOARCH=arm go build -o sweef-arm ./cmd/sweef   # e.g. Pi Zero
-go build -tags quickjs -o sweef-js ./cmd/sweef            # real ES2020 via QuickJS (needs cgo + vendored quickjs)
+go build ./...                      # pure Go, no CGO
+go test ./...                       # includes golden snapshots of real pages and
+                                    # React / Preact / jQuery fixtures under a local server
+GOOS=linux GOARCH=arm64 go build -o sweef-arm64 ./cmd/sweef
 ```
 
-Requires Go ≥ 1.22. The default binary has **zero runtime dependencies**.
+Requires Go 1.26 (the `go` toolchain downloads it automatically when `GOTOOLCHAIN=auto`). The binary has zero runtime dependencies.
 
 ## Roadmap
 
-- [ ] Real layout box model (block/inline flow) for accurate bounding boxes
-- [ ] WebSocket + SSE frame logging in the network ring
-- [ ] Downloads with blob persistence
-- [ ] `sweef watch` — live event stream CLI for humans/debugging
-- [ ] WASM target for in-browser agent demos
-- [ ] Video-free trace viewer compatible with Playwright's trace format subset
+- Real network idle detection and request-body-aware routes
+- Box model good enough for `getBoundingClientRect` consumers (dropdown libraries, virtual lists)
+- Downloads to blobs and `sweef watch` live event stream
+- Python SDK
+- Playwright trace format subset for the trace viewer
 
 ## License
 
-MIT (TBD — confirm before public release).
+MIT (TBD: confirm before public release).

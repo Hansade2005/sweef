@@ -42,6 +42,9 @@ type Options struct {
 	ProxyURL         string
 	ViewportWidth    int // default viewport width (px) for text rendering
 	ViewportHeight   int // default viewport height (px)
+	SettleMs         int // event-loop budget after load and after actions (default 1500)
+	JSMemoryMiB      int // QuickJS heap cap per tab (default 64)
+	JSTimeoutMs      int // single-eval timeout; a looping script is interrupted (default 5000)
 }
 
 func DefaultOptions() Options {
@@ -55,6 +58,9 @@ func DefaultOptions() Options {
 		DefaultUserAgent: "Sweef/0.1 (agent; lightweight)",
 		ViewportWidth:    1280,
 		ViewportHeight:   720,
+		SettleMs:         1500,
+		JSMemoryMiB:      64,
+		JSTimeoutMs:      5000,
 	}
 }
 
@@ -164,7 +170,6 @@ func New(opts Options) *Engine {
 		ctx:      ctx,
 		cancel:   cancel,
 	}
-	runtimeInit(&e.opts)
 	return e
 }
 
@@ -314,7 +319,6 @@ func (e *Engine) Close() error {
 		t.close()
 	}
 	e.cancel()
-	shutdownRuntime()
 	return nil
 }
 

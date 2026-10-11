@@ -217,7 +217,14 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		yaml, err := t.AriaSnapshotYAML()
+		opts := engine.SnapshotOptions{
+			MaxChars:        int(num(p, "maxChars")),
+			Selector:        str(p, "selector"),
+			InteractiveOnly: p["interactiveOnly"] == true,
+			MaxTextLen:      int(num(p, "maxTextLen")),
+			MaxDepth:        int(num(p, "maxDepth")),
+		}
+		yaml, err := t.AriaSnapshotV2(opts)
 		if err != nil {
 			return nil, err
 		}

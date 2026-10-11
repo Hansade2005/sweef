@@ -1,0 +1,2 @@
+// placeholder: replaced by the generated prelude
+globalThis.__swSetDocument=function(){};globalThis.__swDispatch=function(){return true};globalThis.__swRunTimers=function(){return -1};globalThis.__swFlushMutationObservers=function(){};globalThis.__swFireLifecycle=function(){};globalThis.__swSetCurrentScript=function(){};globalThis.__swIsThenable=function(v){return !!(v&&typeof v.then==="function")};globalThis.__swSerialize=function(v){return v===undefined?null:v};

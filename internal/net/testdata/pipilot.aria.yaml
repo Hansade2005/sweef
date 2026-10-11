@@ -1,0 +1,477 @@
+- banner:
+  - link "Skip to content" [ref=e1]:
+    - /url: "#main"
+  - link "PiPilot home" [ref=e2]:
+    - /url: /
+  - navigation "Primary":
+    - list:
+      - listitem:
+        - button "Product" [ref=e3]
+      - listitem:
+        - link "Pricing" [ref=e4]:
+          - /url: /pricing
+      - listitem:
+        - link "Enterprise" [ref=e5]:
+          - /url: /enterprise
+      - listitem:
+        - link "Docs" [ref=e6]:
+          - /url: /docs
+      - listitem:
+        - button "Community" [ref=e7]
+  - button "Switch to dark mode" [ref=e8]
+  - button "Log in" [ref=e9]
+  - button "Start building free" [ref=e10]
+  - button "Switch to dark mode" [ref=e11]
+  - button "Start free" [ref=e12]
+  - button "Open menu" [ref=e13]
+- main:
+  - link "#1 Product of the Month · PeerPush" [ref=e14]:
+    - /url: https://peerpush.net/p/pipilot
+  - heading "Describe it. Own it. Ship it anywhere." [level=1 ref=e15]
+  - paragraph: One description becomes a real, running app — web, mobile, desktop or API — with the backend wired in and the repo in your Google Drive.
+  - form:
+    - text: pipilot · new project
+    - radiogroup "Composer mode":
+      - radio "Build" [checked ref=e16]
+      - radio "Remote New" [ref=e17]
+    - text: Ready
+    - textbox "Describe the app you want to build" [ref=e18]
+    - button [ref=e19]
+    - button "Attach" [ref=e20]
+    - button "Stack: detected from your prompt. Pick one manually" [ref=e21]
+    - text: Pilot
+    - combobox "Inference tier" [ref=e22]:
+      - text: Pilot · Smart · default
+      - option "Pilot · Smart · default" [selected ref=e23]
+      - option "Boost · Strong · free" [ref=e24]
+      - option "Lite · Fast · free" [ref=e25]
+      - option "Nitro · Quick · design-led" [ref=e26]
+    - button "Dictate" [ref=e27]
+    - button "Enhance prompt" [disabled ref=e28]
+    - button "Build" [ref=e29]
+  - group "Example prompts":
+    - button "SaaS analytics dashboard" [ref=e30]
+    - button "Modern storefront" [ref=e31]
+    - button "AI chatbot app" [ref=e32]
+    - button "Kanban project board" [ref=e33]
+    - button "Real-time team chat" [ref=e34]
+    - button "Personal finance tracker" [ref=e35]
+    - button "Booking platform" [ref=e36]
+    - button "Customer support desk" [ref=e37]
+  - text: Free to start · No card · You own the code
+  - button "Have a codebase? Import it" [ref=e38]
+  - button [ref=e39]
+  - button [ref=e40]
+  - paragraph: Builds Web Android iOS Desktop API CLI npm Video
+  - text: pipilot · deploy
+  - button "Replay" [ref=e41]
+  - text: Replay
+  - paragraph: $ pipilot deploy --prod
+  - list:
+    - listitem: bundling app
+    - listitem: uploading to edge network
+    - listitem: provisioning functions
+    - listitem: warming CDN
+    - listitem: aliasing domain
+  - paragraph: deployed · production
+  - paragraph: One build · your cloud
+  - img "Vercel"
+  - text: Vercel
+  - img "Cloudflare"
+  - text: Cloudflare
+  - img "Netlify"
+  - text: Netlify acme.pipilot.dev Live
+  - list:
+    - term "Region"
+    - definition: iad1
+    - term "Build"
+    - definition: passed
+    - term "Status"
+    - definition: 200 OK
+  - region "Backed by":
+    - paragraph: Backed by
+    - list:
+      - listitem:
+        - link "Anthropic" [ref=e42]:
+          - /url: https://www.anthropic.com/startups
+      - listitem:
+        - link "OpenAI" [ref=e43]:
+          - /url: https://openai.com/startups
+      - listitem:
+        - link "ElevenLabs" [ref=e44]:
+          - /url: https://elevenlabs.io/startup-grants
+      - listitem:
+        - link "E2B" [ref=e45]:
+          - /url: https://e2b.dev/startups
+      - listitem:
+        - link "Peachscore" [ref=e46]:
+          - /url: https://peachscore.com
+      - listitem:
+        - link "Angel to Exit" [ref=e47]:
+          - /url: https://a2e.co/
+  - link "7 Kinds of app" [ref=e48]:
+    - /url: /docs#project-types
+  - link "130+ MCP integrations" [ref=e49]:
+    - /url: /integrations
+  - link "SOC 2 Type I + II · audited" [ref=e50]:
+    - /url: /trust#compliance
+  - link "$0 To start · no card" [ref=e51]:
+    - /url: /pricing
+  - text: 01 See it run
+  - heading "From prompt to live URL." [level=2 ref=e52]
+  - paragraph: Four short replays of what the builder does — a backend provisioned mid-build, a deploy that returns a link, two agents splitting one job, a mission that finishes after you close the tab.
+  - tablist "Product replays":
+    - tab "Postgres + API, provisioned" [selected ref=e53]
+    - tab "Prompt → live URL" [ref=e54]
+    - tab "Two agents, one build" [ref=e55]
+    - tab "Ships while you sleep" [ref=e56]
+  - tabpanel "Postgres + API, provisioned":
+    - text: pipilot · database
+    - button "Replay" [ref=e57]
+    - text: Replay
+    - paragraph: $ pipilot db
+    - list:
+      - listitem: provisioning Postgres · PiPilot Cloud
+      - listitem: create table users (…)
+      - listitem: insert 3 rows
+      - listitem: select * from users
+    - paragraph: Query result
+    - text: id email plan 1 ada@acme.io Pro 2 grace@acme.io Team 3 linus@acme.io Free GET /api/users 200 · 3 rows
+  - text: 02 What you get
+  - heading "Not a demo. A product you own." [level=2 ref=e58]
+  - paragraph: Most AI builders hand you a hosted preview. PiPilot hands you the repo, the database and the deploy.
+  - heading "Any kind of app." [level=3 ref=e59]
+  - paragraph: Web apps, real Android and iOS builds, desktop installers, Python and Node APIs, CLIs and npm packages — from one builder.
+  - paragraph: "kinds: web · mobile · desktop · api · cli · npm package · video"
+  - heading "Backend included." [level=3 ref=e60]
+  - paragraph: Postgres, auth, storage and keyless AI, provisioned by the agent while it builds. Claim it and it’s yours.
+  - paragraph: pp.from() · pp.auth · pp.storage · pp.ai
+  - heading "You own the code." [level=3 ref=e61]
+  - paragraph: Real files and real Git history, synced to a folder in your Google Drive. Export or push whenever you like.
+  - paragraph: drive sync · git history · export .zip
+  - heading "Ship it where you want." [level=3 ref=e62]
+  - paragraph: A free instant link in one click — or your own Vercel, Netlify, Cloudflare, Google Play and App Store on Pilot.
+  - paragraph: instant link · vercel · netlify · cloudflare · play · app store
+  - heading "Agents in parallel — and while you sleep." [level=3 ref=e63]
+  - paragraph: Agent Teams split one build across workers. Mission Runners keep going in the cloud and report back.
+  - paragraph: "agent teams: squadron+ · cadet: 2 cloud hours / mo"
+  - heading "130+ integrations." [level=3 ref=e64]
+  - paragraph: GitHub, Stripe, Supabase, Slack, Figma, Notion and more through MCP. Your keys stay on the server.
+  - paragraph: mcp · 130+ servers · keys server-side
+  - text: 03 Ownership
+  - heading "Ships to your stack, not ours." [level=2 ref=e65]
+  - paragraph: Every project is a real repository synced to your Google Drive. Push it to your GitHub and deploy it to your own Vercel, Netlify or Cloudflare — or ship the whole stack to PiPilot Host in one click. N…
+  - img "Google Drive"
+  - link "Google Drive" [ref=e66]:
+    - /url: /docs#cloud-sync
+  - paragraph: Synced · real Git
+  - text: synced synced
+  - img "GitHub"
+  - link "GitHub" [ref=e67]:
+    - /url: /integrations#github
+  - text: Pilot+
+  - paragraph: Push + pull requests
+  - text: pushed pushed
+  - link "Your cloud" [ref=e68]:
+    - /url: /docs#deploying
+  - text: Pilot+
+  - paragraph: Your account, your URL
+  - link "Vercel" [ref=e69]:
+    - /url: /integrations#vercel
+  - link "Netlify" [ref=e70]:
+    - /url: /integrations#netlify
+  - link "Cloudflare" [ref=e71]:
+    - /url: /integrations#cloudflare-pages
+  - text: live live
+  - img
+  - link "PiPilot Host" [ref=e72]:
+    - /url: /hosting
+  - paragraph: Frontend + API + DB · one deploy
+  - paragraph: Connect once · Tokens never leave the server · Own-host deploys on Pilot
+  - link "How deploys work" [ref=e73]:
+    - /url: /docs#deploying
+  - text: 04 How it works
+  - heading "Four steps from idea to shipped." [level=2 ref=e74]
+  - paragraph: Three of them every AI builder promises. The fourth only a real repo can keep.
+  - text: pipilot · acme-bookings 4 STEPS
+  - list:
+    - listitem: 01 read the prompt prompt.md
+    - listitem: 02 wrote screens, wired auth + db src/
+    - listitem: 03 published a live link here.now
+    - listitem: 04 committed to your Drive drive://acme-bookings
+  - list:
+    - listitem:
+      - heading "Describe it." [level=3 ref=e75]
+      - paragraph: "Plain words: a web app, a mobile app, a desktop tool, an API. Attach a sketch, a screenshot or a repo."
+    - listitem:
+      - heading "Watch it build." [level=3 ref=e76]
+      - paragraph: The agent plans, writes and wires a running project, with a live preview you can click while it works.
+    - listitem:
+      - heading "Ship it." [level=3 ref=e77]
+      - paragraph: Refine in chat, then ship — a live URL, an installer, an APK, or your own host.
+    - listitem:
+      - heading "Keep it." [level=3 ref=e78]
+      - paragraph: It’s a real repo in your Google Drive. Push it to GitHub, export it, keep building. Nothing is locked in.
+  - button "Start building free" [ref=e79]
+  - text: 05 Compared with Lovable · Bolt · v0 · Base44 · Replit
+  - heading "Not just another app generator." [level=2 ref=e80]
+  - paragraph: Most AI builders stop at a hosted web preview. PiPilot builds the whole product and hands you the keys.
+  - table:
+    - caption "How PiPilot compares with most AI app builders"
+    - rowgroup:
+      - row:
+        - columnheader "Feature"
+        - columnheader "Most AI builders"
+        - columnheader "PiPilot"
+    - rowgroup:
+      - row:
+        - columnheader "Output"
+        - cell: Only builds web apps
+        - cell: Web, mobile, desktop, APIs, CLIs, SDKs & npm packages — one hub
+      - row:
+        - columnheader "Mobile"
+        - cell: No real mobile output
+        - cell: Real Android & iOS via EAS — submit to Google Play & the App Store
+      - row:
+        - columnheader "Desktop"
+        - cell: No desktop story
+        - cell: Signed Windows, macOS & Linux installers built for you
+      - row:
+        - columnheader "Backends"
+        - cell: JavaScript backends only
+        - cell: Express, Hono — and full Python / FastAPI backends
+      - row:
+        - columnheader "Your code"
+        - cell: Your code lives on their servers
+        - cell: Your code lives in your own Google Drive with real Git — export anytime
+      - row:
+        - columnheader "Deploy"
+        - cell: Deploys only to their platform
+        - cell: Free keyless instant deploy — or ship to YOUR Vercel, Netlify, Cloudflare, App Store & Play
+      - row:
+        - columnheader "Agents"
+        - cell: One model, one pass
+        - cell: Agent Teams plus Mission Runners that build, deploy & debug in the background
+      - row:
+        - columnheader "Database"
+        - cell: Bring-your-own database, hours of setup
+        - cell: PiPilot Cloud — a real Postgres with auth & a REST API, provisioned in seconds, yours to claim
+  - text: 06 Shipped with PiPilot
+  - heading "Real apps, shipped this week." [level=2 ref=e81]
+  - paragraph: Published with PiPilot and voted up by the community. Publish yours — the top three each week win build hours.
+  - radiogroup "Show Launchpad apps or templates":
+    - radio "Launchpad" [checked ref=e82]
+    - radio "Templates" [ref=e83]
+  - link "Browse the Launchpad" [ref=e84]:
+    - /url: /showcase
+  - text: 07 Also built in
+  - heading "Agents, missions and a demo video — included." [level=2 ref=e85]
+  - paragraph: Squadron splits one build across parallel agents. Mission Runners keep working in the cloud after you close the tab. And every app can ship with its own narrated demo video.
+  - text: pipilot · agent teams
+  - button "Replay" [ref=e86]
+  - text: Replay
+  - paragraph: Lead · orchestrating
+  - paragraph: Build a SaaS analytics dashboard — auth, charts, Stripe billing.
+  - paragraph: On it. Splitting this across a team of two.
+  - paragraph: Spawned Worker 1 (frontend) + Worker 2 (data). Assigning tasks…
+  - paragraph: "Worker 1 → Worker 2: align on the /metrics shape."
+  - paragraph: Both workers done. Running checks…
+  - paragraph: Types ✓ Lint ✓ Build ✓
+  - paragraph: Shipped → demo.pipilot.dev
+  - text: W1 frontend W2 data APP preview demo.pipilot.dev Live
+  - paragraph: Revenue
+  - paragraph: $48,920
+  - list:
+    - term "Users"
+    - definition: 2,481
+    - term "Sessions"
+    - definition: 9.7k
+    - term "Churn"
+    - definition: 1.2%
+  - text: pipilot · render_video
+  - paragraph: "// generated by the agent: script, screen capture, voice-over, music"
+  - link "How Agent Teams work" [ref=e87]:
+    - /url: /docs#agent-teams
+  - link "Mission Runners" [ref=e88]:
+    - /url: /docs#mission-runners
+  - link "How video works" [ref=e89]:
+    - /url: /blog/ai-video-generation
+  - text: 08 Pricing
+  - heading "Free to start. $20/mo to ship." [level=2 ref=e90]
+  - paragraph: No card. Projects never expire. You keep every repo.
+  - link "$0 Cadet · Prove an idea, free 5 AI prompts a day · no card" [ref=e91]:
+    - /url: /pricing#plan-cadet
+  - link "$20 /mo Pilot · For solo builders who ship 25 premium prompts a day · your own host" [ref=e92]:
+    - /url: /pricing#plan-pilot
+  - link "$40 /seat Squadron · For teams building together Agent Teams · 60 premium prompts a day per seat" [ref=e93]:
+    - /url: /pricing#plan-squadron
+  - link "Custom Command · For organizations at scale SSO · SLA · custom Cloud Hours" [ref=e94]:
+    - /url: /pricing#plan-command
+  - link "See pricing" [ref=e95]:
+    - /url: /pricing
+  - text: 09 Questions
+  - heading "Asked before signing up." [level=2 ref=e96]
+  - link "All pricing questions" [ref=e97]:
+    - /url: /pricing#faq
+  - heading "Is it real code, or am I locked in?" [level=3 ref=e98]:
+    - button "Is it real code, or am I locked in?" [expanded ref=e99]
+  - region "Is it real code, or am I locked in?":
+    - text: It is a real repo. Real files, real git history, real dependencies. On Pilot you push it to your own GitHub and deploy it to your own Vercel, Netlify or Cloudflare account, and your PiPilot Cloud (a P…
+  - heading "Is there really a free plan?" [level=3 ref=e100]:
+    - button "Is there really a free plan?" [ref=e101]
+  - region "Is there really a free plan?":
+    - text: "Yes, and it does not expire — no card, unlimited projects, the full builder, live preview, PiPilot Cloud (a Postgres backend) and instant deploy. It is metered rather than crippled: 5 AI prompts a day…"
+  - heading "Does it really build mobile and desktop apps?" [level=3 ref=e102]:
+    - button "Does it really build mobile and desktop apps?" [ref=e103]
+  - region "Does it really build mobile and desktop apps?":
+    - text: Yes. Real Android and iOS builds through EAS, with Google Play and App Store submission, and Windows, macOS and Linux desktop installers — not a website in a wrapper.
+  - heading "Do I need to set up a database?" [level=3 ref=e104]:
+    - button "Do I need to set up a database?" [ref=e105]
+  - region "Do I need to set up a database?":
+    - text: No. Every app gets PiPilot Cloud — a real Postgres backend provisioned in seconds, with tables, SQL, auth and a REST Data API. No signup, no connection string, and the agent creates tables and runs qu…
+  - heading "How is PiPilot different from Lovable or Bolt?" [level=3 ref=e106]:
+    - button "How is PiPilot different from Lovable or Bolt?" [ref=e107]
+  - region "How is PiPilot different from Lovable or Bolt?":
+    - text: They build web apps and host your code. PiPilot builds web, mobile, desktop, APIs and CLIs, provisions the backend for you, keeps the repo in your Google Drive with real Git, and deploys to a free lin…
+  - text: Start in seconds
+  - heading "Your first app is free to build." [level=2 ref=e108]
+  - paragraph: Describe it, watch it build, keep the code. No card, no setup.
+  - form:
+    - text: Describe the app you want
+    - textbox "Describe the app you want" [ref=e109]
+    - button "Build" [ref=e110]
+  - paragraph: No credit card · You own the code · Live link in minutes
+  - link "Prefer to read first? Browse the docs" [ref=e111]:
+    - /url: /docs
+- contentinfo:
+  - link "PiPilot home" [ref=e112]:
+    - /url: /
+  - paragraph: The AI fullstack build hub.
+  - paragraph: Describe it. Own the code. Ship it anywhere — web, mobile, desktop, API.
+  - text: 606 Baltimore Ave, Suite 202-802 Towson, MD 21204, USA
+  - link "+1 (240) 905-4550" [ref=e113]:
+    - /url: tel:+12409054550
+  - link "PiPilot on LinkedIn" [ref=e114]:
+    - /url: https://www.linkedin.com/company/pipilot
+  - link "PiPilot on X" [ref=e115]:
+    - /url: https://x.com/pipilot_ai
+  - navigation "Product":
+    - paragraph: Product
+    - list:
+      - listitem:
+        - link "Builder" [ref=e116]:
+          - /url: /
+      - listitem:
+        - link "PiPilot Host" [ref=e117]:
+          - /url: /hosting
+      - listitem:
+        - link "PiPilot Cloud" [ref=e118]:
+          - /url: /cloud
+      - listitem:
+        - link "Integrations" [ref=e119]:
+          - /url: /integrations
+      - listitem:
+        - link "Templates" [ref=e120]:
+          - /url: /templates
+      - listitem:
+        - link "AI Video" [ref=e121]:
+          - /url: /blog/ai-video-generation
+      - listitem:
+        - link "Pricing" [ref=e122]:
+          - /url: /pricing
+      - listitem:
+        - link "Enterprise" [ref=e123]:
+          - /url: /enterprise
+  - navigation "Resources":
+    - paragraph: Resources
+    - list:
+      - listitem:
+        - link "Docs" [ref=e124]:
+          - /url: /docs
+      - listitem:
+        - link "Quickstart" [ref=e125]:
+          - /url: /docs#quickstart
+      - listitem:
+        - link "Changelog" [ref=e126]:
+          - /url: /changelog
+      - listitem:
+        - link "Blog" [ref=e127]:
+          - /url: /blog
+  - navigation "Community":
+    - paragraph: Community
+    - list:
+      - listitem:
+        - link "Launchpad" [ref=e128]:
+          - /url: /showcase
+      - listitem:
+        - link "Video Hub" [ref=e129]:
+          - /url: /video-hub
+      - listitem:
+        - link "Forum" [ref=e130]:
+          - /url: /community
+      - listitem:
+        - link "Roadmap" [ref=e131]:
+          - /url: /community/roadmap
+  - navigation "Company":
+    - paragraph: Company
+    - list:
+      - listitem:
+        - link "About" [ref=e132]:
+          - /url: /about
+      - listitem:
+        - link "Trust Center" [ref=e133]:
+          - /url: /trust
+      - listitem:
+        - link "Status" [ref=e134]:
+          - /url: /status
+      - listitem:
+        - link "hello@pipilot.dev" [ref=e135]:
+          - /url: mailto:hello@pipilot.dev
+      - listitem:
+        - link "sales@pipilot.dev" [ref=e136]:
+          - /url: mailto:sales@pipilot.dev
+      - listitem:
+        - link "technical@pipilot.dev" [ref=e137]:
+          - /url: mailto:technical@pipilot.dev
+        - text: ( support )
+  - group "Backed by":
+    - paragraph: Backed by
+    - list:
+      - listitem:
+        - link "Anthropic" [ref=e138]:
+          - /url: https://www.anthropic.com/startups
+      - listitem:
+        - link "OpenAI" [ref=e139]:
+          - /url: https://openai.com/startups
+      - listitem:
+        - link "ElevenLabs" [ref=e140]:
+          - /url: https://elevenlabs.io/startup-grants
+      - listitem:
+        - link "E2B" [ref=e141]:
+          - /url: https://e2b.dev/startups
+      - listitem:
+        - link "Peachscore" [ref=e142]:
+          - /url: https://peachscore.com
+      - listitem:
+        - link "Angel to Exit" [ref=e143]:
+          - /url: https://a2e.co/
+  - link "Sponsored by E2B for Startups" [ref=e144]:
+    - /url: https://e2b.dev/startups
+  - link "PiPilot — #1 Product of the Month on PeerPush" [ref=e145]:
+    - /url: https://peerpush.net/p/pipilot
+  - link "SOC 2 Type I + Type II · Trust Center" [ref=e146]:
+    - /url: /trust#compliance
+  - paragraph: Powered by Vercel · Supabase · E2B
+  - paragraph:
+    - text: A
+    - link "PIXELWAYS Solutions Inc." [ref=e147]:
+      - /url: https://www.pixelways.co
+    - text: company © 2026
+    - link "Privacy" [ref=e148]:
+      - /url: /privacy
+    - link "Terms" [ref=e149]:
+      - /url: /terms
+    - link "Refund" [ref=e150]:
+      - /url: /refund
+  - button "Start building free" [ref=e151]
+- button "Talk to the PiPilot assistant" [ref=e152]
