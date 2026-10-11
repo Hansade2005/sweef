@@ -39,6 +39,11 @@ func TestFirstBad(t *testing.T) {
 			continue
 		}
 		w, h := f.Width, f.Height
+		if os.Getenv("HEVC_PLANE") == "U" {
+			off := w * h
+			fb, r = fb[off:], r[off:]
+			w, h = f.CWidth, f.CHeight
+		}
 		cnt := 0
 		for cy := 0; cy*ctb < h && cnt < 6; cy++ {
 			for cx := 0; cx*ctb < w && cnt < 6; cx++ {
