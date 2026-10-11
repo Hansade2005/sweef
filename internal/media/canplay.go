@@ -150,6 +150,9 @@ func CanPlayType(mime string) string {
 	if !known {
 		return ""
 	}
+	if (typ == "audio/mp3" || typ == "audio/x-mp3") && hasCodecs {
+		return ""
+	}
 	ff := FFmpegPath() != ""
 	if rule.proprietary && !ff {
 		return ""
