@@ -78,9 +78,6 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 	}
 	h.pps = d.pps[ppsID]
 	h.sps = h.pps.sps
-	if d.sps[h.sps.ID] != nil && d.sps[h.sps.ID] != h.sps && d.sps[h.sps.ID].MbW == h.sps.MbW {
-		h.sps = d.sps[h.sps.ID]
-	}
 	sps := h.sps
 	if sps.ChromaFormat != 0 && sps.BitDepthLuma != sps.BitDepthChroma {
 		return nil, ErrUnsupported

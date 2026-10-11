@@ -359,7 +359,7 @@ func (d *Decoder) cabacBlock(cat, cbf, maxNum int, lv *[64]int32) int {
 	for i := 0; i < maxNum; i++ {
 		lv[i] = 0
 	}
-	fld := btoi(d.fieldMB)
+	fld := btoi(d.mbField)
 	sigB := int(sigCoeffOffset[fld][cat])
 	lastB := int(lastCoeffOffset[fld][cat])
 	absB := int(absLevelOffset[cat])

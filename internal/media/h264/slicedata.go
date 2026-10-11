@@ -91,6 +91,7 @@ func (d *Decoder) decodeSlice(h *sliceHeader, r *bitReader) error {
 	if h.isI() {
 		d.listCount = 0
 	}
+	d.slices[len(d.slices)-1].listCount = max(d.listCount, 1)
 	if !h.isI() {
 		if !d.buildRefList(h, d.picStructure) {
 			return corrupt()

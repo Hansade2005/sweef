@@ -115,7 +115,6 @@ func (d *Decoder) fillNeighbors() {
 func (d *Decoder) fillCaches(mbType uint32) {
 	pic := d.curPic
 	nb := &d.nb
-	idx := d.mbIdx
 	cabac := d.cabacOn
 	intra := isIntraT(mbType)
 	topType, leftType := nb.topType, nb.leftType

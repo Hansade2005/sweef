@@ -73,28 +73,28 @@ type genChan struct {
 
 // sbrGenCfg describes a stream scenario.
 type sbrGenCfg struct {
-	seed        int64
-	cpe         bool
-	coupling    int // 0 never, 1 always, 2 random per frame
-	startFreq   int
-	stopFreq    int
-	xover       int
-	freqScale   int
-	alterScale  int
-	noiseBands  int
-	limBands    int
-	limGains    int
-	interpol    int
-	smoothing   int
-	ampRes      int
-	extra1      bool
-	extra2      bool
-	headerEvery int
-	switchAt    int // frame at which the spectrum parameters change (0 never)
-	classes     []int
-	crc         bool
-	ps          *psGenCfg
-	harmProb    int // percent chance a harmonic flag is set
+	seed         int64
+	cpe          bool
+	coupling     int // 0 never, 1 always, 2 random per frame
+	startFreq    int
+	stopFreq     int
+	xover        int
+	freqScale    int
+	alterScale   int
+	noiseBands   int
+	limBands     int
+	limGains     int
+	interpol     int
+	smoothing    int
+	ampRes       int
+	extra1       bool
+	extra2       bool
+	headerEvery  int
+	switchAt     int // frame at which the spectrum parameters change (0 never)
+	classes      []int
+	crc          bool
+	ps           *psGenCfg
+	harmProb     int // percent chance a harmonic flag is set
 	envLo, envHi int // envelope value range override
 	fixEnv       int // FIXFIX envelope count override
 	hiRes        bool
@@ -103,7 +103,7 @@ type sbrGenCfg struct {
 	invfConst    int // >= 0 forces all inverse filtering modes
 	invfSet      bool
 	envPattern   []int // per high resolution band envelope values (debugging)
-	noiseVal    int // >= 0: constant noise floor start value (-1 random); needs tiny deltas
+	noiseVal     int   // >= 0: constant noise floor start value (-1 random); needs tiny deltas
 }
 
 type sbrGen struct {
@@ -892,10 +892,297 @@ func describe(c sbrGenCfg) string {
 	return fmt.Sprintf("cpe=%v coupling=%d start=%d stop=%d xover=%d fs=%d as=%d nb=%d", c.cpe, c.coupling, c.startFreq, c.stopFreq, c.xover, c.freqScale, c.alterScale, c.noiseBands)
 }
 
-// ---- parametric stereo generator (filled in with the PS decoder) -------------
+// ---- parametric stereo generator ------------------------------------------------
 
-type psGenCfg struct{}
-type psGen struct{}
+type psGenCfg struct {
+	iidMode, iccMode int // 0..5; -1 disables the parameter set
+	ipd              bool
+	classes          []int // frame classes (0 fixed, 1 variable)
+	headerEvery      int
+	switchAt         int // frame at which both modes change to switchIID/switchICC
+	switchIID        int
+	switchICC        int
+	flat             bool // all parameters zero (neutral)
+}
 
-func newPSGen(c *psGenCfg, r *rand.Rand) *psGen { return &psGen{} }
-func (p *psGen) frameBits() *bitW               { return &bitW{} }
+type psGen struct {
+	cfg   psGenCfg
+	rng   *rand.Rand
+	sh    *psState
+	frame int
+}
+
+func newPSGen(c *psGenCfg, r *rand.Rand) *psGen {
+	psInitTables()
+	cl := c.classes
+	if len(cl) == 0 {
+		c.classes = []int{0, 1}
+	}
+	return &psGen{cfg: *c, rng: r, sh: &psState{}}
+}
+
+func (g *psGen) frameBits() *bitW {
+	for attempt := 0; ; attempt++ {
+		w := g.try()
+		if w != nil {
+			return w
+		}
+		if attempt > 100 {
+			panic("ps generator cannot produce a valid frame")
+		}
+	}
+}
+
+// walk draws a parameter value near cur within [lo, hi].
+func (g *psGen) walk(cur, lo, hi int) int {
+	var d int
+	switch r := g.rng.Intn(100); {
+	case r < 40:
+		d = 0
+	case r < 80:
+		d = g.rng.Intn(3) - 1
+	case r < 95:
+		d = g.rng.Intn(7) - 3
+	default:
+		return lo + g.rng.Intn(hi-lo+1)
+	}
+	v := cur + d
+	if v < lo {
+		v = lo
+	}
+	if v > hi {
+		v = hi
+	}
+	return v
+}
+
+func (g *psGen) try() *bitW {
+	cfg := &g.cfg
+	sh := g.sh
+	iidMode, iccMode := cfg.iidMode, cfg.iccMode
+	if cfg.switchAt > 0 && g.frame >= cfg.switchAt {
+		iidMode, iccMode = cfg.switchIID, cfg.switchICC
+	}
+	header := g.frame == 0 || (cfg.headerEvery > 0 && g.frame%cfg.headerEvery == 0) || (cfg.switchAt > 0 && g.frame == cfg.switchAt)
+	w := &bitW{}
+	enableIID := iidMode >= 0
+	enableICC := iccMode >= 0
+	nrIID, nrICC, nrIPD, quant := sh.nrIID, sh.nrICC, sh.nrIPD, sh.iidQuant
+	w.flag(header)
+	if header {
+		w.flag(enableIID)
+		if enableIID {
+			w.put(iidMode, 3)
+			nrIID, nrIPD = psNrIIDICC[iidMode], psNrIPDOPD[iidMode]
+			quant = 0
+			if iidMode > 2 {
+				quant = 1
+			}
+		}
+		w.flag(enableICC)
+		if enableICC {
+			w.put(iccMode, 3)
+			nrICC = psNrIIDICC[iccMode]
+		}
+		w.flag(cfg.ipd)
+	} else {
+		enableIID, enableICC = sh.enableIID, sh.enableICC
+	}
+	enableExt := cfg.ipd
+	if !header {
+		enableExt = sh.enableExt
+	}
+	class := cfg.classes[g.rng.Intn(len(cfg.classes))]
+	w.put(class, 1)
+	idx := g.rng.Intn(4)
+	numEnv := psNumEnvTab[class][idx]
+	w.put(idx, 2)
+	var border [psMaxEnv + 1]int
+	border[0] = -1
+	if class == 1 {
+		prev := -1
+		for e := 1; e <= numEnv; e++ {
+			lo := prev + 1
+			hi := 31 - (numEnv - e)
+			if hi < lo {
+				return nil
+			}
+			b := lo + g.rng.Intn(hi-lo+1)
+			if e == numEnv && g.rng.Intn(2) == 0 {
+				b = 31
+			}
+			if b < lo {
+				b = lo
+			}
+			w.put(b, 5)
+			border[e] = b
+			prev = b
+		}
+	}
+	// parameters
+	var iid, icc [psMaxEnv][psMaxPar]int
+	prevIID := func(e, b int) int {
+		ep := e - 1
+		if e == 0 {
+			ep = sh.numEnv - 1
+		}
+		if ep < 0 {
+			ep = 0
+		}
+		if e == 0 {
+			return int(sh.iidPar[ep][b])
+		}
+		return iid[ep][b]
+	}
+	prevICC := func(e, b int) int {
+		ep := e - 1
+		if e == 0 {
+			ep = sh.numEnv - 1
+		}
+		if ep < 0 {
+			ep = 0
+		}
+		if e == 0 {
+			return int(sh.iccPar[ep][b])
+		}
+		return icc[ep][b]
+	}
+	lim := 7 + 8*quant
+	if enableIID {
+		for e := 0; e < numEnv; e++ {
+			dt := g.rng.Intn(2)
+			if g.frame == 0 && e == 0 || header && sh.nrIID != nrIID {
+				dt = 0
+			}
+			bk := [4]int{psHIIDDf0, psHIIDDf1, psHIIDDt0, psHIIDDt1}[2*dt+quant]
+			w.put(dt, 1)
+			off := psHuffOffset[bk]
+			last := 0
+			for b := 0; b < nrIID; b++ {
+				var base int
+				if dt != 0 {
+					base = prevIID(e, b)
+				} else {
+					base = last
+				}
+				var v int
+				if cfg.flat {
+					v = 0
+				} else {
+					v = g.walk(base, -lim, lim)
+				}
+				delta := v - base
+				if delta+off < 0 || delta+off >= len(psHuffLen[bk]) {
+					return nil
+				}
+				w.huff(psHuffLen[bk], psHuffCode[bk], delta+off)
+				iid[e][b] = v
+				last = v
+			}
+		}
+	}
+	if enableICC {
+		for e := 0; e < numEnv; e++ {
+			dt := g.rng.Intn(2)
+			if g.frame == 0 && e == 0 || header && sh.nrICC != nrICC {
+				dt = 0
+			}
+			bk := psHICCDf
+			if dt != 0 {
+				bk = psHICCDt
+			}
+			w.put(dt, 1)
+			off := psHuffOffset[bk]
+			last := 0
+			for b := 0; b < nrICC; b++ {
+				var base int
+				if dt != 0 {
+					base = prevICC(e, b)
+				} else {
+					base = last
+				}
+				v := g.walk(base, 0, 7)
+				if cfg.flat {
+					v = 0
+				}
+				delta := v - base
+				if delta+off < 0 || delta+off >= len(psHuffLen[bk]) {
+					return nil
+				}
+				w.huff(psHuffLen[bk], psHuffCode[bk], delta+off)
+				icc[e][b] = v
+				last = v
+			}
+		}
+	}
+	if enableExt {
+		ew := &bitW{}
+		ew.flag(cfg.ipd)
+		if cfg.ipd {
+			var ipd, opd [psMaxEnv][psMaxPar]int
+			for e := 0; e < numEnv; e++ {
+				for k := 0; k < 2; k++ {
+					par := &ipd
+					shPar := &sh.ipdPar
+					bkDf, bkDt := psHIPDDf, psHIPDDt
+					if k == 1 {
+						par = &opd
+						shPar = &sh.opdPar
+						bkDf, bkDt = psHOPDDf, psHOPDDt
+					}
+					dt := g.rng.Intn(2)
+					bk := bkDf
+					if dt != 0 {
+						bk = bkDt
+					}
+					ew.put(dt, 1)
+					last := 0
+					for b := 0; b < nrIPD; b++ {
+						var base int
+						if dt != 0 {
+							ep := e - 1
+							if e == 0 {
+								ep = sh.numEnv - 1
+							}
+							if ep < 0 {
+								ep = 0
+							}
+							if e == 0 {
+								base = int(shPar[ep][b])
+							} else {
+								base = par[ep][b]
+							}
+						} else {
+							base = last
+						}
+						v := g.rng.Intn(8)
+						sym := (v - base) & 7
+						ew.huff(psHuffLen[bk], psHuffCode[bk], sym)
+						par[e][b] = v
+						last = v
+					}
+				}
+			}
+		}
+		ew.put(0, 1) // reserved
+		nbytes := (ew.n + 2 + 7) / 8
+		if nbytes >= 15 {
+			w.put(15, 4)
+			w.put(nbytes-15, 8)
+		} else {
+			w.put(nbytes, 4)
+		}
+		w.put(0, 2) // extension id
+		w.append(ew)
+		for i := ew.n + 2; i < nbytes*8; i++ {
+			w.put(0, 1)
+		}
+	}
+	// track the decoder state
+	r := &aacBits{b: w.b}
+	if err := sh.parse(r, w.n); err != nil {
+		return nil
+	}
+	g.frame++
+	return w
+}

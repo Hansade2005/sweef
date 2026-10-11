@@ -22,7 +22,7 @@ func heBase(t *testing.T, rate, ch int, dur float64, seed int) [][]byte {
 	expr := strings.Join(exprs[:ch], "|")
 	tmp := filepath.Join(t.TempDir(), "base.aac")
 	args := []string{"-v", "error", "-y", "-nostdin", "-f", "lavfi", "-i", fmt.Sprintf("aevalsrc='%s':s=%d:d=%g:c=%s", expr, rate, dur, map[int]string{1: "mono", 2: "stereo"}[ch]),
-		"-c:a", "aac", "-b:a", strconv.Itoa(64000*ch), "-cutoff", strconv.Itoa(rate/2 - rate/20), "-f", "adts", tmp}
+		"-c:a", "aac", "-b:a", strconv.Itoa(64000 * ch), "-cutoff", strconv.Itoa(rate/2 - rate/20), "-f", "adts", tmp}
 	_ = seed
 	if out, err := exec.Command(FFmpegPath(), args...).CombinedOutput(); err != nil {
 		t.Fatalf("ffmpeg: %v %s", err, out)
@@ -261,6 +261,40 @@ func heCases() []heCase {
 		add(fmt.Sprintf("sbr_mono_%d", r), r, 1, "explicit-sbr", func(c *sbrGenCfg) { respec(c, r, []int{9, 8, 7, 6, 10, 11}, 0) })
 	}
 	add("sbr_stereo_16k", 16000, 2, "explicit-sbr", func(c *sbrGenCfg) { c.coupling = 2; respec(c, 16000, []int{9, 8, 7}, 0) })
+	// parametric stereo
+	psCase := func(name, mode string, iid, icc int, f func(c *sbrGenCfg)) {
+		add(name, 24000, 1, mode, func(c *sbrGenCfg) {
+			c.ps = &psGenCfg{iidMode: iid, iccMode: icc, headerEvery: 12}
+			if f != nil {
+				f(c)
+			}
+		})
+	}
+	psCase("ps_20band", "explicit-ps", 1, 1, nil)
+	psCase("ps_10band", "explicit-ps", 0, 0, nil)
+	psCase("ps_34band", "explicit-ps", 2, 2, nil)
+	psCase("ps_fine20", "explicit-ps", 4, 4, nil)
+	psCase("ps_fine34", "explicit-ps", 5, 5, nil)
+	psCase("ps_fine10", "explicit-ps", 3, 3, nil)
+	psCase("ps_fineiid_icc20", "explicit-ps", 4, 1, nil)
+	psCase("ps_iid20_fineicc", "explicit-ps", 1, 4, nil)
+	psCase("ps_iid_only", "explicit-ps", 1, -1, nil)
+	psCase("ps_icc_only", "explicit-ps", -1, 1, nil)
+	psCase("ps_mixed_10_34", "explicit-ps", 0, 2, nil)
+	psCase("ps_mixed_20_34", "explicit-ps", 1, 2, nil)
+	psCase("ps_mixed_34_20", "explicit-ps", 2, 1, nil)
+	psCase("ps_mixed_34_10", "explicit-ps", 2, 0, nil)
+	psCase("ps_mixed_10_20", "explicit-ps", 0, 1, nil)
+	psCase("ps_ipd_20", "explicit-ps", 1, 1, func(c *sbrGenCfg) { c.ps.ipd = true })
+	psCase("ps_ipd_10", "explicit-ps", 0, 0, func(c *sbrGenCfg) { c.ps.ipd = true })
+	psCase("ps_ipd_34", "explicit-ps", 2, 2, func(c *sbrGenCfg) { c.ps.ipd = true })
+	psCase("ps_fixed_class", "explicit-ps", 1, 1, func(c *sbrGenCfg) { c.ps.classes = []int{0} })
+	psCase("ps_var_class", "explicit-ps", 1, 1, func(c *sbrGenCfg) { c.ps.classes = []int{1} })
+	psCase("ps_switch_20_34", "explicit-ps", 1, 1, func(c *sbrGenCfg) { c.ps.switchAt = 3; c.ps.switchIID = 2; c.ps.switchICC = 2 })
+	psCase("ps_switch_34_20", "explicit-ps", 2, 2, func(c *sbrGenCfg) { c.ps.switchAt = 3; c.ps.switchIID = 1; c.ps.switchICC = 1 })
+	psCase("ps_bc", "bc-ps", 1, 1, nil)
+	psCase("ps_implicit", "implicit", 1, 1, nil)
+	psCase("ps_explicit_sbr_only", "explicit-sbr", 1, 1, nil)
 	add("sbr_down_48k", 48000, 1, "down", func(c *sbrGenCfg) { respec(c, 48000, []int{8, 7, 6, 9}, 0) })
 	add("sbr_down_44k_stereo", 44100, 2, "down", func(c *sbrGenCfg) { c.coupling = 2; respec(c, 44100, []int{8, 7, 6, 9}, 0) })
 	return cs

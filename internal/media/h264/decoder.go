@@ -47,7 +47,7 @@ type sliceParams struct {
 	disable        int
 	alpha, beta    int
 	cbOff, crOff   int
-	chromaOffCount int
+	listCount      int
 }
 
 // Decoder decodes an H.264 stream access unit by access unit.
@@ -122,7 +122,7 @@ type Decoder struct {
 	rowAdvanced   bool
 
 	implicitW          [3][64][64]int16
-	distScale          [32]int
+	distScale          [64]int
 	distScaleField     [2][64]int
 	mapColToList0      [2][16 + 32]int
 	mapColToList0Field [2][2][16 + 32]int

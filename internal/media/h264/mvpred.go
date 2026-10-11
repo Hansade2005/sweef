@@ -239,3 +239,20 @@ func (d *Decoder) predPSkipMotion() mv16 {
 	}
 	return mv16{med3(A.x, B.x, C.x), med3(A.y, B.y, C.y)}
 }
+
+func abs(a int) int {
+	if a < 0 {
+		return -a
+	}
+	return a
+}
+
+func clip3(lo, hi, v int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
