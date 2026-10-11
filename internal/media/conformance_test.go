@@ -14,66 +14,6 @@ import (
 	"github.com/sweefbrowser/sweef/internal/media/h264"
 )
 
-// esAccessUnits splits an Annex B elementary stream into access units: a
-// new unit starts at each access unit delimiter, or at a slice that starts a
-// new picture (first_mb_in_slice == 0) when no delimiter precedes it.
-func esAccessUnits(es []byte) [][]byte {
-	type nal struct{ start, end int }
-	var nals []nal
-	n := len(es)
-	prev := -1
-	for i := 0; i+3 <= n; i++ {
-		if es[i] == 0 && es[i+1] == 0 && es[i+2] == 1 {
-			if prev >= 0 {
-				e := i
-				for e > prev && es[e-1] == 0 {
-					e--
-				}
-				nals = append(nals, nal{prev, e})
-			}
-			prev = i + 3
-			i += 2
-		}
-	}
-	if prev >= 0 && prev < n {
-		nals = append(nals, nal{prev, n})
-	}
-	var aus [][]byte
-	var cur []byte
-	sawVCL := false
-	for _, nl := range nals {
-		if nl.end <= nl.start {
-			continue
-		}
-		typ := es[nl.start] & 31
-		startNew := false
-		switch {
-		case typ == 9:
-			startNew = len(cur) > 0
-		case typ == 1 || typ == 5:
-			if sawVCL && len(es[nl.start:nl.end]) > 1 && es[nl.start+1]&0x80 != 0 {
-				startNew = true
-			}
-		case typ == 7 || typ == 8 || typ == 6:
-			startNew = sawVCL
-		}
-		if startNew && len(cur) > 0 {
-			aus = append(aus, cur)
-			cur = nil
-			sawVCL = false
-		}
-		cur = append(cur, 0, 0, 0, 1)
-		cur = append(cur, es[nl.start:nl.end]...)
-		if typ == 1 || typ == 5 {
-			sawVCL = true
-		}
-	}
-	if len(cur) > 0 {
-		aus = append(aus, cur)
-	}
-	return aus
-}
-
 // decodeES decodes an Annex B stream with the pure-Go decoder and returns
 // the raw frames in display order.
 func decodeES(t testing.TB, aus [][]byte) ([][]byte, error) {

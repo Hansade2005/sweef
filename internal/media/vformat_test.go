@@ -181,6 +181,15 @@ func TestH264Formats(t *testing.T) {
 		{"gray10", []string{"-c:v", "libx264", "-profile:v", "high10", "-pix_fmt", "gray10le", "-x264-params", "keyint=30:bframes=2"}},
 		{"lossless444", []string{"-c:v", "libx264", "-profile:v", "high444", "-pix_fmt", "yuv444p", "-qp", "0", "-x264-params", "keyint=30:bframes=2"}},
 		{"lossless420", []string{"-c:v", "libx264", "-pix_fmt", "yuv420p", "-qp", "0", "-x264-params", "keyint=30:bframes=2"}},
+		{"mbaff_420", []string{"-c:v", "libx264", "-pix_fmt", "yuv420p", "-x264-params", "interlaced=1:tff=1:keyint=30:bframes=2:ref=3:8x8dct=1"}},
+		{"mbaff_420_bff_cavlc", []string{"-c:v", "libx264", "-pix_fmt", "yuv420p", "-x264-params", "interlaced=1:bff=1:cabac=0:keyint=30:bframes=2"}},
+		{"mbaff_hi422_10", []string{"-c:v", "libx264", "-profile:v", "high422", "-pix_fmt", "yuv422p10le", "-x264-params", "interlaced=1:tff=1:keyint=30:bframes=2"}},
+		{"mbaff_hi10", []string{"-c:v", "libx264", "-profile:v", "high10", "-pix_fmt", "yuv420p10le", "-x264-params", "interlaced=1:tff=1:keyint=30:bframes=3:weightb=1"}},
+		{"mbaff_hi444", []string{"-c:v", "libx264", "-profile:v", "high444", "-pix_fmt", "yuv444p", "-x264-params", "interlaced=1:tff=1:keyint=30:bframes=2:8x8dct=1"}},
+		{"fake_interlaced", []string{"-c:v", "libx264", "-pix_fmt", "yuv420p", "-x264-params", "fake-interlaced=1:keyint=30:bframes=2"}},
+		{"ildct", []string{"-c:v", "libx264", "-pix_fmt", "yuv420p", "-flags", "+ildct", "-x264-params", "keyint=30:bframes=2"}},
+		{"slices_wp", []string{"-c:v", "libx264", "-pix_fmt", "yuv420p", "-x264-params", "keyint=30:bframes=0:slices=4:weightp=2:ref=4"}},
+		{"intra_refresh_cavlc", []string{"-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-x264-params", "intra-refresh=1:keyint=30:ref=3"}},
 		{"lossless444_10", []string{"-c:v", "libx264", "-profile:v", "high444", "-pix_fmt", "yuv444p10le", "-qp", "0", "-x264-params", "keyint=30:bframes=2"}},
 	}
 	for _, c := range cases {

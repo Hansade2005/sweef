@@ -17,15 +17,15 @@ func (d *Decoder) predictIntra(plane, x, y int, haveLeft, haveAbove, notOnRight 
 	maxX := d.miCols*8 - 1
 	maxY := d.miRows*8 - 1
 	if plane > 0 {
-		maxX = ((d.miCols * 8) >> 1) - 1
-		maxY = ((d.miRows * 8) >> 1) - 1
+		maxX = ((d.miCols * 8) >> uint(d.subX)) - 1
+		maxY = ((d.miRows * 8) >> uint(d.subY)) - 1
 	}
 	fr := d.cur
 	stride := fr.stride[plane]
 	pix := fr.pix[plane]
 	var abuf [65]int32 // abuf[k+1] = aboveRow[k]
 	var left [32]int32
-	base := int32(128)
+	base := int32(1) << uint(d.bitDepth-1)
 	ab := abuf[1:]
 	if !haveAbove {
 		for i := 0; i < 2*size; i++ {
@@ -172,8 +172,8 @@ func (d *Decoder) predictIntra(plane, x, y int, haveLeft, haveAbove, notOnRight 
 				v := ab[j] + left[i] - A(-1)
 				if v < 0 {
 					v = 0
-				} else if v > 255 {
-					v = 255
+				} else if v > d.maxV {
+					v = d.maxV
 				}
 				*P(i, j) = v
 			}
@@ -209,9 +209,19 @@ func (d *Decoder) predictIntra(plane, x, y int, haveLeft, haveAbove, notOnRight 
 	for i := 0; i < size; i++ {
 		row := pix[(y+i)*stride+x : (y+i)*stride+x+size]
 		for j := range row {
-			row[j] = uint8(pred[i*size+j])
+			row[j] = uint16(pred[i*size+j])
 		}
 	}
+}
+
+func (d *Decoder) clipPix(v int32) uint16 {
+	if uint32(v) > uint32(d.maxV) {
+		if v < 0 {
+			return 0
+		}
+		return uint16(d.maxV)
+	}
+	return uint16(v)
 }
 
 func roundMvQ2(v int) int {
@@ -237,16 +247,22 @@ func (d *Decoder) predictInter(plane, x, y, w, h, blockIdx int) {
 	}
 	sx, sy := 0, 0
 	if plane > 0 {
-		sx, sy = 1, 1
+		sx, sy = d.subX, d.subY
 	}
 	for rl := 0; rl < nref; rl++ {
 		// motion vector selection
 		var mvr, mvc int
 		bm := &b.blockMvs[rl]
-		if plane == 0 || b.miSize >= block8x8 {
+		switch {
+		case plane == 0 || b.miSize >= block8x8 || (d.subX == 0 && d.subY == 0):
 			mvr, mvc = int(bm[blockIdx].row), int(bm[blockIdx].col)
-		} else {
-			// 4:2:0
+		case d.subX == 0: // 4:4:0
+			mvr = roundMvQ2(int(bm[blockIdx].row) + int(bm[blockIdx+2].row))
+			mvc = roundMvQ2(int(bm[blockIdx].col) + int(bm[blockIdx+2].col))
+		case d.subY == 0: // 4:2:2
+			mvr = roundMvQ2(int(bm[blockIdx].row) + int(bm[blockIdx+1].row))
+			mvc = roundMvQ2(int(bm[blockIdx].col) + int(bm[blockIdx+1].col))
+		default:
 			mvr = roundMvQ4(int(bm[0].row) + int(bm[1].row) + int(bm[2].row) + int(bm[3].row))
 			mvc = roundMvQ4(int(bm[0].col) + int(bm[1].col) + int(bm[2].col) + int(bm[3].col))
 		}
@@ -265,6 +281,9 @@ func (d *Decoder) predictInter(plane, x, y, w, h, blockIdx int) {
 		cmvC := clip3(mbToLeft-spelLeft, mbToRight+spelRight, (2*mvc)>>uint(sx))
 		// scaling
 		refFrame := b.refFrame[rl]
+		if !d.refValid[refFrame-1] {
+			panic(errBitstream)
+		}
 		ref := d.refs[d.refFrameIdx[refFrame-1]]
 		xScale := (ref.w << 14) / d.width
 		yScale := (ref.h << 14) / d.height
@@ -272,7 +291,7 @@ func (d *Decoder) predictInter(plane, x, y, w, h, blockIdx int) {
 		baseY := (y * yScale) >> 14
 		lumaX, lumaY := x, y
 		if plane > 0 {
-			lumaX, lumaY = x<<1, y<<1
+			lumaX, lumaY = x<<uint(d.subX), y<<uint(d.subY)
 		}
 		fracX := ((16 * lumaX * xScale) >> 14) & 15
 		fracY := ((16 * lumaY * yScale) >> 14) & 15
@@ -293,7 +312,7 @@ func (d *Decoder) predictInter(plane, x, y, w, h, blockIdx int) {
 			p0 := d.predBuf[0][i*w : i*w+w]
 			p1 := d.predBuf[1][i*w : i*w+w]
 			for j := range row {
-				row[j] = uint8((int(p0[j]) + int(p1[j]) + 1) >> 1)
+				row[j] = uint16((int(p0[j]) + int(p1[j]) + 1) >> 1)
 			}
 		} else {
 			copy(row, d.predBuf[0][i*w:i*w+w])
@@ -302,7 +321,7 @@ func (d *Decoder) predictInter(plane, x, y, w, h, blockIdx int) {
 }
 
 // blockInterPred implements spec 8.5.2.4.
-func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, filter int, out []uint8) {
+func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, filter int, out []uint16) {
 	lastX := ref.pw[plane] - 1
 	lastY := ref.ph[plane] - 1
 	stride := ref.stride[plane]
@@ -316,7 +335,7 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 		iy := y >> 4
 		// fetch window (w+7) x (h+7)
 		ww := w + 7
-		var win []uint8
+		var win []uint16
 		var wstride int
 		if ix-3 >= 0 && iy-3 >= 0 && ix+w+4 <= lastX+1 && iy+h+4 <= lastY+1 {
 			win = pix[(iy-3)*stride+ix-3:]
@@ -339,7 +358,7 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 			return
 		}
 		// horizontal pass into intermediate (h+7) x w
-		var inter []uint8
+		var inter []uint16
 		var istride int
 		if fx == 0 {
 			inter = win[3:]
@@ -354,7 +373,7 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 				for c := 0; c < w; c++ {
 					s := int32(src[c])*f[0] + int32(src[c+1])*f[1] + int32(src[c+2])*f[2] + int32(src[c+3])*f[3] +
 						int32(src[c+4])*f[4] + int32(src[c+5])*f[5] + int32(src[c+6])*f[6] + int32(src[c+7])*f[7]
-					dst[c] = clip255((s + 64) >> 7)
+					dst[c] = d.clipPix((s + 64) >> 7)
 				}
 			}
 		}
@@ -370,7 +389,7 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 				p := r*istride + c
 				s := int32(inter[p])*f[0] + int32(inter[p+istride])*f[1] + int32(inter[p+2*istride])*f[2] + int32(inter[p+3*istride])*f[3] +
 					int32(inter[p+4*istride])*f[4] + int32(inter[p+5*istride])*f[5] + int32(inter[p+6*istride])*f[6] + int32(inter[p+7*istride])*f[7]
-				out[r*w+c] = clip255((s + 64) >> 7)
+				out[r*w+c] = d.clipPix((s + 64) >> 7)
 			}
 		}
 		return
@@ -387,7 +406,7 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 			for t := 0; t < 8; t++ {
 				s += f[t] * int32(row[clip3(0, lastX, (p>>4)+t-3)])
 			}
-			inter[r*w+c] = clip255((s + 64) >> 7)
+			inter[r*w+c] = d.clipPix((s + 64) >> 7)
 		}
 	}
 	for r := 0; r < h; r++ {
@@ -398,7 +417,7 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 			for t := 0; t < 8; t++ {
 				s += f[t] * int32(inter[((p>>4)+t)*w+c])
 			}
-			out[r*w+c] = clip255((s + 64) >> 7)
+			out[r*w+c] = d.clipPix((s + 64) >> 7)
 		}
 	}
 }

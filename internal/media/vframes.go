@@ -68,6 +68,10 @@ type vp9Adapter struct{ d *vp9.Decoder }
 
 func (a *vp9Adapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Decode(data) }
 func (a *vp9Adapter) Reset()                                   { a.d.Reset() }
+func (a *vp9Adapter) DecodePic(data []byte) (vpic, error) {
+	fr, err := a.d.DecodeFrame(data)
+	return framePic(fr), err
+}
 
 type h264Adapter struct{ d *h264.Decoder }
 

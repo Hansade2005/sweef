@@ -1,19 +1,39 @@
 package vp9
 
-import "image"
+import "github.com/sweefbrowser/sweef/internal/media/yuv"
 
 func (d *Decoder) readColorConfig(r *bitReader) error {
+	d.bitDepth = 8
 	if d.profile >= 2 {
-		return ErrUnsupported
+		if r.flag() {
+			d.bitDepth = 12
+		} else {
+			d.bitDepth = 10
+		}
 	}
-	cs := r.u(3)
-	if cs != 7 { // not RGB
-		r.u(1) // color_range
+	d.maxV = int32(1)<<uint(d.bitDepth) - 1
+	d.colorSp = r.u(3)
+	if d.colorSp != 7 { // not RGB
+		d.fullRng = r.flag()
 		if d.profile == 1 || d.profile == 3 {
-			return ErrUnsupported
+			d.subX = r.u(1)
+			d.subY = r.u(1)
+			if r.u(1) != 0 {
+				return errBitstream
+			}
+		} else {
+			d.subX, d.subY = 1, 1
 		}
 	} else {
-		return ErrUnsupported
+		d.fullRng = true
+		if d.profile == 1 || d.profile == 3 {
+			d.subX, d.subY = 0, 0
+			if r.u(1) != 0 {
+				return errBitstream
+			}
+		} else {
+			return errBitstream
+		}
 	}
 	return nil
 }
@@ -63,7 +83,7 @@ func (d *Decoder) setupPastIndependence() {
 	d.p = defaultProbs()
 }
 
-func (d *Decoder) decodeFrame(data []byte) (*image.YCbCr, error) {
+func (d *Decoder) decodeFrame(data []byte) (*yuv.Frame, error) {
 	r := &bitReader{b: data}
 	if r.u(2) != 2 {
 		return nil, errBitstream
@@ -72,10 +92,9 @@ func (d *Decoder) decodeFrame(data []byte) (*image.YCbCr, error) {
 	hi := r.u(1)
 	d.profile = hi<<1 | lo
 	if d.profile == 3 {
-		r.u(1)
-	}
-	if d.profile != 0 {
-		return nil, ErrUnsupported
+		if r.u(1) != 0 {
+			return nil, ErrUnsupported
+		}
 	}
 	if r.flag() { // show_existing_frame
 		idx := r.u(3)
@@ -83,7 +102,7 @@ func (d *Decoder) decodeFrame(data []byte) (*image.YCbCr, error) {
 		if f == nil {
 			return nil, errBitstream
 		}
-		return frameImage(f), nil
+		return frameOut(f), nil
 	}
 	d.lastFrameType = d.frameType
 	d.frameType = r.u(1)
@@ -116,7 +135,14 @@ func (d *Decoder) decodeFrame(data []byte) (*image.YCbCr, error) {
 			if r.u(8) != 0x49 || r.u(8) != 0x83 || r.u(8) != 0x42 {
 				return nil, errBitstream
 			}
-			// profile 0: 8-bit BT.601 4:2:0
+			if d.profile > 0 {
+				if err := d.readColorConfig(r); err != nil {
+					return nil, err
+				}
+			} else {
+				// profile 0: 8-bit BT.601 4:2:0
+				d.bitDepth, d.maxV, d.subX, d.subY, d.colorSp, d.fullRng = 8, 255, 1, 1, 1, false
+			}
 			d.refreshFlags = r.u(8)
 			d.frameSizeNew(r)
 			d.renderSize(r)
@@ -150,10 +176,18 @@ func (d *Decoder) decodeFrame(data []byte) (*image.YCbCr, error) {
 			} else {
 				d.interpFilter = int(literalToType[r.u(2)])
 			}
+			anyValid := false
 			for i := 0; i < 3; i++ {
-				if d.refs[d.refFrameIdx[i]] == nil {
+				rf := d.refs[d.refFrameIdx[i]]
+				if rf == nil || rf.bd != d.bitDepth || rf.subX != d.subX || rf.subY != d.subY {
 					return nil, errBitstream
 				}
+				// reference scaling limits (8.5.2.3)
+				d.refValid[i] = 2*d.width >= rf.w && 2*d.height >= rf.h && d.width <= 16*rf.w && d.height <= 16*rf.h
+				anyValid = anyValid || d.refValid[i]
+			}
+			if !anyValid {
+				return nil, errBitstream
 			}
 		}
 	}
@@ -291,7 +325,8 @@ func (d *Decoder) decodeFrame(data []byte) (*image.YCbCr, error) {
 	pos += d.headerSize
 
 	// allocate the new frame
-	d.cur = newFrame(d.width, d.height)
+	d.cur = newFrame(d.width, d.height, d.subX, d.subY, d.bitDepth)
+	d.cur.cs, d.cur.full = d.colorSp, d.fullRng
 	d.decodeTiles(data[pos:])
 
 	if d.lfLevel != 0 {
@@ -328,9 +363,9 @@ func (d *Decoder) decodeFrame(data []byte) (*image.YCbCr, error) {
 			d.refs[i] = d.cur
 		}
 	}
-	var out *image.YCbCr
+	var out *yuv.Frame
 	if d.showFrame {
-		out = frameImage(d.cur)
+		out = frameOut(d.cur)
 	}
 	d.cur = nil
 	return out, nil
@@ -342,26 +377,49 @@ func (d *Decoder) frameSizeNew(r *bitReader) {
 	d.computeImageSize()
 }
 
-func newFrame(w, h int) *Frame {
-	f := &Frame{w: w, h: h, subX: 1, subY: 1}
+func newFrame(w, h, subX, subY, bd int) *Frame {
+	f := &Frame{w: w, h: h, subX: subX, subY: subY, bd: bd}
 	aw := (w + 63) &^ 63
 	ah := (h + 63) &^ 63
-	f.stride[0] = aw
-	f.stride[1], f.stride[2] = aw/2, aw/2
-	f.pix[0] = make([]byte, aw*ah)
-	f.pix[1] = make([]byte, aw/2*ah/2)
-	f.pix[2] = make([]byte, aw/2*ah/2)
-	f.pw = [3]int{w, (w + 1) >> 1, (w + 1) >> 1}
-	f.ph = [3]int{h, (h + 1) >> 1, (h + 1) >> 1}
+	cw, ch := aw>>uint(subX), ah>>uint(subY)
+	f.stride = [3]int{aw, cw, cw}
+	f.pix[0] = make([]uint16, aw*ah)
+	f.pix[1] = make([]uint16, cw*ch)
+	f.pix[2] = make([]uint16, cw*ch)
+	f.pw = [3]int{w, (w + subX) >> uint(subX), (w + subX) >> uint(subX)}
+	f.ph = [3]int{h, (h + subY) >> uint(subY), (h + subY) >> uint(subY)}
 	return f
 }
 
-func frameImage(f *Frame) *image.YCbCr {
-	aw := f.stride[0]
-	ah := len(f.pix[0]) / aw
-	img := &image.YCbCr{Y: f.pix[0], Cb: f.pix[1], Cr: f.pix[2], YStride: f.stride[0], CStride: f.stride[1],
-		SubsampleRatio: image.YCbCrSubsampleRatio420, Rect: image.Rect(0, 0, aw, ah)}
-	return img.SubImage(image.Rect(0, 0, f.w, f.h)).(*image.YCbCr)
+// frameOut wraps a decoded frame as an output picture sharing its planes.
+func frameOut(f *Frame) *yuv.Frame {
+	out := &yuv.Frame{Depth: f.bd, Width: f.w, Height: f.h, FullRange: f.full}
+	switch {
+	case f.subX == 1 && f.subY == 1:
+		out.Format = yuv.F420
+	case f.subX == 1:
+		out.Format = yuv.F422
+	case f.subY == 1:
+		out.Format = yuv.F440
+	default:
+		out.Format = yuv.F444
+	}
+	out.CWidth, out.CHeight = f.pw[1], f.ph[1]
+	out.Planes = f.pix
+	out.Stride = f.stride
+	switch f.cs {
+	case 1, 3, 4:
+		out.Matrix = yuv.MatrixBT601
+	case 2:
+		out.Matrix = yuv.MatrixBT709
+	case 5:
+		out.Matrix = yuv.MatrixBT2020
+	case 7:
+		out.Matrix = yuv.MatrixIdentity
+	default:
+		out.Matrix = yuv.MatrixUnspecified
+	}
+	return out
 }
 
 // ---- compressed header --------------------------------------------------------------------

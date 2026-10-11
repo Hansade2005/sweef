@@ -40,67 +40,104 @@ func (d *Decoder) lumaMC(dst []uint16, dstride int, plane []uint16, stride, pw, 
 		}
 		return
 	}
-	// horizontal half-sample at (row offset ro), clipped: b
-	hb := func(j, i int) int32 {
-		p := base + j*sstride + i
-		return tap6(int32(src[p-2]), int32(src[p-1]), int32(src[p]), int32(src[p+1]), int32(src[p+2]), int32(src[p+3]))
-	}
-	vb := func(j, i int) int32 {
-		p := base + j*sstride + i
-		return tap6(int32(src[p-2*sstride]), int32(src[p-sstride]), int32(src[p]), int32(src[p+sstride]), int32(src[p+2*sstride]), int32(src[p+3*sstride]))
-	}
-	clipB := func(v int32) int32 { return int32(clipPix((v+16)>>5, maxv)) }
-	at := func(j, i int) int32 { return int32(src[base+j*sstride+i]) }
-	// j (centre) via intermediate horizontal values
-	centre := func(j, i int) int32 {
-		a := hb(j-2, i)
-		b := hb(j-1, i)
-		c := hb(j, i)
-		dd := hb(j+1, i)
-		e := hb(j+2, i)
-		f := hb(j+3, i)
-		return int32(clipPix((tap6(a, b, c, dd, e, f)+512)>>10, maxv))
-	}
+	maxi := maxv
 	avg := func(a, b int32) uint16 { return uint16((a + b + 1) >> 1) }
-	for j := 0; j < h; j++ {
-		o := dst[j*dstride : j*dstride+w]
-		for i := 0; i < w; i++ {
-			var v uint16
-			switch fy<<2 | fx {
-			case 0x1: // a
-				v = avg(at(j, i), clipB(hb(j, i)))
-			case 0x2: // b
-				v = uint16(clipB(hb(j, i)))
-			case 0x3: // c
-				v = avg(at(j, i+1), clipB(hb(j, i)))
-			case 0x4: // d
-				v = avg(at(j, i), clipB(vb(j, i)))
-			case 0x8: // h
-				v = uint16(clipB(vb(j, i)))
-			case 0xc: // n
-				v = avg(at(j+1, i), clipB(vb(j, i)))
-			case 0xa: // j
-				v = uint16(centre(j, i))
-			case 0x9: // i
-				v = avg(clipB(vb(j, i)), centre(j, i))
-			case 0xb: // k
-				v = avg(clipB(vb(j, i+1)), centre(j, i))
-			case 0x6: // f
-				v = avg(clipB(hb(j, i)), centre(j, i))
-			case 0xe: // q
-				v = avg(clipB(hb(j+1, i)), centre(j, i))
-			case 0x5: // e
-				v = avg(clipB(hb(j, i)), clipB(vb(j, i)))
-			case 0x7: // g
-				v = avg(clipB(hb(j, i)), clipB(vb(j, i+1)))
-			case 0xd: // p
-				v = avg(clipB(vb(j, i)), clipB(hb(j+1, i)))
-			case 0xf: // r
-				v = avg(clipB(vb(j, i+1)), clipB(hb(j+1, i)))
+	switch {
+	case fy == 0: // a, b, c
+		for j := 0; j < h; j++ {
+			o := dst[j*dstride : j*dstride+w]
+			p := base + j*sstride
+			for i := range o {
+				v := clipHalf(hb6(src, p+i), maxi)
+				switch fx {
+				case 1:
+					v = (int32(src[p+i]) + v + 1) >> 1
+				case 3:
+					v = (int32(src[p+i+1]) + v + 1) >> 1
+				}
+				o[i] = uint16(v)
 			}
-			o[i] = v
+		}
+	case fx == 0: // d, h, n
+		for j := 0; j < h; j++ {
+			o := dst[j*dstride : j*dstride+w]
+			p := base + j*sstride
+			for i := range o {
+				v := clipHalf(vb6(src, p+i, sstride), maxi)
+				switch fy {
+				case 1:
+					v = (int32(src[p+i]) + v + 1) >> 1
+				case 3:
+					v = (int32(src[p+i+sstride]) + v + 1) >> 1
+				}
+				o[i] = uint16(v)
+			}
+		}
+	case fx != 2 && fy != 2: // e, g, p, r
+		hOff := (fy >> 1) * sstride // row of the horizontal half sample
+		vOff := fx >> 1             // column of the vertical half sample
+		for j := 0; j < h; j++ {
+			o := dst[j*dstride : j*dstride+w]
+			p := base + j*sstride
+			for i := range o {
+				a := clipHalf(hb6(src, p+i+hOff), maxi)
+				b := clipHalf(vb6(src, p+i+vOff, sstride), maxi)
+				o[i] = avg(a, b)
+			}
+		}
+	default: // j and the quarter positions that average with it
+		tmp := d.tmpI[:(h+5)*w]
+		for r := 0; r < h+5; r++ {
+			p := base + (r-2)*sstride
+			row := tmp[r*w : r*w+w]
+			for i := range row {
+				row[i] = hb6(src, p+i)
+			}
+		}
+		for j := 0; j < h; j++ {
+			o := dst[j*dstride : j*dstride+w]
+			p := base + j*sstride
+			for i := range o {
+				c := (tap6(tmp[j*w+i], tmp[(j+1)*w+i], tmp[(j+2)*w+i], tmp[(j+3)*w+i], tmp[(j+4)*w+i], tmp[(j+5)*w+i]) + 512) >> 10
+				if uint32(c) > uint32(maxi) {
+					if c < 0 {
+						c = 0
+					} else {
+						c = maxi
+					}
+				}
+				switch {
+				case fx == 2 && fy == 2:
+					o[i] = uint16(c)
+				case fy == 2: // i, k
+					o[i] = avg(clipHalf(vb6(src, p+i+(fx>>1), sstride), maxi), c)
+				case fy == 1: // f
+					o[i] = avg(clipHalf(tmp[(j+2)*w+i], maxi), c)
+				default: // q
+					o[i] = avg(clipHalf(tmp[(j+3)*w+i], maxi), c)
+				}
+			}
 		}
 	}
+}
+
+func hb6(src []uint16, p int) int32 {
+	return tap6(int32(src[p-2]), int32(src[p-1]), int32(src[p]), int32(src[p+1]), int32(src[p+2]), int32(src[p+3]))
+}
+
+func vb6(src []uint16, p, s int) int32 {
+	return tap6(int32(src[p-2*s]), int32(src[p-s]), int32(src[p]), int32(src[p+s]), int32(src[p+2*s]), int32(src[p+3*s]))
+}
+
+func clipHalf(v, maxv int32) int32 {
+	v = (v + 16) >> 5
+	if uint32(v) > uint32(maxv) {
+		if v < 0 {
+			return 0
+		}
+		return maxv
+	}
+	return v
 }
 
 // chromaMC predicts a w x h chroma block with eighth-sample fractions.

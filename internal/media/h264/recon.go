@@ -120,35 +120,6 @@ func (d *Decoder) mcRect(r rect) {
 		ents[l] = ent
 		used[l] = true
 		nUse++
-		m := mvs[l]
-		out := d.pred[l][:]
-		pl, stride, pw, ph := refPlaneView(ent, 0)
-		d.lumaMC(out, 16, pl, stride, pw, ph, px+int(m.x>>2), py+int(m.y>>2), int(m.x&3), int(m.y&3), bw, bh, d.f.maxY)
-		switch cat {
-		case 1:
-			my := int(m.y)
-			if d.mbField {
-				my += 2 * ((d.mby & 1) - (ent.ref - 1))
-			}
-			cx, cy := px/2+int(m.x>>3), py/2+(my>>3)
-			fx, fy := int(m.x&7), my&7
-			for c := 1; c <= 2; c++ {
-				cpl, cs, cw, ch := refPlaneView(ent, c)
-				d.chromaMC(out[c*256:], 16, cpl, cs, cw, ch, cx, cy, fx, fy, bw/2, bh/2)
-			}
-		case 2:
-			cx, cy := px/2+int(m.x>>3), py+int(m.y>>2)
-			fx, fy := int(m.x&7), int(m.y&3)*2
-			for c := 1; c <= 2; c++ {
-				cpl, cs, cw, ch := refPlaneView(ent, c)
-				d.chromaMC(out[c*256:], 16, cpl, cs, cw, ch, cx, cy, fx, fy, bw/2, bh)
-			}
-		case 3:
-			for c := 1; c <= 2; c++ {
-				cpl, cs, cw, ch := refPlaneView(ent, c)
-				d.lumaMC(out[c*256:], 16, cpl, cs, cw, ch, px+int(m.x>>2), py+int(m.y>>2), int(m.x&3), int(m.y&3), bw, bh, d.f.maxC)
-			}
-		}
 	}
 	if nUse == 0 {
 		return
@@ -159,6 +130,69 @@ func (d *Decoder) mcRect(r rect) {
 		mode = 1
 	} else if h.isB() && h.pps.WeightedBipredIdc == 2 && nUse == 2 {
 		mode = 2
+	}
+	// a single unweighted prediction goes straight into the picture
+	direct := nUse == 1 && mode == 0
+	var dOff [3]int
+	for c := 0; c < 3; c++ {
+		switch {
+		case c == 0 || cat == 3:
+			dOff[c] = d.mbOff[c] + r.y*4*d.mbStr[c] + r.x*4
+		case cat == 1:
+			dOff[c] = d.mbOff[c] + r.y*2*d.mbStr[c] + r.x*2
+		default:
+			dOff[c] = d.mbOff[c] + r.y*4*d.mbStr[c] + r.x*2
+		}
+	}
+	for l := 0; l < 2; l++ {
+		if !used[l] {
+			continue
+		}
+		ent := ents[l]
+		m := mvs[l]
+		var dst [3][]uint16
+		var dstr [3]int
+		for c := 0; c < 3; c++ {
+			if direct {
+				if c > 0 && cat == 0 {
+					break
+				}
+				pl, _ := d.planeOf(c)
+				dst[c], dstr[c] = pl[dOff[c]:], d.mbStr[c]
+			} else {
+				dst[c], dstr[c] = d.pred[l][c*256:], 16
+			}
+		}
+		pl, stride, pw, ph := refPlaneView(ent, 0)
+		d.lumaMC(dst[0], dstr[0], pl, stride, pw, ph, px+int(m.x>>2), py+int(m.y>>2), int(m.x&3), int(m.y&3), bw, bh, d.f.maxY)
+		switch cat {
+		case 1:
+			my := int(m.y)
+			if d.mbField {
+				my += 2 * ((d.mby & 1) - (ent.ref - 1))
+			}
+			cx, cy := px/2+int(m.x>>3), py/2+(my>>3)
+			fx, fy := int(m.x&7), my&7
+			for c := 1; c <= 2; c++ {
+				cpl, cs, cw, ch := refPlaneView(ent, c)
+				d.chromaMC(dst[c], dstr[c], cpl, cs, cw, ch, cx, cy, fx, fy, bw/2, bh/2)
+			}
+		case 2:
+			cx, cy := px/2+int(m.x>>3), py+int(m.y>>2)
+			fx, fy := int(m.x&7), int(m.y&3)*2
+			for c := 1; c <= 2; c++ {
+				cpl, cs, cw, ch := refPlaneView(ent, c)
+				d.chromaMC(dst[c], dstr[c], cpl, cs, cw, ch, cx, cy, fx, fy, bw/2, bh)
+			}
+		case 3:
+			for c := 1; c <= 2; c++ {
+				cpl, cs, cw, ch := refPlaneView(ent, c)
+				d.lumaMC(dst[c], dstr[c], cpl, cs, cw, ch, px+int(m.x>>2), py+int(m.y>>2), int(m.x&3), int(m.y&3), bw, bh, d.f.maxC)
+			}
+		}
+	}
+	if direct {
+		return
 	}
 	nPl := 3
 	if cat == 0 {
