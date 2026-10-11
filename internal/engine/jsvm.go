@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	fnet "github.com/sweefbrowser/sweef/internal/net"
@@ -140,6 +141,7 @@ func compiledPrelude() []byte {
 }
 
 type jsVM struct {
+	holdBG atomic.Bool // explicit waits also wait on background (media clock) timers
 	mu     sync.Mutex
 	vm     *quickjs.VM
 	tab    *Tab
@@ -541,7 +543,16 @@ func (j *jsVM) pump(budget time.Duration) bool {
 }
 
 // Settle pumps the page's event loop for up to d (exported for RPC waits).
-func (t *Tab) Settle(d time.Duration) { t.settle(d) }
+func (t *Tab) Settle(d time.Duration) {
+	t.mu.RLock()
+	j := t.js
+	t.mu.RUnlock()
+	if j != nil {
+		j.holdBG.Store(true)
+		defer j.holdBG.Store(false)
+	}
+	t.settle(d)
+}
 
 // settle is the short pump used after every action.
 func (t *Tab) settle(d time.Duration) {
@@ -554,7 +565,7 @@ func (t *Tab) settle(d time.Duration) {
 }
 
 func (j *jsVM) runTimers() float64 {
-	r, err := j.call("__swRunTimers", j.nowMs())
+	r, err := j.call("__swRunTimers", j.nowMs(), j.holdBG.Load())
 	if err != nil {
 		j.tab.LogConsole("error", jsErrorText(err, "timers"))
 		return -1

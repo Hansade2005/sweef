@@ -606,7 +606,7 @@
     }
     if (wake === Infinity) return;
     if (wake < 0) wake = 0;
-    s.timer = _setTimeout(function () { s.timer = null; tick(el); }, Math.ceil(wake));
+    s.timer = (global.__swBgTimeout || _setTimeout)(function () { s.timer = null; tick(el); }, Math.ceil(wake));
   }
 
   function tick(el) {

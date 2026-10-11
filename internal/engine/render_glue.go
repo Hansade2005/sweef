@@ -184,6 +184,9 @@ func layoutFromRender(res *render.Result, env *tabEnv) *fnet.Layout {
 			continue
 		}
 		r := b.Border
+		if rc, ok := res.ClientRect(n); ok {
+			r = rc
+		}
 		l.Boxes[n] = [4]int{int(math.Floor(r.X + 0.5)), int(math.Floor(r.Y + 0.5)), int(math.Floor(r.W + 0.5)), int(math.Floor(r.H + 0.5))}
 	}
 	if res.Hit != nil {

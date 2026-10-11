@@ -646,7 +646,7 @@
     var ctx = this;
     if (ctx.__timer || ctx.__state !== 'running' || ctx.__closed || ctx.__offline) return;
     if (!ctx._needTimer()) return;
-    ctx.__timer = _setTimeout(function () { ctx.__timer = null; ctx._catchUp(); ctx._ensureTimer(); }, 20);
+    ctx.__timer = (global.__swBgTimeout || _setTimeout)(function () { ctx.__timer = null; ctx._catchUp(); ctx._ensureTimer(); }, 20);
   };
   BaseAudioContext.prototype._syncElements = function () {
     var ctx = this;

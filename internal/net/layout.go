@@ -493,7 +493,9 @@ func (d *Doc) ElementBoxes(width int) []BoxRow {
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode {
 			r := BoxRow{Tag: n.Data, ID: attr(n, "id")}
-			if b, ok := l.Boxes[n]; ok {
+			if g, ok := geoOf(l, n); ok {
+				r.X, r.Y, r.W, r.H, r.Has = g.Client[0], g.Client[1], g.Client[2], g.Client[3], true
+			} else if b, ok := l.Boxes[n]; ok {
 				r.X, r.Y, r.W, r.H, r.Has = float64(b[0]), float64(b[1]), float64(b[2]), float64(b[3]), true
 			}
 			out = append(out, r)
@@ -504,4 +506,11 @@ func (d *Doc) ElementBoxes(width int) []BoxRow {
 	}
 	walk(d.Root)
 	return out
+}
+
+func geoOf(l *Layout, n *html.Node) (Geometry, bool) {
+	if l.Geo == nil {
+		return Geometry{}, false
+	}
+	return l.Geo(n)
 }

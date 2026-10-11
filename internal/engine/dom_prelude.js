@@ -1838,7 +1838,7 @@
     } catch (e) { reportError(e); }
     runningTimer = null;
   }
-  function runTimers(now) {
+  function runTimers(now, withBg) {
     now = +now; if (!(now >= 0)) now = nowMs(); if (now > lastNow) lastNow = now;
     // Only timers that were pending when this pass started run now; timers armed
     // by callbacks (and re-armed intervals) wait for the next pump so microtasks
@@ -1853,9 +1853,15 @@
         t.seq = ++timerSeq; timerInsert(t);
       }
     }
-    if (!timers.length) return -1;
-    return Math.max(0, timers[0].when - now);
+    // background timers (media clock ticks) never hold the pump open
+    for (var bi = 0; bi < timers.length; bi++) if (withBg || !timers[bi].bg) return Math.max(0, timers[bi].when - now);
+    return -1;
   }
+  Object.defineProperty(global, '__swBgTimeout', { value: function (fn, delay) {
+    var id = setTimeoutImpl(fn, [], delay, false);
+    for (var i = 0; i < timers.length; i++) if (timers[i].id === id) { timers[i].bg = true; break; }
+    return id;
+  } });
   function timerArgs(args) { return slice.call(args, 2); }
   global.setTimeout = function setTimeout(fn, delay) { return setTimeoutImpl(fn, timerArgs(arguments), delay, false); };
   global.setInterval = function setInterval(fn, delay) { return setTimeoutImpl(fn, timerArgs(arguments), delay, true); };
@@ -3180,7 +3186,7 @@
   exportFn('__swDrag', function (src, dst) { try { return dragFromGo(src, dst); } catch (e) { reportError(e); return false; } });
   exportFn('__swWheel', function (dx, dy, x, y) { try { return wheelFromGo(dx, dy, x, y); } catch (e) { reportError(e); return true; } });
   exportFn('__swSetValueFromGo', function (id, value) { try { return setValueFromGo(id, value); } catch (e) { reportError(e); return false; } });
-  exportFn('__swRunTimers', function (now) { try { return runTimers(now); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
+  exportFn('__swRunTimers', function (now, withBg) { try { return runTimers(now, !!withBg); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
   exportFn('__swFlushMutationObservers', function () { try { flushMutationObservers(); } catch (e) { reportError(e); } return pendingObservers.length; });
   exportFn('__swFireLifecycle', function (name) { try { return fireLifecycle(name); } catch (e) { reportError(e); return true; } });
   exportFn('__swSetDocument', function (url, state) { return setDocument(url, state); });

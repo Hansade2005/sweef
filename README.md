@@ -2,7 +2,7 @@
 
 **The agent browser that costs nothing to run.** Sweef is an independent browser engine written in Go: one static binary, no Chromium, a real ES2023 JavaScript engine, and a Model Context Protocol server built in. It gives AI agents a compact, readable view of a page plus reliable actions, on about 15 MB of RAM.
 
-Sweef is not a fork of Chromium and does not do pixel layout. It bets that agents need **semantics** (structure, roles, names, text, form state, network truth) more than they need a rasterised screen, and it spends its budget there.
+Sweef is not a fork of Chromium. It has its own CSS layout engine, rasterizer, software WebGL and media stack, all measured against Chromium (see [Rendering fidelity](#rendering-fidelity)). It bets that agents need **semantics** (structure, roles, names, text, form state, network truth) more than they need a rasterised screen, and it spends its budget there.
 
 ## What you get
 
@@ -14,7 +14,7 @@ Sweef is not a fork of Chromium and does not do pixel layout. It bets that agent
 | Agent interface | CDP + language bindings | **MCP native**, plus a framed JSON-RPC socket and a Node SDK |
 | Page view for the model | DOM dumps or custom snapshots | **Playwright-format accessibility tree** with small `[ref=eN]` handles |
 | JavaScript | V8 | **QuickJS (ES2023)** via [modernc.org/quickjs](https://pkg.go.dev/modernc.org/quickjs), pure Go, no CGO |
-| Pixels, WebGL, media | Yes | No, by design |
+| Pixels, WebGL, media | Yes | **Yes**, pure Go: CSS layout within 1 px of Chromium on 99.5% of boxes, software WebGL 1/2, Canvas 2D, media and Web Audio |
 
 ## Benchmark against Vercel agent-browser
 
@@ -160,9 +160,40 @@ Three states: **works** (covered by tests), **partial** (works for the common ca
 | Emulation: viewport, UA, offline, color scheme, extra headers, geolocation, permissions | works |
 | Dialogs: alert, confirm, prompt answered from an armed response | works |
 | Init scripts | works |
-| Geometry: one flow layout drives element boxes, `getBoundingClientRect`, coordinate clicks and screenshots, so they always agree. Block and inline flow, wrapping, display from CSS, flex rows, table rows, heading sizes, control sizes | partial (no CSS box model: margins, padding, positioning and grid are approximated) |
-| Screenshots: a schematic PNG drawn from that layout, viewport or full page | partial (not a pixel replica) |
-| Pixel-accurate rendering, WebGL, canvas painting, media playback, extensions | not planned |
+| Geometry: a real CSS engine (cascade, box model, block, inline, float, flex, grid, table, multicol, positioning, transforms) drives element boxes, `getBoundingClientRect`, `getClientRects`, offset/client/scroll metrics, hit-testing, coordinate clicks and screenshots, so they always agree | works (see fidelity below) |
+| Screenshots: pixels from the real rasterizer (anti-aliased paths, real fonts, gradients, shadows, filters, blend modes, canvas, WebGL and video frames), viewport or full page | works (text is unhinted, so glyph edges differ slightly from Chromium) |
+| Canvas 2D: paths, text, gradients, patterns, filters, shadows, compositing, `ImageData`, `OffscreenCanvas`, `toDataURL` | works |
+| WebGL 1 and 2: GLSL ES 1.00 and 3.00 compiler, full state machine, MSAA, transform feedback, UBOs, instancing; three.js, PixiJS and regl render correctly | works |
+| Media: `<video>` and `<audio>` element behavior, MSE, text tracks, Web Audio (all node types, worklets, offline rendering) | works (codec limits below) |
+| Browser extensions | not planned |
+
+## Rendering fidelity
+
+Measured against Chromium 1194 on this repo's fixtures (`go run ./tools/fidelity`, `testdata/*`). Layout numbers are for 1280x800.
+
+| Area | Result |
+|---|---|
+| Element boxes, 41 pages from basic CSS to shop, dashboard, email, docs, Bootstrap | mean IoU 0.999, 99.5% of boxes within 1 px, 99.8% within 4 px |
+| Same pages at 1920x1080 | mean IoU 0.999, 99.5% within 1 px |
+| Same pages at 390x844 | mean IoU 0.979, 95.6% within 1 px |
+| Page painter, 8 display-list fixtures | 96% to 100% of pixels within 8/255 |
+| Canvas 2D, 38 fixtures | shapes and gradients 99.1%, text 96.1% within 8/255 |
+| WebGL, 76 fixtures | mean 99.9% of pixels within 4/255 (three.js 99.9%, PixiJS 99.99%, regl 100%) |
+| Web Audio, 26 offline graphs | sample-exact for filters, delay, convolver and panner; oscillators within 6e-4 |
+| Media elements, 21 scenarios | event order identical to Chromium; `canPlayType` matches in 67 of 67 recorded answers |
+
+A 1280x800 text page paints in about 21 ms. A 100k-triangle WebGL frame at 512x512 takes about 170 ms on 4 cores.
+
+What is still different, honestly:
+
+- **Text pixels.** Glyphs are unhinted and have no ligatures, bidi or complex shaping, so text ink agrees at 92 to 97%, not 99%. Layout boxes still match.
+- **Not supported yet:** `::first-letter` and `::first-line`, container queries, subgrid, vertical writing modes, SVG painting (SVG geometry works), backdrop-filter, and per-column multicol backgrounds.
+- **Codecs.** MP3, Vorbis, FLAC and PCM decode in pure Go. AAC, Opus, H.264, VP9 and AV1 need `ffmpeg` on the machine; without it they report unsupported like a browser without the codec. Video without ffmpeg shows VP8 key frames only.
+- **WebGL.** No compressed textures, `EXT_sRGB` or multi-draw; lines are 1 px; `sin` differs from SwiftShader in the last digit.
+- **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.8 s. `MediaRecorder`, EME and picture-in-picture reject.
+- **Exact pixel identity with Chromium is not a goal.** Skia's anti-aliasing and hinting are not reproduced, and screenshots are not byte-identical.
+
+Set `SWEEF_RENDERER=flow` to fall back to the old schematic layout.
 
 ## Architecture
 
@@ -172,6 +203,12 @@ internal/engine        Browser, BrowserContext, Tab, Locator, actions, waits,
                        dialogs, routes, storage state, PNG renderer, RSS governor,
                        jsvm.go (QuickJS VM + host bridge), scripts.go (loader + lifecycle),
                        dom_prelude.js (browser API in JavaScript), jsbridge.md (contract)
+internal/style         CSS parsing, cascade, computed values, UA stylesheet
+internal/render        CSS layout engine and display list (block, inline, flex, grid, table, ...)
+internal/raster        Rasterizer, Canvas 2D context, page painter
+internal/font          Font loading, metrics, shaping-lite, glyph outlines
+internal/gl            Software WebGL 1/2 (state machine, rasterizer) + internal/gl/glsl compiler
+internal/media         Container parsing, audio decode, frames; media/webaudio DSP graph
 internal/net           HTML parser, DOM tree with stable ids, CSS selector engine,
                        locator engines, accessible names, snapshot v2, routes, cookie jar
 internal/rpc           SWF1 wire protocol server (framed JSON over TCP/unix)

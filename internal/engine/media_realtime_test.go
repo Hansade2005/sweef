@@ -195,3 +195,24 @@ func TestTextTrackSRTAndCues(t *testing.T) {
 		t.Fatalf("cue event sequence %v, want %v", ev, want)
 	}
 }
+
+// A looping muted video that is playing must not make every pump wait out the
+// settle budget: the media clock timer is a background timer.
+func TestPlayingVideoDoesNotHoldPump(t *testing.T) {
+	tab := newMediaTab(t)
+	evalJSON(t, tab, `(function(){var v=document.createElement('video');v.src='clip.mp4';v.muted=true;v.loop=true;document.body.appendChild(v);window.__v=v;return true})()`, nil)
+	tab.Settle(300 * time.Millisecond)
+	var ok bool
+	evalJSON(t, tab, `window.__v.play().then(function(){window.__playing=true},function(){window.__playing=false}), true`, &ok)
+	tab.Settle(400 * time.Millisecond)
+	start := time.Now()
+	tab.settle(1500 * time.Millisecond)
+	if d := time.Since(start); d > 600*time.Millisecond {
+		t.Fatalf("pump waited %v with only the media clock pending", d)
+	}
+	var paused bool
+	evalJSON(t, tab, `window.__v.paused`, &paused)
+	if paused {
+		t.Fatal("video should be playing")
+	}
+}
