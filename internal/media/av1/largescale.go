@@ -120,8 +120,19 @@ func (d *Decoder) tileListOBU(payload []byte) error {
 			f.refScaleX[rf], f.refScaleY[rf] = 1<<14, 1<<14
 		}
 		f.largeScale = true
+		var before [covMax]int32
+		copy(before[:], coverage[:])
 		if err := f.decodeTile(data, 0, tileRow, tileCol); err != nil {
 			return err
+		}
+		if dbgLS != nil {
+			var dl []string
+			for i := range coverage {
+				if coverage[i] != before[i] {
+					dl = append(dl, covNames[i])
+				}
+			}
+			dbgLS(tile, anchorIdx, tileRow, tileCol, size, dl)
 		}
 		// copy the tile (without any post filtering) into the output frame
 		destX := tileW * (tile % wTiles)
@@ -145,3 +156,5 @@ func (d *Decoder) tileListOBU(payload []byte) error {
 	d.out = append(d.out, pic)
 	return nil
 }
+
+var dbgLS func(tile, anchor, row, col, size int, feats []string)

@@ -62,7 +62,9 @@ func (t svgTextXf) frag(x, y, angle, sx float64) fragXf {
 	if angle != 0 || sx != 1 {
 		// the canvas is concatenated with translate(P) rotate scale translate(-P)
 		// about the unquantized origin P (float matrix product)
-		s, cs := math.Sincos(angle)
+		// Blink keeps the angle as a float in degrees
+		rad := float64(float32(angle*180/math.Pi)) * math.Pi / 180
+		s, cs := math.Sincos(rad)
 		Px, Py := float64(float32(x)), float64(float32(y))
 		ra, rb, rc, rd := cs*sx, s*sx, -s, cs
 		e := Px - (ra*Px + rc*Py)
