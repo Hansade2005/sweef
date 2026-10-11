@@ -364,6 +364,9 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 		t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(), Data: m})
 		t.emit(EvDomMutated, m)
 	})
+	if w, _, _, _, _ := t.Viewport(); w > 0 {
+		doc.SetLayoutWidth(w)
+	}
 	t.applyStyles(doc)
 	t.mu.Lock()
 	t.html = htmlSrc
@@ -870,6 +873,9 @@ func (t *Tab) SetViewport(w, h int, dsf float64, mobile, landscape bool) {
 		t.dsf = dsf
 	}
 	t.mobile, t.landscape = mobile, landscape
+	if t.dom != nil {
+		t.dom.SetLayoutWidth(t.vpW)
+	}
 	t.mu.Unlock()
 	t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(),
 		Data: map[string]any{"action": "setViewport", "width": t.vpW, "height": t.vpH, "mobile": mobile}})

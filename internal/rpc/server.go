@@ -269,6 +269,9 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		out := map[string]any{"text": t.Screenshot(w)}
 		if format == "png" {
 			pb := t.PNGScreenshot(w, h, dsf)
+			if p["fullPage"] == true {
+				pb = t.PNGScreenshotFull(w, dsf)
+			}
 			out["pngBase64"] = base64.StdEncoding.EncodeToString(pb)
 			out["bytes"] = len(pb)
 		}
