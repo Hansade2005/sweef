@@ -163,6 +163,9 @@ func shapeSVGRun(spec FontSpec, rs []rune, letterSp, wordSp float64) svgRun {
 			out.ex[i] += wordSp
 		}
 		fl := pen
+		if os.Getenv("SVG_ADVFLOOR") != "" {
+			fl = math.Floor(pen*64+1e-6) / 64
+		}
 		out.adv[i] = fl - prev
 		prev = fl
 	}
@@ -323,17 +326,17 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 			x: p.X, y: p.Y, angle: p.Angle, sx: p.ScaleX, w: p.Adv, nat: nats[i], ex: sr.ex[0], asc: sr.asc, desc: sr.desc,
 			size: sr.size, fake: sr.fake, skew: sr.skew, nom: i})
 	}
+	byNom := make(map[int]*textGlyph, len(out))
+	for i := range out {
+		byNom[out[i].nom] = &out[i]
+	}
 	for i := range out {
 		g := &out[i]
 		g.pivX = g.x
-		if os.Getenv("SVG_PIV") == "3" {
-			// the char positions Blink reports: run start plus the floored offset
-			for j := range out {
-				if out[j].nom == runOf[g.nom] {
-					x0 := out[j].x
-					g.pivX = x0 + float64(lu64(g.x)-lu64(x0))
-				}
-			}
+		// the pivot is the character position Blink reports: the run start
+		// plus the floored offset
+		if st0 := byNom[runOf[g.nom]]; st0 != nil && os.Getenv("SVG_PIVRAW") == "" {
+			g.pivX = st0.x + float64(lu64(g.x)-lu64(st0.x))
 		}
 	}
 	return out

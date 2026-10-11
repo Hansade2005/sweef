@@ -3,7 +3,9 @@ package hevc
 import (
 	"bytes"
 	"fmt"
+	"github.com/sweefbrowser/sweef/internal/media/yuv"
 	"os"
+	"os/exec"
 	"testing"
 )
 
@@ -91,8 +93,6 @@ func TestDumpParams(t *testing.T) {
 	}
 }
 
-
-
 func TestSaoPoint(t *testing.T) {
 	p := os.Getenv("HEVC_FILE")
 	if p == "" {
@@ -129,6 +129,9 @@ func TestDeblockPoint(t *testing.T) {
 	data, _ := os.ReadFile(p)
 	dbgDeblock = func(pic *Picture, ci int, vertical bool, cx, cy, bs, qpL, tc int, noP, noQ bool) {
 		if pic.poc == 5 && ci == 1 && vertical && cx == 136 && cy >= 84 && cy <= 94 {
+			for r := 0; r < 4; r++ {
+				t.Logf("  row %d pre: %v", cy+r, pic.planes[1][(cy+r)*pic.stride[1]+cx-3:(cy+r)*pic.stride[1]+cx+3])
+			}
 			st := pic.stride[1]
 			t.Logf("edge cx=%d cy=%d bs=%d qp=%d tc=%d noP=%v noQ=%v row0: %v", cx, cy, bs, qpL, tc, noP, noQ, pic.planes[1][cy*st+cx-3:cy*st+cx+3])
 		}
@@ -251,4 +254,92 @@ func TestSaoSample(t *testing.T) {
 		}
 	}
 	decodeAnnexB(t, data)
+}
+
+func TestNoDeblock(t *testing.T) {
+	p := os.Getenv("HEVC_FILE")
+	if p == "" {
+		t.Skip()
+	}
+	dbgNoDeblock = true
+	defer func() { dbgNoDeblock = false }()
+	data, _ := os.ReadFile(p)
+	cmd := exec.Command("ffmpeg", "-v", "error", "-nostdin", "-skip_loop_filter", "all", "-i", p, "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-")
+	ref, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	frames, _ := decodeAnnexB(t, data)
+	for fi, f := range frames {
+		fb := frameBytes(f)
+		r := ref[fi*len(fb) : (fi+1)*len(fb)]
+		cnt := 0
+		for i := range fb {
+			if fb[i] != r[i] {
+				cnt++
+			}
+		}
+		t.Logf("frame %d: %d bad", fi, cnt)
+	}
+}
+
+func TestSaoAnalyze(t *testing.T) {
+	p := os.Getenv("HEVC_FILE")
+	if p == "" {
+		t.Skip()
+	}
+	data, _ := os.ReadFile(p)
+	ref := ffmpegRaw(t, p, "yuv420p")
+	type pre struct {
+		planes [3][]uint16
+		sao    []saoParams
+		w      int
+	}
+	var pres []pre
+	var pics []*Picture
+	dbgSAOHook = func(d *Decoder, pic *Picture) {
+		var pr pre
+		for i := 0; i < 3; i++ {
+			pr.planes[i] = append([]uint16(nil), pic.planes[i]...)
+		}
+		pr.sao = append([]saoParams(nil), d.sao...)
+		pr.w = d.sp.wCtb
+		pres = append(pres, pr)
+		pics = append(pics, pic)
+	}
+	frames, _ := decodeAnnexB(t, data)
+	for k, pic := range pics {
+		var f *yuv.Frame
+		fi := -1
+		for i, fr := range frames {
+			if &fr.Planes[0][0] == &pic.planes[0][0] {
+				f, fi = fr, i
+			}
+		}
+		fb := frameBytes(f)
+		r := ref[fi*len(fb) : (fi+1)*len(fb)]
+		w, h := f.Width, f.Height
+		cnt := 0
+		for i := range fb {
+			if fb[i] != r[i] && i >= w*h && cnt < 12 {
+				j := i - w*h
+				ci := 1
+				if j >= f.CWidth*f.CHeight {
+					j -= f.CWidth * f.CHeight
+					ci = 2
+				}
+				x, y := j%f.CWidth, j/f.CWidth
+				ctb := (y/8)*pres[k].w + x/8
+				sp := pres[k].sao[ctb]
+				st := f.CWidth
+				pl := pres[k].planes[ci]
+				t.Logf("poc %d c%d (%d,%d) rel(%d,%d) typ %d eo %d off %v pre %d  nb: l %d r %d u %d d %d ul %d ur %d dl %d dr %d | mine %d ff %d", pic.poc, ci, x, y, x%8, y%8, sp.typ[ci], sp.eo[ci], sp.offset[ci], pl[y*st+x],
+					pl[y*st+x-1], pl[y*st+x+1], pl[(y-1)*st+x], pl[(y+1)*st+x], pl[(y-1)*st+x-1], pl[(y-1)*st+x+1], pl[(y+1)*st+x-1], pl[(y+1)*st+x+1], fb[i], r[i])
+				cnt++
+			}
+		}
+		if cnt > 0 {
+			break
+		}
+	}
 }

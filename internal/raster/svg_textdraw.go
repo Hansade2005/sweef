@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -78,10 +77,6 @@ func (t svgTextXf) frag(x, y, angle, sx, pivX float64) fragXf {
 	}
 	px := tx0 + (a*X + c*Y)
 	py := ty0 + (b*X + d*Y)
-	if angle != 0 {
-		px += float32(dbgDX)
-		py += float32(dbgDY)
-	}
 	axis := xfAxis(float64(a), float64(b), float64(c), float64(d))
 	hx, hy := float32(0.125), float32(0.125)
 	switch axis {
@@ -397,10 +392,3 @@ func (r *svgR) decorateFragment(c *Context, fr fragment, k float64) {
 
 // lu64 floors v to 1/64 (Blink's LayoutUnit) in single precision.
 func lu64(v float64) float32 { return float32(math.Floor(float64(float32(v))*64)) / 64 }
-
-var dbgDX, dbgDY = envF("SVG_DX"), envF("SVG_DY")
-
-func envF(k string) float64 {
-	v, _ := strconv.ParseFloat(os.Getenv(k), 64)
-	return v
-}

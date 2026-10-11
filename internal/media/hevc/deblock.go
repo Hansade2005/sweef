@@ -3,6 +3,7 @@ package hevc
 // In-loop deblocking filter (8.7.2), applied to a whole picture after all of
 // its slices have been decoded.
 
+var dbgNoDeblock bool
 var dbgEdge func(d *Decoder, pic *Picture, vertical bool, xq, yq int, e uint8)
 var dbgDeblock func(pic *Picture, ci int, vertical bool, cx, cy, bs, qpL, tc int, noP, noQ bool)
 
@@ -73,7 +74,7 @@ func (d *Decoder) deblockPicture(pic *Picture) {
 			break
 		}
 	}
-	if !any {
+	if !any || dbgNoDeblock {
 		return
 	}
 	d.deblockPass(pic, true)
