@@ -224,6 +224,7 @@ type ImageShader struct {
 	RepX, RepY bool
 	Filter     FilterMode
 	Clamp      IRect // sampling window in image pixels (empty = whole image)
+	EdgeClamp  bool  // replicate edges instead of transparent outside (drawImage)
 	alpha      float64
 	mips       []*Surface
 	level      int
@@ -328,6 +329,9 @@ func (s *ImageShader) ShadeRow(x, y, n int, dst []uint8) {
 		v := s.inv[1]*fx + s.inv[3]*fy + s.inv[5]
 		o := dst[i*4 : i*4+4 : i*4+4]
 		inside := (s.RepX || (u >= float64(c.X0) && u < float64(c.X1))) && (s.RepY || (v >= float64(c.Y0) && v < float64(c.Y1)))
+		if s.EdgeClamp {
+			inside = true
+		}
 		if !s.RepX && !s.RepY && !inside {
 			o[0], o[1], o[2], o[3] = 0, 0, 0, 0
 			continue

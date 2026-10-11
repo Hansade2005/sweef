@@ -268,7 +268,7 @@ type Computed struct {
 	TextDecorLine    uint8 // bit0 underline bit1 overline bit2 line-through
 	TextDecorStyle   string
 	TextDecorColor   Color
-	decorCur         bool
+	DecorCur         bool
 	TextOverflow     string
 	ObjectFit        string
 	ObjectPos        [2]Length
@@ -314,6 +314,7 @@ type Computed struct {
 	// internal helpers
 	Zoom  float64
 	Flags uint32
+	id    uint64
 }
 
 // Flags bits.

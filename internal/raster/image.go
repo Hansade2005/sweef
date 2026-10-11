@@ -12,6 +12,7 @@ func (c *Context) DrawImage(img *Surface, sx, sy, sw, sh, dx, dy, dw, dh float64
 	// normalise negative sizes (flips)
 	m := Translate(dx, dy).Mul(Scale(dw/sw, dh/sh)).Mul(Translate(-sx, -sy))
 	is := NewImageShader(img, c.st.ctm.Mul(m), false, false, c.filterMode(), c.st.alpha)
+	is.EdgeClamp = true
 	x0, x1 := math.Min(sx, sx+sw), math.Max(sx, sx+sw)
 	y0, y1 := math.Min(sy, sy+sh), math.Max(sy, sy+sh)
 	is.SetClamp(IRect{int(math.Floor(x0 + 1e-9)), int(math.Floor(y0 + 1e-9)), int(math.Ceil(x1 - 1e-9)), int(math.Ceil(y1 - 1e-9))})

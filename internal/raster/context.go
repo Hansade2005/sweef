@@ -106,24 +106,24 @@ func (c *Context) Restore() {
 // SaveDepth is the number of saved states.
 func (c *Context) SaveDepth() int { return len(c.stack) }
 
-func (c *Context) SetTransform(m Matrix)    { c.st.ctm = m }
-func (c *Context) Transform() Matrix        { return c.st.ctm }
-func (c *Context) Concat(m Matrix)          { c.st.ctm = c.st.ctm.Mul(m) }
-func (c *Context) Translate(x, y float64)   { c.Concat(Translate(x, y)) }
-func (c *Context) Scale(x, y float64)       { c.Concat(Scale(x, y)) }
-func (c *Context) Rotate(a float64)         { c.Concat(Rotate(a)) }
-func (c *Context) SetFill(p Paint)          { c.st.fill = p }
-func (c *Context) SetStroke(p Paint)        { c.st.stroke = p }
-func (c *Context) FillPaint() Paint         { return c.st.fill }
-func (c *Context) StrokePaint() Paint       { return c.st.stroke }
-func (c *Context) SetStrokeStyle(s StrokeStyle) { c.st.ss = s }
-func (c *Context) StrokeStyle() StrokeStyle { return c.st.ss }
-func (c *Context) SetGlobalAlpha(a float64) { c.st.alpha = a }
-func (c *Context) GlobalAlpha() float64     { return c.st.alpha }
-func (c *Context) SetOp(op CompositeOp)     { c.st.op = op }
-func (c *Context) Op() CompositeOp          { return c.st.op }
+func (c *Context) SetTransform(m Matrix)           { c.st.ctm = m }
+func (c *Context) Transform() Matrix               { return c.st.ctm }
+func (c *Context) Concat(m Matrix)                 { c.st.ctm = c.st.ctm.Mul(m) }
+func (c *Context) Translate(x, y float64)          { c.Concat(Translate(x, y)) }
+func (c *Context) Scale(x, y float64)              { c.Concat(Scale(x, y)) }
+func (c *Context) Rotate(a float64)                { c.Concat(Rotate(a)) }
+func (c *Context) SetFill(p Paint)                 { c.st.fill = p }
+func (c *Context) SetStroke(p Paint)               { c.st.stroke = p }
+func (c *Context) FillPaint() Paint                { return c.st.fill }
+func (c *Context) StrokePaint() Paint              { return c.st.stroke }
+func (c *Context) SetStrokeStyle(s StrokeStyle)    { c.st.ss = s }
+func (c *Context) StrokeStyle() StrokeStyle        { return c.st.ss }
+func (c *Context) SetGlobalAlpha(a float64)        { c.st.alpha = a }
+func (c *Context) GlobalAlpha() float64            { return c.st.alpha }
+func (c *Context) SetOp(op CompositeOp)            { c.st.op = op }
+func (c *Context) Op() CompositeOp                 { return c.st.op }
 func (c *Context) SetSmoothing(on bool, q Quality) { c.st.smooth, c.st.quality = on, q }
-func (c *Context) SetFilters(f []Filter)    { c.st.filters = f }
+func (c *Context) SetFilters(f []Filter)           { c.st.filters = f }
 
 // SetShadow configures the drop shadow (blur is the canvas shadowBlur value).
 func (c *Context) SetShadow(col Color, blur, dx, dy float64) {
