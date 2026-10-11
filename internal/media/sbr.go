@@ -128,7 +128,7 @@ type sbrChan struct {
 	syn         sbrSynthesis
 	wCur, wPrev [32][32][2]float64
 	yCur, yPrev [38][64][2]float64
-	xOut        [32][64][2]float64
+	xOut        [38][64][2]float64
 }
 
 // sbrElem is the SBR decoder of one SCE or CPE element.
@@ -1436,7 +1436,8 @@ func (s *sbrElem) hfAssemble(c *sbrChan) {
 	c.fIndexSine = indexSine
 }
 
-// xGen assembles the QMF domain output of one channel (32 slots x 64 bands).
+// xGen assembles the QMF domain output of one channel: 32 slots of 64 bands
+// plus the 6 low band look ahead slots the PS hybrid filter needs.
 func (s *sbrElem) xGen(c *sbrChan) {
 	const iF = 32
 	iTemp := 2*c.tEnvNumEnvOld - iF
@@ -1461,12 +1462,12 @@ func (s *sbrElem) xGen(c *sbrChan) {
 		}
 	}
 	for k = 0; k < s.kx[1]; k++ {
-		for i := iTemp; i < 32; i++ {
+		for i := iTemp; i < 38; i++ {
 			c.xOut[i][k] = s.xLow[k][i+sbrEnvOff]
 		}
 	}
 	for ; k < s.kx[1]+s.m[1]; k++ {
-		for i := iTemp; i < 32; i++ {
+		for i := iTemp; i < iF; i++ {
 			c.xOut[i][k] = c.yCur[i][k]
 		}
 	}

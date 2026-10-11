@@ -106,7 +106,7 @@ type sbrSynthesis struct {
 
 // run synthesises 32 slots of 64 bands x[slot][band][re,im] into 2048 samples
 // (or, with down, 32 bands into 1024 samples).
-func (s *sbrSynthesis) run(x *[32][64][2]float64, out []float32, down bool) {
+func (s *sbrSynthesis) run(x *[38][64][2]float64, out []float32, down bool) {
 	sbrQMFInit()
 	if down {
 		for l := 0; l < 32; l++ {

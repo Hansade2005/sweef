@@ -58,7 +58,14 @@ func loadVideoStream(src Source, info *Info) (*vstream, error) {
 
 func (vs *vstream) loadWebM(src Source, info *Info, trk *Track) error {
 	if vs.codec == "av1" {
-		vs.cfg = trk.priv // av1C: configuration OBUs (sequence header)
+		// av1C: configuration OBUs (sequence header)
+		n := int(src.Size())
+		if n > 1<<20 {
+			n = 1 << 20
+		}
+		if head, _ := readFull(src, 0, n); len(head) > 0 {
+			vs.cfg = mkvCodecPrivate(head, trk.ID)
+		}
 	}
 	off := info.DataStart
 	if off < 0 {

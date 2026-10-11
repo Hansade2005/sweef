@@ -85,3 +85,49 @@ func av1Frame(p *av1.Picture) *yuv.Frame {
 	}
 	return f
 }
+
+// mkvCodecPrivate returns the CodecPrivate of the track with the given number
+// from the head of a Matroska/WebM file (EBML header, Segment, Tracks).
+func mkvCodecPrivate(head []byte, trackID int) []byte {
+	p := 0
+	var body []byte
+	for p < len(head) {
+		id, il, sz, sl, ok := parseElHeader(head[p:])
+		if !ok {
+			return nil
+		}
+		st := p + il + sl
+		if id == idSegment {
+			body = head[min(st, len(head)):]
+			break
+		}
+		if sz < 0 {
+			return nil
+		}
+		p = st + int(sz)
+	}
+	for q := 0; q < len(body); {
+		id, il, sz, sl, ok := parseElHeader(body[q:])
+		if !ok {
+			return nil
+		}
+		st := q + il + sl
+		en := st + int(sz)
+		if sz < 0 || en > len(body) {
+			en = len(body)
+		}
+		if id == idCluster {
+			return nil
+		}
+		if id == idTracks {
+			for _, t := range parseMkvTracks(body[st:en]) {
+				if t.ID == trackID {
+					return t.priv
+				}
+			}
+			return nil
+		}
+		q = en
+	}
+	return nil
+}

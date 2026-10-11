@@ -18,7 +18,7 @@ func TestSBRQMFIdentity(t *testing.T) {
 			}
 			var w [32][32][2]float64
 			an.run(in, &w)
-			var x [32][64][2]float64
+			var x [38][64][2]float64
 			for l := 0; l < 32; l++ {
 				for k := 0; k < 32; k++ {
 					x[l][k] = w[l][k]

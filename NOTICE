@@ -10,3 +10,44 @@ owner accepted this licensing for these tables. See https://ffmpeg.org/legal.htm
 Opus decoding
 -------------
 Opus decoding uses github.com/thesyncim/gopus (BSD-3-Clause).
+
+AV1 decoding
+------------
+internal/media/av1 is a pure-Go implementation of the AV1 decoding process
+written from the AV1 Bitstream & Decoding Process Specification (Alliance for
+Open Media, https://aomedia.org/license/). Its constant tables
+(internal/media/av1/tables_gen.go, cdf_gen.go, transform_gen.go) were
+extracted by script from the text of that specification and cross-checked
+against the read-only data of libaom. The test fixtures were encoded with
+libaom, SVT-AV1 and rav1e, and the expected output hashes come from dav1d.
+
+dav1d
+  Copyright (c) 2018-2024, VideoLAN and dav1d authors
+  Copyright (c) 2018, Two Orioles, LLC
+  All rights reserved.
+  Licensed under the BSD 2-Clause License.
+
+libaom
+  Copyright (c) 2001-2022, Alliance for Open Media. All rights reserved.
+  Licensed under the BSD 2-Clause License, with the Alliance for Open Media
+  Patent License 1.0 (https://aomedia.org/license/patent-license/).
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
