@@ -265,8 +265,9 @@ func (fs *faceSet) faceFor(r rune) *font.Face {
 const refSize = 1024.0
 
 type gkey struct {
-	f *font.Face
-	r rune
+	f   *font.Face
+	r   rune
+	gid int // glyph id for ligatures, 0 to look up r
 }
 
 var (
@@ -274,16 +275,22 @@ var (
 	gpCache = map[gkey]*Path{}
 )
 
-// glyphPath returns the unit-size (1 px em) outline of r.
-func glyphPath(f *font.Face, r rune) *Path {
-	k := gkey{f, r}
+// glyphPath returns the unit-size (1 px em) outline of a glyph.
+func glyphPath(g Glyph) *Path {
+	f, r := g.Face, g.R
+	k := gkey{f, r, g.GID}
 	gpMu.RLock()
 	p, ok := gpCache[k]
 	gpMu.RUnlock()
 	if ok {
 		return p
 	}
-	segs := f.Outline(r, refSize)
+	var segs []font.Segment
+	if g.GID != 0 {
+		segs = f.OutlineGID(g.GID, refSize)
+	} else {
+		segs = f.Outline(r, refSize)
+	}
 	if segs != nil {
 		p = NewPath()
 		const s = 1 / refSize
@@ -317,6 +324,7 @@ type Glyph struct {
 	R    rune
 	X    float64 // pen offset from run origin
 	Face *font.Face
+	GID  int // glyph id when it is not simply the glyph of R (ligatures)
 }
 
 // Shaped is a laid-out run.
@@ -343,7 +351,9 @@ func normalizeText(s string) string {
 	}, s)
 }
 
-// Shape lays text out with the font spec.
+// Shape lays text out with the font spec: pair kerning (when kern) and
+// standard ligatures (when letterSpacing is zero, as in browsers) from the
+// font's OpenType tables, shaped word by word like canvas text in Chromium.
 func Shape(spec FontSpec, text string, letterSpacing, wordSpacing float64, kern bool) *Shaped {
 	fs := resolveFaces(spec.Families, spec.Weight, spec.Italic)
 	sh := &Shaped{Size: spec.Size, Set: fs}
@@ -352,30 +362,50 @@ func Shape(spec FontSpec, text string, letterSpacing, wordSpacing float64, kern 
 		sh.Fake = spec.Weight >= 600 && f0.Style.Weight < 600
 		sh.Skew = spec.Italic && !f0.Style.Italic
 	}
-	var x float64
-	var prev rune
-	var prevFace *font.Face
-	for _, r := range text {
-		if spec.SmallCaps && unicode.IsLower(r) {
-			r = unicode.ToUpper(r)
+	rs := []rune(text)
+	if spec.SmallCaps {
+		for i, r := range rs {
+			if unicode.IsLower(r) {
+				rs[i] = unicode.ToUpper(r)
+			}
 		}
-		f := fs.faceFor(r)
+	}
+	opts := font.ShapeOptions{Kern: kern, Liga: letterSpacing == 0}
+	var x float64
+	for i := 0; i < len(rs); {
+		f := fs.faceFor(rs[i])
 		if f == nil {
+			i++
 			continue
 		}
-		if kern && prevFace == f && prev != ' ' && r != ' ' { // canvas shapes word by word
-			x += f.KernF(prev, r, spec.Size)
+		// a run is one word in one face; a space is a run of its own
+		j := i + 1
+		if rs[i] != ' ' {
+			for j < len(rs) && rs[j] != ' ' && fs.faceFor(rs[j]) == f {
+				j++
+			}
 		}
-		adv := f.AdvanceF(r, spec.Size)
-		if adv < 0 {
-			adv = spec.Size * 0.5
+		if !f.HasGlyph(rs[i]) {
+			// no glyph anywhere: advance by half an em like browsers' notdef box
+			sh.Glyphs = append(sh.Glyphs, Glyph{R: rs[i], X: x, Face: f})
+			x += spec.Size*0.5 + letterSpacing
+			i++
+			continue
 		}
-		sh.Glyphs = append(sh.Glyphs, Glyph{R: r, X: x, Face: f})
-		x += adv + letterSpacing
-		if r == ' ' {
+		run := f.ShapeRun(rs[i:j], spec.Size, opts)
+		for _, g := range run {
+			gl := Glyph{R: rs[i+g.Cluster], X: x + g.X + letterSpacing*float64(g.Cluster), Face: f}
+			if g.NRunes > 1 {
+				gl.GID = g.GID
+			}
+			sh.Glyphs = append(sh.Glyphs, gl)
+		}
+		end := run[len(run)-1]
+		x += end.X + end.Adv + letterSpacing*float64(j-i)
+		if rs[i] == ' ' {
 			x += wordSpacing
 		}
-		prev, prevFace = r, f
+		i = j
 	}
 	sh.Width = x
 	return sh
@@ -413,7 +443,7 @@ func (c *Context) MeasureText(text string) TextMetrics {
 	x0, x1 := math.Inf(1), math.Inf(-1)
 	y0, y1 := math.Inf(1), math.Inf(-1)
 	for _, g := range sh.Glyphs {
-		p := glyphPath(g.Face, g.R)
+		p := glyphPath(g)
 		if p == nil {
 			continue
 		}
@@ -492,6 +522,7 @@ func (c *Context) alignOffset(sh *Shaped, t *textState) (float64, float64) {
 type gmKey struct {
 	f      *font.Face
 	r      rune
+	gid    int
 	sx, sy int32 // FreeType's 26.6 pixel sizes along x and y
 	sub    uint8
 	bold   bool
@@ -514,7 +545,7 @@ func fakeBoldExtra(size float64) float64 {
 }
 
 func glyphMask(g Glyph, sizeX, sizeY float64, sub int, bold, skew bool) *Mask {
-	k := gmKey{g.Face, g.R, int32(sizeX * 64), int32(sizeY * 64), uint8(sub), bold, skew}
+	k := gmKey{g.Face, g.R, g.GID, int32(sizeX * 64), int32(sizeY * 64), uint8(sub), bold, skew}
 	gmMu.Lock()
 	if m, ok := gmCache[k]; ok {
 		gmMu.Unlock()
@@ -523,8 +554,8 @@ func glyphMask(g Glyph, sizeX, sizeY float64, sub int, bold, skew bool) *Mask {
 	gmMu.Unlock()
 	var m *Mask
 	if !bold {
-		m = skiaGlyph(g.Face, g.R, sizeX, sizeY, sub, skew)
-	} else if p := glyphPath(g.Face, g.R); p != nil {
+		m = skiaGlyph(g, sizeX, sizeY, sub, skew)
+	} else if p := glyphPath(g); p != nil {
 		sk := 0.0
 		if skew {
 			sk = -0.25
@@ -657,7 +688,7 @@ func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 func (c *Context) textPath(sh *Shaped, x, y, sx float64) *Path {
 	p := NewPath()
 	for _, g := range sh.Glyphs {
-		gp := glyphPath(g.Face, g.R)
+		gp := glyphPath(g)
 		if gp == nil {
 			continue
 		}

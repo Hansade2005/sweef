@@ -374,7 +374,7 @@ func (c *ctx) scrollbars(b *lbox) {
 func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 	st := b.st
 	b.vscroll, b.hscroll = false, false
-	for pass := 0; pass < 2; pass++ {
+	for pass := 0; pass < 3; pass++ {
 		c.scrollbars(b)
 		cw := c.usedContentWidth(b, in)
 		if in.fixW < 0 {
@@ -507,7 +507,7 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 			b.h = h + b.vExtra() + b.sbH
 		}
 		// scrollbar necessity for overflow:auto
-		if pass == 0 && (st.OverflowY == "auto" || st.OverflowX == "auto") && st.Scrollbar != "none" {
+		if pass < 2 && (st.OverflowY == "auto" || st.OverflowX == "auto") && st.Scrollbar != "none" {
 			need := false
 			ext := contentH
 			if b.inner == iFlex || b.inner == iGrid {

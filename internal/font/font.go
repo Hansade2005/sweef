@@ -289,6 +289,10 @@ func (f *Face) Outline(r rune, size float64) []Segment {
 	if err != nil || gi == 0 {
 		return nil
 	}
+	return f.outlineLocked(gi, size)
+}
+
+func (f *Face) outlineLocked(gi sfnt.GlyphIndex, size float64) []Segment {
 	segs, err := f.font.LoadGlyph(&f.buf, gi, f.scale(size), nil)
 	if err != nil {
 		return nil
@@ -685,3 +689,5 @@ func be16(b []byte, o int) int {
 }
 
 func bei16(b []byte, o int) int { return int(int16(be16(b, o))) }
+
+func glyphIndex(g int) sfnt.GlyphIndex { return sfnt.GlyphIndex(g) }

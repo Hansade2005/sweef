@@ -314,6 +314,20 @@ func (c *ctx) buildElement(n *html.Node, pst *style.Computed, out *[]*lbox) {
 				k.hiddenFlow = true
 			}
 		}
+		// loose inline content of a closed details is not rendered either
+		var keep []*lbox
+		seenS := false
+		for _, k := range b.kids {
+			if k.n != nil && k.n.Data == "summary" && !seenS && k.pseudo == "" {
+				seenS = true
+				keep = append(keep, k)
+				continue
+			}
+			if k.kind == kBlock || k.kind == kAtomic || k.oof || k.floated {
+				keep = append(keep, k)
+			}
+		}
+		b.kids = keep
 	}
 	c.finishCommon(b)
 	c.fixupChildren(b)
@@ -484,6 +498,46 @@ func (c *ctx) addMarker(b *lbox, st *style.Computed) {
 	m.liIndex = val
 	m.markerOutside = st.ListStylePos != "inside"
 	b.marker = m
+	if !m.markerOutside && st.ListStyleImage.IsNone() {
+		// an inside marker is inline content at the start of the item
+		var txt string
+		t := st.ListStyleType
+		switch {
+		case strings.HasPrefix(t, "\x00"):
+			txt = t[1:]
+		case t == "disc":
+			txt = "\u2022 "
+		case t == "circle":
+			txt = "\u25e6 "
+		case t == "square":
+			txt = "\u25aa "
+		case t == "disclosure-closed":
+			txt = "\u25b8 "
+		case t == "disclosure-open":
+			txt = "\u25be "
+		default:
+			txt = formatCounter(val, t) + ". "
+		}
+		// the marker's own box has line-height 0 so a fallback font cannot grow the line
+		mst := *st
+		mst.LineHeight = style.Px(0)
+		if strings.HasPrefix(t, "disclosure") {
+			// Chromium sizes the disclosure marker at 1.059375em
+			mst.LetterSpacing = 0
+			nat := c.textWidth(&mst, txt)
+			mst.LetterSpacing = (st.FontSize*1.059375 - nat) / float64(len([]rune(txt)))
+		}
+		mb := newBox(b.n, &mst, kInline)
+		mb.inlineLv = true
+		mb.pseudo = "marker"
+		tb := newBox(b.n, &mst, kText)
+		tb.text = txt
+		tb.inlineLv = true
+		tb.pseudo = "marker"
+		mb.addKid(tb)
+		b.addKid(mb)
+		b.marker = nil
+	}
 }
 
 // ---- anonymous box fixup -----------------------------------------------------------

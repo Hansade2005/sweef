@@ -270,8 +270,9 @@ func aaaFlatten(p *Path) []Subpath {
 }
 
 type guKey struct {
-	f *font.Face
-	r rune
+	f   *font.Face
+	r   rune
+	gid int
 }
 
 var (
@@ -280,15 +281,20 @@ var (
 )
 
 // glyphUnits returns the outline in font units (y down), cached.
-func glyphUnits(f *font.Face, r rune) []font.Segment {
-	k := guKey{f, r}
+func glyphUnits(g Glyph) []font.Segment {
+	f, r := g.Face, g.R
+	k := guKey{f, r, g.GID}
 	guMu.Lock()
 	s, ok := guCache[k]
 	guMu.Unlock()
 	if ok {
 		return s
 	}
-	s = f.Outline(r, float64(f.UnitsPerEm()))
+	if g.GID != 0 {
+		s = f.OutlineGID(g.GID, float64(f.UnitsPerEm()))
+	} else {
+		s = f.Outline(r, float64(f.UnitsPerEm()))
+	}
 	guMu.Lock()
 	guCache[k] = s
 	guMu.Unlock()
@@ -323,8 +329,9 @@ func ftDivFix(a, b int) int {
 // skiaGlyph rasterizes glyph r of f at size px with the given quarter-pixel
 // subpixel offset. It returns the mask positioned relative to the glyph
 // origin (baseline-left), or nil for glyphs without outline.
-func skiaGlyph(f *font.Face, r rune, sizeX, sizeY float64, sub int, skew bool) *Mask {
-	segs := glyphUnits(f, r)
+func skiaGlyph(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Mask {
+	f := g.Face
+	segs := glyphUnits(g)
 	if len(segs) == 0 {
 		return nil
 	}
