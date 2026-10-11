@@ -191,3 +191,4 @@ func (in *Instance) Run() (discarded bool) {
 	c := in.sh.main(f)
 	return c == ctlDiscard || f.Discarded || c == ctlAbort
 }
+

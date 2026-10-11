@@ -1,0 +1,9 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);
+var p=new Path2D('M10 80 C 40 10, 65 10, 95 80 S 150 150, 180 80');x.lineWidth=3;x.strokeStyle='#c30';x.stroke(p);
+var q=new Path2D('M20 100 h60 v40 h-60 z M30 110 h40 v20 h-40 z');x.fillStyle='#06c';x.fill(q,'evenodd');
+var r=new Path2D('M120 100 a25 25 0 1 1 50 0 a25 25 0 1 1 -50 0 M190 100 l20 40 l20 -40 z');x.fillStyle='rgba(0,150,0,.7)';x.fill(r);
+var s=new Path2D();s.addPath(new Path2D('M0 0 l30 0 l0 30 z'),new DOMMatrix().translate(190,10).rotate(20));x.fillStyle='#000';x.fill(s);
+x.fillStyle='#000';x.fillText(String(x.isPointInPath(q,25,105,'evenodd'))+x.isPointInPath(q,40,120,'evenodd')+x.isPointInStroke(p,10,80),150,150);
+</script>

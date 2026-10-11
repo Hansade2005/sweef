@@ -1,0 +1,126 @@
+{
+ "events": [
+  [
+   "loadstart",
+   2,
+   0,
+   0,
+   2,
+   1
+  ],
+  [
+   "ms-sourceopen",
+   3
+  ],
+  [
+   "sb-updatestart",
+   7
+  ],
+  [
+   "sb-update",
+   7
+  ],
+  [
+   "sb-updateend",
+   7
+  ],
+  [
+   "sb-updatestart",
+   8
+  ],
+  [
+   "durationchange",
+   8,
+   0,
+   1,
+   2,
+   1
+  ],
+  [
+   "loadedmetadata",
+   8,
+   0,
+   1,
+   2,
+   1
+  ],
+  [
+   "sb-update",
+   8
+  ],
+  [
+   "sb-updateend",
+   8
+  ],
+  [
+   "sb-updatestart",
+   8
+  ],
+  [
+   "sb-update",
+   8
+  ],
+  [
+   "sb-updateend",
+   8
+  ],
+  [
+   "durationchange",
+   8,
+   0,
+   1,
+   2,
+   1
+  ],
+  [
+   "ms-sourceended",
+   8
+  ],
+  [
+   "loadeddata",
+   14,
+   0,
+   4,
+   2,
+   1
+  ],
+  [
+   "canplay",
+   14,
+   0,
+   4,
+   2,
+   1
+  ],
+  [
+   "canplaythrough",
+   14,
+   0,
+   4,
+   2,
+   1
+  ]
+ ],
+ "x": {
+  "supported": [
+   true,
+   true,
+   false
+  ],
+  "rs0": "closed",
+  "rsOpen": "open",
+  "bytes": 29213,
+  "updatingAfterAppend": true,
+  "dur": 2.014,
+  "buffered": [
+   [
+    0,
+    2.01
+   ]
+  ],
+  "rsEnded": "ended",
+  "readyState": 4,
+  "duration": 2.014,
+  "videoWidth": 160
+ }
+}

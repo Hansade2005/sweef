@@ -1,0 +1,10 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);x.lineWidth=2;
+x.strokeStyle='#c00';x.beginPath();x.moveTo(10,60);x.quadraticCurveTo(60,0,110,60);x.stroke();
+x.strokeStyle='#00c';x.beginPath();x.moveTo(120,60);x.bezierCurveTo(140,0,200,0,230,60);x.stroke();
+x.fillStyle='#0a0';x.beginPath();x.arc(40,110,28,0.3,4.5);x.fill();
+x.strokeStyle='#000';x.beginPath();x.arc(110,110,28,0,Math.PI*1.5,true);x.stroke();
+x.beginPath();x.moveTo(150,90);x.arcTo(200,90,200,140,25);x.lineTo(200,150);x.stroke();
+x.fillStyle='rgba(200,0,200,.6)';x.beginPath();x.ellipse(210,120,20,30,0.6,0,Math.PI*2);x.fill();
+</script>

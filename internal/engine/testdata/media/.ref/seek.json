@@ -1,0 +1,107 @@
+{
+ "events": [
+  [
+   "loadstart",
+   3,
+   0,
+   0,
+   2,
+   1
+  ],
+  [
+   "progress",
+   6,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "suspend",
+   6,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "durationchange",
+   7,
+   0,
+   1,
+   1,
+   1
+  ],
+  [
+   "loadedmetadata",
+   7,
+   0,
+   1,
+   1,
+   1
+  ],
+  [
+   "loadeddata",
+   9,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplay",
+   9,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplaythrough",
+   9,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "seeking",
+   9,
+   1,
+   1,
+   1,
+   1
+  ],
+  [
+   "seeked",
+   10,
+   1,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplay",
+   10,
+   1,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplaythrough",
+   10,
+   1,
+   4,
+   1,
+   1
+  ]
+ ],
+ "x": {
+  "seekRet": 1,
+  "seekingNow": true,
+  "ctNow": 1,
+  "currentTime": 1,
+  "seeking": false
+ }
+}

@@ -1,0 +1,10 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);
+var s=document.createElement('canvas');s.width=8;s.height=8;var q=s.getContext('2d');for(var i=0;i<8;i++)for(var j=0;j<8;j++){q.fillStyle=((i+j)%2)?'#222':'hsl('+(i*40+j*10)+',80%,60%)';q.fillRect(i,j,1,1);}
+x.imageSmoothingEnabled=true;x.drawImage(s,5,5,70,70);x.imageSmoothingEnabled=false;x.drawImage(s,85,5,70,70);
+x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.drawImage(s,165,5,70,70);
+x.imageSmoothingQuality='low';x.drawImage(s,5,90.5,30.3,30.7);x.drawImage(s,45,90,8,8);x.drawImage(s,60,90,3,3);
+var big=document.createElement('canvas');big.width=100;big.height=100;var b=big.getContext('2d');for(var k=0;k<100;k+=2){b.fillStyle=k%4?'#000':'#f00';b.fillRect(k,0,1,100);}
+x.imageSmoothingQuality='low';x.drawImage(big,100,90,50,50);x.imageSmoothingQuality='medium';x.drawImage(big,160,90,50,50);
+</script>

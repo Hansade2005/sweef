@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);
+function shapes(ox,oy){x.fillStyle='#e33';x.fillRect(ox,oy,24,24);x.fillStyle='#3a3';x.beginPath();x.arc(ox+36,oy+12,12,0,7);x.fill();x.fillStyle='#33e';x.fillRect(ox+2,oy+28,40,8);}
+x.filter='blur(2px)';shapes(8,8);x.filter='grayscale(100%)';shapes(68,8);x.filter='sepia(1)';shapes(128,8);x.filter='invert(1)';shapes(188,8);
+x.filter='brightness(1.6)';shapes(8,58);x.filter='contrast(2)';shapes(68,58);x.filter='hue-rotate(90deg)';shapes(128,58);x.filter='saturate(3)';shapes(188,58);
+x.filter='opacity(0.4)';shapes(8,108);x.filter='drop-shadow(4px 4px 3px rgba(0,0,0,.6))';shapes(68,108);x.filter='blur(1px) brightness(1.2)';shapes(128,108);x.filter='none';shapes(188,108);
+</script>

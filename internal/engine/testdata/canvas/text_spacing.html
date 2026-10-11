@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);x.fillStyle='#000';x.font='16px "DejaVu Sans"';
+x.fillText('normal spacing here',8,25);x.letterSpacing='3px';x.fillText('letter spacing 3px',8,55);x.letterSpacing='0px';x.wordSpacing='12px';x.fillText('word spacing twelve px',8,85);
+x.wordSpacing='0px';x.fontKerning='none';x.fillText('AVATAR To Wa',8,115);x.fontKerning='normal';x.fillText('AVATAR To Wa',120,115);
+</script>

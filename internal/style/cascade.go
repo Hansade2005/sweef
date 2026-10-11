@@ -829,3 +829,14 @@ func (s *cstate) inheritProp(name string) bool {
 	}
 	return true
 }
+
+// Anonymous returns the style of an anonymous box below parent.
+func (e *Engine) Anonymous(parent *Computed, display string) *Computed {
+	c := e.newComputed(parent)
+	c.Display = display
+	e.finalize(c, parent, "")
+	return c
+}
+
+// Initial returns the engine's initial-values style (parent of the root).
+func (e *Engine) InitialStyle() *Computed { return e.initial }

@@ -1,0 +1,91 @@
+{
+ "events": [
+  [
+   "loadstart",
+   1,
+   0,
+   0,
+   2,
+   1
+  ],
+  [
+   "progress",
+   5,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "suspend",
+   5,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "durationchange",
+   7,
+   0,
+   1,
+   1,
+   1
+  ],
+  [
+   "loadedmetadata",
+   7,
+   0,
+   1,
+   1,
+   1
+  ],
+  [
+   "loadeddata",
+   14,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplay",
+   14,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplaythrough",
+   14,
+   0,
+   4,
+   1,
+   1
+  ]
+ ],
+ "x": {
+  "duration": 1.5,
+  "readyState": 4,
+  "networkState": 1,
+  "paused": true,
+  "ended": false,
+  "seeking": false,
+  "currentTime": 0,
+  "preload": "auto",
+  "src": "tone.wav",
+  "buffered": [
+   [
+    0,
+    1.5
+   ]
+  ],
+  "seekable": [
+   [
+    0,
+    1.5
+   ]
+  ]
+ }
+}

@@ -14,7 +14,7 @@ import (
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
-	_ "image/png"
+	"image/png"
 	"math"
 	"net/url"
 	"strconv"
@@ -191,13 +191,14 @@ type mediaRes struct {
 }
 
 type mediaHost struct {
-	j      *jsVM
-	mu     sync.Mutex
-	res    map[int]*mediaRes
-	next   int
-	vsrcs  map[int64]*videoSource
-	pcm    map[int]*media.PCM
-	nextP  int
+	j     *jsVM
+	mu    sync.Mutex
+	res   map[int]*mediaRes
+	next  int
+	vsrcs map[int64]*videoSource
+	pcm   map[int]*media.PCM
+	nextP int
+	wa    *waState
 }
 
 func newMediaHost(j *jsVM) *mediaHost {
@@ -271,7 +272,7 @@ func (m *mediaHost) fns() map[string]hostFn {
 			return map[string]any{"ok": false, "error": "network", "message": err.Error()}, nil
 		}
 		if strings.HasPrefix(abs, "data:") {
-			b, err := decodeDataURL(abs)
+			b, err := mediaDataURL(abs)
 			if err != nil {
 				return map[string]any{"ok": false, "error": "network", "message": err.Error()}, nil
 			}
@@ -384,7 +385,7 @@ func (m *mediaHost) fns() map[string]hostFn {
 		}
 		var data []byte
 		if strings.HasPrefix(abs, "data:") {
-			data, err = decodeDataURL(abs)
+			data, err = mediaDataURL(abs)
 		} else {
 			var r map[string]any
 			r, err = m.j.tab.httpForScript("GET", abs, nil, "")
@@ -515,6 +516,10 @@ func (m *mediaHost) get(id int) *mediaRes {
 	return m.res[id]
 }
 
+func (m *mediaHost) storePCMData(d [][]float32, rate int) map[string]any {
+	return m.storePCM(&media.PCM{SampleRate: rate, Data: d}, 0)
+}
+
 func (m *mediaHost) storePCM(p *media.PCM, rate int) map[string]any {
 	if rate > 0 && p.SampleRate != rate {
 		p = media.Resample(p, rate)
@@ -604,7 +609,7 @@ func argF(a []any, i int) float64 {
 	return 0
 }
 
-func decodeDataURL(u string) ([]byte, error) {
+func mediaDataURL(u string) ([]byte, error) {
 	i := strings.IndexByte(u, ',')
 	if i < 0 {
 		return nil, fmt.Errorf("bad data URL")
@@ -636,4 +641,10 @@ func b64f32(s string) []float32 {
 		out[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[i*4:]))
 	}
 	return out
+}
+
+func encodePNGBase64(img image.Image) string {
+	var b bytes.Buffer
+	_ = png.Encode(&b, img)
+	return base64.StdEncoding.EncodeToString(b.Bytes())
 }

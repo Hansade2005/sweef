@@ -1,0 +1,10 @@
+WEBVTT
+
+NOTE a comment
+
+cue1
+00:00:00.300 --> 00:00:00.800 line:80% align:start
+First <b>cue</b>
+
+00:00:01.000 --> 00:00:01.500
+Second cue

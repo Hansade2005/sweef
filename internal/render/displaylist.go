@@ -15,10 +15,12 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/sweefbrowser/sweef/internal/font"
+	"github.com/sweefbrowser/sweef/internal/style"
 )
 
-// Color is non-premultiplied 8-bit RGBA.
-type Color struct{ R, G, B, A uint8 }
+// Color is non-premultiplied 8-bit RGBA (an alias of style.Color so the
+// style engine and the display list share one type).
+type Color = style.Color
 
 // Rect is an axis-aligned rectangle.
 type Rect struct{ X, Y, W, H float64 }

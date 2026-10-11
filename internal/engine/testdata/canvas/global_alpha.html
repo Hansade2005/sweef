@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);
+['#e33','#3a3','#33e'].forEach(function(c,i){x.globalAlpha=0.5;x.fillStyle=c;x.beginPath();x.arc(70+i*28,60+(i%2)*20,40,0,7);x.fill();});
+x.globalAlpha=0.3;x.fillStyle='#000';x.fillRect(10,110,220,10);x.globalAlpha=1;x.fillStyle='rgba(0,0,0,0.3)';x.fillRect(10,130,220,10);
+</script>

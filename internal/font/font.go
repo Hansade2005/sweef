@@ -9,7 +9,6 @@
 package font
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"sort"
@@ -44,6 +43,9 @@ type Face struct {
 	mu     sync.Mutex
 	buf    sfnt.Buffer
 	upm    int
+	data   []byte
+	adv    map[rune]float64 // advance in font units (-1 = no glyph)
+	kern   map[[2]rune]float64
 }
 
 // Metrics are in pixels at the requested size.
@@ -58,7 +60,97 @@ func newFace(family string, st Style, data []byte, mono bool) (*Face, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Face{Family: family, Style: st, Mono: mono, font: f, upm: int(f.UnitsPerEm())}, nil
+	return &Face{Family: family, Style: st, Mono: mono, font: f, upm: int(f.UnitsPerEm()), data: data,
+		adv: map[rune]float64{}, kern: map[[2]rune]float64{}}, nil
+}
+
+// UnitsPerEm of the face.
+func (f *Face) UnitsPerEm() int { return f.upm }
+
+// AdvanceUnits is the horizontal advance of r in font units, or -1 when the
+// face has no glyph for r.
+func (f *Face) AdvanceUnits(r rune) float64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if v, ok := f.adv[r]; ok {
+		return v
+	}
+	v := -1.0
+	if gi, err := f.font.GlyphIndex(&f.buf, r); err == nil && gi != 0 {
+		if a, err := f.font.GlyphAdvance(&f.buf, gi, fixed.Int26_6(f.upm*64), xfont.HintingNone); err == nil {
+			v = float64(a) / 64
+		}
+	}
+	f.adv[r] = v
+	return v
+}
+
+// AdvanceF is the exact (unrounded) advance of r at size px, or -1.
+func (f *Face) AdvanceF(r rune, size float64) float64 {
+	u := f.AdvanceUnits(r)
+	if u < 0 {
+		return -1
+	}
+	return u * size / float64(f.upm)
+}
+
+// KernF is the exact kerning adjustment between a and b at size px.
+func (f *Face) KernF(a, b rune, size float64) float64 {
+	f.mu.Lock()
+	k, ok := f.kern[[2]rune{a, b}]
+	if !ok {
+		k = 0
+		ga, err1 := f.font.GlyphIndex(&f.buf, a)
+		gb, err2 := f.font.GlyphIndex(&f.buf, b)
+		if err1 == nil && err2 == nil && ga != 0 && gb != 0 {
+			if v, err := f.font.Kern(&f.buf, ga, gb, fixed.Int26_6(f.upm*64), xfont.HintingNone); err == nil {
+				k = float64(v) / 64
+			}
+		}
+		f.kern[[2]rune{a, b}] = k
+	}
+	f.mu.Unlock()
+	return k * size / float64(f.upm)
+}
+
+// RawMetrics returns unscaled hhea ascent/descent/lineGap and OS/2 values in font units.
+func (f *Face) RawMetrics() (ascent, descent, lineGap, avgChar, maxAdvance float64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	m, err := f.font.Metrics(&f.buf, fixed.Int26_6(f.upm*64), xfont.HintingNone)
+	if err == nil {
+		ascent, descent = float64(m.Ascent)/64, float64(m.Descent)/64
+		lineGap = float64(m.Height-m.Ascent-m.Descent) / 64
+	}
+	avgChar, maxAdvance = tableAvgMax(f.data)
+	return
+}
+
+func tableAvgMax(d []byte) (avg, maxAdv float64) {
+	if len(d) < 12 {
+		return
+	}
+	n := int(d[4])<<8 | int(d[5])
+	for i := 0; i < n; i++ {
+		o := 12 + i*16
+		if o+16 > len(d) {
+			break
+		}
+		tag := string(d[o : o+4])
+		off := int(d[o+8])<<24 | int(d[o+9])<<16 | int(d[o+10])<<8 | int(d[o+11])
+		switch tag {
+		case "OS/2":
+			if off+4 <= len(d) {
+				v := int16(uint16(d[off+2])<<8 | uint16(d[off+3]))
+				avg = float64(v)
+			}
+		case "hhea":
+			if off+12 <= len(d) {
+				maxAdv = float64(uint16(d[off+10])<<8 | uint16(d[off+11]))
+			}
+		}
+	}
+	return
 }
 
 // Parse loads a font from raw TTF/OTF bytes (used for @font-face).
@@ -316,25 +408,25 @@ func RegisterWeb(family string, st Style, data []byte) error {
 	return nil
 }
 
-// generic CSS families map to a preference list; the first installed wins.
+// generic CSS families map to what Chromium on this machine resolves them to
+// (measured). A generic that Chromium cannot resolve is absent, so the next
+// family in the list (and finally the default serif) is used.
 var generics = map[string][]string{
-	"serif":         {"times new roman", "liberation serif", "tinos", "dejavu serif", "noto serif", "freeserif", "go"},
-	"sans-serif":    {"arial", "liberation sans", "arimo", "helvetica", "dejavu sans", "inter", "noto sans", "freesans", "go"},
-	"monospace":     {"courier new", "liberation mono", "cousine", "dejavu sans mono", "noto sans mono", "freemono", "go mono"},
-	"cursive":       {"comic sans ms", "dejavu sans", "go"},
-	"fantasy":       {"impact", "dejavu sans", "go"},
-	"system-ui":     {"inter", "dejavu sans", "liberation sans", "go"},
-	"ui-sans-serif": {"inter", "dejavu sans", "go"},
-	"ui-monospace":  {"dejavu sans mono", "liberation mono", "go mono"},
-	"ui-serif":      {"dejavu serif", "go"},
+	"serif":         {"liberation serif", "times new roman", "dejavu serif", "go"},
+	"sans-serif":    {"liberation sans", "arial", "dejavu sans", "go"},
+	"monospace":     {"dejavu sans mono", "liberation mono", "go mono"},
+	"system-ui":     {"inter", "liberation sans", "go"},
+	"ui-sans-serif": {"inter", "liberation sans", "go"},
+	"-apple-system": {"inter"}, "blinkmacsystemfont": {"inter"},
+	"segoe ui": {"inter"}, "helvetica neue": {"inter"}, "sf pro text": {"inter"}, "sf pro display": {"inter"},
 }
 
-// aliases for common proprietary names.
+// aliases are metric-compatible substitutions fontconfig performs.
 var aliases = map[string]string{
-	"helvetica": "liberation sans", "helvetica neue": "liberation sans", "arial": "liberation sans",
-	"times": "liberation serif", "times new roman": "liberation serif",
-	"courier": "liberation mono", "courier new": "liberation mono",
-	"segoe ui": "dejavu sans", "-apple-system": "inter", "blinkmacsystemfont": "inter", "roboto": "inter",
+	"helvetica": "liberation sans", "arial": "liberation sans", "arimo": "liberation sans",
+	"times": "liberation serif", "times new roman": "liberation serif", "tinos": "liberation serif",
+	"courier": "liberation mono", "courier new": "liberation mono", "cousine": "liberation mono",
+	"calibri": "carlito", "cambria": "caladea",
 }
 
 func match(list []*entry, family string, st Style) *entry {
@@ -443,5 +535,3 @@ func Families() []string {
 	sort.Strings(out)
 	return out
 }
-
-var _ = bytes.MinRead

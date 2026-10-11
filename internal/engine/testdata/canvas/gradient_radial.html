@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);
+var g=x.createRadialGradient(50,50,5,50,50,40);g.addColorStop(0,'#fff');g.addColorStop(0.5,'#f80');g.addColorStop(1,'#006');x.fillStyle=g;x.fillRect(0,0,100,100);
+g=x.createRadialGradient(150,40,5,190,60,35);g.addColorStop(0,'red');g.addColorStop(1,'rgba(0,0,255,0.2)');x.fillStyle=g;x.fillRect(110,0,130,100);
+g=x.createRadialGradient(40,130,0,40,130,25);g.addColorStop(0,'#0a0');g.addColorStop(1,'#fff');x.fillStyle=g;x.beginPath();x.arc(40,130,25,0,7);x.fill();
+g=x.createRadialGradient(110,130,20,150,130,8);g.addColorStop(0,'#000');g.addColorStop(1,'#f0f');x.fillStyle=g;x.fillRect(95,105,100,50);
+</script>

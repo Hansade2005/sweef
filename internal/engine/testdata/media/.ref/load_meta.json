@@ -1,0 +1,74 @@
+{
+ "events": [
+  [
+   "loadstart",
+   2,
+   0,
+   0,
+   2,
+   1
+  ],
+  [
+   "progress",
+   6,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "suspend",
+   6,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "durationchange",
+   10,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "loadedmetadata",
+   10,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "loadeddata",
+   10,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplay",
+   10,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplaythrough",
+   10,
+   0,
+   4,
+   1,
+   1
+  ]
+ ],
+ "x": {
+  "duration": 1.5,
+  "readyState": 4,
+  "networkState": 1,
+  "preload": "metadata"
+ }
+}

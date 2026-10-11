@@ -1,0 +1,25 @@
+{
+ "events": [
+  [
+   "loadstart",
+   1,
+   0,
+   0,
+   1,
+   1
+  ],
+  [
+   "suspend",
+   1,
+   0,
+   0,
+   1,
+   1
+  ]
+ ],
+ "x": {
+  "duration": "NaN",
+  "readyState": 0,
+  "networkState": 1
+ }
+}

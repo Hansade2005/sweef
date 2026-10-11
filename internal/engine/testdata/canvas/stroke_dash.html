@@ -1,0 +1,9 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);x.lineWidth=4;x.strokeStyle='#000';
+x.setLineDash([10,5]);x.beginPath();x.moveTo(10,15);x.lineTo(230,15);x.stroke();
+x.setLineDash([2,6]);x.lineCap='round';x.beginPath();x.moveTo(10,35);x.lineTo(230,35);x.stroke();
+x.lineCap='butt';x.setLineDash([15,5,3]);x.lineDashOffset=7;x.beginPath();x.moveTo(10,55);x.lineTo(230,55);x.stroke();
+x.setLineDash([12,6]);x.lineDashOffset=0;x.beginPath();x.arc(60,105,40,0,Math.PI*2);x.stroke();
+x.beginPath();x.rect(120,70,100,70);x.stroke();
+</script>

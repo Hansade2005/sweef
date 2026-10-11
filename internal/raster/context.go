@@ -4,8 +4,8 @@ import (
 	"math"
 )
 
-// Paint is a fill or stroke source.
-type Paint struct {
+// Brush is a fill or stroke source.
+type Brush struct {
 	Color    Color
 	Gradient *GradientDef
 	Pattern  *Pattern
@@ -34,7 +34,7 @@ type clipState struct {
 
 type state struct {
 	ctm          Matrix
-	fill, stroke Paint
+	fill, stroke Brush
 	ss           StrokeStyle
 	alpha        float64
 	op           CompositeOp
@@ -56,11 +56,17 @@ type layerRec struct {
 }
 
 // Context is a 2D drawing context over a Surface.
+type layerMeta struct {
+	opacity float64
+	blend   string
+}
+
 type Context struct {
-	surf   *Surface
-	st     state
-	stack  []state
-	layers []layerRec
+	layerMeta []layerMeta
+	surf      *Surface
+	st        state
+	stack     []state
+	layers    []layerRec
 }
 
 // NewContext creates a context drawing onto a new transparent w x h surface.
@@ -81,8 +87,8 @@ func (c *Context) ResetState() {
 	c.stack = c.stack[:0]
 	c.st = state{
 		ctm:    Identity,
-		fill:   Paint{Color: Black},
-		stroke: Paint{Color: Black},
+		fill:   Brush{Color: Black},
+		stroke: Brush{Color: Black},
 		ss:     StrokeStyle{Width: 1, Cap: CapButt, Join: JoinMiter, MiterLimit: 10},
 		alpha:  1,
 		op:     SourceOver,
@@ -112,10 +118,10 @@ func (c *Context) Concat(m Matrix)                 { c.st.ctm = c.st.ctm.Mul(m) 
 func (c *Context) Translate(x, y float64)          { c.Concat(Translate(x, y)) }
 func (c *Context) Scale(x, y float64)              { c.Concat(Scale(x, y)) }
 func (c *Context) Rotate(a float64)                { c.Concat(Rotate(a)) }
-func (c *Context) SetFill(p Paint)                 { c.st.fill = p }
-func (c *Context) SetStroke(p Paint)               { c.st.stroke = p }
-func (c *Context) FillPaint() Paint                { return c.st.fill }
-func (c *Context) StrokePaint() Paint              { return c.st.stroke }
+func (c *Context) SetFill(p Brush)                 { c.st.fill = p }
+func (c *Context) SetStroke(p Brush)               { c.st.stroke = p }
+func (c *Context) FillPaint() Brush                { return c.st.fill }
+func (c *Context) StrokePaint() Brush              { return c.st.stroke }
 func (c *Context) SetStrokeStyle(s StrokeStyle)    { c.st.ss = s }
 func (c *Context) StrokeStyle() StrokeStyle        { return c.st.ss }
 func (c *Context) SetGlobalAlpha(a float64)        { c.st.alpha = a }
@@ -212,7 +218,7 @@ func (c *Context) filterMode() FilterMode {
 	return FilterBilinear
 }
 
-func (c *Context) shaderFor(p Paint, alpha float64) Shader {
+func (c *Context) shaderFor(p Brush, alpha float64) Shader {
 	switch {
 	case p.Gradient != nil:
 		return NewGradientShader(*p.Gradient, c.st.ctm, alpha)
@@ -419,7 +425,6 @@ func (c *Context) drawShadow(m *Mask, sh Shader, dst *Surface, cl *clipState) {
 		return
 	}
 	col := s.shadowColor
-	col.A *= s.alpha
 	composite(dst, bm, Solid(col), s.op, cl)
 }
 
@@ -669,4 +674,17 @@ func (c *Context) IsPointInStroke(p *Path, x, y float64) bool {
 	wn, _ := windingAt(polys, x, y)
 	// pieces are consistently oriented; any non-zero winding counts
 	return wn != 0
+}
+
+// SetTransformStash is a no-op hook kept for symmetry with layers.
+func (c *Context) SetTransformStash() {}
+
+// FillPathDevice fills a path already in device space.
+func (c *Context) FillPathDevice(p *Path, rule FillRule) {
+	c.draw(FillMask(p, Identity, rule, c.drawBounds()), c.shaderFor(c.st.fill, c.st.alpha))
+}
+
+// ClipPathDevice intersects the clip with a device-space path.
+func (c *Context) ClipPathDevice(p *Path, rule FillRule) {
+	c.clipWithMask(FillMask(p, Identity, rule, c.ClipBounds()))
 }

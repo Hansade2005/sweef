@@ -831,6 +831,11 @@ func (p *parser) postfixExpr() *Expr {
 			}
 			p.i++
 			e = &Expr{K: EField, S: f.S, Line: f.Line, Args: []*Expr{e}}
+			if f.S == "length" && p.isP("(") {
+				p.i++
+				p.expectP(")")
+				e = &Expr{K: ECall, S: "__length", Line: f.Line, Args: []*Expr{e.Args[0]}}
+			}
 		case "++", "--":
 			p.i++
 			e = &Expr{K: EPostfix, S: t.S, Line: t.Line, Args: []*Expr{e}}

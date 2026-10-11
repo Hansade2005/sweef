@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);
+var g=x.createConicGradient(0,60,80);g.addColorStop(0,'red');g.addColorStop(0.25,'yellow');g.addColorStop(0.5,'lime');g.addColorStop(0.75,'cyan');g.addColorStop(1,'red');x.fillStyle=g;x.beginPath();x.arc(60,80,55,0,7);x.fill();
+g=x.createConicGradient(Math.PI/2,170,80);g.addColorStop(0,'#000');g.addColorStop(0.5,'#fff');g.addColorStop(1,'#000');x.fillStyle=g;x.fillRect(120,30,100,100);
+</script>

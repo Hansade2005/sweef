@@ -396,6 +396,10 @@ func Initial() *Computed {
 	c.Resize = "none"
 	c.Scrollbar = "auto"
 	c.Zoom = 1
+	for i := 0; i < 4; i++ {
+		c.Margin[i] = Px(0)
+		c.Padding[i] = Px(0)
+	}
 	c.Orphans = 2
 	return c
 }

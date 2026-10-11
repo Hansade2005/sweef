@@ -311,7 +311,7 @@ func (c *compiler) declareBuiltins() {
 			dt := vecT(KFloat, 4)
 			dt.Arr = c.opt.MaxDrawBuffers
 			sh.FragDataOff = c.builtinVar("gl_FragData", dt, false)
-			if c.exts["GL_EXT_frag_depth"] != "" && c.exts["GL_EXT_frag_depth"] != "disable" {
+			if c.extEnabled("GL_EXT_frag_depth") {
 				sh.FragDepthOff = c.builtinVar("gl_FragDepthEXT", tFloat, false)
 			}
 		} else {

@@ -2,7 +2,6 @@ package style
 
 import (
 	"math"
-	"strconv"
 	"strings"
 
 	"github.com/sweefbrowser/sweef/internal/font"

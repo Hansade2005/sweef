@@ -747,7 +747,7 @@ func (c *compiler) assign(e *Expr) *V {
 		rhs := c.mat(c.expr(e.Args[1]))
 		c.hint = -1
 		if !sameType(lv.T, rhs.T) {
-			c.fail(e.Line, "=", "cannot convert from '%s' to '%s'", rhs.T, lv.T)
+			c.fail(e.Line, "=", "cannot convert from '%s' to '%s'", vtn(rhs), lv.T)
 		}
 		ops := append(append([]op{}, lv.Ops...), rhs.Ops...)
 		ops = append(ops, c.store(lv, rhs, e.Line)...)
@@ -811,4 +811,11 @@ func (c *compiler) ternary(e *Expr, h int) *V {
 		}
 	}
 	return &V{T: a.T, Off: d, Ops: append(append([]op{}, cond.Ops...), o)}
+}
+
+func vtn(v *V) string {
+	if v.C != nil {
+		return "const " + v.T.String()
+	}
+	return v.T.String()
 }

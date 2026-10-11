@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c width=240 height=160></canvas><script>
+var c=document.getElementById("c"),x=c.getContext("2d");
+x.fillStyle='#fff';x.fillRect(0,0,240,160);x.strokeStyle='#000';x.lineWidth=1;
+x.beginPath();for(var i=0;i<10;i++){x.moveTo(10,10+i*6);x.lineTo(100,10+i*6);}x.stroke();
+x.beginPath();for(var i=0;i<10;i++){x.moveTo(110,10.5+i*6);x.lineTo(200,10.5+i*6);}x.stroke();
+x.beginPath();for(var i=0;i<10;i++){x.moveTo(10+i*6,80);x.lineTo(10+i*6,150);}x.stroke();
+x.beginPath();for(var i=0;i<10;i++){x.moveTo(110.5+i*6,80);x.lineTo(110.5+i*6,150);}x.stroke();
+</script>

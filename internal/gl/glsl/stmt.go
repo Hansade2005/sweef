@@ -470,7 +470,7 @@ func (c *compiler) localDecl(d *Decl) []op {
 		}
 		v := c.expr(d.Init)
 		if !sameType(v.T, t) {
-			c.fail(d.Line, "=", "cannot convert from '%s' to '%s'", v.T, t)
+			c.fail(d.Line, "=", "cannot convert from '%s' to '%s'", vtn(v), t)
 		}
 		if v.C == nil {
 			c.fail(d.Line, d.Name, "initializer of a const variable must be a constant expression")
@@ -483,7 +483,7 @@ func (c *compiler) localDecl(d *Decl) []op {
 		v := c.mat(c.expr(d.Init))
 		c.hint = -1
 		if !sameType(v.T, t) {
-			c.fail(d.Line, "=", "cannot convert from '%s' to '%s'", v.T, t)
+			c.fail(d.Line, "=", "cannot convert from '%s' to '%s'", vtn(v), t)
 		}
 		ops = append(ops, v.Ops...)
 		if v.C != nil {

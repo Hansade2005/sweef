@@ -1,0 +1,93 @@
+{
+ "events": [
+  [
+   "durationchange",
+   15,
+   0,
+   1,
+   1,
+   1
+  ],
+  [
+   "loadedmetadata",
+   15,
+   0,
+   1,
+   1,
+   1
+  ],
+  [
+   "loadeddata",
+   16,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplay",
+   16,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "canplaythrough",
+   16,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "volumechange",
+   17,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "volumechange",
+   17,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "ratechange",
+   17,
+   0,
+   4,
+   1,
+   1
+  ],
+  [
+   "ratechange",
+   17,
+   0,
+   4,
+   1,
+   1
+  ]
+ ],
+ "x": {
+  "volErr": "IndexSizeError",
+  "rateErr": "NotSupportedError",
+  "ctErr": "TypeError",
+  "volume": 0.5,
+  "muted": true,
+  "defaultMuted": false,
+  "playbackRate": 1.5,
+  "defaultPlaybackRate": 0.5,
+  "preservesPitch": true,
+  "controls": false,
+  "loop": false,
+  "autoplay": false,
+  "crossOrigin": null,
+  "preload": "auto",
+  "networkState": 1
+ }
+}

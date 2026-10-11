@@ -2,6 +2,7 @@ package raster
 
 import (
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -363,9 +364,9 @@ func Shape(spec FontSpec, text string, letterSpacing, wordSpacing float64, kern 
 			continue
 		}
 		if kern && prevFace == f {
-			x += f.Kern(prev, r, spec.Size)
+			x += f.Kern(prev, r, 2048) * spec.Size / 2048
 		}
-		adv := f.Advance(r, spec.Size)
+		adv := f.Advance(r, 2048) * spec.Size / 2048
 		if adv < 0 {
 			adv = spec.Size * 0.5
 		}
@@ -430,10 +431,10 @@ func (c *Context) MeasureText(text string) TextMetrics {
 		x0, x1, y0, y1 = 0, 0, 0, 0
 	}
 	// ActualLeft is distance from the alignment point to the left of the box.
-	m.ActualLeft = -(x0 + dx)
+	m.ActualLeft = -math.Floor(x0 + dx)
 	m.ActualRight = x1 + dx
-	m.ActualAscent = -(y0 + dy)
-	m.ActualDescent = y1 + dy
+	m.ActualAscent = math.Ceil(-(y0 + dy))
+	m.ActualDescent = math.Ceil(y1 + dy)
 	m.Hanging = asc*0.8 - dy
 	m.Alphabetic = -dy
 	m.Ideograph = -desc - dy
@@ -513,6 +514,7 @@ func glyphMask(g Glyph, size float64, sub int, bold, skew bool) *Mask {
 	p := glyphPath(g.Face, g.R)
 	var m *Mask
 	if p != nil {
+		p = hintPath(p, g.Face, size)
 		sk := 0.0
 		if skew {
 			sk = -0.25
@@ -579,7 +581,7 @@ func applyTextGamma(m *Mask) *Mask { return m }
 // user space. Returns nil if nothing visible.
 func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 	m := c.st.ctm
-	simple := m[1] == 0 && m[2] == 0 && m[0] > 0 && m[3] > 0 && math.Abs(m[0]-m[3]) < 1e-9
+	simple := m[1] == 0 && m[2] == 0 && m[0] > 0 && m[3] > 0 && math.Abs(m[0]-m[3]) < 1e-9 && sx == 1
 	clip := c.drawBounds()
 	if simple {
 		scale := m[0]
@@ -597,6 +599,7 @@ func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 		for _, g := range sh.Glyphs {
 			gx := (x+g.X*sx)*scale + m[4]
 			gy := math.Round(y*scale + m[5])
+			gx += 0.125 // Skia rounds to the nearest quarter pixel
 			ix := math.Floor(gx)
 			sub := int(math.Floor((gx - ix) * 4))
 			gm := glyphMask(g, dsize, sub, sh.Fake, sh.Skew)
@@ -731,3 +734,100 @@ func (c *Context) SetLetterSpacing(v float64) { c.st.text.letterSpacing = v }
 func (c *Context) SetWordSpacing(v float64)   { c.st.text.wordSpacing = v }
 func (c *Context) SetFontKerning(k string)    { c.st.text.kerning = k }
 func (c *Context) SetBaseFontSize(v float64)  { c.st.text.baseSize = v }
+
+// String serialises the font like browsers do for ctx.font.
+func (f FontSpec) String() string {
+	var parts []string
+	if f.Italic {
+		parts = append(parts, "italic")
+	}
+	if f.SmallCaps {
+		parts = append(parts, "small-caps")
+	}
+	switch {
+	case f.Weight == 700:
+		parts = append(parts, "bold")
+	case f.Weight != 400 && f.Weight != 0:
+		parts = append(parts, strconv.Itoa(f.Weight))
+	}
+	if f.Stretch != "" {
+		parts = append(parts, f.Stretch)
+	}
+	parts = append(parts, strconv.FormatFloat(f.Size, 'f', -1, 64)+"px")
+	fam := make([]string, len(f.Families))
+	for i, n := range f.Families {
+		switch n {
+		case "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "math", "emoji":
+			fam[i] = n
+		default:
+			if strings.ContainsAny(n, " \t\"',") || n == "" {
+				fam[i] = strconv.Quote(n)
+			} else {
+				fam[i] = n
+			}
+		}
+	}
+	parts = append(parts, strings.Join(fam, ", "))
+	return strings.Join(parts, " ")
+}
+
+// hintPath approximates FreeType's light auto-hinting: it snaps the
+// baseline, x-height and cap-height to whole pixels by warping y.
+func hintPath(p *Path, f *font.Face, size float64) *Path {
+	if !hintEnabled || size < 4 || size > 80 {
+		return p
+	}
+	m := f.Metrics(size)
+	xh, ch := m.XHeight, m.CapHeight
+	if xh <= 0 || ch <= 0 {
+		return p
+	}
+	rx := hintRound(xh, size)
+	rc := hintRound(ch, size)
+	if hintMode == "x" {
+		rc = ch + (rx - xh)
+	}
+	if hintMode == "c" {
+		rx = xh
+	}
+	if hintMode == "n" {
+		rx, rc = math.Floor(xh+0.5), math.Floor(ch+0.5)
+	}
+	if rx == xh && rc == ch {
+		return p
+	}
+	// control points in unit-em y-up space
+	x0, x1 := xh/size, ch/size
+	rx0, rc0 := rx/size, rc/size
+	warp := func(yUp float64) float64 {
+		switch {
+		case yUp <= 0:
+			return yUp
+		case yUp <= x0:
+			return yUp * rx0 / x0
+		case yUp <= x1:
+			return rx0 + (yUp-x0)*(rc0-rx0)/(x1-x0)
+		}
+		return yUp + (rc0 - x1)
+	}
+	q := &Path{Cmds: p.Cmds, Pts: make([]float64, len(p.Pts)), has: p.has}
+	for i := 0; i < len(p.Pts); i += 2 {
+		q.Pts[i] = p.Pts[i]
+		q.Pts[i+1] = -warp(-p.Pts[i+1])
+	}
+	return q
+}
+
+var hintEnabled = os.Getenv("HINT") == "1"
+var hintMode = os.Getenv("HINT")
+
+func hintRound(v, size float64) float64 {
+	r := math.Floor(v + 0.5)
+	if size < 14 && v-math.Floor(v) > 0.2 {
+		r = math.Ceil(v)
+	}
+	if r < 1 {
+		r = 1
+	}
+	return r
+}

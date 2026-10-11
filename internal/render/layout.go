@@ -1,0 +1,649 @@
+package render
+
+import (
+	"image"
+	"math"
+	"sort"
+
+	"golang.org/x/net/html"
+
+	"github.com/sweefbrowser/sweef/internal/style"
+)
+
+type nilEnv struct{}
+
+func (nilEnv) Image(string) image.Image                         { return nil }
+func (nilEnv) Bitmap(*html.Node) image.Image                    { return nil }
+func (nilEnv) IntrinsicSize(*html.Node) (w, h float64, ok bool) { return 0, 0, false }
+func (nilEnv) Focused() *html.Node                              { return nil }
+
+type ctx struct {
+	opts       Options
+	env        Env
+	eng        *style.Engine
+	vw, vh     float64
+	sbViewport float64
+
+	styles      map[*html.Node]*style.Computed
+	byNode      map[*html.Node][]*lbox
+	pseudoBoxes map[*html.Node][]*lbox
+	counters    map[string][]int
+	quoteDepth  int
+	specs       map[string]*fontSpec
+	specPtr     map[*style.Computed]*fontSpec
+
+	rootBox *lbox
+	bodyBox *lbox
+	cbStack []*lbox
+	inFlow  []*lbox
+	noCache bool
+	docEl   *html.Node
+	res     *Result
+
+	paintCache map[*lbox]*paintInfo
+	all        []*lbox
+}
+
+// Layout lays out the document rooted at root (a document or html element).
+func Layout(root *html.Node, o Options) *Result {
+	if o.Width <= 0 {
+		o.Width = 1280
+	}
+	if o.Height <= 0 {
+		o.Height = 800
+	}
+	if o.DPR <= 0 {
+		o.DPR = 1
+	}
+	c := &ctx{opts: o, env: o.Env, vw: o.Width, vh: o.Height,
+		styles: map[*html.Node]*style.Computed{}, byNode: map[*html.Node][]*lbox{}, pseudoBoxes: map[*html.Node][]*lbox{},
+		counters: map[string][]int{}, specs: map[string]*fontSpec{}, specPtr: map[*style.Computed]*fontSpec{}}
+	if c.env == nil {
+		c.env = nilEnv{}
+	}
+	c.docEl = findDocEl(root)
+	res := &Result{Boxes: map[*html.Node]*Box{}}
+	c.res = res
+	scheme := o.ColorScheme
+	if scheme == "" {
+		scheme = "light"
+	}
+	env := &style.Env{Width: o.Width, Height: o.Height, DPR: o.DPR, ColorScheme: scheme, Print: o.Print, ReducedMotion: o.ReducedMotion}
+	var sheets []style.SheetIn
+	for _, s := range o.Sheets {
+		if s.UserAgent {
+			continue
+		}
+		sheets = append(sheets, style.SheetIn{Text: s.Text, Media: s.Media})
+	}
+	c.eng = style.NewEngine(env, sheets)
+	c.eng.SysFont = "dejavu sans"
+	registerFonts(c.eng.Fonts)
+	if c.docEl == nil {
+		res.Width, res.Height = o.Width, o.Height
+		res.Viewport = Rect{0, 0, o.Width, o.Height}
+		res.Hit = func(x, y float64) *html.Node { return nil }
+		return res
+	}
+	var top []*lbox
+	c.buildElement(c.docEl, nil, &top)
+	if len(top) == 0 {
+		res.Width, res.Height = o.Width, o.Height
+		res.Viewport = Rect{0, 0, o.Width, o.Height}
+		res.Hit = func(x, y float64) *html.Node { return nil }
+		return res
+	}
+	rb := top[0]
+	rb.kind = kBlock
+	c.rootBox = rb
+	c.findBody(rb)
+	c.layoutRoot(rb)
+	c.finishResult(rb)
+	return res
+}
+
+func findDocEl(n *html.Node) *html.Node {
+	if n == nil {
+		return nil
+	}
+	if n.Type == html.ElementNode && n.Data == "html" {
+		return n
+	}
+	for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
+		if r := findDocEl(ch); r != nil {
+			return r
+		}
+	}
+	if n.Type == html.ElementNode {
+		return n
+	}
+	return nil
+}
+
+func (c *ctx) findBody(rb *lbox) {
+	for _, k := range rb.kids {
+		if k.n != nil && k.n.Data == "body" && k.pseudo == "" {
+			c.bodyBox = k
+		}
+	}
+	// overflow propagation to the viewport
+	if rb.st.OverflowX == "visible" && rb.st.OverflowY == "visible" && c.bodyBox != nil {
+		c.bodyBox.ovProp = true
+	} else {
+		rb.ovProp = true
+	}
+}
+
+func (c *ctx) viewportOverflow() (string, string) {
+	if c.bodyBox != nil && c.bodyBox.ovProp {
+		return c.bodyBox.st.OverflowX, c.bodyBox.st.OverflowY
+	}
+	return c.rootBox.st.OverflowX, c.rootBox.st.OverflowY
+}
+
+func (c *ctx) layoutRoot(rb *lbox) {
+	_, oy := c.viewportOverflow()
+	c.sbViewport = 0
+	if oy == "scroll" {
+		c.sbViewport = sbSize
+	}
+	for pass := 0; pass < 2; pass++ {
+		c.resetKids(rb)
+		cw := c.vw - c.sbViewport
+		in := layoutIn{cbw: cw, cbh: c.vh, fixW: -1, fixH: -1, bfc: &bfcState{}}
+		c.cbStack = nil
+		c.layoutBox(rb, in)
+		rb.x, rb.y = rb.mar[3], rb.mar[0]
+		c.place(rb, rb.x, rb.y)
+		docH := math.Max(rb.ovBottom, rb.y+rb.h+rb.mar[2])
+		if pass == 0 && c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh+0.01 {
+			c.sbViewport = sbSize
+			continue
+		}
+		break
+	}
+}
+
+func registerFonts(ff []style.FontFace) {}
+
+func (c *ctx) finishResult(rb *lbox) {
+	res := c.res
+	vw := c.vw - c.sbViewport
+	res.Viewport = Rect{0, 0, vw, c.vh}
+	res.Width = math.Max(vw, math.Max(rb.ovRight, rb.ax+rb.w+rb.mar[1]))
+	res.Height = math.Max(c.vh, math.Max(rb.ovBottom, rb.ay+rb.h+rb.mar[2]))
+	c.buildBoxes()
+	c.paintAll(rb)
+	c.installHit(rb)
+}
+
+// ---- placement: absolute coordinates ---------------------------------------------------
+
+func (b *lbox) overflowX() string {
+	if b.ovProp {
+		return "visible"
+	}
+	return b.st.OverflowX
+}
+func (b *lbox) overflowY() string {
+	if b.ovProp {
+		return "visible"
+	}
+	return b.st.OverflowY
+}
+
+func (b *lbox) clips() bool {
+	ox, oy := b.overflowX(), b.overflowY()
+	return ox != "visible" || oy != "visible"
+}
+
+// place assigns absolute coordinates to b (whose layout origin is ox, oy) and
+// its descendants and accumulates scrollable overflow.
+func (c *ctx) place(b *lbox, ox, oy float64) {
+	c.all = append(c.all, b)
+	b.relX, b.relY = c.relativeOffset(b)
+	b.ax, b.ay = ox+b.relX, oy+b.relY
+	b.ovRight, b.ovBottom = b.ax+b.w, b.ay+b.h
+	b.ovLeft, b.ovTop = b.ax, b.ay
+	cx, cy := b.ax+b.bor[3]+b.pad[3], b.ay+b.bor[0]+b.pad[0]
+	_ = cx
+	_ = cy
+	acc := func(k *lbox) {
+		if k.hidden() {
+			return
+		}
+		r, bt, l, t := k.ovRight, k.ovBottom, k.ovLeft, k.ovTop
+		if k.hasTransform() {
+			x0, y0, x1, y1 := k.transformedBounds(k.ovLeft, k.ovTop, k.ovRight, k.ovBottom)
+			l, t, r, bt = x0, y0, x1, y1
+		}
+		if r > b.ovRight {
+			b.ovRight = r
+		}
+		if bt > b.ovBottom {
+			b.ovBottom = bt
+		}
+		if l < b.ovLeft {
+			b.ovLeft = l
+		}
+		if t < b.ovTop {
+			b.ovTop = t
+		}
+	}
+	// kids in flow
+	for _, k := range b.kids {
+		if k.oof || k.kind == kText || k.kind == kInline || k.kind == kBreak || k.kind == kMarker {
+			continue
+		}
+		if b.ifc {
+			continue
+		}
+		c.place(k, b.ax+k.x, b.ay+k.y)
+		if !b.clips() || true {
+			acc(k)
+		}
+	}
+	// inline content
+	if b.ifc {
+		c.placeInline(b)
+		for _, k := range b.inlineKids {
+			c.place(k, b.ax+k.x, b.ay+k.y)
+			acc(k)
+		}
+		for _, ln := range b.lines {
+			r := b.ax + b.bor[3] + b.pad[3] + ln.x + ln.contentW
+			bt := b.ay + b.bor[0] + b.pad[0] + ln.y + ln.h
+			if r > b.ovRight {
+				b.ovRight = r
+			}
+			if bt > b.ovBottom {
+				b.ovBottom = bt
+			}
+		}
+		for _, fb := range b.inlineFrags() {
+			if fb.R+0 > b.ovRight {
+				b.ovRight = fb.R
+			}
+		}
+	}
+	c.placeSpecial(b, acc)
+	// positioned descendants
+	for _, k := range b.oofKids {
+		if k.cbBox != b {
+			continue
+		}
+		var px, py float64
+		if b == c.rootBox && !b.isContainingBlockForAbs() && k.st.Position != "fixed" {
+			px, py = 0, 0
+		} else if k.st.Position == "fixed" && b == c.rootBox {
+			px, py = 0, 0
+		} else {
+			px, py = b.ax, b.ay
+		}
+		c.place(k, px+k.x, py+k.y)
+		if k.st.Position != "fixed" {
+			acc(k)
+		}
+	}
+	// sticky positioning at scroll offset 0
+	if b.st.Position == "sticky" {
+		c.applySticky(b)
+	}
+	// scroll sizes
+	b.scrollW = math.Max(b.ovRight, b.ax+b.w) - b.ax
+	b.scrollH = math.Max(b.ovBottom, b.ay+b.h) - b.ay
+	if b.clips() {
+		// content overflow of a scroll container does not propagate
+		myR, myB := b.ax+b.w, b.ay+b.h
+		b.scrollR, b.scrollB = b.ovRight, b.ovBottom
+		b.ovRight, b.ovBottom = myR, myB
+		b.ovLeft, b.ovTop = b.ax, b.ay
+	}
+}
+
+func (b *lbox) hidden() bool { return false }
+
+func (c *ctx) relativeOffset(b *lbox) (float64, float64) {
+	st := b.st
+	if st.Position != "relative" && st.Position != "sticky" {
+		return 0, 0
+	}
+	if st.Position == "sticky" {
+		return 0, 0
+	}
+	cbw, cbh := 0.0, -1.0
+	if b.lp != nil {
+		cbw = b.lp.w - b.lp.hExtra() - b.lp.sbW
+		if hh := b.lp.contentH; b.lp.st.Height.K != style.LAuto {
+			cbh = hh
+		}
+	}
+	var dx, dy float64
+	l, r, t, bt := st.Inset[3], st.Inset[1], st.Inset[0], st.Inset[2]
+	switch {
+	case l.K != style.LAuto:
+		dx = rl(l, cbw)
+	case r.K != style.LAuto:
+		dx = -rl(r, cbw)
+	}
+	switch {
+	case t.K != style.LAuto:
+		if !(t.HasPct() && cbh < 0) {
+			dy = rl(t, cbh)
+		}
+	case bt.K != style.LAuto:
+		if !(bt.HasPct() && cbh < 0) {
+			dy = -rl(bt, cbh)
+		}
+	}
+	return dx, dy
+}
+
+func (c *ctx) applySticky(b *lbox) {
+	st := b.st
+	// scrollport: viewport (nearest scroll container approximated by the viewport)
+	var sp Rect = Rect{0, 0, c.vw - c.sbViewport, c.vh}
+	for p := b.lp; p != nil; p = p.lp {
+		if p.clips() && p != c.rootBox {
+			sp = Rect{p.ax + p.bor[3], p.ay + p.bor[0], p.w - p.bor[1] - p.bor[3], p.h - p.bor[0] - p.bor[2]}
+			break
+		}
+		if p.lp == nil {
+			break
+		}
+	}
+	var dx, dy float64
+	t, bt := st.Inset[0], st.Inset[2]
+	l, r := st.Inset[3], st.Inset[1]
+	if t.K != style.LAuto {
+		top := sp.Y + rl(t, sp.H)
+		if b.ay < top {
+			dy = top - b.ay
+		}
+	} else if bt.K != style.LAuto {
+		bot := sp.Y + sp.H - rl(bt, sp.H)
+		if b.ay+b.h > bot {
+			dy = bot - (b.ay + b.h)
+		}
+	}
+	if l.K != style.LAuto {
+		left := sp.X + rl(l, sp.W)
+		if b.ax < left {
+			dx = left - b.ax
+		}
+	} else if r.K != style.LAuto {
+		rt := sp.X + sp.W - rl(r, sp.W)
+		if b.ax+b.w > rt {
+			dx = rt - (b.ax + b.w)
+		}
+	}
+	// limited by the containing block
+	if b.lp != nil {
+		cb := b.lp
+		if dy > 0 {
+			maxDy := cb.ay + cb.h - cb.bor[2] - cb.pad[2] - (b.ay + b.h) - b.mar[2]
+			if dy > maxDy {
+				dy = math.Max(0, maxDy)
+			}
+		}
+		if dy < 0 {
+			minDy := cb.ay + cb.bor[0] + cb.pad[0] - b.ay + b.mar[0]
+			if dy < minDy {
+				dy = math.Min(0, minDy)
+			}
+		}
+	}
+	if dx != 0 || dy != 0 {
+		c.shiftTree(b, dx, dy)
+	}
+}
+
+func (c *ctx) shiftTree(b *lbox, dx, dy float64) {
+	b.ax += dx
+	b.ay += dy
+	b.relX += dx
+	b.relY += dy
+	b.ovRight += dx
+	b.ovBottom += dy
+	b.ovLeft += dx
+	b.ovTop += dy
+	for _, k := range b.kids {
+		if k.kind == kBlock || k.kind == kAtomic {
+			c.shiftTree(k, dx, dy)
+		}
+	}
+	for _, k := range b.inlineKids {
+		c.shiftTree(k, dx, dy)
+	}
+	for _, k := range b.oofKids {
+		if k.cbBox == b {
+			c.shiftTree(k, dx, dy)
+		}
+	}
+	for _, fr := range b.fragsAbs {
+		_ = fr
+	}
+	b.shiftFrags(dx, dy)
+}
+
+// ---- transforms ------------------------------------------------------------------------------
+
+func (b *lbox) hasTransform() bool {
+	st := b.st
+	return len(st.Transform) > 0 || len(st.Translate) > 0 || len(st.Rotate) > 0 || len(st.Scale) > 0
+}
+
+func (b *lbox) matrixFor(w, h float64) [6]float64 {
+	st := b.st
+	m := [6]float64{1, 0, 0, 1, 0, 0}
+	mul := func(a, b [6]float64) [6]float64 {
+		return [6]float64{a[0]*b[0] + a[2]*b[1], a[1]*b[0] + a[3]*b[1], a[0]*b[2] + a[2]*b[3], a[1]*b[2] + a[3]*b[3],
+			a[0]*b[4] + a[2]*b[5] + a[4], a[1]*b[4] + a[3]*b[5] + a[5]}
+	}
+	apply := func(ops []style.TOp) {
+		for _, op := range ops {
+			var t [6]float64 = [6]float64{1, 0, 0, 1, 0, 0}
+			lv := func(i int, base float64) float64 { return op.A[i].Resolve(base) }
+			num := func(i int, d float64) float64 {
+				if i < op.N {
+					return op.A[i].V
+				}
+				return d
+			}
+			switch op.Fn {
+			case "translate":
+				t[4] = lv(0, w)
+				if op.N > 1 {
+					t[5] = lv(1, h)
+				}
+			case "translatex":
+				t[4] = lv(0, w)
+			case "translatey":
+				t[5] = lv(0, h)
+			case "translate3d":
+				t[4] = lv(0, w)
+				t[5] = lv(1, h)
+			case "scale":
+				sx := num(0, 1)
+				sy := sx
+				if op.N > 1 {
+					sy = num(1, sx)
+				}
+				t[0], t[3] = sx, sy
+			case "scalex":
+				t[0] = num(0, 1)
+			case "scaley":
+				t[3] = num(0, 1)
+			case "scale3d":
+				t[0], t[3] = num(0, 1), num(1, 1)
+			case "rotate", "rotatez":
+				a := num(0, 0) * math.Pi / 180
+				t[0], t[1], t[2], t[3] = math.Cos(a), math.Sin(a), -math.Sin(a), math.Cos(a)
+			case "rotatex":
+				a := num(0, 0) * math.Pi / 180
+				t[3] = math.Cos(a)
+			case "rotatey":
+				a := num(0, 0) * math.Pi / 180
+				t[0] = math.Cos(a)
+			case "skew":
+				ax := num(0, 0) * math.Pi / 180
+				ay := num(1, 0) * math.Pi / 180
+				t[2], t[1] = math.Tan(ax), math.Tan(ay)
+			case "skewx":
+				t[2] = math.Tan(num(0, 0) * math.Pi / 180)
+			case "skewy":
+				t[1] = math.Tan(num(0, 0) * math.Pi / 180)
+			case "matrix":
+				t = [6]float64{num(0, 1), num(1, 0), num(2, 0), num(3, 1), num(4, 0), num(5, 0)}
+			default:
+				continue
+			}
+			m = mul(m, t)
+		}
+	}
+	// order: translate, rotate, scale, then transform
+	apply(st.Translate)
+	apply(st.Rotate)
+	apply(st.Scale)
+	apply(st.Transform)
+	return m
+}
+
+// fullMatrix returns the matrix about the transform origin in absolute coordinates.
+func (b *lbox) fullMatrix() [6]float64 {
+	w, h := b.w, b.h
+	m := b.matrixFor(w, h)
+	ox := b.st.TransformOrigin[0].Resolve(w)
+	oy := b.st.TransformOrigin[1].Resolve(h)
+	px, py := b.ax+ox, b.ay+oy
+	// translate(p) * m * translate(-p)
+	e := m[4] + px - (m[0]*px + m[2]*py)
+	f := m[5] + py - (m[1]*px + m[3]*py)
+	return [6]float64{m[0], m[1], m[2], m[3], e, f}
+}
+
+func (b *lbox) transformedBounds(l, t, r, bt float64) (float64, float64, float64, float64) {
+	m := b.fullMatrix()
+	xs := []float64{l, r, l, r}
+	ys := []float64{t, t, bt, bt}
+	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+	for i := range xs {
+		x := m[0]*xs[i] + m[2]*ys[i] + m[4]
+		y := m[1]*xs[i] + m[3]*ys[i] + m[5]
+		x0, x1 = math.Min(x0, x), math.Max(x1, x)
+		y0, y1 = math.Min(y0, y), math.Max(y1, y)
+	}
+	return x0, y0, x1, y1
+}
+
+// ---- Box output ----------------------------------------------------------------------------------
+
+func (c *ctx) buildBoxes() {
+	res := c.res
+	// every element that has a style
+	for n, st := range c.styles {
+		bs := c.byNode[n]
+		if st.Display == "none" {
+			res.Boxes[n] = &Box{Display: "none", Position: st.Position, Visible: false, Transform: [6]float64{1, 0, 0, 1, 0, 0}}
+			continue
+		}
+		if len(bs) == 0 {
+			res.Boxes[n] = &Box{Display: st.Display, Position: st.Position, Visible: st.Visibility == "visible", Transform: [6]float64{1, 0, 0, 1, 0, 0}}
+			continue
+		}
+		bx := &Box{Display: st.Display, Position: st.Position, Visible: st.Visibility == "visible", Transform: [6]float64{1, 0, 0, 1, 0, 0}}
+		bx.ZIndex = 0
+		if !st.ZAuto {
+			bx.ZIndex = st.ZIndex
+		}
+		var border Rect
+		first := true
+		for _, b := range bs {
+			var r Rect
+			if b.kind == kInline {
+				for _, f := range b.absFrags {
+					bx.Frags = append(bx.Frags, f)
+					r = r.union(f)
+				}
+				if len(b.absFrags) == 0 {
+					continue
+				}
+			} else {
+				r = Rect{b.ax, b.ay, b.w, b.h}
+				if b.kind == kAtomic || b.kind == kBlock {
+					bx.Margin = b.mar
+				}
+			}
+			if first {
+				border = r
+				first = false
+			} else {
+				border = border.union(r)
+			}
+		}
+		main := bs[0]
+		for _, b := range bs {
+			if b.kind != kInline {
+				main = b
+				break
+			}
+		}
+		bx.Border = border
+		if main.kind != kInline {
+			bx.Padding = Rect{border.X + main.bor[3], border.Y + main.bor[0], border.W - main.bor[1] - main.bor[3], border.H - main.bor[0] - main.bor[2]}
+			bx.Content = Rect{bx.Padding.X + main.pad[3], bx.Padding.Y + main.pad[0], bx.Padding.W - main.pad[1] - main.pad[3] - main.sbW, bx.Padding.H - main.pad[0] - main.pad[2] - main.sbH}
+			bx.ClientW, bx.ClientH = bx.Padding.W-main.sbW, bx.Padding.H-main.sbH
+			bx.ScrollW, bx.ScrollH = math.Max(main.scrollW, bx.ClientW), math.Max(main.scrollH, bx.ClientH)
+			if main.clips() {
+				sw := main.scrollR - main.ax - main.bor[3]
+				sh := main.scrollB - main.ay - main.bor[0]
+				bx.ScrollW, bx.ScrollH = math.Max(sw, bx.ClientW), math.Max(sh, bx.ClientH)
+			}
+			if main.kind == kBlock || main.kind == kAtomic {
+				d := st.Display
+				if main.kind == kBlock {
+					d = style.Blockify(d)
+				}
+				bx.Display = d
+			}
+			if main.hasTransform() {
+				bx.HasTransform = true
+				bx.Transform = main.fullMatrix()
+			}
+			if main == c.bodyBox || main == c.rootBox {
+				// html/body client sizes refer to the viewport for the root
+			}
+			bx.OffsetParent = c.offsetParent(main)
+		} else {
+			bx.Padding, bx.Content = border, border
+			bx.ClientW, bx.ClientH = border.W, border.H
+			bx.ScrollW, bx.ScrollH = border.W, border.H
+		}
+		res.Boxes[n] = bx
+	}
+	if rb := res.Boxes[c.docEl]; rb != nil {
+		rb.ClientW, rb.ClientH = c.vw-c.sbViewport, c.vh
+		rb.ScrollW, rb.ScrollH = res.Width, res.Height
+	}
+}
+
+func (c *ctx) offsetParent(b *lbox) *html.Node {
+	for p := b.parent; p != nil; p = p.parent {
+		if p.n == nil {
+			continue
+		}
+		if p.st.Position != "static" || p.n.Data == "body" || p.n.Data == "td" || p.n.Data == "th" || p.n.Data == "table" {
+			return p.n
+		}
+	}
+	return nil
+}
+
+func sortedNodes(m map[*html.Node]*Box) []*html.Node {
+	var out []*html.Node
+	for n := range m {
+		out = append(out, n)
+	}
+	sort.Slice(out, func(i, j int) bool { return false })
+	return out
+}

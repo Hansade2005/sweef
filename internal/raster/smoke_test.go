@@ -11,9 +11,9 @@ func TestSmokeDump(t *testing.T) {
 		t.Skip()
 	}
 	c := NewContext(300, 100)
-	c.SetFill(Paint{Color: Color{1, 1, 1, 1}})
+	c.SetFill(Brush{Color: Color{1, 1, 1, 1}})
 	c.FillRect(0, 0, 300, 100)
-	c.SetFill(Paint{Color: Black})
+	c.SetFill(Brush{Color: Black})
 	c.SetFont("20px sans-serif")
 	c.FillText("Hello, World fi", 10.3, 30.4, 0)
 	c.SetFont("13px monospace")
