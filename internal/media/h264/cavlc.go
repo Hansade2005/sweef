@@ -81,7 +81,7 @@ func (t *vlcTable) read(r *bitReader) (int, bool) {
 // (-1 for chroma DC). Levels are written to lv in scan order [0,maxNum).
 // It returns TotalCoeff, or -1 on a bitstream error.
 func (d *Decoder) cavlcBlock(nC, maxNum int, lv *[64]int32) int {
-	r := d.br
+	r := d.resBr
 	for i := 0; i < maxNum; i++ {
 		lv[i] = 0
 	}

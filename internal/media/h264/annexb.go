@@ -39,7 +39,7 @@ func SplitAccessUnits(es []byte) [][]byte {
 					d.pps[p.ID] = p
 				}
 			}
-		case 1, 5:
+		case 1, 2, 5:
 			h, err := d.parseSliceHeader(newBitReader(unescape(n[1:])), typ, int(n[0]>>5)&3)
 			if err == nil {
 				if first != nil && d.isNewPictureFrom(first, h) {

@@ -198,6 +198,18 @@ func (p *SVGTextPath) init() {
 	}
 }
 
+// Scale multiplies the path (and its start offset) by k.
+func (p *SVGTextPath) Scale(k float64) {
+	for _, c := range p.Contours {
+		for i := range c {
+			c[i][0] *= k
+			c[i][1] *= k
+		}
+	}
+	p.Start *= k
+	p.inited = false
+}
+
 // Length is the total length of all contours.
 func (p *SVGTextPath) Length() float64 { p.init(); return p.total }
 

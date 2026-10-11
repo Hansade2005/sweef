@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff}</style></head><body>
+<svg width="1280" height="800" viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg" font-family="Liberation Sans" >
+<defs><filter id="bl"><feGaussianBlur stdDeviation="1.5"/></filter><clipPath id="cp"><rect x="0" y="0" width="60" height="30"/></clipPath>
+<linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#c00"/><stop offset="1" stop-color="#00c"/></linearGradient>
+<mask id="mk"><rect x="0" y="0" width="200" height="40" fill="#fff"/><circle cx="60" cy="20" r="12" fill="#000"/></mask></defs>
+<svg x="20" y="10" width="300" height="100" viewBox="0 0 100 33.3"><text x="2" y="20" font-size="9">ViewBox scaled 3x text</text></svg>
+<svg x="340" y="10" width="300" height="100" viewBox="0 0 150 100" preserveAspectRatio="none"><text x="3" y="40" font-size="12">Non-uniform viewBox</text></svg>
+<svg x="660" y="10" width="300" height="100" viewBox="0 0 400 100"><g transform="translate(10 20) rotate(6)"><text font-size="22" x="0" y="30">Nested scale rotate</text></g></svg>
+<g transform="scale(1.3) translate(20 100) skewX(-12)"><text x="0" y="0" font-size="17">Nested transforms skew</text></g>
+<g transform="translate(400 160)"><g transform="rotate(10)"><g transform="scale(1.4,0.9)"><text font-size="15">Three levels deep text</text></g></g></g>
+<text x="20" y="250" font-size="40" fill="#e8b" stroke="#303" stroke-width="3" paint-order="stroke">Paint order</text>
+<text x="300" y="250" font-size="40" fill="#8eb" stroke="#303" stroke-width="2" stroke-linejoin="round">Stroke fill</text>
+<text transform="translate(640 250) scale(2 0.6)" font-size="30" fill="none" stroke="#036" stroke-width="2">Stroke non-uniform</text>
+<text transform="translate(20 330) skewX(25)" font-size="30" fill="#a60" stroke="#000" stroke-width="1.5" stroke-dasharray="4 2">Dashed skew</text>
+<text transform="translate(420 330) rotate(-8)" font-size="34" fill="url(#lg)" font-weight="700">Gradient fill rotated</text>
+<text x="20" y="400" font-size="26" filter="url(#bl)">Blurred text</text>
+<text x="250" y="400" font-size="40" clip-path="url(#cp)" transform="translate(0 0)">Clipped text sample</text>
+<text x="500" y="400" font-size="30" mask="url(#mk)" transform="translate(0 -30) rotate(3 500 400)">Masked text sample</text>
+<text x="20" y="470" font-size="18" dominant-baseline="middle" transform="rotate(5 20 470)">Middle baseline</text>
+<text x="260" y="470" font-size="18" dominant-baseline="hanging" transform="skewX(10)">Hanging baseline</text>
+<text x="520" y="470" font-size="18" dominant-baseline="central">Central baseline</text>
+<text x="760" y="470" font-size="18" dominant-baseline="text-after-edge" transform="rotate(-5 760 470)">After edge</text>
+<text x="20" y="540" font-size="18" text-anchor="middle" transform="rotate(10 120 540)">Anchor middle rotated</text>
+<text x="400" y="540" font-size="18" text-anchor="end" transform="skewX(-15)">Anchor end skew</text>
+<text x="20" y="600" font-size="18" baseline-shift="super">Super <tspan baseline-shift="sub">sub</tspan> <tspan baseline-shift="5">num</tspan></text>
+<text x="400" y="600" font-size="18" letter-spacing="2" word-spacing="6" transform="rotate(3 400 600)">Letter word spacing</text>
+<text x="20" y="660" font-size="18" text-decoration="underline" transform="skewX(-10)">Underlined skew</text>
+<g opacity=".5"><text x="400" y="660" font-size="30" fill="#c00">Group opacity</text></g>
+<text x="700" y="660" font-size="22" fill-opacity=".5" fill="#00c" stroke="#000" stroke-width="2" stroke-opacity=".5">Alpha stroke fill</text>
+<text x="20" y="720" font-size="14" font-size-adjust="0.5">Nothing special wave</text>
+<text x="600" y="740" font-size="60" transform="scale(1.1) rotate(-4)">Big Rotated</text>
+</svg></body></html>

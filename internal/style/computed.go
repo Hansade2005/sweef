@@ -72,6 +72,7 @@ type TOp struct {
 	Fn string // matrix, translate, translateX, translateY, scale, scaleX, scaleY, rotate, skew, skewX, skewY, translate3d...
 	A  [6]Length
 	N  int
+	M  *[16]float64 // matrix3d: the 16 values in CSS (column-major) order
 }
 
 // FilterFn is one filter function.
@@ -277,6 +278,10 @@ type Computed struct {
 	TOriginZ                 float64
 	Translate, Rotate, Scale []TOp
 	Perspective              float64
+	PerspectiveOrigin        [2]Length // perspective-origin (default 50% 50%)
+	TransformStyle           string    // "" (flat) or "preserve-3d"
+	BackfaceHidden           bool      // backface-visibility: hidden
+	TransformBox             string    // transform-box: "" (view-box / border-box per element), content-box, border-box, fill-box, stroke-box, view-box
 	Filter                   []FilterFn
 	BackdropFilter           []FilterFn
 	MixBlend                 string
@@ -413,6 +418,7 @@ func Initial() *Computed {
 	c.ContentVisibility = "visible"
 	c.MixBlend = "normal"
 	c.TransformOrigin = [2]Length{Pct(50), Pct(50)}
+	c.PerspectiveOrigin = [2]Length{Pct(50), Pct(50)}
 	c.OutlineStyle = "none"
 	c.OutlineWidth = 3
 	for i := range c.BorderStyle {

@@ -11,7 +11,7 @@ var errRefMismatch = errors.New("av1: reference frame mismatch")
 func (d *Decoder) setupFrame(fh *frameHdr) error {
 	s := d.seq
 	if fh.frameWidth <= 0 || fh.frameHeight <= 0 || fh.upscaledWidth > 65536 || fh.frameHeight > 65536 ||
-		fh.miCols*fh.miRows > 1<<22 {
+		fh.miCols*fh.miRows > 1<<24 {
 		return ErrUnsupported
 	}
 	f := &frameDec{d: d, seq: s, fh: fh}
@@ -154,6 +154,8 @@ func (d *Decoder) finishFrame() error {
 		featData:      fh.featData,
 		showable:      fh.showable,
 		mono:          d.seq.mono,
+		spatialID:     d.spatialID,
+		temporalID:    d.temporalID,
 	}
 	rf.savedOrderHints = fh.orderHints
 	cdfCopy := finalCdf

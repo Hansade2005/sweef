@@ -181,6 +181,10 @@ type frameHdr struct {
 
 	// header size in bytes (used for OBU_FRAME)
 	hdrBits int
+	// bit positions used by the test stream rewriter: the error_resilient_mode
+	// field and the refresh_frame_flags field (read or implied).
+	posErrorRes, posRefresh   int
+	posShortSig, posRefIdxEnd int // frame_refs_short_signaling flag, end of ref_frame_idx[]
 }
 
 func (s *seqHdr) relDist(a, b int) int {

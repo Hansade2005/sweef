@@ -25,6 +25,8 @@ type Picture struct {
 	// Color description from the sequence header.
 	ColorPrimaries, TransferCharacteristics, MatrixCoefficients int
 	FullRange                                                   bool
+	// Layer of the OBU the picture was coded in (scalable streams).
+	SpatialID, TemporalID int
 }
 
 // frameBuf is a set of sample planes.
@@ -77,6 +79,8 @@ type refFrame struct {
 	featData        [maxSegments][segLvlMax]int
 	showable        bool
 	mono            bool
+	spatialID       int
+	temporalID      int
 }
 
 // Decoder decodes a sequence of temporal units.
@@ -98,6 +102,39 @@ type Decoder struct {
 
 	temporalID, spatialID int
 	out                   []*Picture
+
+	// OperatingPoint selects the operating point of a scalable stream (0 is
+	// the highest quality one in practice) and AllLayers makes every shown
+	// frame an output; by default only the highest spatial layer of the
+	// operating point is output for each temporal unit, like dav1d.
+	OperatingPoint int
+	AllLayers      bool
+
+	newTU bool     // the next output picture is the first of a temporal unit
+	cache *Picture // spatial layer picture waiting for a higher layer
+}
+
+// opIdc returns operating_point_idc of the selected operating point.
+func (d *Decoder) opIdc() int {
+	if d.seq == nil {
+		return 0
+	}
+	op := d.OperatingPoint
+	if op < 0 || op >= d.seq.opCnt {
+		op = 0
+	}
+	return d.seq.opIdc[op]
+}
+
+// maxSpatialID is the highest spatial layer of the operating point.
+func (d *Decoder) maxSpatialID() int {
+	m := d.opIdc() >> 8
+	n := 0
+	for m > 1 {
+		m >>= 1
+		n++
+	}
+	return n
 }
 
 // NewDecoder returns a decoder with no state.
@@ -105,7 +142,7 @@ func NewDecoder() *Decoder { return &Decoder{} }
 
 // Reset discards all decoding state (call before decoding from a key frame).
 func (d *Decoder) Reset() {
-	*d = Decoder{}
+	*d = Decoder{OperatingPoint: d.OperatingPoint, AllLayers: d.AllLayers}
 }
 
 // Decode decodes one temporal unit (a sequence of OBUs in the low-overhead
@@ -113,6 +150,7 @@ func (d *Decoder) Reset() {
 func (d *Decoder) Decode(data []byte) (pics []*Picture, err error) {
 	d.out = nil
 	defer func() {
+		defer func() { d.endTemporalUnit(); pics = d.out }()
 		if r := recover(); r != nil {
 			// Corrupt streams can index outside the tables; report an error
 			// rather than crashing the caller.
@@ -121,6 +159,10 @@ func (d *Decoder) Decode(data []byte) (pics []*Picture, err error) {
 			pics, err = d.out, fmt.Errorf("av1: corrupt stream: %v", r)
 		}
 	}()
+	if IsAnnexB(data) {
+		err := d.decodeAnnexB(data)
+		return d.out, err
+	}
 	pos := 0
 	for pos < len(data) {
 		n, err := d.decodeOBU(data[pos:])
@@ -165,9 +207,10 @@ func (d *Decoder) decodeOBU(data []byte) (int, error) {
 	payload := data[hdrBytes : hdrBytes+obuSize]
 	total := hdrBytes + obuSize
 	if obuType != obuSequenceHeader && obuType != obuTemporalDelimiter && d.seq != nil &&
-		d.seq.operatingPointIdc != 0 && extFlag {
-		inT := (d.seq.operatingPointIdc >> uint(temporalID)) & 1
-		inS := (d.seq.operatingPointIdc >> uint(spatialID+8)) & 1
+		d.opIdc() != 0 && extFlag {
+		idc := d.opIdc()
+		inT := (idc >> uint(temporalID)) & 1
+		inS := (idc >> uint(spatialID+8)) & 1
 		if inT == 0 || inS == 0 {
 			return total, nil
 		}
@@ -183,6 +226,7 @@ func (d *Decoder) decodeOBU(data []byte) (int, error) {
 		d.seq = s
 	case obuTemporalDelimiter:
 		d.seenFrameHeader = false
+		d.newTU = true
 	case obuFrameHeader, obuRedundantFrameHeader:
 		if d.seq == nil {
 			return 0, errNoSeq

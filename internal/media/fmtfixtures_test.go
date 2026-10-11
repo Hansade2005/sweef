@@ -61,7 +61,7 @@ func TestCanPlayNativeVideoProfiles(t *testing.T) {
 		`video/mp4; codecs="avc1.6E0033"`:     "probably", // High 10
 		`video/mp4; codecs="avc1.7A0033"`:     "probably", // High 4:2:2
 		`video/mp4; codecs="avc1.F4001F"`:     "probably", // High 4:4:4 Predictive
-		`video/mp4; codecs="avc1.58A01E"`:     "maybe",    // Extended
+		`video/mp4; codecs="avc1.58A01E"`:     "probably", // Extended
 		`video/webm; codecs="vp09.00.10.08"`:  "probably",
 		`video/webm; codecs="vp09.01.20.08"`:  "probably",
 		`video/webm; codecs="vp09.02.10.10"`:  "probably",

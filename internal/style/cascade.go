@@ -820,7 +820,8 @@ var initialVals = map[string]string{
 	"visibility": "visible", "cursor": "auto", "list-style": "disc outside none", "list-style-type": "disc", "table-layout": "auto", "border-collapse": "separate",
 	"text-shadow": "none", "filter": "none", "aspect-ratio": "auto", "object-fit": "fill", "pointer-events": "auto", "text-overflow": "clip",
 	"grid-template-columns": "none", "grid-template-rows": "none", "grid-column": "auto", "grid-row": "auto", "grid-area": "auto", "grid-auto-flow": "row",
-	"font-variant": "normal", "text-decoration-color": "currentcolor", "text-decoration-style": "solid", "mix-blend-mode": "normal", "transform-origin": "50% 50%",
+	"font-variant": "normal", "text-decoration-color": "currentcolor", "text-decoration-style": "solid", "mix-blend-mode": "normal", "transform-origin": "50% 50%", "perspective": "none", "perspective-origin": "50% 50%", "transform-style": "flat", "backface-visibility": "visible", "transform-box": "view-box",
+	"translate": "none", "rotate": "none", "scale": "none",
 }
 
 func initialValue(name string) (string, bool) {

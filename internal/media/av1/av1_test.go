@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -196,7 +197,23 @@ func TestFileCompare(t *testing.T) {
 		t.Fatal(err)
 	}
 	resetCoverage()
-	pics, err := NewDecoder().Decode(data)
+	dec := NewDecoder()
+	if v, e := strconv.Atoi(os.Getenv("AV1_OP")); e == nil {
+		dec.OperatingPoint = v
+	}
+	dec.AllLayers = os.Getenv("AV1_ALL") == "1"
+	var pics []*Picture
+	if tus := os.Getenv("AV1_TU"); tus == "1" {
+		for _, tu := range splitTemporalUnits(data) {
+			ps, e := dec.Decode(tu)
+			if e != nil {
+				err = e
+			}
+			pics = append(pics, ps...)
+		}
+	} else {
+		pics, err = dec.Decode(data)
+	}
 	if err != nil {
 		t.Logf("decode error after %d pictures: %v", len(pics), err)
 	}
@@ -255,4 +272,117 @@ func BenchmarkDecode(b *testing.B) {
 		frames += len(pics)
 	}
 	b.ReportMetric(float64(frames)/b.Elapsed().Seconds(), "fps")
+}
+
+func lebBytes(v int) []byte {
+	var out []byte
+	for {
+		c := byte(v & 0x7f)
+		v >>= 7
+		if v != 0 {
+			out = append(out, c|0x80)
+		} else {
+			return append(out, c)
+		}
+	}
+}
+
+// toAnnexB rewrites a low-overhead stream as Annex B temporal units. With
+// keepSize the OBUs keep their obu_size fields (allowed by the format),
+// otherwise they are stripped.
+func toAnnexB(data []byte, keepSize bool) []byte {
+	var out []byte
+	for _, tu := range splitTemporalUnits(data) {
+		var units [][]byte // frame units
+		var cur []byte
+		frames := 0
+		for pos := 0; pos < len(tu); {
+			b := &bitReader{buf: tu[pos:]}
+			b.f(1)
+			typ := b.f(4)
+			ext := b.flag()
+			b.flag()
+			b.f(1)
+			var extb byte
+			if ext {
+				extb = byte(b.f(8))
+			}
+			size := b.leb128()
+			hdrLen := b.pos / 8
+			obu := tu[pos : pos+hdrLen+size]
+			if !keepSize {
+				h := []byte{tu[pos] &^ 2}
+				if ext {
+					h = append(h, extb)
+				}
+				obu = append(h, tu[pos+hdrLen:pos+hdrLen+size]...)
+			}
+			if (typ == obuFrame || typ == obuFrameHeader) && frames > 0 {
+				units = append(units, cur)
+				cur = nil
+			}
+			if typ == obuFrame || typ == obuFrameHeader {
+				frames++
+			}
+			cur = append(cur, lebBytes(len(obu))...)
+			cur = append(cur, obu...)
+			pos += hdrLen + size
+		}
+		units = append(units, cur)
+		var body []byte
+		for _, u := range units {
+			body = append(body, lebBytes(len(u))...)
+			body = append(body, u...)
+		}
+		out = append(out, lebBytes(len(body))...)
+		out = append(out, body...)
+	}
+	return out
+}
+
+// TestAnnexB decodes every fixture rewritten in the Annex B format (with and
+// without obu_size fields) and requires the same pictures.
+func TestAnnexB(t *testing.T) {
+	for _, f := range fixtureList(t) {
+		name := strings.TrimSuffix(filepath.Base(f), ".obu")
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := NewDecoder().Decode(data)
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		for _, keep := range []bool{false, true} {
+			ab := toAnnexB(data, keep)
+			if !IsAnnexB(ab) {
+				t.Fatalf("%s keep=%v: not detected as Annex B", name, keep)
+			}
+			got, err := NewDecoder().Decode(ab)
+			if err != nil {
+				t.Fatalf("%s keep=%v: %v", name, keep, err)
+			}
+			if fmt.Sprint(md5s(got)) != fmt.Sprint(md5s(want)) {
+				t.Fatalf("%s keep=%v: pictures differ", name, keep)
+			}
+			// one temporal unit per call
+			d := NewDecoder()
+			var all []*Picture
+			for p := 0; p < len(ab); {
+				sz, n, _ := lebAt(ab, p)
+				ps, err := d.Decode(ab[p : p+n+sz])
+				if err != nil {
+					t.Fatal(err)
+				}
+				all = append(all, ps...)
+				p += n + sz
+			}
+			if fmt.Sprint(md5s(all)) != fmt.Sprint(md5s(want)) {
+				t.Fatalf("%s keep=%v: per-temporal-unit decoding differs", name, keep)
+			}
+		}
+		if IsAnnexB(data) {
+			t.Fatalf("%s: section 5 stream detected as Annex B", name)
+		}
+	}
 }

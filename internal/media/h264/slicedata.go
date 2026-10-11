@@ -107,6 +107,11 @@ func (d *Decoder) decodeSlice(h *sliceHeader, r *bitReader) error {
 			d.setupImplicit(h)
 		}
 	}
+	d.resBr = r
+	d.dpOn = h.nalType == 2
+	if d.dpOn && len(d.dpLost) != len(d.sliceTable) {
+		d.dpLost = make([]uint16, len(d.sliceTable))
+	}
 	d.qp = h.qp
 	d.lastDQ = false
 	d.cabacOn = h.pps.CABAC

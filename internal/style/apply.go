@@ -886,11 +886,56 @@ func (s *cstate) apply(name, v, l string) bool {
 			return false
 		}
 		c.TransformOrigin = [2]Length{x, y}
-	case "perspective":
+		c.TOriginZ = 0
+		if len(f) == 3 {
+			z, ok := s.px(f[2])
+			if !ok {
+				return false
+			}
+			c.TOriginZ = z
+		}
+	case "perspective", "-webkit-perspective":
 		if l == "none" {
 			c.Perspective = 0
 		} else if x, ok := s.px(l); ok {
 			c.Perspective = x
+		} else {
+			return false
+		}
+	case "perspective-origin", "-webkit-perspective-origin":
+		f := fields(l)
+		if len(f) == 0 || len(f) > 2 {
+			return false
+		}
+		x, y, ok := s.positionPair(f)
+		if !ok {
+			return false
+		}
+		c.PerspectiveOrigin = [2]Length{x, y}
+	case "transform-style", "-webkit-transform-style":
+		switch l {
+		case "flat":
+			c.TransformStyle = ""
+		case "preserve-3d":
+			c.TransformStyle = "preserve-3d"
+		default:
+			return false
+		}
+	case "backface-visibility", "-webkit-backface-visibility":
+		switch l {
+		case "visible":
+			c.BackfaceHidden = false
+		case "hidden":
+			c.BackfaceHidden = true
+		default:
+			return false
+		}
+	case "transform-box":
+		switch l {
+		case "content-box", "border-box", "fill-box", "stroke-box", "view-box":
+			c.TransformBox = l
+		default:
+			return false
 		}
 	// ---- fonts & text -----------------------------------------------------------------
 	case "font":

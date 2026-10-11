@@ -1,0 +1,20 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>xf3d_basic</title>
+<style>
+body { margin: 20px; font: 14px Arial, sans-serif; background: #fff; }
+.cell { display: inline-block; vertical-align: top; width: 150px; height: 110px; margin: 10px 20px; position: relative; }
+.b { width: 100px; height: 70px; background: #fcb; border: 3px solid #a33; padding: 4px; box-sizing: border-box; }
+.rx { transform: rotateX(50deg) } .ry { transform: rotateY(50deg) } .rz { transform: rotateZ(30deg) }
+.r3 { transform: rotate3d(1, 1, 0, 45deg) } .tz { transform: translateZ(40px) }
+.p1 { transform: perspective(300px) rotateY(40deg) } .p2 { transform: perspective(200px) translateZ(80px) }
+.s3 { transform: scale3d(1.2, 0.8, 2) } .sz { transform: scaleZ(3) }
+.m3 { transform: matrix3d(1,0,0,0, 0,1,0,0, 0,0,1,-0.004, 20,10,0,1) }
+.i1 { rotate: x 40deg } .i2 { rotate: 1 1 1 60deg } .i3 { translate: 10px 20px 30px; scale: 1 1 2; rotate: 20deg }
+.o1 { transform: perspective(400px) rotateX(35deg); transform-origin: top left } .o2 { transform: perspective(400px) rotateY(-35deg); transform-origin: 0 0 -30px }
+.t3 { transform: translate3d(20px, 10px, 50px) rotateY(30deg) }
+</style></head><body>
+<div class="cell"><div class="b rx">rotateX</div></div><div class="cell"><div class="b ry">rotateY</div></div><div class="cell"><div class="b rz">rotateZ</div></div><div class="cell"><div class="b r3">rotate3d</div></div>
+<div class="cell"><div class="b tz">translateZ</div></div><div class="cell"><div class="b p1">perspective()</div></div><div class="cell"><div class="b p2">persp tz</div></div><div class="cell"><div class="b s3">scale3d</div></div>
+<div class="cell"><div class="b sz">scaleZ</div></div><div class="cell"><div class="b m3">matrix3d</div></div><div class="cell"><div class="b i1">rotate x</div></div><div class="cell"><div class="b i2">rotate axis</div></div>
+<div class="cell"><div class="b i3">individual</div></div><div class="cell"><div class="b o1">origin tl</div></div><div class="cell"><div class="b o2">origin z</div></div><div class="cell"><div class="b t3">translate3d</div></div>
+</body></html>

@@ -1,0 +1,382 @@
+package raster
+
+import (
+	"fmt"
+	"math"
+	"os"
+	"strings"
+)
+
+var svgTextDebug = os.Getenv("SVGTEXT_DEBUG") != ""
+
+// Painting of SVG text in Blink's scaled space (see svg_textlayout.go): the
+// canvas matrix is the screen matrix times 1/k and glyph origins are the
+// scaled-space positions, so the device matrix of a glyph and its origin are
+// computed in single precision exactly as the product of those matrices.
+
+// svgPG is one glyph ready for rasterization: its device 2x2 matrix, device
+// origin (without the sampling offset, for glyphs drawn as paths) and the
+// integer pixel and quarter-pixel subpixel cell Skia puts it in.
+type svgPG struct {
+	g          Glyph
+	a, b, c, d float64
+	dx, dy     float64
+	ix, iy     int
+	sux, suy   int
+}
+
+// svgTextXf maps the scaled text space to the device.
+type svgTextXf struct {
+	m          Matrix
+	k          float64
+	a, b, c, d float32 // device matrix times 1/k, single precision
+}
+
+func newSvgTextXf(m Matrix, k float64) svgTextXf {
+	t := svgTextXf{m: m, k: k}
+	t.a, t.b, t.c, t.d = float32(m[0]), float32(m[1]), float32(m[2]), float32(m[3])
+	if k != 1 {
+		ik := float32(1 / float32(k))
+		t.a, t.b, t.c, t.d = t.a*ik, t.b*ik, t.c*ik, t.d*ik
+	}
+	return t
+}
+
+// fragXf is the matrix of one painted fragment (SkMatrix of the canvas
+// pre-translated to the fragment origin and post-translated by Skia's
+// sampling offset) together with the glyph-space matrix.
+type fragXf struct {
+	a, b, c, d float32 // glyph-space matrix (rotation and scale included)
+	px, py     float32 // origin mapped to the device, no sampling offset
+	tx, ty     float32 // the same plus the sampling offset
+	axis       int
+}
+
+// frag builds the matrix of a fragment whose origin is (x, y) in scaled
+// space and that is painted rotated by angle and scaled by sx.
+func (t svgTextXf) frag(x, y, angle, sx float64) fragXf {
+	a, b, c, d := t.a, t.b, t.c, t.d
+	if angle != 0 || sx != 1 {
+		s, cs := math.Sincos(angle)
+		ra, rb, rc, rd := float32(cs*sx), float32(s*sx), float32(-s), float32(cs)
+		a, b, c, d = t.a*ra+t.c*rb, t.b*ra+t.d*rb, t.a*rc+t.c*rd, t.b*rc+t.d*rd
+	}
+	// the fragment origin is a LayoutUnit: floored to 1/64
+	X, Y := lu64(x), lu64(y)
+	px := float32(t.m[4]) + (t.a*X + t.c*Y)
+	py := float32(t.m[5]) + (t.b*X + t.d*Y)
+	axis := xfAxis(float64(a), float64(b), float64(c), float64(d))
+	hx, hy := float32(0.125), float32(0.125)
+	switch axis {
+	case 1:
+		hy = 0.5
+	case 2:
+		hx = 0.5
+	}
+	return fragXf{a: a, b: b, c: c, d: d, px: px, py: py, tx: px + hx, ty: py + hy, axis: axis}
+}
+
+// glyph places a glyph at offset (gx, gy) from the fragment origin.
+func (f fragXf) glyph(g Glyph, gx, gy float32) svgPG {
+	x := (gx*f.a + gy*f.c) + f.tx
+	y := (gy*f.d + gx*f.b) + f.ty
+	fx, fy := math.Floor(float64(x)), math.Floor(float64(y))
+	pg := svgPG{g: g, a: float64(f.a), b: float64(f.b), c: float64(f.c), d: float64(f.d),
+		dx: float64((gx*f.a + gy*f.c) + f.px), dy: float64((gy*f.d + gx*f.b) + f.py),
+		ix: int(fx), iy: int(fy)}
+	// quarter-pixel subpixel indices on the axes that have them
+	if f.axis != 2 {
+		pg.sux = int(math.Floor(float64(int32((float64(x)-fx)*65536)) / 16384))
+	}
+	if f.axis != 1 {
+		pg.suy = int(math.Floor(float64(int32((float64(y)-fy)*65536)) / 16384))
+	}
+	if svgTextDebug {
+		fmt.Fprintf(os.Stderr, "G %.6f %.6f -> %.6f %.6f cell %d %d %d %d axis %d\n", gx, gy, x, y, pg.ix, pg.iy, pg.sux, pg.suy, f.axis)
+	}
+	return pg
+}
+
+// svgGlyphMask rasterizes glyphs of one size the way Skia does: glyphs whose
+// text matrix has a column longer than 256 px are paths, all others are
+// cached masks placed on the quarter-pixel grid and added up through the
+// preblend table. With st.w > 0 the glyphs are stroked (user-space stroke).
+func (c *Context) svgGlyphMask(gs []svgPG, size float64, fake, skew bool, lum uint8, st xfStroke) *Mask {
+	clip := c.drawBounds()
+	type placed struct {
+		m      *Mask
+		ox, oy int
+	}
+	var ps []placed
+	bb := IRect{}
+	var pathOut *Mask
+	for _, g := range gs {
+		if math.IsNaN(g.a+g.b+g.c+g.d+g.dx+g.dy) || math.IsInf(g.dx+g.dy, 0) {
+			continue
+		}
+		if math.Hypot(g.a*size, g.b*size) > 256 || math.Hypot(g.c*size, g.d*size) > 256 {
+			if st.w > 0 {
+				continue
+			}
+			var mk *Mask
+			if fake {
+				p := xfPathGlyph(g.g, size, Matrix{g.a, g.b, g.c, g.d, 0, 0}, skew, 0, 0)
+				if p == nil {
+					continue
+				}
+				fill, sp, flip := xfBoldPaths(p, size, g.a, g.b, g.c, g.d)
+				if fill == nil {
+					continue
+				}
+				t := Translate(g.dx, g.dy)
+				mk = fxFillUnion(fill.Transform(t), sp.Transform(t), flip, clip)
+			} else {
+				p := xfPathGlyph(g.g, size, Matrix{g.a, g.b, g.c, g.d, g.dx, g.dy}, skew, 0, 0)
+				if p == nil {
+					continue
+				}
+				mk = fxFillPath(p, clip)
+			}
+			pathOut = unionMasks(pathOut, mk)
+			continue
+		}
+		var gm *Mask
+		if st.w > 0 {
+			gm = xfGlyphMaskS(g.g, size, g.a, g.b, g.c, g.d, false, skew, g.sux, g.suy, st)
+		} else {
+			gm = xfGlyphMask(g.g, size, g.a, g.b, g.c, g.d, fake, skew, g.sux, g.suy)
+		}
+		if gm == nil {
+			continue
+		}
+		r := IRect{gm.B.X0 + g.ix, gm.B.Y0 + g.iy, gm.B.X1 + g.ix, gm.B.Y1 + g.iy}
+		if r.Intersect(clip).Empty() {
+			continue
+		}
+		ps = append(ps, placed{gm, g.ix, g.iy})
+		bb = bb.Union(r)
+	}
+	bb = bb.Intersect(clip)
+	var out *Mask
+	if len(ps) > 0 && !bb.Empty() {
+		out = newMask(bb)
+		lut := lutForLum(lum)
+		for _, p := range ps {
+			for yy := max(p.m.B.Y0+p.oy, bb.Y0); yy < min(p.m.B.Y1+p.oy, bb.Y1); yy++ {
+				src := p.m.Row(yy - p.oy)
+				x0 := max(p.m.B.X0+p.ox, bb.X0)
+				x1 := min(p.m.B.X1+p.ox, bb.X1)
+				if x1 <= x0 {
+					continue
+				}
+				srow := src[x0-p.ox-p.m.B.X0 : x1-p.ox-p.m.B.X0]
+				drow := out.Row(yy)[x0-bb.X0 : x1-bb.X0]
+				for i, v := range srow {
+					if v == 0 {
+						continue
+					}
+					v = lut[v]
+					s := uint32(drow[i]) + uint32(v)
+					if s > 255 {
+						s = 255
+					}
+					drow[i] = uint8(s)
+				}
+			}
+		}
+	}
+	return unionMasks(out, pathOut)
+}
+
+// fragment is a group of glyphs painted together (same style, plain).
+type fragment struct {
+	gl []textGlyph
+}
+
+func fragmentsOf(placed []textGlyph) []fragment {
+	var frs []fragment
+	for _, p := range placed {
+		if k := len(frs) - 1; k >= 0 {
+			f := &frs[k]
+			pv := &f.gl[len(f.gl)-1]
+			if pv.node == p.node && pv.st == p.st && pv.plain() && p.plain() && pv.y == p.y && pv.size == p.size &&
+				math.Abs(pv.x+pv.w-p.x) < 1e-6 && math.Abs(pv.w-pv.nat) < 1e-6 && math.Abs(p.w-p.nat) < 1e-6 {
+				f.gl = append(f.gl, p)
+				continue
+			}
+		}
+		frs = append(frs, fragment{gl: []textGlyph{p}})
+	}
+	return frs
+}
+
+func (r *svgR) drawText(n *svgNode, st sStyle, m Matrix) {
+	if !st.visible {
+		return
+	}
+	k := svgScreenScale(m)
+	placed := r.layoutText(n, &st, k)
+	if len(placed) == 0 {
+		return
+	}
+	bb, hasBB := glyphsBBox(placed, k)
+	xf := newSvgTextXf(m, k)
+	c := r.c
+	for _, fr := range fragmentsOf(placed) {
+		p0 := &fr.gl[0]
+		if !p0.st.visible {
+			continue
+		}
+		order := []string{"fill", "stroke"}
+		if po := strings.Fields(p0.st.paintOrder); len(po) > 0 && po[0] != "normal" {
+			if po[0] == "stroke" {
+				order = []string{"stroke", "fill"}
+			}
+		}
+		for _, step := range order {
+			if step == "fill" {
+				r.fillFragment(c, n, fr, xf, bb, hasBB, m)
+			} else {
+				r.strokeFragment(c, n, fr, xf, bb, hasBB, m)
+			}
+		}
+		r.decorateFragment(c, fr, k)
+	}
+}
+
+func fragmentPGs(fr fragment, xf svgTextXf) []svgPG {
+	out := make([]svgPG, 0, len(fr.gl))
+	var fx fragXf
+	var x0 float64
+	for i := range fr.gl {
+		p := &fr.gl[i]
+		if i == 0 || !p.plain() {
+			fx = xf.frag(p.x, p.y, p.angle, p.sx)
+			x0 = p.x
+		}
+		if p.skip || strings.TrimSpace(string(p.r)) == "" {
+			continue
+		}
+		out = append(out, fx.glyph(p.g, float32(p.x-x0), 0))
+	}
+	return out
+}
+
+func (r *svgR) fillFragment(c *Context, n *svgNode, fr fragment, xf svgTextXf, bb Rect, hasBB bool, m Matrix) {
+	p0 := &fr.gl[0]
+	if p0.st.fill.kind == pNone || p0.st.fillOp <= 0 {
+		return
+	}
+	sh := r.shaderFor(p0.st.fill, p0.st.fillOp, n, bb, hasBB, p0.st, m)
+	if sh == nil {
+		return
+	}
+	var lum uint8
+	if p0.st.fill.kind == pColor {
+		lum = textLum(Color{p0.st.fill.col.R, p0.st.fill.col.G, p0.st.fill.col.B, 1})
+	}
+	pgs := fragmentPGs(fr, xf)
+	if len(pgs) == 0 {
+		return
+	}
+	if mk := c.svgGlyphMask(pgs, p0.size, p0.fake, p0.skew, lum, xfStroke{}); mk != nil {
+		c.draw(mk, sh)
+	}
+}
+
+func (r *svgR) strokeFragment(c *Context, n *svgNode, fr fragment, xf svgTextXf, bb Rect, hasBB bool, m Matrix) {
+	p0 := &fr.gl[0]
+	if p0.st.stroke.kind == pNone || p0.st.strokeOp <= 0 || p0.st.sw <= 0 {
+		return
+	}
+	sh := r.shaderFor(p0.st.stroke, p0.st.strokeOp, n, bb, hasBB, p0.st, m)
+	if sh == nil {
+		return
+	}
+	ss := r.strokeStyle(p0.st)
+	pgs := fragmentPGs(fr, xf)
+	if len(pgs) == 0 {
+		return
+	}
+	big := false
+	for _, g := range pgs {
+		if math.Hypot(g.a*p0.size, g.b*p0.size) > 256 || math.Hypot(g.c*p0.size, g.d*p0.size) > 256 {
+			big = true
+		}
+	}
+	if len(ss.Dash) == 0 && !p0.fake && !big {
+		var lum uint8
+		if col := p0.st.stroke; col.kind == pColor {
+			lum = textLum(Color{col.col.R, col.col.G, col.col.B, 1})
+		}
+		xs := xfStroke{w: float32(ss.Width * xf.k), miter: float32(ss.MiterLimit), join: ss.Join, cap: ss.Cap}
+		if mk := c.svgGlyphMask(pgs, p0.size, false, p0.skew, lum, xs); mk != nil {
+			c.draw(mk, sh)
+		}
+		return
+	}
+	// general case: the outline in scaled space, stroked there
+	path := NewPath()
+	for i := range fr.gl {
+		p := &fr.gl[i]
+		if p.skip || strings.TrimSpace(string(p.r)) == "" {
+			continue
+		}
+		s, cs := math.Sincos(p.angle)
+		gp := xfPathGlyph(p.g, p.size, Matrix{cs * p.sx, s * p.sx, -s, cs, float64(float32(p.x)), float64(float32(p.y))}, p.skew, 0, 0)
+		if gp != nil {
+			path.AddPath(gp, Identity)
+		}
+	}
+	if path.Empty() {
+		return
+	}
+	sc := ss
+	sc.Width *= xf.k
+	if len(sc.Dash) > 0 {
+		d := make([]float64, len(sc.Dash))
+		for i, v := range sc.Dash {
+			d[i] = v * xf.k
+		}
+		sc.Dash = d
+		sc.DashOffset *= xf.k
+	}
+	dm := m.Mul(Scale(1/xf.k, 1/xf.k))
+	if mk := StrokeMask(path, dm, sc, c.drawBounds()); mk != nil {
+		c.draw(mk, sh)
+	}
+}
+
+func (r *svgR) decorateFragment(c *Context, fr fragment, k float64) {
+	p0 := &fr.gl[0]
+	if p0.st.decoration == "" || p0.st.fill.kind != pColor {
+		return
+	}
+	var w float64
+	for _, g := range fr.gl {
+		w += g.w
+	}
+	fs := p0.st.fontSize * k
+	th := math.Max(1, fs/16)
+	col := p0.st.fill.col
+	col.A *= p0.st.fillOp
+	deco := func(dy float64) {
+		pa := NewPath()
+		pa.Rect(0, dy, w, th)
+		s, cs := math.Sincos(p0.angle)
+		pa = pa.Transform(Matrix{cs, s, -s, cs, p0.x, p0.y}).Transform(Scale(1/k, 1/k))
+		c.FillPathShader(pa, NonZero, Solid(col))
+	}
+	if strings.Contains(p0.st.decoration, "underline") {
+		deco(fs * 0.1)
+	}
+	if strings.Contains(p0.st.decoration, "line-through") {
+		deco(-fs * 0.3)
+	}
+	if strings.Contains(p0.st.decoration, "overline") {
+		deco(-p0.asc)
+	}
+}
+
+// lu64 floors v to 1/64 (Blink's LayoutUnit) in single precision.
+func lu64(v float64) float32 { return float32(math.Floor(float64(float32(v))*64)) / 64 }

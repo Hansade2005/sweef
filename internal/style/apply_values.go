@@ -754,6 +754,9 @@ func (s *cstate) transform(v string) ([]TOp, bool) {
 		if len(parts) > 6 && name != "matrix3d" {
 			return nil, false
 		}
+		if name == "matrix3d" && len(parts) != 16 {
+			return nil, false
+		}
 		angle := func(x string) (Length, bool) {
 			a, ok := parseAngle(strings.TrimSpace(x))
 			return Length{K: LNumber, V: a}, ok
@@ -783,6 +786,9 @@ func (s *cstate) transform(v string) ([]TOp, bool) {
 			if i >= 6 {
 				break
 			}
+			if name == "matrix3d" {
+				break
+			}
 			var x Length
 			var ok bool
 			if name == "rotate3d" && i == 3 {
@@ -796,21 +802,19 @@ func (s *cstate) transform(v string) ([]TOp, bool) {
 			op.A[i] = x
 			op.N++
 		}
-		if name == "matrix3d" && len(parts) == 16 {
-			// keep 2D components a,b,c,d,tx,ty = m[0],m[1],m[4],m[5],m[12],m[13]
-			vals := make([]float64, 16)
+		if name == "matrix3d" {
+			if len(parts) != 16 {
+				return nil, false
+			}
+			var m [16]float64
 			for i, p := range parts {
 				n, ok := parseNumber(strings.TrimSpace(p))
 				if !ok {
 					return nil, false
 				}
-				vals[i] = n
+				m[i] = n
 			}
-			op.Fn = "matrix"
-			for i, idx := range []int{0, 1, 4, 5, 12, 13} {
-				op.A[i] = Length{K: LNumber, V: vals[idx]}
-			}
-			op.N = 6
+			op = TOp{Fn: "matrix3d", M: &m, N: 16}
 		}
 		out = append(out, op)
 	}
@@ -825,13 +829,19 @@ func (s *cstate) individualTransform(name, v string) ([]TOp, bool) {
 	f := fields(l)
 	switch name {
 	case "translate":
+		if len(f) > 3 {
+			return nil, false
+		}
 		op := TOp{Fn: "translate"}
+		if len(f) == 3 {
+			op.Fn = "translate3d"
+		}
 		for i, w := range f {
-			if i > 1 {
-				break
-			}
 			x, ok := s.length(w, false)
 			if !ok {
+				return nil, false
+			}
+			if i == 2 && x.K != LPx {
 				return nil, false
 			}
 			op.A[i] = x
@@ -839,11 +849,14 @@ func (s *cstate) individualTransform(name, v string) ([]TOp, bool) {
 		}
 		return []TOp{op}, op.N > 0
 	case "scale":
+		if len(f) > 3 {
+			return nil, false
+		}
 		op := TOp{Fn: "scale"}
+		if len(f) == 3 {
+			op.Fn = "scale3d"
+		}
 		for i, w := range f {
-			if i > 1 {
-				break
-			}
 			n, ok := s.numOrPct(w)
 			if !ok {
 				return nil, false
@@ -853,13 +866,59 @@ func (s *cstate) individualTransform(name, v string) ([]TOp, bool) {
 		}
 		return []TOp{op}, op.N > 0
 	default:
-		for _, w := range f {
-			if a, ok := parseAngle(w); ok {
-				return []TOp{{Fn: "rotate", A: [6]Length{{K: LNumber, V: a}}, N: 1}}, true
+		// rotate: [ none | <angle> | [ x | y | z | <number>{3} ] && <angle> ]
+		var ang float64
+		haveAng := false
+		var axis []float64
+		angIdx := -1
+		if len(f) == 4 {
+			// the angle is the token with a unit; a bare 0 counts when no other has one
+			angIdx = 3
+			for i, w := range f {
+				if _, ok := parseNumber(w); !ok {
+					angIdx = i
+				}
 			}
 		}
+		for i, w := range f {
+			if len(f) == 4 && i != angIdx {
+				n, ok := parseNumber(w)
+				if !ok {
+					return nil, false
+				}
+				axis = append(axis, n)
+				continue
+			}
+			if a, ok := parseAngle(w); ok && !haveAng {
+				ang, haveAng = a, true
+				continue
+			}
+			switch w {
+			case "x":
+				axis = []float64{1, 0, 0}
+				continue
+			case "y":
+				axis = []float64{0, 1, 0}
+				continue
+			case "z":
+				axis = []float64{0, 0, 1}
+				continue
+			}
+			return nil, false
+		}
+		if !haveAng || len(axis) != 0 && len(axis) != 3 {
+			return nil, false
+		}
+		if len(axis) == 0 {
+			return []TOp{{Fn: "rotate", A: [6]Length{{K: LNumber, V: ang}}, N: 1}}, true
+		}
+		op := TOp{Fn: "rotate3d", N: 4}
+		for i := 0; i < 3; i++ {
+			op.A[i] = Length{K: LNumber, V: axis[i]}
+		}
+		op.A[3] = Length{K: LNumber, V: ang}
+		return []TOp{op}, true
 	}
-	return nil, false
 }
 
 // ---- content ----------------------------------------------------------------------------

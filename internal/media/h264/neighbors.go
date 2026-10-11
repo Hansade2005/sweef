@@ -182,6 +182,13 @@ func (d *Decoder) fillCaches(mbType uint32) {
 					c[4+x] = v
 				}
 			}
+			if d.dpConstrainedNC(intra) {
+				if topType != 0 && !isIntraT(topType) {
+					for x := 0; x < w; x++ {
+						c[4+x] = 0
+					}
+				}
+			}
 			for r := 0; r < h; r++ {
 				var lm int
 				var lr int
@@ -192,7 +199,9 @@ func (d *Decoder) fillCaches(mbType uint32) {
 					lm = r
 					lr = int(nb.leftRowC[r])
 				}
-				if leftType[lm] != 0 {
+				if leftType[lm] != 0 && d.dpConstrainedNC(intra) && !isIntraT(leftType[lm]) {
+					c[3+8*(1+r)] = 0
+				} else if leftType[lm] != 0 {
 					c[3+8*(1+r)] = d.nz[nb.leftXY[lm]*48+p*16+lr*w+w-1]
 				} else {
 					v := uint8(64)

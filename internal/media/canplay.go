@@ -223,13 +223,8 @@ func nativeCodecSupport(lc, native string) string {
 	if native == "" || !HasNativeVideo(native) {
 		return ""
 	}
-	if strings.HasPrefix(lc, "avc1") || strings.HasPrefix(lc, "avc3") {
-		// avc1.PPCCLL: the Extended profile (88) may use data partitioning,
-		// which the native decoder lacks.
-		if len(lc) >= 7 && strings.EqualFold(lc[5:7], "58") {
-			return "maybe"
-		}
-	}
+	// The Extended profile (avc1.58) is covered, data partitioning included;
+	// only SP/SI slices fall back to ffmpeg.
 	return "probably"
 }
 

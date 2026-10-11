@@ -1,0 +1,21 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>xf3d_perspective</title>
+<style>
+body { margin: 20px; font: 14px Arial, sans-serif; background: #fff; }
+.scene { display: inline-block; vertical-align: top; width: 220px; height: 150px; margin: 10px 20px; border: 1px solid #888; background: #eef; }
+.c { width: 100px; height: 100px; margin: 25px auto; background: #6a6; color: #fff; text-align: center; line-height: 100px; box-shadow: 4px 4px 0 #353; }
+.a .c { transform: rotateY(45deg) }
+.b { perspective: 300px } .b .c { transform: rotateY(45deg) }
+.d { perspective: 150px } .d .c { transform: rotateY(45deg) }
+.e { perspective: 300px; perspective-origin: 0 0 } .e .c { transform: rotateY(45deg) }
+.f { perspective: 300px; perspective-origin: 100% 100% } .f .c { transform: rotateX(45deg) }
+.g { perspective: 200px } .g .c { transform: translateZ(100px) }
+.h { perspective: 200px } .h .c { transform: translateZ(250px) }
+.i { perspective: 300px } .i .c { transform: rotateZ(20deg) }
+.j { perspective: 500px; perspective-origin: 20% 80% } .j .c { transform: rotateX(30deg) rotateY(-30deg) }
+.k { perspective: 300px; transform: rotateY(20deg) } .k .c { transform: rotateY(40deg) }
+</style></head><body>
+<div class="scene a"><div class="c">none</div></div><div class="scene b"><div class="c">300</div></div><div class="scene d"><div class="c">150</div></div><div class="scene e"><div class="c">origin 0 0</div></div>
+<div class="scene f"><div class="c">origin br</div></div><div class="scene g"><div class="c">tz 100</div></div><div class="scene h"><div class="c">behind</div></div><div class="scene i"><div class="c">rotZ</div></div>
+<div class="scene j"><div class="c">mixed</div></div><div class="scene k"><div class="c">own xf</div></div>
+</body></html>

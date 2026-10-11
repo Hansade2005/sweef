@@ -15,7 +15,15 @@ func (r *Result) ClientRect(n *html.Node) (Rect, bool) {
 	if bx == nil || bx.Display == "none" {
 		return Rect{}, false
 	}
-	rc := bx.Border
+	if pts, ok := r.projectChain(n, rectCorners(bx.Border)); ok {
+		return boundsOf(pts), true
+	}
+	return r.rectOfFrag(n, bx.Border)
+}
+
+// rectOfFrag maps one rectangle of n through the 2D transform chain.
+func (r *Result) rectOfFrag(n *html.Node, rc Rect) (Rect, bool) {
+	bx := r.Boxes[n]
 	// the four corners go through every transform of the ancestor chain; the
 	// bounding box is taken once at the end (rotations of rotations compose)
 	pts := [4][2]float64{{rc.X, rc.Y}, {rc.Right(), rc.Y}, {rc.X, rc.Bottom()}, {rc.Right(), rc.Bottom()}}

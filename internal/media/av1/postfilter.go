@@ -46,5 +46,31 @@ func (d *Decoder) output(rf *refFrame, film *filmGrain) {
 	if s != nil && s.filmGrainPresent && film != nil && film.apply {
 		pic = applyFilmGrain(pic, film)
 	}
-	d.out = append(d.out, pic)
+	pic.SpatialID, pic.TemporalID = rf.spatialID, rf.temporalID
+	d.emit(pic)
+}
+
+// emit applies the spatial layer output rule of dav1d (all_layers off): with
+// several spatial layers in the operating point only the highest layer that
+// is present is output for each temporal unit.
+func (d *Decoder) emit(pic *Picture) {
+	if d.AllLayers || d.maxSpatialID() == 0 {
+		d.out = append(d.out, pic)
+		d.newTU = false
+		return
+	}
+	if d.cache != nil && (d.cache.SpatialID == d.maxSpatialID() || d.newTU) {
+		d.out = append(d.out, d.cache)
+	}
+	d.cache = pic
+	d.newTU = false
+}
+
+// endTemporalUnit outputs the picture held back by emit at the end of the
+// data handed to Decode.
+func (d *Decoder) endTemporalUnit() {
+	if d.cache != nil {
+		d.out = append(d.out, d.cache)
+		d.cache = nil
+	}
 }

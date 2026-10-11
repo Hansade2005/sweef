@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff}</style></head><body>
+<svg width="1280" height="800" viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg" font-family="Liberation Sans" >
+<defs>
+<path id="p1" d="M 40 150 C 140 20, 240 280, 360 120 S 500 60, 560 140"/>
+<path id="p2" d="M 640 160 Q 740 20 840 160 T 1040 160"/>
+<path id="p3" d="M 100 330 A 80 80 0 0 1 260 330 A 80 80 0 0 1 100 330 Z"/>
+<path id="p4" d="M 330 260 L 400 330 L 470 260 L 540 330 L 610 260"/>
+<path id="p5" d="M 700 330 C 700 230, 900 230, 900 330 C 900 430 700 430 700 330 Z"/>
+<path id="p6" d="M 40 480 C 200 420, 300 560, 460 480"/>
+<path id="p7" d="M 520 540 C 600 400 700 400 760 480 S 900 600 1000 500"/>
+<path id="p8" d="M 60 700 L 400 700 L 400 620"/>
+</defs>
+<use href="#p1" fill="none" stroke="#ddd"/>
+<use href="#p2" fill="none" stroke="#ddd"/>
+<use href="#p3" fill="none" stroke="#ddd"/>
+<use href="#p4" fill="none" stroke="#ddd"/>
+<use href="#p5" fill="none" stroke="#ddd"/>
+<use href="#p6" fill="none" stroke="#ddd"/>
+<use href="#p7" fill="none" stroke="#ddd"/>
+<use href="#p8" fill="none" stroke="#ddd"/>
+<text font-size="18"><textPath href="#p1">Text on a cubic curve with some length to it</textPath></text>
+<text font-size="16" fill="#036"><textPath href="#p2" startOffset="10">Quadratic wave text path</textPath></text>
+<text font-size="14"><textPath href="#p3" startOffset="20">Around the circle of arcs and closing</textPath></text>
+<text font-size="20" fill="#a30"><textPath href="#p4">Zig zag path</textPath></text>
+<text font-size="18" text-anchor="middle"><textPath href="#p5" startOffset="50%">Middle anchored loop text</textPath></text>
+<text font-size="24" text-anchor="end"><textPath href="#p6" startOffset="100%">End anchored</textPath></text>
+<text font-size="16" dy="-6"><textPath href="#p7" startOffset="5%">Offset by dy and starting at five percent</textPath></text>
+<text font-size="30" fill="#063"><textPath href="#p8">Corner</textPath></text>
+<text font-size="14" transform="translate(0 20) rotate(2)"><textPath href="#p6" side="right">Rotated text path outer</textPath></text>
+<text font-size="12" fill="#555"><textPath href="#p1" startOffset="0" textLength="400" lengthAdjust="spacingAndGlyphs"><tspan dy="30">Path with textLength</tspan></textPath></text>
+<text font-size="15"><textPath href="#p7" startOffset="30%" dominant-baseline="hanging">Hanging baseline <tspan fill="#c00" rotate="15">tspan rot</tspan> end</textPath></text>
+</svg></body></html>

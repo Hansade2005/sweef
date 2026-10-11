@@ -42,13 +42,23 @@ const (
 	covLossless
 	covIntraEdgeFilter
 	covRefMvTemporal
+	covNonUniformTiles
+	covShortSignaling
+	covSwitchFrame
+	covIntraOnly
+	covErrorRes
+	covSpatialLayers
+	covTemporalLayers
+	covAnnexB
+	covLargeScale
 	covMax
 )
 
 var covNames = [covMax]string{"palette", "paletteUV", "intrabc", "cfl", "filterIntra", "directional", "edgeUpsample",
 	"smooth", "paeth", "obmc", "localWarp", "globalWarp", "wedge", "diffwtd", "distance", "interintra", "compoundAvg",
 	"scaledRef", "skipMode", "segmentation", "deltaQ", "deltaLF", "qmatrix", "tx64", "idtx", "lrWiener", "lrSgr",
-	"superres", "filmGrain", "cdef", "loopFilter", "mfmv", "tiles", "interpDual", "lossless", "intraEdgeFilter", "refMvTemporal"}
+	"superres", "filmGrain", "cdef", "loopFilter", "mfmv", "tiles", "interpDual", "lossless", "intraEdgeFilter", "refMvTemporal", "nonUniformTiles", "shortSignaling",
+	"switchFrame", "intraOnly", "errorRes", "spatialLayers", "temporalLayers", "annexB", "largeScaleTile"}
 
 var coverage [covMax]int32
 

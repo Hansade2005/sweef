@@ -525,8 +525,22 @@ func (b *lbox) hasTransform() bool {
 	return len(st.Transform) > 0 || len(st.Translate) > 0 || len(st.Rotate) > 0 || len(st.Scale) > 0
 }
 
+// planeAffine6 is the z=0 plane of m as a CSS matrix(); a projective part is
+// ignored (the 2D approximation used where only an affine map is needed).
+func planeAffine6(m Mat4) [6]float64 {
+	w := m[3][3]
+	if w == 0 {
+		w = 1
+	}
+	return [6]float64{m[0][0] / w, m[1][0] / w, m[0][1] / w, m[1][1] / w, m[0][3] / w, m[1][3] / w}
+}
+
 func (b *lbox) matrixFor(w, h float64) [6]float64 {
 	st := b.st
+	if b.use4() {
+		_, _, rw, rh := b.refBox()
+		return planeAffine6(b.xfList(rw, rh))
+	}
 	m := [6]float64{1, 0, 0, 1, 0, 0}
 	mul := func(a, b [6]float64) [6]float64 {
 		return [6]float64{a[0]*b[0] + a[2]*b[1], a[1]*b[0] + a[3]*b[1], a[0]*b[2] + a[2]*b[3], a[1]*b[2] + a[3]*b[3],
@@ -603,6 +617,9 @@ func (b *lbox) matrixFor(w, h float64) [6]float64 {
 
 // fullMatrix returns the matrix about the transform origin in absolute coordinates.
 func (b *lbox) fullMatrix() [6]float64 {
+	if b.use4() {
+		return planeAffine6(b.own4(0, 0))
+	}
 	w, h := b.w, b.h
 	m := b.matrixFor(w, h)
 	ox := b.st.TransformOrigin[0].Resolve(w)
@@ -709,6 +726,7 @@ func (c *ctx) buildBoxes() {
 				bx.HasTransform = true
 				bx.Transform = main.fullMatrix()
 			}
+			bx.Xf3 = main.xf3dOf()
 			if main == c.bodyBox || main == c.rootBox {
 				// html/body client sizes refer to the viewport for the root
 			}

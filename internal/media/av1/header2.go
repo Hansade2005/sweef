@@ -43,6 +43,12 @@ func (d *Decoder) parseFrameHeader(b *bitReader, temporalID, spatialID int) (*fr
 		}
 		fh.frameType = b.f(2)
 		fh.frameIsIntra = fh.frameType == intraOnlyFrame || fh.frameType == keyFrame
+		switch fh.frameType {
+		case intraOnlyFrame:
+			cov(covIntraOnly)
+		case switchFrame:
+			cov(covSwitchFrame)
+		}
 		fh.showFrame = b.flag()
 		if fh.showFrame && s.decoderModelInfoPresent && !s.equalPictureInterval {
 			b.f(s.framePresTimeLenM1 + 1)
@@ -52,6 +58,7 @@ func (d *Decoder) parseFrameHeader(b *bitReader, temporalID, spatialID int) (*fr
 		} else {
 			fh.showable = b.flag()
 		}
+		fh.posErrorRes = b.pos
 		if fh.frameType == switchFrame || (fh.frameType == keyFrame && fh.showFrame) {
 			fh.errorRes = true
 		} else {
@@ -124,6 +131,7 @@ func (d *Decoder) parseFrameHeader(b *bitReader, temporalID, spatialID int) (*fr
 			}
 		}
 	}
+	fh.posRefresh = b.pos
 	if fh.frameType == switchFrame || (fh.frameType == keyFrame && fh.showFrame) {
 		fh.refreshFlags = allFrames
 	} else {
@@ -149,9 +157,11 @@ func (d *Decoder) parseFrameHeader(b *bitReader, temporalID, spatialID int) (*fr
 		}
 	} else {
 		shortSignaling := false
+		fh.posShortSig = b.pos
 		if s.enableOrderHint {
 			shortSignaling = b.flag()
 			if shortSignaling {
+				cov(covShortSignaling)
 				lastIdx := b.f(3)
 				goldIdx := b.f(3)
 				d.setFrameRefs(fh, lastIdx, goldIdx)
@@ -165,6 +175,7 @@ func (d *Decoder) parseFrameHeader(b *bitReader, temporalID, spatialID int) (*fr
 				b.f(s.deltaFrameIDLenM2 + 2)
 			}
 		}
+		fh.posRefIdxEnd = b.pos
 		for i := 0; i < refsPerFrame; i++ {
 			if d.ref[fh.refFrameIdx[i]] == nil {
 				return nil, errBitstream
@@ -453,6 +464,7 @@ func (d *Decoder) tileInfo(b *bitReader, fh *frameHdr) {
 		fh.miRowStarts[i] = fh.miRows
 		fh.tileRows = i
 	} else {
+		cov(covNonUniformTiles)
 		widestTileSb := 0
 		startSb := 0
 		i := 0

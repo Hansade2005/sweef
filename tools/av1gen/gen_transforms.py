@@ -40,9 +40,11 @@ class Gen:
         c, s = cos128(angle), sin128(angle)
         x, y = self.newvar(), self.newvar()
         def term(v, k):
-            return "%s*%d" % (v, k)
-        self.lines.append("%s := (%s - %s + 2048) >> 12" % (x, term(ta, c), term(tb, s)))
-        self.lines.append("%s := (%s + %s + 2048) >> 12" % (y, term(ta, s), term(tb, c)))
+            return "int64(%s)*%d" % (v, k)
+        # 64-bit products: with 12-bit video the row transform inputs span
+        # 20 bits and a butterfly sum exceeds 32 bits.
+        self.lines.append("%s := int32((%s - %s + 2048) >> 12)" % (x, term(ta, c), term(tb, s)))
+        self.lines.append("%s := int32((%s + %s + 2048) >> 12)" % (y, term(ta, s), term(tb, c)))
         if flip:
             self.names[a], self.names[b] = y, x
         else:
