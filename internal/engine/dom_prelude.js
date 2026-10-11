@@ -3195,7 +3195,7 @@
 
   // Internals for jsext extension preludes (canvas, WebGL, media); the
   // engine deletes this after they have run.
-  global.__swInternals = { ID: ID, idOf: idOf, wrap: wrap, slots: slots, getters: getters, methods: methods, setTimeout: setTimeoutImpl, now: nowMs, currentURL: currentURL, makeEvent: makeEventFor, sw: sw, global: global };
+  global.__swInternals = { ID: ID, idOf: idOf, wrap: wrap, slots: slots, getters: getters, methods: methods, setTimeout: setTimeoutImpl, now: nowMs, currentURL: currentURL, makeEvent: makeEventFor, fire: fire, sw: sw, global: global };
 
   // A pooled VM is built before it is bound to a document; __swSetDocument
   // installs the real one at bind time.
