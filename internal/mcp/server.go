@@ -209,28 +209,19 @@ func (s *Server) handle(ctx context.Context, req *rpcReq) {
 			reply(map[string]any{"isError": true, "content": []map[string]any{{"type": "text", "text": err.Error()}}}, nil)
 			return
 		}
+		_ = out
+		parts := []map[string]any{{"type": "text", "text": content}}
+		// For screenshots, also emit a native MCP image content part so
+		// clients (Claude Desktop, Playwright-MCP-style agents) can render it.
 		if p.Name == "browser_screenshot" {
-			var r struct {
-				PNG  string `json:"pngBase64"`
-				Text string `json:"text"`
+			var probe struct {
+				PNGBase64 string `json:"pngBase64"`
 			}
-			if json.Unmarshal(out, &r) == nil && r.PNG != "" {
-				reply(map[string]any{"content": []map[string]any{
-					{"type": "image", "data": r.PNG, "mimeType": "image/png"},
-					{"type": "text", "text": r.Text},
-				}}, nil)
-				return
+			if json.Unmarshal([]byte(content), &probe) == nil && probe.PNGBase64 != "" {
+				parts = append(parts, map[string]any{"type": "image", "mimeType": "image/png", "data": probe.PNGBase64})
 			}
 		}
-		if p.Name == "browser_aria_snapshot" {
-			var r struct {
-				YAML string `json:"yaml"`
-			}
-			if json.Unmarshal(out, &r) == nil && r.YAML != "" {
-				content = r.YAML
-			}
-		}
-		reply(map[string]any{"content": []map[string]any{{"type": "text", "text": content}}}, nil)
+		reply(map[string]any{"content": parts}, nil)
 	default:
 		reply(nil, &rpcErr{-32601, "method not found: " + req.Method})
 	}
