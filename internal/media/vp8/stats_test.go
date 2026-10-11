@@ -32,3 +32,23 @@ func TestVP8Coverage(t *testing.T) {
 		t.Errorf("clip does not exercise inter tools")
 	}
 }
+
+func BenchmarkDecode640x360(b *testing.B) {
+	t := &testing.T{}
+	_ = t
+	dir := b.TempDir()
+	out := dir + "/o.ivf"
+	ffmpeg(b, "-f", "lavfi", "-i", "mandelbrot=rate=30:size=640x360", "-t", "3", "-c:v", "libvpx", "-b:v", "1M", "-y", out)
+	data, _ := os.ReadFile(out)
+	frames := readIVF(b, data)
+	b.ResetTimer()
+	n := 0
+	for i := 0; i < b.N; i++ {
+		d := NewDecoder()
+		for _, f := range frames {
+			d.Decode(f)
+			n++
+		}
+	}
+	b.ReportMetric(float64(n)/b.Elapsed().Seconds(), "fps")
+}
