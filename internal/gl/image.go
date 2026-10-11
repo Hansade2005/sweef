@@ -39,6 +39,23 @@ func NewImage(f *Format, w, h, d, samples int) *Image {
 	case ClsInt:
 		im.I = make([]int32, n)
 	}
+	if !f.IsDepth() && f.SBits == 0 && f.Bits[3] == 0 && !f.AlphaOnly {
+		switch f.Class {
+		case ClsU8:
+			one := uint8(255)
+			for i := 3; i < len(im.U8); i += 4 {
+				im.U8[i] = one
+			}
+		case ClsF32:
+			for i := 3; i < len(im.F); i += 4 {
+				im.F[i] = 1
+			}
+		case ClsInt:
+			for i := 3; i < len(im.I); i += 4 {
+				im.I[i] = 1
+			}
+		}
+	}
 	if f.SBits > 0 && im.St == nil {
 		im.St = make([]uint8, w*h*d*samples)
 	}

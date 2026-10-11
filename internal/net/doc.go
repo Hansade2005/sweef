@@ -39,6 +39,29 @@ type Doc struct {
 	layoutCacheW   int
 	layoutCacheGen uint64
 	viewportW      atomic.Int64
+	layoutProvider func(width int) *Layout
+}
+
+// SetLayoutProvider replaces the built-in flow layout with fn (the render
+// engine). fn must not call Layout on the same Doc. Clears the cache.
+func (d *Doc) SetLayoutProvider(fn func(width int) *Layout) {
+	d.layoutMu.Lock()
+	d.layoutProvider = fn
+	d.layoutCache = nil
+	d.layoutMu.Unlock()
+}
+
+// GeometryOf returns precise element geometry when a layout provider is set.
+func (d *Doc) GeometryOf(backendID int64) (Geometry, bool) {
+	n := d.find(backendID)
+	if n == nil {
+		return Geometry{}, false
+	}
+	l := d.Layout(d.LayoutWidth())
+	if l.Geo == nil {
+		return Geometry{}, false
+	}
+	return l.Geo(n)
 }
 
 func (d *Doc) layoutGen() uint64 { return d.mutGen.Load() }
@@ -1171,6 +1194,12 @@ func (d *Doc) BackendByEngine(sel string) (int64, string, error) {
 // (x, y), or 0. Smaller boxes win, then later document order (paint order).
 func (d *Doc) ElementFromPoint(x, y int) int64 {
 	l := d.Layout(d.LayoutWidth())
+	if l.Hit != nil {
+		if n := l.Hit(float64(x), float64(y)); n != nil {
+			return d.idOf(n)
+		}
+		return 0
+	}
 	var best *html.Node
 	bestArea := -1
 	for n, b := range l.Boxes {

@@ -937,6 +937,15 @@ func (j *jsVM) registerHost() error {
 			return nil, nil
 		}},
 		{"box", doc(func(d *fnet.Doc, a []any) (any, error) {
+			if g, ok := d.GeometryOf(argI(a, 0)); ok {
+				fr := make([]any, 0, len(g.Frags))
+				for _, f := range g.Frags {
+					fr = append(fr, []any{f[0], f[1], f[2], f[3]})
+				}
+				return map[string]any{"x": g.Client[0], "y": g.Client[1], "width": g.Client[2], "height": g.Client[3],
+					"ox": g.Border[0], "oy": g.Border[1], "ow": g.Border[2], "oh": g.Border[3],
+					"cw": g.ClientW, "ch": g.ClientH, "sw": g.ScrollW, "sh": g.ScrollH, "frags": fr, "precise": true}, nil
+			}
 			b, err := d.BoundingBox(argI(a, 0))
 			if err != nil {
 				return map[string]any{"x": 0, "y": 0, "width": 0, "height": 0}, nil
