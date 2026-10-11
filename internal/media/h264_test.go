@@ -299,6 +299,8 @@ func TestNativeFramesVsFFmpeg(t *testing.T) {
 		args []string
 	}{
 		{"h264_bframes.mp4", []string{"-f", "lavfi", "-i", "mandelbrot=rate=15:size=192x112", "-t", "2", "-c:v", "libx264", "-profile:v", "high", "-x264-params", "keyint=30:bframes=3:ref=3", "-pix_fmt", "yuv420p"}},
+		{"vp9.webm", []string{"-f", "lavfi", "-i", "mandelbrot=rate=15:size=192x112", "-t", "2", "-c:v", "libvpx-vp9", "-b:v", "400k", "-g", "20", "-cpu-used", "4", "-pix_fmt", "yuv420p"}},
+		{"vp9.mp4", []string{"-f", "lavfi", "-i", "mandelbrot=rate=15:size=192x112", "-t", "2", "-c:v", "libvpx-vp9", "-b:v", "400k", "-g", "20", "-cpu-used", "4", "-pix_fmt", "yuv420p"}},
 		{"vp8.webm", []string{"-f", "lavfi", "-i", "mandelbrot=rate=15:size=192x112", "-t", "2", "-c:v", "libvpx", "-b:v", "400k", "-g", "20", "-pix_fmt", "yuv420p"}},
 	}
 	for _, c := range cases {

@@ -402,7 +402,7 @@ func TestMediaH264NeedsFFmpegAndFramesFollowTime(t *testing.T) {
 			// MP4 (H.264+AAC)
 			var res map[string]any
 			evalJSON(t, tab, `new Promise(function(res){var v=document.createElement('video');v.id='m';v.muted=true;v.preload='auto';v.src='clip.mp4';document.body.appendChild(v);v.onerror=function(){res({err:v.error.code})};v.onloadedmetadata=function(){res({w:v.videoWidth,h:v.videoHeight,d:v.duration})};})`, &res)
-			if !withFF {
+			if !withFF && !media.HasNativeVideo("h264") {
 				if res["err"] != float64(4) {
 					t.Fatalf("H.264 without ffmpeg must fail with MEDIA_ERR_SRC_NOT_SUPPORTED, got %v", res)
 				}

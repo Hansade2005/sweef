@@ -8,6 +8,7 @@ import (
 
 	"github.com/sweefbrowser/sweef/internal/media/h264"
 	"github.com/sweefbrowser/sweef/internal/media/vp8"
+	"github.com/sweefbrowser/sweef/internal/media/vp9"
 )
 
 // vdecoder is a pure-Go video decoder fed one access unit at a time. Decode
@@ -23,6 +24,11 @@ type vp8Adapter struct{ d *vp8.Decoder }
 func (a *vp8Adapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Decode(data) }
 func (a *vp8Adapter) Reset()                                   { a.d.Reset() }
 
+type vp9Adapter struct{ d *vp9.Decoder }
+
+func (a *vp9Adapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Decode(data) }
+func (a *vp9Adapter) Reset()                                   { a.d.Reset() }
+
 type h264Adapter struct{ d *h264.Decoder }
 
 func (a *h264Adapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Decode(data) }
@@ -34,6 +40,8 @@ func newNativeDecoder(vs *vstream) vdecoder {
 	switch vs.codec {
 	case "vp8":
 		return &vp8Adapter{vp8.NewDecoder()}
+	case "vp9":
+		return &vp9Adapter{vp9.NewDecoder()}
 	case "h264":
 		d := h264.NewDecoder()
 		if err := d.SetAVCC(vs.cfg); err != nil {
@@ -48,7 +56,7 @@ func newNativeDecoder(vs *vstream) vdecoder {
 // without ffmpeg.
 func HasNativeVideo(codec string) bool {
 	switch codec {
-	case "vp8", "h264":
+	case "vp8", "vp9", "h264":
 		return true
 	}
 	return false
