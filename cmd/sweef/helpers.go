@@ -92,9 +92,18 @@ func callRemote(addr, method, paramsJSON string) error {
 	if err := conn.Write(msg); err != nil {
 		return err
 	}
-	resp, _, err := conn.Read(make([]byte, 4096))
-	if err != nil {
-		return err
+	// The server multiplexes event.* notifications on the same socket; skip
+	// frames until we get the reply that carries our request ID.
+	var resp *protocol.Message
+	for {
+		m, _, err := conn.Read(make([]byte, 4096))
+		if err != nil {
+			return err
+		}
+		if m.ID == 1 {
+			resp = m
+			break
+		}
 	}
 	if resp.Error != nil {
 		return resp.Error

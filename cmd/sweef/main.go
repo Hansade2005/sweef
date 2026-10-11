@@ -44,6 +44,8 @@ func main() {
 		cmdFetch(args)
 	case "snapshot":
 		cmdSnapshot(args)
+	case "shot":
+		cmdShot(args)
 	case "eval":
 		cmdEval(args)
 	case "call":
@@ -161,6 +163,7 @@ func cmdFetch(args []string) {
 
 func cmdSnapshot(args []string) {
 	fs := flag.NewFlagSet("snapshot", flag.ExitOnError)
+	aria := fs.Bool("aria", false, "Playwright-style YAML accessibility tree with [ref=eN] handles")
 	rest := parseSkipURL(fs, args)
 	if len(rest) == 0 {
 		usage()
@@ -172,12 +175,50 @@ func cmdSnapshot(args []string) {
 	if err != nil {
 		fail(err)
 	}
+	if *aria {
+		y, err := t.AriaSnapshotYAML()
+		if err != nil {
+			fail(err)
+		}
+		fmt.Print(y)
+		return
+	}
 	nodes, err := t.Snapshot()
 	if err != nil {
 		fail(err)
 	}
 	b, _ := json.MarshalIndent(nodes, "", " ")
 	fmt.Println(string(b))
+}
+
+// cmdShot writes a real PNG screenshot of a URL to -out (default <url-host>.png),
+// with Playwright-like --width/--height/--dsf flags.
+func cmdShot(args []string) {
+	fs := flag.NewFlagSet("shot", flag.ExitOnError)
+	width := fs.Int("width", 0, "viewport width (0 = context default)")
+	height := fs.Int("height", 0, "viewport height (0 = context default)")
+	dsf := fs.Float64("dsf", 1, "device scale factor")
+	out := fs.String("out", "", "output path (default page.png)")
+	rest := parseSkipURL(fs, args)
+	if len(rest) == 0 {
+		usage()
+		os.Exit(2)
+	}
+	e := engine.New(engineOptsFrom(fs))
+	defer e.Close()
+	t, err := e.NewTab(rest[0])
+	if err != nil {
+		fail(err)
+	}
+	pb := t.PNGScreenshot(*width, *height, *dsf)
+	path := *out
+	if path == "" {
+		path = "page.png"
+	}
+	if err := os.WriteFile(path, pb, 0o644); err != nil {
+		fail(err)
+	}
+	fmt.Fprintf(os.Stderr, "wrote %s (%d bytes)\n", path, len(pb))
 }
 
 func cmdEval(args []string) {

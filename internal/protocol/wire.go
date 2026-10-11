@@ -25,9 +25,9 @@ const (
 )
 
 var (
-	ErrBadMagic   = errors.New("protocol: bad magic")
-	ErrTooLarge   = errors.New("protocol: frame exceeds limit")
-	ErrClosed     = errors.New("protocol: connection closed")
+	ErrBadMagic = errors.New("protocol: bad magic")
+	ErrTooLarge = errors.New("protocol: frame exceeds limit")
+	ErrClosed   = errors.New("protocol: connection closed")
 )
 
 // Message is one JsonRpc envelope. Either Method != "" (request/notification),

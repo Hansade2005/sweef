@@ -10,6 +10,7 @@ package rpc
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +62,22 @@ func (s *Server) tabID(p Params) (string, error) {
 	return id, nil
 }
 
+// tabOrNew resolves the target tab; if none exists yet it auto-creates one
+// (navigating to url when provided). This lets agents call browser_navigate /
+// browser_screenshot as the very first tool without an explicit newTab.
+func (s *Server) tabOrNew(p Params) (*engine.Tab, error) {
+	if str(p, "tab") == "" {
+		if len(s.eng.ListTabs()) == 0 {
+			u := strOr(p, "url", "about:blank")
+			t, _ := s.eng.NewTab(u) // navigation errors are surfaced via logs
+			if t != nil {
+				return t, nil
+			}
+		}
+	}
+	return s.tab(p)
+}
+
 func (s *Server) tab(p Params) (*engine.Tab, error) {
 	id, err := s.tabID(p)
 	if err != nil {
@@ -97,10 +114,13 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		return map[string]any{"product": "Sweef/0.1", "userAgent": s.eng.Opts().DefaultUserAgent,
 			"jsRuntime": "quickjs-es2020", "memoryBudgetMiB": s.eng.Opts().MaxRSSMiB}, nil
 	case "Browser.newTab", "Target.createTarget":
-		t, err := s.eng.NewTab(str(p, "url"))
-		if err != nil {
+		u := str(p, "url")
+		t, err := s.eng.NewTab(u)
+		if err != nil && t == nil {
 			return nil, err
 		}
+		// NewTab reports navigation errors but still returns a usable tab;
+		// swallow the error so agents can inspect logs and retry via Page.navigate.
 		return map[string]any{"tab": t.ID, "url": t.URL(), "title": t.Title()}, nil
 	case "Browser.closeTab", "Target.closeTarget":
 		return map[string]bool{"ok": true}, s.eng.CloseTab(str(p, "tab"))
@@ -127,7 +147,7 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 
 	// ---- Navigation ----
 	case "Page.navigate", "Page.goto":
-		t, err := s.tab(p)
+		t, err := s.tabOrNew(p)
 		if err != nil {
 			return nil, err
 		}
@@ -192,13 +212,32 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 			return nil, err
 		}
 		return t.Snapshot()
-	case "Page.screenshot": // structured text render; PNG when headful build
+	case "Page.ariaSnapshot": // Playwright-style YAML accessibility tree with [ref=eN] handles
+		t, err := s.tab(p)
+		if err != nil {
+			return nil, err
+		}
+		yaml, err := t.AriaSnapshotYAML()
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"yaml": yaml}, nil
+	case "Page.screenshot": // PNG bytes (base64) + structured text render; width/height/dsf per Playwright
 		t, err := s.tab(p)
 		if err != nil {
 			return nil, err
 		}
 		w := int(num(p, "width"))
-		return map[string]any{"text": t.Screenshot(w)}, nil
+		h := int(num(p, "height"))
+		dsf := num(p, "deviceScaleFactor")
+		format := strOr(p, "type", "png")
+		out := map[string]any{"text": t.Screenshot(w)}
+		if format == "png" {
+			pb := t.PNGScreenshot(w, h, dsf)
+			out["pngBase64"] = base64.StdEncoding.EncodeToString(pb)
+			out["bytes"] = len(pb)
+		}
+		return out, nil
 
 	// ---- DOM queries ----
 	case "DOM.querySelector":
@@ -298,7 +337,7 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		return map[string]bool{"ok": true}, nil
 
 	default:
-		return nil, fmt.Errorf("unknown method %q", method)
+		return s.dispatchExt(method, p)
 	}
 }
 

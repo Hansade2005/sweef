@@ -64,46 +64,78 @@ func (r *Ring) Since(sinceSID int64) []Event {
 
 func (r *Ring) All() []Event { return r.Since(0) }
 
+// Trim halves the live window — called by the memory governor under pressure.
+func (r *Ring) Trim() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.n > 1 {
+		drop := r.n / 2
+		r.head = (r.head + drop) % r.size
+		r.n -= drop
+	}
+}
+
 // NodeInfo is the serialisable handle the outside world uses to address DOM
 // nodes. BackendNodeID is stable for the lifetime of the document tree.
 type NodeInfo struct {
-	NodeID      int64  `json:"nodeId"`
-	BackendID   int64  `json:"backendNodeId"`
-	Name        string `json:"name"`          // tag name, lowercased
-	ID          string `json:"id,omitempty"`  // id attribute
-	Type        string `json:"type,omitempty"`
-	Role        string `json:"role,omitempty"`
-	Text        string `json:"text,omitempty"`       // accessible-ish label
-	Href        string `json:"href,omitempty"`
-	Attrs       map[string]string `json:"attrs,omitempty"`
-	Visible     bool   `json:"visible"`
-	Disabled    bool   `json:"disabled"`
-	Checked     bool   `json:"checked,omitempty"`
-	Box         [4]int `json:"box,omitempty"` // x,y,w,h in layout px (approx)
-	Focusable   bool   `json:"focusable"`
+	NodeID    int64             `json:"nodeId"`
+	BackendID int64             `json:"backendNodeId"`
+	Name      string            `json:"name"`         // tag name, lowercased
+	ID        string            `json:"id,omitempty"` // id attribute
+	Type      string            `json:"type,omitempty"`
+	Role      string            `json:"role,omitempty"`
+	Text      string            `json:"text,omitempty"` // accessible-ish label
+	Href      string            `json:"href,omitempty"`
+	Attrs     map[string]string `json:"attrs,omitempty"`
+	Visible   bool              `json:"visible"`
+	Disabled  bool              `json:"disabled"`
+	Checked   bool              `json:"checked,omitempty"`
+	Box       [4]int            `json:"box,omitempty"` // x,y,w,h in layout px (approx)
+	Focusable bool              `json:"focusable"`
 }
 
 // Tab is one browsing context. Goroutine-light: no dedicated thread, just
 // state + a mutex; JS evaluation happens on demand.
 type Tab struct {
-	ID     string
-	mu     sync.RWMutex
-	eng    *Engine
-	title  string
-	url    *url.URL
-	html   string
-	dom    *fnet.Doc // parsed tree held by our DOM layer
+	ID      string
+	mu      sync.RWMutex
+	eng     *Engine
+	ctx     *BrowserContext // isolation context (nil = engine default)
+	title   string
+	url     *url.URL
+	html    string
+	dom     *fnet.Doc // parsed tree held by our DOM layer
 	scripts []*CompiledScript
 
 	consoleRing *Ring
 	netRing     *Ring
 	stateRing   *Ring
+	dialogRing  *Ring
 
 	jsCtx   any // opaque QuickJS context handle
 	history []*url.URL
 	hIdx    int
 
 	closed atomic.Bool
+
+	// Emulation state (Playwright page.* setters)
+	vpW, vpH    int
+	dsf         float64
+	mobile      bool
+	landscape   bool
+	userAgent   string
+	geo         *[2]float64
+	permissions map[string]bool
+	offline     bool
+	colorScheme string
+	extraHdrs   map[string]string
+
+	initScripts []*CompiledScript
+	bindings    []string
+
+	// Dialog response armed by the agent before the dialog fires
+	dialogAccept bool
+	dialogText   string
 
 	// Interception hooks (route.fulfill / route.abort semantics)
 	interceptMu sync.RWMutex
@@ -117,11 +149,38 @@ func newTab(e *Engine, id string) *Tab {
 		consoleRing: NewRing(e.opts.ConsoleRingSize),
 		netRing:     NewRing(e.opts.NetworkRingSize),
 		stateRing:   NewRing(e.opts.StateRingSize),
+		dialogRing:  NewRing(64),
+		vpW:         e.opts.ViewportWidth,
+		vpH:         e.opts.ViewportHeight,
+		dsf:         1,
+	}
+	if t.vpW == 0 {
+		t.vpW = 1280
+	}
+	if t.vpH == 0 {
+		t.vpH = 720
 	}
 	if !e.opts.DisableJS {
 		t.jsCtx = runtimeCreateContext(id)
+	} else {
+		// Pure-Go DOM bridge: jsCtx stays nil but we still answer the
+		// read-only expression subset (document.title, querySelector…) so
+		// agents can evaluate common expressions even without QuickJS.
+		t.jsCtx = &domBridgeTab{tab: t}
 	}
 	return t
+}
+
+// domBridgeTab is a marker context that routes runtimeEval to the fallback
+// evaluator bound to this tab's live DOM.
+type domBridgeTab struct{ tab *Tab }
+
+// Context returns the tab's browser context (creating the default lazily).
+func (t *Tab) Context() *BrowserContext {
+	if t.ctx != nil {
+		return t.ctx
+	}
+	return t.eng.DefaultContext()
 }
 
 func (t *Tab) close() {
@@ -162,6 +221,11 @@ func (t *Tab) Navigate(rawurl string, headers map[string]string) error {
 	if u.Scheme == "" {
 		u.Scheme = "https"
 	}
+	if t.IsOfflineMode() {
+		err := fmt.Errorf("offline mode: navigation to %s blocked", rawurl)
+		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": rawurl, "error": err.Error()}})
+		return err
+	}
 	res, err := t.fetch(u, headers)
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": rawurl, "error": err.Error()}})
@@ -189,14 +253,34 @@ type fetchResult struct {
 }
 
 func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error) {
+	// Route interception first: fulfill (status+body) or abort (status 0).
+	if code, body, matched := t.interceptGet(u.String()); matched {
+		rec := fnet.RequestRecord{Method: "GET", URL: u.String(), FinalURL: u.String(), Status: code, DurationMs: 0}
+		if code == 0 {
+			err := fmt.Errorf("aborted by route")
+			t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": u.String(), "error": err.Error()}})
+			return nil, err
+		}
+		rec.Status = code
+		t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
+		return &fetchResult{body: body, finalURL: u.String(), status: code, har: rec}, nil
+	}
+
 	req, err := http.NewRequestWithContext(t.eng.ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", t.eng.opts.DefaultUserAgent)
+	req.Header.Set("User-Agent", t.UserAgent())
 	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
+	for k, v := range t.ExtraHeaders() {
+		req.Header.Set(k, v)
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
+	}
+	// context cookie jar takes precedence over the shared transport jar
+	if ck := t.Context().JarRef().ForURL(u.String()); ck != "" {
+		req.Header.Set("Cookie", ck)
 	}
 	rec := fnet.RequestRecord{Method: "GET", URL: u.String(), Headers: flattenHeaders(req.Header)}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
@@ -215,6 +299,15 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		return nil, err
 	}
 	body = b
+	// persist Set-Cookie into the tab's context jar
+	for _, sc := range res.Header.Values("Set-Cookie") {
+		if c := parseCookie(sc, t.eng.now()); c != nil {
+			if c.Domain == "" {
+				c.Domain = res.Request.URL.Hostname()
+			}
+			t.Context().JarRef().Set(c)
+		}
+	}
 	rec.Status = res.StatusCode
 	rec.FinalURL = res.Request.URL.String()
 	rec.DurationMs = time.Since(start).Milliseconds()
@@ -232,7 +325,8 @@ func flattenHeaders(h map[string][]string) map[string]string {
 	return out
 }
 
-// SetDocument parses html, rebuilds the DOM, runs inline scripts, fires load.
+// SetDocument parses html, rebuilds the DOM, runs init scripts + page scripts,
+// fires load.
 func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 	doc, err := fnet.ParseDocument(htmlSrc, finalURL)
 	if err != nil {
@@ -240,6 +334,11 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 			Data: map[string]string{"level": "error", "text": "parse failure: " + err.Error()}})
 		return
 	}
+	// forward DOM mutations from the doc layer onto the bus (EvDomMutated)
+	doc.SetMutationListener(func(m fnet.Mutation) {
+		t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(), Data: m})
+		t.emit(EvDomMutated, m)
+	})
 	t.mu.Lock()
 	t.html = htmlSrc
 	t.dom = doc
@@ -247,13 +346,46 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 	u, _ := url.Parse(finalURL)
 	t.url = u
 	t.scripts = compileScripts(doc.Scripts())
+	initScripts := append([]*CompiledScript(nil), t.initScripts...)
 	t.mu.Unlock()
 
+	// addInitScript sources run BEFORE any page script, on every navigation —
+	// same guarantee Playwright gives agents for hooking timers/fetch.
+	for _, s := range initScripts {
+		out, errs := runtimeEval(t.jsCtx, s.Source, s.Name)
+		for _, e := range errs {
+			t.LogConsole("error", e)
+		}
+		if out != "" {
+			t.applyDomMutations(out)
+		}
+	}
 	if !t.eng.opts.DisableJS && t.jsCtx != nil {
 		t.runScripts()
+	} else if _, ok := t.jsCtx.(*domBridgeTab); ok {
+		// Pure-Go DOM bridge: run page scripts through the read-only
+		// evaluator so console.log/document.* expressions still produce
+		// useful signals even without QuickJS linked in.
+		SetEvalTabHook(func() *Tab { return t })
+		for _, s := range t.snapshotScripts() {
+			out, errs := fallbackEval(s.Source)
+			for _, e := range errs {
+				t.LogConsole("info", e)
+			}
+			if out != "" {
+				t.applyDomMutations(out)
+			}
+		}
 	}
 	t.stateRing.Push(Event{Tab: t.ID, Kind: EvLoad, At: time.Now(), Data: map[string]any{"url": finalURL, "title": t.Title()}})
 	t.emit(EvLoad, map[string]any{"url": finalURL, "title": t.Title()})
+}
+
+// snapshotScripts returns a stable copy of the page's compiled <script> list.
+func (t *Tab) snapshotScripts() []*CompiledScript {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return append([]*CompiledScript(nil), t.scripts...)
 }
 
 func (t *Tab) runScripts() {
@@ -322,10 +454,10 @@ func (t *Tab) QuerySelector(sel string) (*NodeInfo, error) {
 		return nil, ErrNotFound
 	}
 	info, err := t.dom.QuerySelector(sel)
-if err != nil {
-return nil, err
-}
-return infoToNode(info), nil
+	if err != nil {
+		return nil, err
+	}
+	return infoToNode(info), nil
 }
 
 func (t *Tab) QuerySelectorAll(sel string) ([]*NodeInfo, error) {
@@ -335,14 +467,14 @@ func (t *Tab) QuerySelectorAll(sel string) ([]*NodeInfo, error) {
 		return nil, ErrNotFound
 	}
 	infos, err := t.dom.QuerySelectorAll(sel)
-if err != nil {
-return nil, err
-}
-out := make([]*NodeInfo, 0, len(infos))
-for _, i := range infos {
-out = append(out, infoToNode(i))
-}
-return out, nil
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*NodeInfo, 0, len(infos))
+	for _, i := range infos {
+		out = append(out, infoToNode(i))
+	}
+	return out, nil
 }
 
 // Text returns innerText-like extraction for agents (structured, whitespace-normalised).
@@ -364,14 +496,14 @@ func (t *Tab) Snapshot() ([]*NodeInfo, error) {
 		return nil, ErrNotFound
 	}
 	infos, err := t.dom.AriaSnapshot()
-if err != nil {
-return nil, err
-}
-out := make([]*NodeInfo, 0, len(infos))
-for _, i := range infos {
-out = append(out, infoToNode(i))
-}
-return out, nil
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*NodeInfo, 0, len(infos))
+	for _, i := range infos {
+		out = append(out, infoToNode(i))
+	}
+	return out, nil
 }
 
 func (t *Tab) ConsoleLog(sinceSID int64) []Event { return t.consoleRing.Since(sinceSID) }
@@ -385,9 +517,22 @@ func (t *Tab) LogConsole(level, text string) {
 }
 
 // Evaluate runs JS in the tab context and returns a JSON-encoded result.
+// Even in pure-Go / --no-js builds it answers the read-only DOM expression
+// subset (document.title, location.href, querySelector…) against the live DOM.
 func (t *Tab) Evaluate(expr string) (json.RawMessage, error) {
-	if t.eng.opts.DisableJS || t.jsCtx == nil {
+	if t.jsCtx == nil {
 		return nil, fmt.Errorf("js disabled")
+	}
+	if !cgoAvailable() {
+		SetEvalTabHook(func() *Tab { return t })
+		out, errs := fallbackEval(expr)
+		for _, e := range errs {
+			t.LogConsole("info", e)
+		}
+		if out == "" {
+			return json.RawMessage("null"), nil
+		}
+		return json.RawMessage(out), nil
 	}
 	out, errs := runtimeEval(t.jsCtx, expr, "<eval>")
 	for _, e := range errs {
@@ -401,26 +546,6 @@ func (t *Tab) Evaluate(expr string) (json.RawMessage, error) {
 
 // Click performs a semantic click on selector: focus, dispatch mousedown/up/click,
 // follow link href or submit button form (Playwright actionability minus pixels).
-func (t *Tab) Click(sel string) error {
-	ni, err := t.QuerySelector(sel)
-	if err != nil {
-		return err
-	}
-	if ni.Disabled {
-		return fmt.Errorf("element %q is disabled", sel)
-	}
-	t.LogConsole("log", fmt.Sprintf("click %q <%s>", sel, ni.Name))
-	if ni.Href != "" {
-		base, _ := url.Parse(t.URL())
-		abs, _ := url.Parse(ni.Href)
-		return t.Navigate(base.ResolveReference(abs).String(), nil)
-	}
-	// forms: if inside <form> and type=submit -> GET/POST navigation
-	if ni.Type == "submit" {
-		return t.SubmitFormFor(sel)
-	}
-	return nil
-}
 
 func (t *Tab) Fill(sel, value string) error {
 	ni, err := t.QuerySelector(sel)
@@ -435,14 +560,6 @@ func (t *Tab) Fill(sel, value string) error {
 			Data: map[string]string{"sel": sel, "value": value}})
 	}
 	return err
-}
-
-func (t *Tab) Press(sel string, keys string) error {
-	t.LogConsole("log", fmt.Sprintf("press %q on %q", keys, sel))
-	if keys == "Enter" {
-		return t.SubmitFormFor(sel)
-	}
-	return nil
 }
 
 func (t *Tab) SubmitFormFor(sel string) error {
@@ -496,7 +613,16 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	return nil
 }
 
-func (t *Tab) GoBack() error  { return t.traverse(-1) }
+// Reload re-navigates to the current URL, bypassing cached state — like
+// Playwright's page.reload().
+func (t *Tab) Reload() error {
+	t.mu.RLock()
+	u := t.url
+	t.mu.RUnlock()
+	return t.Navigate(u.String(), map[string]string{"Cache-Control": "no-cache"})
+}
+
+func (t *Tab) GoBack() error    { return t.traverse(-1) }
 func (t *Tab) GoForward() error { return t.traverse(+1) }
 
 func (t *Tab) traverse(delta int) error {
@@ -520,31 +646,49 @@ func (t *Tab) Route(glob string, handler func(*http.Request) (int, string, bool)
 	t.interceptMu.Unlock()
 }
 
+// Unroute removes one previously installed rule by its glob pattern.
+func (t *Tab) Unroute(glob string) {
+	t.interceptMu.Lock()
+	var keep []*fnet.Route
+	for _, r := range t.routes {
+		if r.Pattern != glob {
+			keep = append(keep, r)
+		}
+	}
+	t.routes = keep
+	t.interceptMu.Unlock()
+}
+
 func (t *Tab) UnrouteAll() {
 	t.interceptMu.Lock()
 	t.routes = nil
 	t.interceptMu.Unlock()
 }
 
-// Screenshot renders the structured snapshot into an ANSI/plain-text "image";
-// on machines with a display server the same model feeds the PNG rasteriser.
+// Screenshot renders the current document as structured text — the agent-first
+// equivalent of a screenshot (token-cheap, deterministic). width<=0 uses the
+// context viewport width.
 func (t *Tab) Screenshot(width int) string {
-	if width <= 0 || width > 240 {
-		width = 80 // tiny-machine default
-	}
 	t.mu.RLock()
-	defer t.mu.RUnlock()
-	if t.dom == nil {
+	dom := t.dom
+	if width <= 0 {
+		width = t.vpW
+	}
+	t.mu.RUnlock()
+	if width <= 0 {
+		width = 80
+	}
+	if dom == nil {
 		return ""
 	}
-	return t.dom.RenderText(width)
+	return dom.RenderText(width)
 }
 
 // HAR exports the network ring in Chrome HAR 1.2 format.
 func (t *Tab) HAR() ([]byte, error) {
 	evs := t.netRing.All()
 	type log struct {
-		Version string              `json:"version"`
+		Version string               `json:"version"`
 		Entries []fnet.RequestRecord `json:"entries"`
 	}
 	wrapper := struct {
@@ -562,32 +706,220 @@ func (t *Tab) HAR() ([]byte, error) {
 
 // infoToNode converts a DOM-layer Info into the engine's wire NodeInfo.
 func infoToNode(i *fnet.Info) *NodeInfo {
-return &NodeInfo{
-NodeID:    i.NodeID,
-BackendID: i.BackendID,
-Name:      i.Name,
-ID:        i.ID,
-Type:      i.Type,
-Role:      i.Role,
-Text:      i.Text,
-Href:      i.Href,
-Visible:   i.Visible,
-Disabled:  i.Disabled,
-Checked:   i.Checked,
-Focusable: i.Focusable,
-}
+	return &NodeInfo{
+		NodeID:    i.NodeID,
+		BackendID: i.BackendID,
+		Name:      i.Name,
+		ID:        i.ID,
+		Type:      i.Type,
+		Role:      i.Role,
+		Text:      i.Text,
+		Href:      i.Href,
+		Visible:   i.Visible,
+		Disabled:  i.Disabled,
+		Checked:   i.Checked,
+		Focusable: i.Focusable,
+	}
 }
 
 // CompiledScript is a script ready for the JS runtime.
 type CompiledScript struct {
-Source string
-Name   string
+	Source string
+	Name   string
 }
 
 func compileScripts(srcs []fnet.Script) []*CompiledScript {
-out := make([]*CompiledScript, 0, len(srcs))
-for _, s := range srcs {
-out = append(out, &CompiledScript{Source: s.Source, Name: s.Name})
+	out := make([]*CompiledScript, 0, len(srcs))
+	for _, s := range srcs {
+		out = append(out, &CompiledScript{Source: s.Source, Name: s.Name})
+	}
+	return out
 }
-return out
+
+// interceptGet evaluates installed route handlers for a GET; returns
+// (statusCode, body, matched). code==0 with matched==true means abort.
+func (t *Tab) interceptGet(rawurl string) (int, string, bool) {
+	t.interceptMu.RLock()
+	routes := append([]*fnet.Route(nil), t.routes...)
+	t.interceptMu.RUnlock()
+	if len(routes) == 0 {
+		return 0, "", false
+	}
+	req, _ := http.NewRequest(http.MethodGet, rawurl, nil)
+	for _, r := range routes {
+		if code, body, ok := fnet.MatchRoute(r, req); ok {
+			return code, body, true
+		}
+	}
+	return 0, "", false
+}
+
+// Dialogs records a JS dialog and applies the armed response like Playwright's
+// page.on("dialog"). Returns whether it was accepted.
+func (t *Tab) HandleDialog(d Dialog) bool {
+	t.mu.Lock()
+	acc, txt := t.dialogAccept, t.dialogText
+	t.dialogAccept, t.dialogText = true, ""
+	t.mu.Unlock()
+	if d.Kind == "alert" || d.Kind == "beforeunload" {
+		acc = true
+	}
+	t.dialogRing.Push(Event{Tab: t.ID, Kind: EvDialog, At: time.Now(),
+		Data: map[string]any{"kind": d.Kind, "message": d.Message, "accepted": acc, "reply": txt}})
+	t.emit(EvDialog, map[string]any{"dialog": d, "accepted": acc, "text": txt})
+	return acc
+}
+
+func (t *Tab) ArmDialogResponse(accept bool, promptText string) {
+	t.mu.Lock()
+	t.dialogAccept = accept
+	t.dialogText = promptText
+	t.mu.Unlock()
+}
+
+func (t *Tab) DialogLog(sinceSID int64) []Event { return t.dialogRing.Since(sinceSID) }
+
+// Emulation setters/getters (Playwright parity).
+func (t *Tab) SetViewport(w, h int, dsf float64, mobile, landscape bool) {
+	t.mu.Lock()
+	if w > 0 {
+		t.vpW = w
+	}
+	if h > 0 {
+		t.vpH = h
+	}
+	if dsf > 0 {
+		t.dsf = dsf
+	}
+	t.mobile, t.landscape = mobile, landscape
+	t.mu.Unlock()
+	t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(),
+		Data: map[string]any{"action": "setViewport", "width": t.vpW, "height": t.vpH, "mobile": mobile}})
+}
+
+func (t *Tab) Viewport() (w, h int, dsf float64, mobile, landscape bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.vpW, t.vpH, t.dsf, t.mobile, t.landscape
+}
+
+func (t *Tab) SetUserAgent(ua string) { t.mu.Lock(); t.userAgent = ua; t.mu.Unlock() }
+
+func (t *Tab) UserAgent() string {
+	t.mu.RLock()
+	ua := t.userAgent
+	t.mu.RUnlock()
+	if ua != "" {
+		return ua
+	}
+	return t.eng.opts.DefaultUserAgent
+}
+
+func (t *Tab) SetGeolocation(lat, lng float64) {
+	t.mu.Lock()
+	t.geo = &[2]float64{lat, lng}
+	t.mu.Unlock()
+}
+
+func (t *Tab) Geolocation() [2]float64 {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if t.geo == nil {
+		return [2]float64{}
+	}
+	return *t.geo
+}
+
+func (t *Tab) GrantPermissions(perms []string) {
+	t.mu.Lock()
+	if t.permissions == nil {
+		t.permissions = map[string]bool{}
+	}
+	for _, p := range perms {
+		t.permissions[p] = true
+	}
+	t.mu.Unlock()
+}
+
+func (t *Tab) PermissionsList() []string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	var out []string
+	for p, ok := range t.permissions {
+		if ok {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func (t *Tab) SetOffline(on bool) {
+	t.mu.Lock()
+	t.offline = on
+	t.mu.Unlock()
+	t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(),
+		Data: map[string]any{"action": "setOffline", "offline": on}})
+}
+
+func (t *Tab) IsOfflineMode() bool { t.mu.RLock(); defer t.mu.RUnlock(); return t.offline }
+
+func (t *Tab) SetColorScheme(s string) { t.mu.Lock(); t.colorScheme = s; t.mu.Unlock() }
+
+func (t *Tab) ColorSchemeName() string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if t.colorScheme == "" {
+		return "light"
+	}
+	return t.colorScheme
+}
+
+func (t *Tab) SetExtraHeaders(h map[string]string) { t.mu.Lock(); t.extraHdrs = h; t.mu.Unlock() }
+
+func (t *Tab) ExtraHeaders() map[string]string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	out := map[string]string{}
+	for k, v := range t.extraHdrs {
+		out[k] = v
+	}
+	return out
+}
+
+func (t *Tab) AddInitScript(src string) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	id := fmt.Sprintf("init-%d", len(t.initScripts)+1)
+	t.initScripts = append(t.initScripts, &CompiledScript{Source: src, Name: id})
+	return id
+}
+
+func (t *Tab) RemoveInitScript(id string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	var keep []*CompiledScript
+	for _, s := range t.initScripts {
+		if s.Name != id {
+			keep = append(keep, s)
+		}
+	}
+	t.initScripts = keep
+}
+
+func (t *Tab) ExposeBinding(name string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, b := range t.bindings {
+		if b == name {
+			return nil
+		}
+	}
+	t.bindings = append(t.bindings, name)
+	return nil
+}
+
+func (t *Tab) Bindings() []string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return append([]string(nil), t.bindings...)
 }

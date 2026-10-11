@@ -1,0 +1,10 @@
+{
+  "name": "@sweef/browser",
+  "version": "0.1.0",
+  "description": "Sweef Browser SDK for Node.js — Playwright-style automation over the SWF1 socket protocol",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "engines": { "node": ">=14" },
+  "keywords": ["browser", "automation", "ai-agents", "mcp", "playwright", "headless"]
+}

@@ -14,8 +14,8 @@ func cgoAvailable() bool        { return false }
 func initCgoRuntime(o *Options) {}
 func shutdownCgoRuntime()       {}
 
-func createCgoContext(tabID string) any   { return nil }
-func destroyCgoContext(ctx any)           {}
+func createCgoContext(tabID string) any { return nil }
+func destroyCgoContext(ctx any)         {}
 func cgoEval(ctx any, src, name string) (string, []string) {
 	return "", nil
 }

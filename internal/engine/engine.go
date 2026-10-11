@@ -23,34 +23,38 @@ import (
 )
 
 var (
-	ErrNoTab      = errors.New("engine: no such tab")
-	ErrClosed     = errors.New("engine: closed")
-	ErrNotFound   = errors.New("engine: node not found")
-	ErrTimeout    = errors.New("engine: timeout waiting for condition")
+	ErrNoTab    = errors.New("engine: no such tab")
+	ErrClosed   = errors.New("engine: closed")
+	ErrNotFound = errors.New("engine: node not found")
+	ErrTimeout  = errors.New("engine: timeout waiting for condition")
 )
 
 // Options tune the whole browser instance for low-memory machines.
 type Options struct {
-	MaxRSSMiB        int           // soft budget; GC pressure + eviction kicks in above this
-	MaxCacheMiB      int           // HTTP memory cache ceiling
-	Headless         bool          // always true today; "headful" streams to a thin client
-	DisableJS        bool          // pure fetch+DOM mode for tiny agents
-	ConsoleRingSize  int           // console messages retained per tab
-	NetworkRingSize  int           // network events retained per tab
-	StateRingSize    int           // actionability/state log entries retained
+	MaxRSSMiB        int  // soft budget; GC pressure + eviction kicks in above this
+	MaxCacheMiB      int  // HTTP memory cache ceiling
+	Headless         bool // always true today; "headful" streams to a thin client
+	DisableJS        bool // pure fetch+DOM mode for tiny agents
+	ConsoleRingSize  int  // console messages retained per tab
+	NetworkRingSize  int  // network events retained per tab
+	StateRingSize    int  // actionability/state log entries retained
 	DefaultUserAgent string
 	ProxyURL         string
+	ViewportWidth    int // default viewport width (px) for text rendering
+	ViewportHeight   int // default viewport height (px)
 }
 
 func DefaultOptions() Options {
 	return Options{
-		MaxRSSMiB:       48,
-		MaxCacheMiB:     8,
-		Headless:        true,
-		ConsoleRingSize: 512,
-		NetworkRingSize: 512,
-		StateRingSize:   256,
+		MaxRSSMiB:        48,
+		MaxCacheMiB:      8,
+		Headless:         true,
+		ConsoleRingSize:  512,
+		NetworkRingSize:  512,
+		StateRingSize:    256,
 		DefaultUserAgent: "Sweef/0.1 (agent; lightweight)",
+		ViewportWidth:    1280,
+		ViewportHeight:   720,
 	}
 }
 
@@ -58,27 +62,27 @@ func DefaultOptions() Options {
 type EventKind string
 
 const (
-	EvNavigated        EventKind = "Page.navigate"
-	EvLoad             EventKind = "Page.load"
-	EvDomMutated       EventKind = "DOM.nodeInserted"
-	EvConsole          EventKind = "Log.entry"
-	EvRequest          EventKind = "Network.request"
-	EvResponse         EventKind = "Network.response"
-	EvFailure          EventKind = "Network.failure"
-	EvDialog           EventKind = "Page.javascript dialog"
-	EvPopup            EventKind = "Page.popup"
-	EvCrash            EventKind = "Page.crashed"
-	EvDownload         EventKind = "Browser.download"
+	EvNavigated  EventKind = "Page.navigate"
+	EvLoad       EventKind = "Page.load"
+	EvDomMutated EventKind = "DOM.nodeInserted"
+	EvConsole    EventKind = "Log.entry"
+	EvRequest    EventKind = "Network.request"
+	EvResponse   EventKind = "Network.response"
+	EvFailure    EventKind = "Network.failure"
+	EvDialog     EventKind = "Page.javascript dialog"
+	EvPopup      EventKind = "Page.popup"
+	EvCrash      EventKind = "Page.crashed"
+	EvDownload   EventKind = "Browser.download"
 )
 
 // Event is one broadcast entry. Ring buffers store these verbatim so history
 // queries are O(n) over a bounded window, never unbounded.
 type Event struct {
-	SID   int64      `json:"sid"`
-	Tab   string     `json:"tab"`
-	Kind  EventKind  `json:"kind"`
-	At    time.Time  `json:"at"`
-	Data  any        `json:"data,omitempty"`
+	SID  int64     `json:"sid"`
+	Tab  string    `json:"tab"`
+	Kind EventKind `json:"kind"`
+	At   time.Time `json:"at"`
+	Data any       `json:"data,omitempty"`
 }
 
 // Bus fans out events to subscribers (MCP bridge, CDP shim, SDK sockets).
@@ -135,6 +139,13 @@ type Engine struct {
 
 	httpClient *http.Client // lazily built: cookie jar + bounded transport
 
+	// Context isolation (Playwright BrowserContext parity)
+	contexts   map[string]*BrowserContext
+	defaultCtx *BrowserContext
+	jar        *Jar
+	metrics    *Metrics
+	started    time.Time
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	closed atomic.Bool
@@ -142,14 +153,74 @@ type Engine struct {
 
 func New(opts Options) *Engine {
 	ctx, cancel := context.WithCancel(context.Background())
-	e := &Engine{opts: opts, bus: NewBus(), tabs: map[string]*Tab{}, ctx: ctx, cancel: cancel}
+	e := &Engine{
+		opts:     opts,
+		bus:      NewBus(),
+		tabs:     map[string]*Tab{},
+		contexts: map[string]*BrowserContext{},
+		jar:      NewJar(),
+		metrics:  NewMetrics(opts.MaxRSSMiB),
+		started:  time.Now(),
+		ctx:      ctx,
+		cancel:   cancel,
+	}
 	runtimeInit(&e.opts)
 	return e
 }
 
-func (e *Engine) Bus() *Bus          { return e.bus }
-func (e *Engine) Opts() Options      { return e.opts }
+func (e *Engine) Bus() *Bus                { return e.bus }
+func (e *Engine) Opts() Options            { return e.opts }
 func (e *Engine) Context() context.Context { return e.ctx }
+
+// emit broadcasts an engine-level event (no tab) onto the bus.
+func (e *Engine) emit(kind EventKind, data any) {
+	e.bus.Publish(Event{Kind: kind, At: time.Now(), Data: data})
+}
+
+// now is a clock indirection so tests can pin time.
+func (e *Engine) now() time.Time { return time.Now() }
+
+// NewTabInContext creates a tab bound to a specific BrowserContext; tabs
+// inherit the context's UA/viewport/cookies and register with its tab list.
+func (e *Engine) NewTabInContext(c *BrowserContext, url string) (*Tab, error) {
+	if e.closed.Load() {
+		return nil, ErrClosed
+	}
+	e.mu.Lock()
+	t := newTab(e, e.newTabID())
+	t.ctx = c
+	e.tabs[t.ID] = t
+	e.order = append(e.order, t.ID)
+	e.mu.Unlock()
+	// apply context emulation before first navigation
+	if o := c.Options(); o.UserAgent != "" || o.ViewportWidth > 0 {
+		t.SetViewport(o.ViewportWidth, o.ViewportHeight, o.DeviceScaleFactor, o.Mobile, o.Landscape)
+		if o.UserAgent != "" {
+			t.SetUserAgent(o.UserAgent)
+		}
+		if len(o.ExtraHeaders) > 0 {
+			t.SetExtraHeaders(o.ExtraHeaders)
+		}
+		t.SetOffline(o.Offline)
+		if o.ColorScheme != "" {
+			t.SetColorScheme(o.ColorScheme)
+		}
+		if len(o.Permissions) > 0 {
+			t.GrantPermissions(o.Permissions)
+		}
+		if o.Geolocation != nil {
+			t.SetGeolocation(o.Geolocation[0], o.Geolocation[1])
+		}
+	}
+	if url != "" && url != "about:blank" {
+		if err := t.Navigate(url, nil); err != nil {
+			return t, err
+		}
+	} else {
+		t.SetDocument("<html><head><title>New Tab</title></head><body></body></html>", "about:blank")
+	}
+	return t, nil
+}
 
 func (e *Engine) newTabID() string {
 	return fmt.Sprintf("tab-%d", e.nextID.Add(1))
@@ -236,6 +307,8 @@ func (e *Engine) Close() error {
 	}
 	e.tabs = map[string]*Tab{}
 	e.order = nil
+	e.contexts = map[string]*BrowserContext{}
+	e.defaultCtx = nil
 	e.mu.Unlock()
 	for _, t := range tabs {
 		t.close()
@@ -244,3 +317,5 @@ func (e *Engine) Close() error {
 	shutdownRuntime()
 	return nil
 }
+
+// Reload re-fetches the current URL in place (page.reload equivalent).
