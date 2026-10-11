@@ -47,6 +47,7 @@ type Options struct {
 	JSTimeoutMs      int    // single-eval timeout; a looping script is interrupted (default 5000)
 	WarmVMs          int    // JS VMs kept pre-built so navigations skip prelude setup (default 1)
 	DownloadsDir     string // where downloads are saved (default $TMPDIR/sweef-downloads)
+	CacheDir         string // on-disk bytecode cache ("" = $SWEEF_CACHE_DIR or user cache dir; "off" disables)
 }
 
 func DefaultOptions() Options {
@@ -178,9 +179,16 @@ func New(opts Options) *Engine {
 		ctx:      ctx,
 		cancel:   cancel,
 	}
-	e.vms = newVMPool(opts)
+	cacheDir := opts.CacheDir
+	if cacheDir == "" {
+		cacheDir = defaultCacheDir()
+	} else if cacheDir == "off" {
+		cacheDir = ""
+	}
+	e.code = newCodeCache(cacheDir)
+	setPreludeCacheDir(e.code.dir)
 	e.res = newResCache(opts.MaxCacheMiB)
-	e.code = newCodeCache()
+	e.vms = newVMPool(opts)
 	return e
 }
 

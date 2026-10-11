@@ -376,7 +376,11 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 	old := t.js
 	t.js = nil
 	t.mu.Unlock()
-	old.close()
+	// Freeing every object the previous page allocated takes milliseconds;
+	// nothing can reach the old VM any more, so do it off the critical path.
+	if old != nil {
+		go old.close()
+	}
 
 	// Pages with no scripts, no inline handlers and no init scripts get no
 	// VM at all: there is nothing to run, and a navigation stays at the cost

@@ -15,12 +15,15 @@ package engine
 import (
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,17 +42,47 @@ var domPrelude string
 var (
 	preludeOnce     sync.Once
 	preludeBytecode []byte
+	preludeDiskMu   sync.Mutex
+	preludeDiskDir  string
 )
+
+// setPreludeCacheDir lets the first engine point the prelude cache at disk.
+func setPreludeCacheDir(dir string) {
+	preludeDiskMu.Lock()
+	if preludeDiskDir == "" {
+		preludeDiskDir = dir
+	}
+	preludeDiskMu.Unlock()
+}
 
 func compiledPrelude() []byte {
 	preludeOnce.Do(func() {
+		src := domPrelude + "\n" + domPreludeExt
+		preludeDiskMu.Lock()
+		dir := preludeDiskDir
+		preludeDiskMu.Unlock()
+		var file string
+		if dir != "" {
+			key := codeKey(src)
+			file = filepath.Join(dir, "prelude-"+hex.EncodeToString(key[:8])+".qjsbc")
+			if b, err := os.ReadFile(file); err == nil && len(b) > 0 {
+				preludeBytecode = b
+				return
+			}
+		}
 		vm, err := quickjs.NewVM()
 		if err != nil {
 			return
 		}
 		defer vm.Close()
-		if bc, err := vm.Compile(domPrelude+"\n"+domPreludeExt, quickjs.EvalGlobal); err == nil {
+		if bc, err := vm.Compile(src, quickjs.EvalGlobal); err == nil {
 			preludeBytecode = bc
+			if file != "" {
+				tmp := file + ".tmp"
+				if os.WriteFile(tmp, bc, 0o600) == nil {
+					_ = os.Rename(tmp, file)
+				}
+			}
 		}
 	})
 	return preludeBytecode
@@ -270,7 +303,7 @@ func (j *jsVM) run(src, name string) (any, error) {
 // runCached executes classic script source through the process-wide code
 // cache: large scripts are compiled to bytecode once and replayed after that.
 func (j *jsVM) runCached(src, name string) (any, error) {
-	if len(src) < 2048 {
+	if len(src) < 256 {
 		return j.run(src, name)
 	}
 	key := codeKey(src)
@@ -281,6 +314,7 @@ func (j *jsVM) runCached(src, name string) (any, error) {
 		return nil, ErrClosed
 	}
 	bc := cache.get(key)
+	fromCache := bc != nil
 	if bc == nil {
 		var err error
 		if bc, err = j.vm.Compile(src, quickjs.EvalGlobal); err != nil {
@@ -291,7 +325,15 @@ func (j *jsVM) runCached(src, name string) (any, error) {
 	}
 	r, err := j.vm.EvalBytecode(bc)
 	if err != nil {
-		j.tab.LogConsole("error", jsErrorText(err, name))
+		var qe *quickjs.Error
+		if fromCache && !errors.As(err, &qe) {
+			// unreadable cache entry: drop it and run from source
+			cache.forget(key)
+			r, err = j.vm.Eval(src, quickjs.EvalGlobal)
+		}
+		if err != nil {
+			j.tab.LogConsole("error", jsErrorText(err, name))
+		}
 	}
 	return r, err
 }
