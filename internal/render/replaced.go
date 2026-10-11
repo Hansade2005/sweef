@@ -37,6 +37,10 @@ func (c *ctx) loadImage(r *replacedInfo) {
 		if r.ih > 0 {
 			r.ratio = r.iw / r.ih
 		}
+		return
+	}
+	if w, h, hasW, hasH, ratio, ok := c.svgImageIntrinsic(r.url); ok {
+		r.iw, r.ih, r.hasIW, r.hasIH, r.ratio = w, h, hasW, hasH, ratio
 	}
 }
 

@@ -40,6 +40,7 @@ type Rule struct {
 	Origin  Origin
 	Layer   int // 0 unlayered; larger = later layer
 	Cont    *ContCond
+	Scope   *ScopeCond
 	Order   int
 	id      int
 }
@@ -78,6 +79,7 @@ type parser struct {
 	supportsF func(name, val string) bool
 	depth     int
 	cont      *ContCond
+	scope     *ScopeCond
 	quirks    bool
 }
 
@@ -314,7 +316,15 @@ func (p *parser) atBlock(prelude, body, parentSel string) {
 			p.nestedBody(body, parentSel)
 			p.cont = old
 		}
-	case "@scope", "@document", "@-moz-document":
+	case "@scope":
+		if sc := parseScopePrelude(args, p.quirks); sc != nil {
+			old := p.scope
+			sc.Outer = old
+			p.scope = sc
+			p.nestedBody(body, parentSel)
+			p.scope = old
+		}
+	case "@document", "@-moz-document":
 	case "@starting-style", "@keyframes", "@-webkit-keyframes", "@page", "@property", "@font-feature-values", "@counter-style", "@view-transition", "@position-try":
 	}
 }
@@ -457,7 +467,7 @@ func (p *parser) addRule(selText string, decls []Decl) {
 	if len(decls) == 0 {
 		return
 	}
-	r := &Rule{Decls: decls, Origin: p.origin, Layer: p.curLayer, Cont: p.cont}
+	r := &Rule{Decls: decls, Origin: p.origin, Layer: p.curLayer, Cont: p.cont, Scope: p.scope}
 	*p.order++
 	r.Order = *p.order
 	for _, alt := range splitTop(selText, ',') {

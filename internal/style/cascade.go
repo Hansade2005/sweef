@@ -228,7 +228,16 @@ func (e *Engine) collect(n *html.Node, pseudo string) []*Entry {
 			if en.Pseudo != pseudo {
 				continue
 			}
-			if en.Sel.Match(n, nil) {
+			var scopeEl *html.Node
+			if en.Rule.Scope != nil {
+				if scopeEl = scopeRootFor(n, en.Rule.Scope); scopeEl == nil {
+					continue
+				}
+				if scopeEl == n && !strings.Contains(en.key, ":scope") {
+					continue
+				}
+			}
+			if en.Sel.Match(n, scopeEl) {
 				if en.Rule.Cont != nil && !e.contMatches(n, en.Rule.Cont, pseudo) {
 					continue
 				}
