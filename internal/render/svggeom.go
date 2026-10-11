@@ -303,12 +303,12 @@ func (c *ctx) svgUse(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 		w, h := vw, vh
 		if v := attr(n, "width"); v != "" {
 			w = svgLen(v, vw, w)
-		} else if v := svgProp2(t, "width"); v != "" && t.Tag == "svg" {
+		} else if v := svgProp2(t, "width"); v != "" {
 			w = svgLen(v, vw, w)
 		}
 		if v := attr(n, "height"); v != "" {
 			h = svgLen(v, vh, h)
-		} else if v := svgProp2(t, "height"); v != "" && t.Tag == "svg" {
+		} else if v := svgProp2(t, "height"); v != "" {
 			h = svgLen(v, vh, h)
 		}
 		vbw, vbh := w, h

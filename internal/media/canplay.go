@@ -79,35 +79,36 @@ const (
 )
 
 type codecInfo struct {
-	kind  string // audio or video
-	class codecClass
+	kind   string // audio or video
+	class  codecClass
+	native string // ffprobe-style name of a video codec that may have a pure-Go decoder
 }
 
 func classifyCodec(c string) codecInfo {
 	lc := strings.ToLower(c)
 	switch {
-	case lc == "vp8":
-		return codecInfo{"video", ccFree}
+	case lc == "vp8" || lc == "vp8.0":
+		return codecInfo{"video", ccFFmpeg, "vp8"}
 	case lc == "vp9" || strings.HasPrefix(lc, "vp09."):
-		return codecInfo{"video", ccFree}
+		return codecInfo{"video", ccFFmpeg, "vp9"}
 	case strings.HasPrefix(lc, "av01."):
-		return codecInfo{"video", ccFree}
+		return codecInfo{"video", ccFFmpeg, "av1"}
 	case strings.HasPrefix(lc, "avc1") || strings.HasPrefix(lc, "avc3"):
-		return codecInfo{"video", ccFFmpeg}
+		return codecInfo{"video", ccFFmpeg, "h264"}
 	case strings.HasPrefix(lc, "hvc1") || strings.HasPrefix(lc, "hev1"):
-		return codecInfo{"video", ccNo}
+		return codecInfo{"video", ccNo, ""}
 	case lc == "theora":
-		return codecInfo{"video", ccNo}
+		return codecInfo{"video", ccNo, ""}
 	case lc == "vorbis" || lc == "opus" || lc == "flac" || lc == "mp3" || lc == "1":
-		return codecInfo{"audio", ccFree}
+		return codecInfo{"audio", ccFree, ""}
 	case lc == "mp4a.6b" || lc == "mp4a.69":
-		return codecInfo{"audio", ccFree}
+		return codecInfo{"audio", ccFree, ""}
 	case strings.HasPrefix(lc, "mp4a.40."):
-		return codecInfo{"audio", ccFFmpeg}
+		return codecInfo{"audio", ccFFmpeg, ""}
 	case lc == "speex" || lc == "0":
-		return codecInfo{"audio", ccNo}
+		return codecInfo{"audio", ccNo, ""}
 	}
-	return codecInfo{"", ccUnknown}
+	return codecInfo{"", ccUnknown, ""}
 }
 
 // containerRule describes which codec kinds a MIME type may carry.
@@ -168,7 +169,7 @@ func CanPlayType(mime string) string {
 		if ci.class == ccUnknown || ci.class == ccNo {
 			return ""
 		}
-		if ci.class == ccFFmpeg && !ff {
+		if ci.class == ccFFmpeg && !ff && !(ci.native != "" && HasNativeVideo(ci.native)) {
 			return ""
 		}
 		if ci.kind == "video" && !rule.video {
@@ -234,14 +235,9 @@ func Playable(info *Info) (bool, string) {
 		switch t.Kind {
 		case "video":
 			switch t.CodecName {
-			case "vp8":
-			case "vp9", "av1":
-				if !ff {
-					return false, t.CodecName + " frames need ffmpeg"
-				}
-			case "h264":
-				if !ff {
-					return false, "H.264 needs ffmpeg"
+			case "vp8", "vp9", "av1", "h264":
+				if !ff && !HasNativeVideo(t.CodecName) {
+					return false, t.CodecName + " needs ffmpeg"
 				}
 			default:
 				return false, "video codec " + t.CodecName + " is not supported"

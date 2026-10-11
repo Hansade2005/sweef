@@ -286,4 +286,11 @@ type Options struct {
 	Env           Env
 	ReducedMotion bool
 	Print         bool // media type print instead of screen
+	// ScrollX, ScrollY is the viewport's scroll position, used to decide which
+	// content-visibility:auto subtrees are on screen.
+	ScrollX, ScrollY float64
+	// CVRelevant, when set, reports content-visibility:auto elements that are
+	// relevant to the user for another reason (they contain focus or the
+	// selection); those are never skipped.
+	CVRelevant func(n *html.Node) bool
 }

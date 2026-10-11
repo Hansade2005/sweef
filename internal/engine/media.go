@@ -242,10 +242,10 @@ func (m *mediaHost) openSource(src media.Source, net *netSource) (any, error) {
 	mode := ""
 	v := info.Video()
 	if v != nil {
-		if media.FFmpegPath() != "" {
+		if media.HasNativeVideo(v.CodecName) {
+			mode = "native"
+		} else if media.FFmpegPath() != "" {
 			mode = "ffmpeg"
-		} else if v.CodecName == "vp8" {
-			mode = "keyframes"
 		}
 	}
 	m.mu.Lock()

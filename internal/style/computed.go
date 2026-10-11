@@ -224,20 +224,23 @@ type Computed struct {
 	OverflowX, OverflowY string
 	Contain              string
 	ContentVisibility    string // visible | hidden | auto
-	QuirkMarginTop       bool   // quirks mode: margin-top comes from the UA sheet of p, h1, ul ... (ignored at the start of body/td)
-	QuirkMarginBottom    bool
-	BreakBefore          string // auto | avoid | column | page ...
-	BreakAfter           string
-	BreakInside          string // auto | avoid
-	CIntrW, CIntrH       Length // contain-intrinsic-width/height (LNone when unset)
-	CIntrAutoW           bool
-	CIntrAutoH           bool
-	Isolation            string
-	Appearance           string
-	Resize               string
-	Scrollbar            string // scrollbar-width: auto | thin | none
-	ScrollbarGutter      string
-	OverflowClipMargin   float64
+	// CVSkip is set by layout (never by the cascade) on a content-visibility:auto
+	// element whose contents are not relevant to the user and so are skipped.
+	CVSkip             bool
+	QuirkMarginTop     bool // quirks mode: margin-top comes from the UA sheet of p, h1, ul ... (ignored at the start of body/td)
+	QuirkMarginBottom  bool
+	BreakBefore        string // auto | avoid | column | page ...
+	BreakAfter         string
+	BreakInside        string // auto | avoid
+	CIntrW, CIntrH     Length // contain-intrinsic-width/height (LNone when unset)
+	CIntrAutoW         bool
+	CIntrAutoH         bool
+	Isolation          string
+	Appearance         string
+	Resize             string
+	Scrollbar          string // scrollbar-width: auto | thin | none
+	ScrollbarGutter    string
+	OverflowClipMargin float64
 
 	Width, Height, MinWidth, MinHeight, MaxWidth, MaxHeight Length
 	Margin                                                  [4]Length // top right bottom left
@@ -438,15 +441,21 @@ func Initial() *Computed {
 // inline-size/size, contain: size / inline-size / strict, content-visibility
 // hidden).
 func (c *Computed) ContainsInlineSize() bool {
-	if c.ContainerType == "size" || c.ContainerType == "inline-size" || c.ContentVisibility == "hidden" {
+	if c.ContainerType == "size" || c.ContainerType == "inline-size" || c.CVSkipped() {
 		return true
 	}
 	return containTok(c.Contain, "size") || containTok(c.Contain, "inline-size") || containTok(c.Contain, "strict")
 }
 
+// CVSkipped reports whether the element's contents are skipped:
+// content-visibility: hidden, or auto while not relevant to the user.
+func (c *Computed) CVSkipped() bool {
+	return c.ContentVisibility == "hidden" || c.ContentVisibility == "auto" && c.CVSkip
+}
+
 // ContainsBlockSize reports block-size containment.
 func (c *Computed) ContainsBlockSize() bool {
-	if c.ContainerType == "size" || c.ContentVisibility == "hidden" {
+	if c.ContainerType == "size" || c.CVSkipped() {
 		return true
 	}
 	return containTok(c.Contain, "size") || containTok(c.Contain, "strict")

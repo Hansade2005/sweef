@@ -1,0 +1,58 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>cvauto</title>
+<style>
+body{margin:0;font:16px/1.4 'Liberation Sans',Arial,sans-serif;background:#fff}
+header{height:120px;background:#dde;padding:20px;box-sizing:border-box}
+main{display:block;padding:0 20px}
+section{content-visibility:auto;contain-intrinsic-size:auto 300px;border:1px solid #99a;margin:12px 0;padding:8px 14px;background:#f6f6fb}
+section h2{margin:0 0 6px;font-size:20px}
+section p{margin:6px 0}
+.nosize{content-visibility:auto;background:#efe;border:2px solid #4a4;margin:10px 0;padding:6px}
+.nosize div{height:90px;background:#cec}
+.w{content-visibility:auto;contain-intrinsic-width:140px;contain-intrinsic-height:60px;display:inline-block;vertical-align:top;background:#fee;border:1px solid #c44;margin:4px}
+.w div{width:300px;height:200px;background:#fcc}
+.hid{content-visibility:hidden;contain-intrinsic-size:200px 70px;background:#eef;border:1px solid #44c;margin:8px 0}
+.hid div{height:300px;background:#ccf}
+.txt{content-visibility:hidden;contain-intrinsic-size:auto 45px;background:#fe9;border:1px solid #ca2;margin:6px 0;font-size:18px;position:relative}
+.nest{content-visibility:auto;contain-intrinsic-size:auto 66px;background:#e9f;margin:6px 0}
+.nest .inner{content-visibility:auto;contain-intrinsic-size:auto 120px;background:#d7e}
+.fl{display:flex;gap:10px}
+.fl>div{content-visibility:auto;contain-intrinsic-size:100px 80px;flex:0 0 auto;background:#ffd;border:1px solid #aa4}
+.fl>div>span{display:block;width:60px;height:150px;background:#ee9}
+footer{height:200px;background:#dde;margin-top:20px}
+</style></head><body>
+<header>content-visibility: auto</header>
+<main>
+<div class="nosize"><div></div></div>
+<div class="w"><div></div></div><div class="w"><div></div></div><div class="w"><div></div></div>
+<div class="hid"><div></div></div>
+<div class="txt">direct text inside a skipped box <b>bold</b> <span style="display:inline-block;width:50px;height:20px;background:#f90"></span><div style="position:absolute;left:300px;top:20px;width:40px;height:40px;background:#f09"></div><div style="float:left;width:30px;height:30px;background:#09f"></div></div>
+<div class="nest"><div class="inner"><p>nested</p></div></div>
+<div class="fl"><div><span></span></div><div><span></span></div><div><span></span></div></div>
+<section id="s0"><h2>Section 0</h2><p>Section 0 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s1"><h2>Section 1</h2><p>Section 1 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 1 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s2"><h2>Section 2</h2><p>Section 2 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 2 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 2 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s3"><h2>Section 3</h2><p>Section 3 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 3 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 3 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 3 paragraph 3: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s4"><h2>Section 4</h2><p>Section 4 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s5"><h2>Section 5</h2><p>Section 5 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 5 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s6"><h2>Section 6</h2><p>Section 6 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 6 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 6 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s7"><h2>Section 7</h2><p>Section 7 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 7 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 7 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 7 paragraph 3: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s8"><h2>Section 8</h2><p>Section 8 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s9"><h2>Section 9</h2><p>Section 9 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 9 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s10"><h2>Section 10</h2><p>Section 10 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 10 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 10 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s11"><h2>Section 11</h2><p>Section 11 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 11 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 11 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 11 paragraph 3: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s12"><h2>Section 12</h2><p>Section 12 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s13"><h2>Section 13</h2><p>Section 13 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 13 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s14"><h2>Section 14</h2><p>Section 14 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 14 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 14 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s15"><h2>Section 15</h2><p>Section 15 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 15 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 15 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 15 paragraph 3: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s16"><h2>Section 16</h2><p>Section 16 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s17"><h2>Section 17</h2><p>Section 17 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 17 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s18"><h2>Section 18</h2><p>Section 18 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 18 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 18 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s19"><h2>Section 19</h2><p>Section 19 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 19 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 19 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 19 paragraph 3: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s20"><h2>Section 20</h2><p>Section 20 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s21"><h2>Section 21</h2><p>Section 21 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 21 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s22"><h2>Section 22</h2><p>Section 22 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 22 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 22 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+<section id="s23"><h2>Section 23</h2><p>Section 23 paragraph 0: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 23 paragraph 1: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 23 paragraph 2: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p><p>Section 23 paragraph 3: the quick brown fox jumps over the lazy dog and keeps running through the meadow until the evening comes.</p></section>
+</main>
+<footer></footer>
+</body></html>

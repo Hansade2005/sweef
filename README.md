@@ -181,6 +181,7 @@ Measured against Chromium 1194 on this repo's fixtures (`go run ./tools/fidelity
 | Canvas 2D, 42 fixtures | shapes 99.4%, text 99.7% within 8/255 |
 | SVG (paths, gradients, clips, masks, filters incl. turbulence and lighting, markers, text, `textPath`, `foreignObject`) | feature pages 98.9% to 99.8% ink |
 | CSS `clip-path`, `mask`, multicol fragments | 98% to 99.9% ink |
+| Transformed elements at fractional offsets, `content-visibility: auto`, `position: fixed` containing blocks, `foreignObject` contexts | boxes IoU 1.000, ink 97.9% to 100% on 5 fixtures |
 | WebGL, 76 fixtures | mean 99.9% of pixels within 4/255 (three.js 99.9%, PixiJS 99.99%, regl 100%) |
 | Web Audio, 26 offline graphs | sample-exact for filters, delay, convolver and panner; oscillators within 6e-4 |
 | Media elements, 21 scenarios | event order identical to Chromium; `canPlayType` matches in 67 of 67 recorded answers |
@@ -189,9 +190,9 @@ A 1280x800 text page paints in about 21 ms. A 100k-triangle WebGL frame at 512x5
 
 What is still different, honestly:
 
-- **Text.** Glyph edges now match to within 12/255 at 9 to 32 px. Not matched: text inside CSS-transformed elements at fractional offsets (Chromium rounds the paint offset), cubic glyph outlines are less verified than quadratic ones, and Arabic diacritics, Hebrew points and Indic scripts are not positioned.
-- **CSS not done:** `content-visibility: auto` skipping, `@container style()` queries, subgrid line names, `mask-border`, `clip-path` and `mask` on plain inline elements, `box-decoration-break: clone` on wrapped inlines, vertical text with RTL or nested orthogonal flows.
-- **SVG not done:** `foreignObject` inside `pattern`, `mask`, `clipPath` or `use`, CSS `mask` image layers on SVG elements, `kernelUnitLength`, and a few filter inputs (BackgroundImage, FillPaint).
+- **Text.** Glyph edges now match to within 12/255 at 9 to 32 px. Rotated and skewed text differs in anti-aliasing (positions match: transformed elements round their paint offset like Chromium), cubic glyph outlines are less verified than quadratic ones, and Arabic diacritics, Hebrew points and Indic scripts are not positioned.
+- **CSS not done:** `content-visibility: auto` reopening on scroll, find-in-page and anchors (a static load skips and opens exactly like Chromium), `@container style()` queries, subgrid line names, `mask-border`, `clip-path` and `mask` on plain inline elements, `box-decoration-break: clone` on wrapped inlines, vertical text with RTL or nested orthogonal flows.
+- **SVG not done:** CSS `mask` image layers on SVG elements, `kernelUnitLength`, and a few filter inputs (BackgroundImage, FillPaint).
 - **Codecs.** MP3, Vorbis, FLAC, Opus (Ogg, WebM, MP4; SILK, CELT, hybrid) and PCM decode in pure Go. AAC, H.264, VP9 and AV1 need `ffmpeg` on the machine; without it they report unsupported like a browser without the codec. Video without ffmpeg shows VP8 key frames only.
 - **WebGL.** No compressed textures, `EXT_sRGB` or multi-draw; lines are 1 px; `sin` differs from SwiftShader in the last digit.
 - **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.4 s, because QuickJS cannot share typed arrays with Go. `MediaRecorder`, EME and picture-in-picture reject.

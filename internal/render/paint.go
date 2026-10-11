@@ -26,6 +26,7 @@ type hitRec struct {
 	m     [6]float64
 	hasM  bool
 	noPE  bool
+	ext   []func(x, y float64) bool
 }
 
 type painter struct {
@@ -37,10 +38,13 @@ type painter struct {
 	// latX, latY is the origin of the pixel lattice rectangles snap to (the
 	// box origin of the nearest lattice-opening ancestor), see paint_snap.go
 	latX, latY float64
-	hits       []hitRec
-	outl       []*lbox
-	active     map[*lbox]bool
-	svgdocs    map[string]*SVGDoc
+	// hitExt are extra hit tests (user-space points) attached to hits recorded
+	// while painting a foreignObject
+	hitExt  []func(x, y float64) bool
+	hits    []hitRec
+	outl    []*lbox
+	active  map[*lbox]bool
+	svgdocs map[string]*SVGDoc
 	// fragShift is non-zero while painting a continuing fragment of a sliced box
 	fragShift float64
 }
@@ -171,7 +175,7 @@ func (p *painter) addHit(b *lbox, rects ...Rect) {
 	if b.n == nil {
 		return
 	}
-	p.hits = append(p.hits, hitRec{n: b.n, rects: rects, clips: p.clips, m: p.m, hasM: p.hasM, noPE: b.st.PointerEvents == "none"})
+	p.hits = append(p.hits, hitRec{n: b.n, rects: rects, clips: p.clips, m: p.m, hasM: p.hasM, noPE: b.st.PointerEvents == "none", ext: p.hitExt})
 }
 
 // paintSC paints a stacking context rooted at b.
@@ -334,6 +338,9 @@ func (p *painter) clipChain(b *lbox) []*lbox {
 
 // children in paint (tree) order, including inline-level descendants of IFCs.
 func (p *painter) flowKids(b *lbox) []*lbox {
+	if b.cvSkip {
+		return nil // content-visibility: skipped contents do not paint or hit-test
+	}
 	if !b.ifc {
 		hasHidden := false
 		for _, k := range b.kids {
@@ -446,7 +453,7 @@ func (p *painter) phaseFloats(b *lbox) {
 }
 
 func (p *painter) phaseInline(b *lbox) {
-	if b.ifc {
+	if b.ifc && !b.cvSkip {
 		p.paintLines(b)
 	}
 	for _, k := range p.flowKids(b) {

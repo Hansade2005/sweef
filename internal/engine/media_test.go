@@ -420,7 +420,7 @@ func TestMediaH264NeedsFFmpegAndFramesFollowTime(t *testing.T) {
 					t.Fatalf("frame did not change after seeking to 1.5 s")
 				}
 			}
-			// WebM VP8: key frame without ffmpeg, real frames with it
+			// WebM VP8: decoded natively, frames follow currentTime with or without ffmpeg
 			evalJSON(t, tab, `new Promise(function(res){var v=document.createElement('video');v.id='w';v.muted=true;v.preload='auto';v.src='clip.webm';document.body.appendChild(v);v.onloadeddata=function(){res(1)};v.onerror=function(){res(0)}})`, nil)
 			w, h, s0 := waitFrame(t, tab, "#w", 0)
 			if w != 160 || h != 120 {
@@ -431,11 +431,8 @@ func TestMediaH264NeedsFFmpegAndFramesFollowTime(t *testing.T) {
 			time.Sleep(300 * time.Millisecond)
 			_, _, s1 := videoFrame(t, tab, "#w")
 			changed := s1 != s0
-			if withFF && !changed {
-				t.Errorf("with ffmpeg the frame must follow currentTime")
-			}
-			if !withFF && changed {
-				t.Errorf("without ffmpeg only the key frame is available")
+			if !changed {
+				t.Errorf("the VP8 frame must follow currentTime (native decoder, ffmpeg=%v)", withFF)
 			}
 		})
 	}

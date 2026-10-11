@@ -1,0 +1,21 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>fixedcb</title>
+<style>
+body{margin:0;font:12px Arial,sans-serif}
+.cb{position:absolute;width:180px;height:100px;background:#eef;border:1px solid #66a}
+.f{position:fixed;left:10px;top:20px;width:60px;height:30px;background:#fc0}
+.row2{top:140px}
+</style></head><body>
+<div class="cb" style="left:10px;top:10px;transform:translate(5px,5px)"><div class="f"></div></div>
+<div class="cb" style="left:210px;top:10px;filter:blur(0px)"><div class="f"></div></div>
+<div class="cb" style="left:410px;top:10px;perspective:100px"><div class="f"></div></div>
+<div class="cb" style="left:610px;top:10px;will-change:transform"><div class="f"></div></div>
+<div class="cb" style="left:810px;top:10px;contain:paint"><div class="f"></div></div>
+<div class="cb" style="left:1010px;top:10px;position:relative;margin-top:0"><div class="f"></div></div>
+<div class="cb row2" style="left:10px;contain:layout"><div class="f"></div></div>
+<div class="cb row2" style="left:210px;transform:rotate(5deg)"><div style="margin:20px"><div class="f" style="right:10px;left:auto;bottom:10px;top:auto"></div></div></div>
+<div class="cb row2" style="left:410px;backdrop-filter:blur(1px)"><div class="f"></div></div>
+<div class="cb row2" style="left:610px;content-visibility:auto"><div class="f"></div></div>
+<div class="cb row2" style="left:810px;translate:3px 3px"><div class="f"></div></div>
+<div class="cb row2" style="left:1010px;scale:1.1"><div class="f"></div></div>
+</body></html>

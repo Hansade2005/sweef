@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -78,7 +77,7 @@ func compareFF(t *testing.T, name string, ivf []byte, w, h int) {
 	ref := ffmpeg(t, "-i", p, "-fps_mode", "passthrough", "-pix_fmt", "yuv420p", "-f", "rawvideo", "-")
 	got, n := decodeAll(t, readIVF(t, ivf))
 	fs := w * h * 3 / 2
-	if (w%2 == 1 || h%2 == 1) {
+	if w%2 == 1 || h%2 == 1 {
 		fs = w*h + 2*((w+1)/2)*((h+1)/2)
 	}
 	if len(ref) != len(got) {
@@ -146,7 +145,57 @@ func TestVP8FFmpegMatrix(t *testing.T) {
 	}
 }
 
-var _ = md5.Sum
-var _ = hex.EncodeToString
-var _ = fmt.Sprint
-var _ = strings.Join
+// TestVP8Fixtures decodes the committed streams and compares each frame with
+// the MD5 that ffmpeg's decoder produced for it (no ffmpeg needed to run).
+func TestVP8Fixtures(t *testing.T) {
+	files, _ := filepath.Glob("testdata/*.ivf")
+	if len(files) == 0 {
+		t.Fatal("no fixtures")
+	}
+	for _, f := range files {
+		name := strings.TrimSuffix(filepath.Base(f), ".ivf")
+		t.Run(name, func(t *testing.T) {
+			ivf, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := os.ReadFile(strings.TrimSuffix(f, ".ivf") + ".md5")
+			if err != nil {
+				t.Fatal(err)
+			}
+			wl := strings.Fields(string(want))
+			d := NewDecoder()
+			n := 0
+			for i, fr := range readIVF(t, ivf) {
+				img, err := d.Decode(fr)
+				if err != nil {
+					t.Fatalf("frame %d: %v", i, err)
+				}
+				if img == nil {
+					continue
+				}
+				if n >= len(wl) {
+					t.Fatalf("more frames than reference (%d)", len(wl))
+				}
+				h := md5.New()
+				b := img.Bounds()
+				for y := 0; y < b.Dy(); y++ {
+					h.Write(img.Y[y*img.YStride : y*img.YStride+b.Dx()])
+				}
+				for y := 0; y < (b.Dy()+1)/2; y++ {
+					h.Write(img.Cb[y*img.CStride : y*img.CStride+(b.Dx()+1)/2])
+				}
+				for y := 0; y < (b.Dy()+1)/2; y++ {
+					h.Write(img.Cr[y*img.CStride : y*img.CStride+(b.Dx()+1)/2])
+				}
+				if got := hex.EncodeToString(h.Sum(nil)); got != wl[n] {
+					t.Fatalf("frame %d (output %d): md5 %s want %s", i, n, got, wl[n])
+				}
+				n++
+			}
+			if n != len(wl) {
+				t.Fatalf("decoded %d frames, reference has %d", n, len(wl))
+			}
+		})
+	}
+}

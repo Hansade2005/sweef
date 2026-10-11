@@ -132,6 +132,8 @@ type lbox struct {
 	isBtn                            bool
 	contBlocks                       []*lbox
 	hiddenFlow                       bool
+	fixedCB                          bool // acts as the containing block of fixed descendants (foreignObject wrapper)
+	cvSkip                           bool // content-visibility skipped contents: no painting of descendants
 	mcN                              int
 	mcSegs                           []mcSeg // vertical ranges where the columns apply (column-span splits them)
 	mcFrags                          []Rect  // per-column fragments of a block split across columns, relative to its bounding box origin
