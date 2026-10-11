@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -140,6 +141,12 @@ type Tab struct {
 	// Interception hooks (route.fulfill / route.abort semantics)
 	interceptMu sync.RWMutex
 	routes      []*fnet.Route
+	routes2     routeTable // RouteRule interception (fulfill/abort/continue)
+
+	lastNet        atomic.Int64 // unix nanos of the last request start (networkidle)
+	bindingReplies map[string]string
+	bindingRing    *Ring
+	downloads      []Download
 }
 
 func newTab(e *Engine, id string) *Tab {
@@ -150,6 +157,7 @@ func newTab(e *Engine, id string) *Tab {
 		netRing:     NewRing(e.opts.NetworkRingSize),
 		stateRing:   NewRing(e.opts.StateRingSize),
 		dialogRing:  NewRing(64),
+		bindingRing: NewRing(256),
 		vpW:         e.opts.ViewportWidth,
 		vpH:         e.opts.ViewportHeight,
 		dsf:         1,
@@ -222,6 +230,9 @@ func (t *Tab) Navigate(rawurl string, headers map[string]string) error {
 		return err
 	}
 	res, err := t.fetch(u, headers)
+	if errors.Is(err, errDownloaded) {
+		return nil // the response was saved as a download; the page stays
+	}
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": rawurl, "error": err.Error()}})
 		t.emit(EvFailure, map[string]any{"url": rawurl, "error": err.Error()})
@@ -248,43 +259,59 @@ type fetchResult struct {
 }
 
 func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error) {
-	// Route interception first: fulfill (status+body) or abort (status 0).
-	if code, body, matched := t.interceptGet(u.String()); matched {
-		rec := fnet.RequestRecord{Method: "GET", URL: u.String(), FinalURL: u.String(), Status: code, DurationMs: 0}
-		if code == 0 {
-			err := fmt.Errorf("aborted by route")
-			t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": u.String(), "error": err.Error()}})
+	if u.Scheme == "data" {
+		mt, data, err := decodeDataURL(u.String())
+		if err != nil {
 			return nil, err
 		}
-		rec.Status = code
-		t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
-		return &fetchResult{body: body, finalURL: u.String(), status: code, har: rec}, nil
+		h := http.Header{}
+		h.Set("Content-Type", mt)
+		if isDownloadResponse(h) {
+			t.SaveDownloadBytes("download", mt, data, u.String())
+			return nil, errDownloaded
+		}
+		return &fetchResult{body: string(data), finalURL: u.String(), status: 200}, nil
 	}
-
-	req, err := http.NewRequestWithContext(t.eng.ctx, http.MethodGet, u.String(), nil)
+	synth, method, target, hdrs, _, err := t.routedRequest("GET", u.String(), headers, "")
 	if err != nil {
+		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": u.String(), "error": err.Error()}})
 		return nil, err
 	}
-	req.Header.Set("User-Agent", t.UserAgent())
-	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
-	for k, v := range t.ExtraHeaders() {
-		req.Header.Set(k, v)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	// context cookie jar takes precedence over the shared transport jar
-	if ck := t.Context().JarRef().ForURL(u.String()); ck != "" {
-		req.Header.Set("Cookie", ck)
-	}
-	rec := fnet.RequestRecord{Method: "GET", URL: u.String(), Headers: flattenHeaders(req.Header)}
-	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
-	t.emit(EvRequest, rec)
-
+	rec := fnet.RequestRecord{Method: method, URL: target}
 	start := time.Now()
-	res, err := t.eng.client().Do(req)
-	if err != nil {
-		return nil, err
+	var res *http.Response
+	if synth != nil {
+		res = synth
+		rec.Headers = map[string]string{"x-sweef-route": "fulfill"}
+	} else {
+		req, err := http.NewRequestWithContext(t.eng.ctx, method, target, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", t.UserAgent())
+		req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
+		for k, v := range t.ExtraHeaders() {
+			req.Header.Set(k, v)
+		}
+		for k, v := range hdrs {
+			req.Header.Set(k, v)
+		}
+		// context cookie jar takes precedence over the shared transport jar
+		if ck := t.Context().JarRef().ForURL(target); ck != "" {
+			req.Header.Set("Cookie", ck)
+		}
+		rec.Headers = flattenHeaders(req.Header)
+		t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
+		t.emit(EvRequest, rec)
+		t.touchNet()
+		if res, err = t.eng.client().Do(req); err != nil {
+			return nil, err
+		}
+	}
+	if isDownloadResponse(res.Header) && res.StatusCode < 400 {
+		defer res.Body.Close()
+		t.saveDownload(u.String(), suggestedName(res.Header, u.String(), ""), res.Header.Get("Content-Type"), res.Body)
+		return nil, errDownloaded
 	}
 	defer res.Body.Close()
 	var body []byte
@@ -298,13 +325,16 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	for _, sc := range res.Header.Values("Set-Cookie") {
 		if c := parseCookie(sc, t.eng.now()); c != nil {
 			if c.Domain == "" {
-				c.Domain = res.Request.URL.Hostname()
+				c.Domain = hostOf(target)
 			}
 			t.Context().JarRef().Set(c)
 		}
 	}
 	rec.Status = res.StatusCode
-	rec.FinalURL = res.Request.URL.String()
+	rec.FinalURL = target
+	if res.Request != nil && res.Request.URL != nil {
+		rec.FinalURL = res.Request.URL.String()
+	}
 	rec.DurationMs = time.Since(start).Milliseconds()
 	rec.ResponseHeaders = flattenHeaders(res.Header)
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
@@ -334,6 +364,7 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 		t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(), Data: m})
 		t.emit(EvDomMutated, m)
 	})
+	t.applyStyles(doc)
 	t.mu.Lock()
 	t.html = htmlSrc
 	t.dom = doc
@@ -347,7 +378,10 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 	t.mu.Unlock()
 	old.close()
 
-	if !t.eng.opts.DisableJS {
+	// Pages with no scripts, no inline handlers and no init scripts get no
+	// VM at all: there is nothing to run, and a navigation stays at the cost
+	// of a fetch and a parse. A VM is created on demand by Evaluate.
+	if !t.eng.opts.DisableJS && (len(initScripts) > 0 || doc.NeedsScript()) {
 		j := newJSVM(t, doc, finalURL)
 		t.mu.Lock()
 		t.js = j
@@ -454,6 +488,7 @@ type SnapshotOptions = fnet.SnapshotOptions
 
 // AriaSnapshotV2 renders the Playwright-format accessibility tree with options.
 func (t *Tab) AriaSnapshotV2(o SnapshotOptions) (string, error) {
+	t.settle(0) // deliver queued socket/worker events and due timers first
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if t.dom == nil {
@@ -476,16 +511,51 @@ func (t *Tab) LogConsole(level, text string) {
 // the JSON-encoded completion value. DOM nodes serialise as {nodeType,
 // tagName, id, ref}.
 func (t *Tab) Evaluate(expr string) (json.RawMessage, error) {
-	t.mu.RLock()
-	j := t.js
-	t.mu.RUnlock()
-	if j == nil {
-		if t.eng.opts.DisableJS {
-			return nil, fmt.Errorf("javascript is disabled (--no-js)")
-		}
-		return nil, fmt.Errorf("no document loaded")
+	j, err := t.ensureJS()
+	if err != nil {
+		return nil, err
 	}
 	return j.evaluate(expr)
+}
+
+// ensureJS returns the tab's VM, binding one to the current document when the
+// page loaded without scripts (lazy VM).
+func (t *Tab) ensureJS() (*jsVM, error) {
+	t.mu.RLock()
+	j, d, u := t.js, t.dom, t.url
+	t.mu.RUnlock()
+	if j != nil {
+		return j, nil
+	}
+	if t.eng.opts.DisableJS {
+		return nil, fmt.Errorf("javascript is disabled (--no-js)")
+	}
+	if d == nil {
+		return nil, fmt.Errorf("no document loaded")
+	}
+	docURL := "about:blank"
+	if u != nil {
+		docURL = u.String()
+	}
+	j = newJSVM(t, d, docURL)
+	if j == nil {
+		return nil, fmt.Errorf("javascript engine unavailable")
+	}
+	_, _ = j.call("__swSetDocument", docURL, "complete")
+	t.mu.Lock()
+	if t.js == nil && t.dom == d {
+		t.js = j
+	} else {
+		other := t.js
+		t.mu.Unlock()
+		j.close()
+		if other == nil {
+			return nil, fmt.Errorf("document changed")
+		}
+		return other, nil
+	}
+	t.mu.Unlock()
+	return j, nil
 }
 
 // Click performs a semantic click on selector: focus, dispatch mousedown/up/click,
@@ -551,10 +621,25 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	for k, v := range values {
 		form.Set(k, v)
 	}
-	req, err := http.NewRequestWithContext(t.eng.ctx, http.MethodPost, rawurl, strings.NewReader(form.Encode()))
+	encoded := form.Encode()
+	synth, method, target, hdrs, newBody, err := t.routedRequest("POST", rawurl, nil, encoded)
 	if err != nil {
 		return err
 	}
+	if synth != nil {
+		b, _ := io.ReadAll(synth.Body)
+		t.SetDocument(string(b), rawurl)
+		return nil
+	}
+	rawurl = target
+	req, err := http.NewRequestWithContext(t.eng.ctx, method, rawurl, strings.NewReader(newBody))
+	if err != nil {
+		return err
+	}
+	for k, v := range hdrs {
+		req.Header.Set(k, v)
+	}
+	t.touchNet()
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", t.UserAgent())
 	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
@@ -878,6 +963,7 @@ func (t *Tab) ExtraHeaders() map[string]string {
 func (t *Tab) AddInitScript(src string) string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	// Init scripts apply from the next navigation on, as in Playwright.
 	id := fmt.Sprintf("init-%d", len(t.initScripts)+1)
 	t.initScripts = append(t.initScripts, &CompiledScript{Source: src, Name: id})
 	return id
@@ -904,6 +990,9 @@ func (t *Tab) ExposeBinding(name string) error {
 		}
 	}
 	t.bindings = append(t.bindings, name)
+	if j := t.js; j != nil {
+		go j.installBindings() // define it in the live page too (outside t.mu)
+	}
 	return nil
 }
 

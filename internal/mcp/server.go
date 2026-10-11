@@ -61,8 +61,8 @@ var tools = []toolDef{
 		objProps(map[string]map[string]string{"url": {"type": "string", "description": "absolute URL"}, "tab": {"type": "string", "description": "optional tab id"}}, "url")},
 	{"browser_snapshot", "Return the accessibility tree (roles/names/states) of the page. Token-cheap; prefer this over HTML for reasoning.",
 		objProps(map[string]map[string]string{"tab": {"type": "string"}})},
-	{"browser_aria_snapshot", "Return the page as a Playwright-style YAML accessibility tree: headings, paragraphs, lists, tables, text and every control with role, accessible name, states (checked/disabled/expanded/selected/required) and /url. Actionable nodes carry [ref=eN]; pass that ref back to any action tool as its selector (e.g. selector=\"e42\"). Options: selector (scope to a CSS selector or ref), interactiveOnly (controls + headings only, much smaller), maxChars (default 60000; output is truncated with a note when hit), maxTextLen (per text node, default 200), maxDepth.",
-		objProps(map[string]map[string]string{"tab": {"type": "string"}, "selector": {"type": "string"}, "interactiveOnly": {"type": "boolean"}, "maxChars": {"type": "number"}, "maxTextLen": {"type": "number"}, "maxDepth": {"type": "number"}})},
+	{"browser_aria_snapshot", "Return the page as a Playwright-style YAML accessibility tree: headings, paragraphs, lists, tables, text and every control with role, accessible name, states (checked/disabled/expanded/selected/required) and /url. Actionable nodes carry [ref=eN]; pass that ref back to any action tool as its selector (e.g. selector=\"e42\"). Options: selector (scope to a CSS selector or ref), interactiveOnly (controls + headings only, much smaller), delta (only lines changed since your previous snapshot of this tab), maxChars (default 60000; output is truncated with a note when hit), maxTextLen (per text node, default 200), maxDepth.",
+		objProps(map[string]map[string]string{"tab": {"type": "string"}, "selector": {"type": "string"}, "interactiveOnly": {"type": "boolean"}, "delta": {"type": "boolean"}, "maxChars": {"type": "number"}, "maxTextLen": {"type": "number"}, "maxDepth": {"type": "number"}})},
 	{"browser_click", "Click the first element matching a CSS selector (links navigate, submit buttons post forms).",
 		objProps(map[string]map[string]string{"selector": {"type": "string"}, "tab": {"type": "string"}}, "selector")},
 	{"browser_fill", "Set the value of an input/textarea/select matched by CSS selector.",
@@ -88,8 +88,20 @@ var tools = []toolDef{
 		objProps(map[string]map[string]string{"tab": {"type": "string"}}, "tab")},
 	{"browser_back", "History back.", objProps(map[string]map[string]string{"tab": {"type": "string"}})},
 	{"browser_forward", "History forward.", objProps(map[string]map[string]string{"tab": {"type": "string"}})},
-	{"browser_route_mock", "Intercept requests matching a glob and fulfill with a canned status/body (or abort).",
-		objProps(map[string]map[string]string{"pattern": {"type": "string"}, "status": {"type": "number"}, "body": {"type": "string"}, "action": {"type": "string", "description": "fulfill|abort"}, "tab": {"type": "string"}}, "pattern")},
+	{"browser_route_mock", "Intercept page requests (navigations, fetch/XHR, form posts, scripts). Match by URL glob (** any, * one segment) or /regex/, optionally by method and bodyContains. action: fulfill (status, body or json, contentType, headers), abort, or continue (rewrite url, newMethod, newBody, headers). times limits how often the rule applies.",
+		objProps(map[string]map[string]string{"pattern": {"type": "string"}, "action": {"type": "string", "description": "fulfill|abort|continue"}, "method": {"type": "string"}, "bodyContains": {"type": "string"}, "status": {"type": "number"}, "body": {"type": "string"}, "contentType": {"type": "string"}, "url": {"type": "string"}, "newMethod": {"type": "string"}, "newBody": {"type": "string"}, "times": {"type": "number"}, "tab": {"type": "string"}}, "pattern")},
+	{"browser_unroute", "Remove interception rules for a pattern (empty pattern removes all).",
+		objProps(map[string]map[string]string{"pattern": {"type": "string"}, "tab": {"type": "string"}})},
+	{"browser_pdf", "Export the current page as a PDF (headings, text, lists, tables, clickable links). Returns pdfBase64, or writes to path. Options: format (A4|Letter|Legal|A3|A5), landscape, margin (pt), scale, displayHeaderFooter.",
+		objProps(map[string]map[string]string{"path": {"type": "string"}, "format": {"type": "string"}, "landscape": {"type": "boolean"}, "margin": {"type": "number"}, "scale": {"type": "number"}, "displayHeaderFooter": {"type": "boolean"}, "tab": {"type": "string"}})},
+	{"browser_downloads", "List files the page downloaded (attachments, <a download>, blob/data URLs) with their saved paths.",
+		objProps(map[string]map[string]string{"tab": {"type": "string"}})},
+	{"browser_download", "Download a URL (relative to the page) to the downloads directory with the page's cookies.",
+		objProps(map[string]map[string]string{"url": {"type": "string"}, "filename": {"type": "string"}, "tab": {"type": "string"}}, "url")},
+	{"browser_expose_binding", "Expose a function on window that page code can call; calls are recorded (read them with browser_binding_calls) and resolve to reply (any JSON).",
+		objProps(map[string]map[string]string{"name": {"type": "string"}, "reply": {"type": "string", "description": "JSON value returned to the page"}, "tab": {"type": "string"}}, "name")},
+	{"browser_binding_calls", "Read calls page code made to exposed bindings since a cursor.",
+		objProps(map[string]map[string]string{"since": {"type": "number"}, "tab": {"type": "string"}})},
 	{"browser_har_export", "Export captured network traffic as HAR 1.2 JSON.",
 		objProps(map[string]map[string]string{"tab": {"type": "string"}})},
 	{"browser_stats", "Engine memory/goroutine stats — useful for agents supervising their own footprint.",
@@ -111,7 +123,7 @@ var tools = []toolDef{
 		objProps(map[string]map[string]string{"selector": {"type": "string"}, "state": {"type": "string"}, "timeoutMs": {"type": "number"}, "tab": {"type": "string"}}, "selector")},
 	{"browser_wait_for_function", "Poll a JS expression until it returns truthy or timeout.",
 		objProps(map[string]map[string]string{"expression": {"type": "string"}, "pollMs": {"type": "number"}, "timeoutMs": {"type": "number"}, "tab": {"type": "string"}}, "expression")},
-	{"browser_wait_for_load_state", "Wait for load state: load|domcontentloaded|networkidle.",
+	{"browser_wait_for_load_state", "Wait for load state: load|domcontentloaded|networkidle (no request started for 500 ms while page scripts run).",
 		objProps(map[string]map[string]string{"state": {"type": "string"}, "timeoutMs": {"type": "number"}, "tab": {"type": "string"}})},
 	{"browser_locator_count", "Count elements matching a selector without acting (locator engine prefixes allowed).",
 		objProps(map[string]map[string]string{"selector": {"type": "string"}, "tab": {"type": "string"}}, "selector")},
@@ -134,6 +146,14 @@ var tools = []toolDef{
 		objProps(map[string]map[string]string{"source": {"type": "string"}, "tab": {"type": "string"}}, "source")},
 	{"browser_request", "Context-level HTTP (APIRequestContext): method,url,body -> status,headers,body. No tab needed.",
 		objProps(map[string]map[string]string{"method": {"type": "string"}, "url": {"type": "string"}, "body": {"type": "string"}, "context": {"type": "string"}}, "url")},
+	{"browser_batch", "Run many browser steps in ONE call and get one observation back. Use it whenever you already know the next several actions (fill a form, click through a flow) instead of calling tools one by one. steps is an array; each step is {\"cmd\": verb, \"args\": [..]} with verbs open, click, dblclick, fill, type, press, hover, focus, check, uncheck, select, scroll, get (text|html|value|attr|title|url|count), is (visible|enabled|checked), wait (selector|ms|text t|url glob|fn js|load), eval, back, forward, reload, sleep, snapshot, expect (text t | url sub | title sub | visible sel | hidden sel | count sel n | value sel v). Selectors accept refs like e12. Stops at the first failing step unless stopOnError=false or the step has optional=true. observe (default interactive) returns the final page: none, interactive, full, delta (only lines changed since your last snapshot) or text.",
+		map[string]any{"type": "object", "properties": map[string]any{
+			"steps": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{
+				"cmd": map[string]any{"type": "string"}, "args": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				"method": map[string]any{"type": "string"}, "params": map[string]any{"type": "object"}, "optional": map[string]any{"type": "boolean"}}}},
+			"stopOnError": map[string]any{"type": "boolean"},
+			"observe":     map[string]any{"type": "string", "enum": []string{"none", "interactive", "full", "delta", "text"}},
+			"tab":         map[string]any{"type": "string"}}, "required": []string{"steps"}}},
 	{"browser_events_poll", "Poll DOM-mutation/console/network/navigation event stream since cursor (incremental, agent-friendly).",
 		objProps(map[string]map[string]string{"since": {"type": "number"}, "tab": {"type": "string"}})},
 }
@@ -284,12 +304,24 @@ var methodFor = map[string]string{
 	"browser_add_init_script":     "Page.addInitScript",
 	"browser_request":             "Fetch.request",
 	"browser_events_poll":         "Events.poll",
+	"browser_batch":               "Batch.run",
+	"browser_unroute":             "Network.unroute",
+	"browser_pdf":                 "Page.pdf",
+	"browser_downloads":           "Page.downloads",
+	"browser_download":            "Page.download",
+	"browser_expose_binding":      "Runtime.addBinding",
+	"browser_binding_calls":       "Runtime.bindingCalls",
 }
 
 func (s *Server) callTool(name string, args map[string]any) (json.RawMessage, string, error) {
 	m, ok := methodFor[name]
 	if !ok {
 		return nil, "", fmt.Errorf("unknown tool %q", name)
+	}
+	if name == "browser_batch" {
+		if _, set := args["observe"]; !set {
+			args["observe"] = "interactive"
+		}
 	}
 	raw, _ := json.Marshal(args)
 	res, rerr := s.rpcS.Call(m, raw)

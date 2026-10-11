@@ -25,6 +25,11 @@ type Doc struct {
 
 	idMu sync.RWMutex
 	tab  *idTable
+
+	// css holds compiled stylesheet rules and the computed-style cache
+	// (see css.go); nil until first use.
+	cssMu sync.Mutex
+	css   *cssState
 }
 
 // Mutation describes a DOM change in Playwright-mutation-like terms. The engine
@@ -49,6 +54,7 @@ func (d *Doc) SetMutationListener(fn func(Mutation)) {
 }
 
 func (d *Doc) note(m Mutation) {
+	d.invalidateStyles()
 	d.mu.RLock()
 	ls := append([]func(Mutation){}, d.listeners...)
 	d.mu.RUnlock()
@@ -169,7 +175,7 @@ func (d *Doc) nodeToInfo(n *html.Node) *Info {
 		Role:      role,
 		Text:      txt,
 		Href:      attr(n, "href"),
-		Visible:   effectivelyVisible(n),
+		Visible:   d.effectivelyVisible(n),
 		Disabled:  hasAttr(n, "disabled"),
 		Checked:   hasAttr(n, "checked"),
 		Focusable: isFocusable(n),
@@ -177,11 +183,12 @@ func (d *Doc) nodeToInfo(n *html.Node) *Info {
 }
 
 // effectivelyVisible walks up the ancestor chain checking the hidden
-// attribute, aria-hidden, inline display:none/visibility:hidden and
+// attribute, aria-hidden, computed display:none/visibility:hidden (inline
+// style plus any stylesheets installed with SetStylesheets) and
 // input[type=hidden].
-func effectivelyVisible(n *html.Node) bool {
+func (d *Doc) effectivelyVisible(n *html.Node) bool {
 	for x := n; x != nil && x.Type == html.ElementNode; x = x.Parent {
-		if pruned(x) {
+		if d.pruned(x) {
 			return false
 		}
 	}
@@ -297,6 +304,7 @@ func (d *Doc) SetInnerHTML(backendID int64, frag string) error {
 	for _, s := range sub {
 		n.AppendChild(s)
 	}
+	d.invalidateStyles()
 	return nil
 }
 
@@ -377,6 +385,7 @@ func (d *Doc) SelectOption(backendID int64, want string) error {
 				}
 			}
 			setAttr(o, "selected", "")
+			d.invalidateStyles()
 			return nil
 		}
 	}
@@ -389,6 +398,7 @@ func (d *Doc) SetChecked(backendID int64, checked bool) error {
 	if n == nil {
 		return fmt.Errorf("no node with backendNodeId %d", backendID)
 	}
+	defer d.invalidateStyles()
 	switch attr(n, "type") {
 	case "checkbox":
 		if checked {
@@ -424,8 +434,9 @@ func (d *Doc) SetChecked(backendID int64, checked bool) error {
 }
 
 // IsVisible approximates CSS visibility without layout: hidden attribute,
-// aria-hidden, inline display:none/visibility:hidden anywhere up the chain,
-// and input[type=hidden] are invisible.
+// aria-hidden, computed display:none/visibility:hidden (inline style and
+// stylesheet rules) anywhere up the chain, and input[type=hidden] are
+// invisible.
 func (d *Doc) IsVisible(backendID int64) (bool, error) {
 	n := d.find(backendID)
 	if n == nil {
@@ -434,7 +445,7 @@ func (d *Doc) IsVisible(backendID int64) (bool, error) {
 	if !d.Attached(n) {
 		return false, nil
 	}
-	return effectivelyVisible(n), nil
+	return d.effectivelyVisible(n), nil
 }
 
 // BoundingBox returns a deterministic pseudo-layout box: elements are laid
@@ -469,7 +480,7 @@ func (d *Doc) layoutBoxes() map[*html.Node][4]int {
 	x, y := pad, pad
 	var walk func(n *html.Node, depth int)
 	walk = func(n *html.Node, depth int) {
-		if n.Type != html.ElementNode || pruned(n) {
+		if n.Type != html.ElementNode || d.pruned(n) {
 			return
 		}
 		block := blockTags[n.Data]
@@ -1075,25 +1086,19 @@ func (d *Doc) ByRole(role, name string) []*Info {
 // placeholder or title.
 func (d *Doc) ByLabel(label string) []*Info {
 	var out []*Info
-	for _, n := range d.queryAll("input, textarea, select, button") {
-		l := attr(n, "aria-label")
-		if l == "" {
-			l = attr(n, "placeholder")
+	want := strings.ToLower(strings.TrimSpace(label))
+	for _, n := range d.queryAll("input, textarea, select, button, meter, progress, output, [role=checkbox], [role=switch], [role=textbox], [role=combobox], [role=slider]") {
+		if n.Data == "input" && strings.EqualFold(attr(n, "type"), "hidden") {
+			continue
 		}
-		if l == "" {
-			l = attr(n, "title")
-		}
-		if l == "" {
-			id := attr(n, "id")
-			if id != "" {
-				for _, ln := range d.queryAll("label[for=" + id + "]") {
-					l = innerText(ln)
-					break
-				}
+		// Candidate names: the accessible name (aria-label, aria-labelledby,
+		// <label for>, wrapping <label>, ...) plus placeholder and title.
+		cands := []string{accessibleName(n), labelForControl(n), attr(n, "aria-label"), attr(n, "placeholder"), attr(n, "title")}
+		for _, c := range cands {
+			if c != "" && strings.Contains(strings.ToLower(c), want) {
+				out = append(out, d.nodeToInfo(n))
+				break
 			}
-		}
-		if strings.Contains(strings.ToLower(l), strings.ToLower(label)) {
-			out = append(out, d.nodeToInfo(n))
 		}
 	}
 	return out

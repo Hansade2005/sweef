@@ -435,9 +435,9 @@ func matchCompound(n *html.Node, c compoundSel, scope *html.Node) bool {
 		return false
 	}
 	if len(c.classes) > 0 {
-		cls := " " + strings.Join(strings.Fields(attr(n, "class")), " ") + " "
+		cls := attr(n, "class")
 		for _, k := range c.classes {
-			if !strings.Contains(cls, " "+k+" ") {
+			if !hasClass(cls, k) {
 				return false
 			}
 		}
@@ -453,6 +453,30 @@ func matchCompound(n *html.Node, c compoundSel, scope *html.Node) bool {
 		}
 	}
 	return true
+}
+
+// hasClass reports whether the whitespace-separated class list cls contains
+// k, without allocating (this sits on the hot path of the CSS cascade).
+func hasClass(cls, k string) bool {
+	if k == "" || len(cls) < len(k) {
+		return false
+	}
+	isWS := func(b byte) bool { return b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f' }
+	i := 0
+	for i < len(cls) {
+		for i < len(cls) && isWS(cls[i]) {
+			i++
+		}
+		j := i
+		for j < len(cls) && !isWS(cls[j]) {
+			j++
+		}
+		if j-i == len(k) && cls[i:j] == k {
+			return true
+		}
+		i = j
+	}
+	return false
 }
 
 func matchAttr(n *html.Node, a attrSel) bool {

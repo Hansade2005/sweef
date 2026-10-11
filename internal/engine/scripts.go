@@ -111,7 +111,7 @@ func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {
 		_ = j.runModule(src, name)
 		j.jobs()
 	} else {
-		_, _ = j.run(src, name)
+		_, _ = j.runCached(src, name)
 	}
 	_, _ = j.call("__swSetCurrentScript", 0)
 	if s.Src != "" {

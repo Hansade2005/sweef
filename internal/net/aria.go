@@ -2,6 +2,7 @@ package net
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -369,18 +370,31 @@ func optionsOf(sel *html.Node) []*html.Node {
 
 // ---- pruning ---------------------------------------------------------------
 
-func inlineHidden(n *html.Node) bool {
-	st := strings.ToLower(attr(n, "style"))
-	if st == "" {
-		return false
+// styleHidden reports whether the cascade (inline style plus stylesheets
+// installed with SetStylesheets) hides n: display:none, visibility
+// hidden/collapse, or opacity 0. visibility inherits, so a hidden ancestor
+// hides descendants that do not set visibility:visible themselves; the
+// snapshot walk stops at the first hidden element anyway.
+func (d *Doc) styleHidden(n *html.Node) bool {
+	d.cssMu.Lock()
+	cs := d.styleLocked(n)
+	d.cssMu.Unlock()
+	if cs.display == "none" {
+		return true
 	}
-	st = strings.ReplaceAll(st, " ", "")
-	return strings.Contains(st, "display:none") || strings.Contains(st, "visibility:hidden") ||
-		strings.Contains(st, "opacity:0;") || strings.HasSuffix(st, "opacity:0")
+	if cs.visibility == "hidden" || cs.visibility == "collapse" {
+		return true
+	}
+	if o := cs.vals[propOpacity]; o != "" {
+		if f, err := strconv.ParseFloat(strings.TrimSuffix(o, "%"), 64); err == nil && f == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // pruned reports whether n and its whole subtree are excluded from the tree.
-func pruned(n *html.Node) bool {
+func (d *Doc) pruned(n *html.Node) bool {
 	if n.Type != html.ElementNode {
 		return false
 	}
@@ -392,16 +406,24 @@ func pruned(n *html.Node) bool {
 		}
 		return true
 	}
-	if hasAttr(n, "hidden") || attr(n, "aria-hidden") == "true" {
+	if attr(n, "aria-hidden") == "true" {
 		return true
 	}
 	if n.Data == "input" && strings.EqualFold(attr(n, "type"), "hidden") {
 		return true
 	}
-	if inlineHidden(n) {
-		return true
+	// The hidden attribute is a UA rule `[hidden]{display:none}`: an author
+	// rule for display beats it (e.g. `.show{display:block}`), but only once
+	// stylesheets are installed; without any, it prunes unconditionally.
+	if hasAttr(n, "hidden") {
+		d.cssMu.Lock()
+		hasSheets := d.css != nil && d.css.hasSheets
+		d.cssMu.Unlock()
+		if !hasSheets {
+			return true
+		}
 	}
-	return false
+	return d.styleHidden(n)
 }
 
 func isInteractiveElement(n *html.Node, role string) bool {
@@ -434,7 +456,7 @@ func (d *Doc) buildSnap(n *html.Node, o *SnapshotOptions, depth int) []*snapNode
 	if n.Type != html.ElementNode && n.Type != html.DocumentNode {
 		return nil
 	}
-	if pruned(n) {
+	if d.pruned(n) {
 		return nil
 	}
 	role := computeRole(n)
