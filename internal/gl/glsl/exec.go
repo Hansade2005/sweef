@@ -77,8 +77,8 @@ type Frame struct {
 	scratch   [32]float32
 }
 
-func fl(u uint32) float32  { return math.Float32frombits(u) }
-func bf(f float32) uint32  { return math.Float32bits(f) }
+func fl(u uint32) float32 { return math.Float32frombits(u) }
+func bf(f float32) uint32 { return math.Float32bits(f) }
 func b2u(b bool) uint32 {
 	if b {
 		return 1
@@ -88,12 +88,12 @@ func b2u(b bool) uint32 {
 
 // IOVar describes a shader input or output variable.
 type IOVar struct {
-	Name   string
-	T      Type
-	Off    int
-	Loc    int // layout(location) or -1
-	Flat   bool
-	Used   bool
+	Name      string
+	T         Type
+	Off       int
+	Loc       int // layout(location) or -1
+	Flat      bool
+	Used      bool
 	Invariant bool
 }
 
@@ -191,4 +191,3 @@ func (in *Instance) Run() (discarded bool) {
 	c := in.sh.main(f)
 	return c == ctlDiscard || f.Discarded || c == ctlAbort
 }
-

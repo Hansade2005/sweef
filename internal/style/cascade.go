@@ -25,6 +25,7 @@ type Engine struct {
 	univ      []*Entry
 	Fonts     []FontFace
 	SysFont   string
+	Quirks    bool
 	RootFont  float64
 	initial   *Computed
 	inline    map[string][]Decl
@@ -48,12 +49,25 @@ func uaParsed() []*Rule {
 }
 
 // NewEngine builds an engine from author sheets (UA sheet is built in).
-func NewEngine(env *Env, sheets []SheetIn) *Engine {
+func NewEngine(env *Env, sheets []SheetIn) *Engine { return NewEngineQ(env, sheets, false) }
+
+const quirkCSS = `table { white-space: normal; line-height: normal; font-weight: normal; font-size: medium; font-variant: normal; font-style: normal; text-align: start }`
+
+// NewEngineQ is NewEngine with an optional quirks-mode user-agent sheet.
+func NewEngineQ(env *Env, sheets []SheetIn, quirks bool) *Engine {
 	e := &Engine{env: env, byID: map[string][]*Entry{}, byClass: map[string][]*Entry{}, byTag: map[string][]*Entry{},
 		SysFont: "system-ui", RootFont: 16, inline: map[string][]Decl{}, share: map[uint64]*Computed{}}
 	e.initial = Initial()
 	for _, r := range uaParsed() {
 		e.addRule(r)
+	}
+	e.Quirks = quirks
+	if quirks {
+		o := 1
+		p := ParseSheet(quirkCSS, env, OriginUA, &o, map[string]int{})
+		for _, r := range p.Rules {
+			e.addRule(r)
+		}
 	}
 	order := 1000000
 	layers := map[string]int{}
@@ -459,6 +473,7 @@ func (e *Engine) computeFrom(decls []Decl, parent *Computed, pseudo string) *Com
 			s.applyDecl(d)
 		}
 		if pass == 0 {
+			s.fixMonospace()
 			s.uc.em = c.FontSize
 			s.metricsDone = false
 		}
@@ -594,6 +609,7 @@ func (e *Engine) finalize(c, parent *Computed, pseudo string) {
 	if !c.TextFillSet {
 		c.TextFill = c.Color
 	}
+	c.OrigInline = c.Display == "inline" || strings.HasPrefix(c.Display, "inline-") || c.Display == "contents"
 	// blockification
 	if c.Float != "none" || c.Position == "absolute" || c.Position == "fixed" {
 		c.Display = blockify(c.Display)
@@ -730,7 +746,7 @@ func (s *cstate) inheritProp(name string) bool {
 	case "font-family":
 		c.FontFamily = p.FontFamily
 	case "font-size":
-		c.FontSize = p.FontSize
+		c.FontSize, c.FontSizeKw, c.FontAbs = p.FontSize, p.FontSizeKw, p.FontAbs
 		s.setupMetrics()
 	case "font-weight":
 		c.FontWeight = p.FontWeight

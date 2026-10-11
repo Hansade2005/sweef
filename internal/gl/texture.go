@@ -477,7 +477,7 @@ func (v *texView) sampleLevel(r *glsl.SampleReq, level int, linear bool) [4]floa
 	}
 	if v.dim == 3 {
 		d := im.D
-		fz := p*float64(d)
+		fz := p * float64(d)
 		if !linear {
 			x := wrapCoord(int(math.Floor(s*float64(w)))+offx, w, v.wrap[0])
 			y := wrapCoord(int(math.Floor(t*float64(h)))+offy, h, v.wrap[1])

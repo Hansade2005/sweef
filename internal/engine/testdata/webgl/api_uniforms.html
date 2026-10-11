@@ -1,0 +1,31 @@
+<!doctype html><meta charset=utf-8><canvas id=c width=64 height=64></canvas>
+<script>
+function ctx(v, attrs){ var c=document.getElementById('c'); return c.getContext(v||'webgl', Object.assign({preserveDrawingBuffer:true, antialias:false}, attrs||{})); }
+function J(v){ if(v===undefined) return 'undefined'; if(v===null) return 'null'; if(typeof v==='number') return String(v); if(ArrayBuffer.isView(v)) return v.constructor.name+'['+Array.prototype.join.call(v,',')+']'; if(Array.isArray(v)) return '['+v.map(J).join(',')+']'; if(typeof v==='object') return Object.prototype.toString.call(v); return JSON.stringify(v); }
+try{var out=[];var gl=ctx('webgl');
+var vs='attribute vec3 position;attribute vec2 uv;attribute mat3 m;uniform mat4 mvp;uniform vec3 lights[3];uniform float f;uniform struct S{vec2 a;float b[2];}s;uniform sampler2D tex;uniform bool flag;uniform ivec2 iv;varying vec2 v;void main(){v=uv+vec2(f)+s.a+vec2(s.b[1])+vec2(iv)+(flag?vec2(1.0):vec2(0.0));vec3 q=m*position;gl_Position=mvp*vec4(q+lights[2],1.0)+texture2D(tex,v);}';
+function sh(t,s){var o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS)) out.push('compile: '+gl.getShaderInfoLog(o));return o;}
+var p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,vs));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,'precision mediump float;varying vec2 v;uniform vec4 col;uniform highp float f;void main(){gl_FragColor=col*f+vec4(v,0.0,1.0);}'));gl.linkProgram(p);out.push('link='+gl.getProgramParameter(p,gl.LINK_STATUS)+' '+JSON.stringify(gl.getProgramInfoLog(p)));
+var na=gl.getProgramParameter(p,gl.ACTIVE_ATTRIBUTES),nu=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);out.push('active='+na+','+nu+' attached='+gl.getProgramParameter(p,gl.ATTACHED_SHADERS));
+var at=[];for(var i=0;i<na;i++){var a=gl.getActiveAttrib(p,i);at.push(a.name+':'+a.type+':'+a.size+'@'+gl.getAttribLocation(p,a.name));}out.push('attribs='+at.sort().join(' '));
+var un=[];for(var i=0;i<nu;i++){var u=gl.getActiveUniform(p,i);un.push(u.name+':'+u.type+':'+u.size);}out.push('uniforms='+un.sort().join(' '));
+gl.useProgram(p);
+['mvp','lights','lights[0]','lights[2]','lights[3]','f','s.a','s.b','s.b[1]','s','tex','flag','iv','col','nope','position'].forEach(function(n){var l=gl.getUniformLocation(p,n);out.push('loc '+n+'='+(l?'obj':'null'));});
+gl.uniform1f(gl.getUniformLocation(p,'f'),2.5);out.push('f='+gl.getUniform(p,gl.getUniformLocation(p,'f')));
+gl.uniform3fv(gl.getUniformLocation(p,'lights'),[1,2,3,4,5,6,7,8,9]);out.push('l1='+J(gl.getUniform(p,gl.getUniformLocation(p,'lights[1]'))));
+gl.uniformMatrix4fv(gl.getUniformLocation(p,'mvp'),false,[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);out.push('mvp='+J(gl.getUniform(p,gl.getUniformLocation(p,'mvp'))));
+gl.uniform1i(gl.getUniformLocation(p,'flag'),1);out.push('flag='+gl.getUniform(p,gl.getUniformLocation(p,'flag')));
+gl.uniform2i(gl.getUniformLocation(p,'iv'),3,4);out.push('iv='+J(gl.getUniform(p,gl.getUniformLocation(p,'iv'))));
+function chk(name,f){var r;try{r=f();}catch(e){r='throws '+e.name;}out.push(name+' -> '+J(r)+' err=0x'+gl.getError().toString(16));}
+chk('uniform1i on float',function(){gl.uniform1i(gl.getUniformLocation(p,'f'),1)});
+chk('uniform3f on vec4',function(){gl.uniform3f(gl.getUniformLocation(p,'col'),1,2,3)});
+chk('uniform1f on array',function(){gl.uniform1f(gl.getUniformLocation(p,'lights'),1)});
+chk('uniformMatrix transpose',function(){gl.uniformMatrix4fv(gl.getUniformLocation(p,'mvp'),true,new Float32Array(16))});
+chk('uniformMatrix size',function(){gl.uniformMatrix4fv(gl.getUniformLocation(p,'mvp'),false,new Float32Array(9))});
+chk('uniform1fv size',function(){gl.uniform1fv(gl.getUniformLocation(p,'f'),new Float32Array(0))});
+chk('uniform bad loc',function(){gl.uniform1f({},1)});
+chk('uniform sampler range',function(){gl.uniform1i(gl.getUniformLocation(p,'tex'),100)});
+chk('bindAttribLocation relink',function(){gl.bindAttribLocation(p,5,'uv');gl.linkProgram(p);return gl.getAttribLocation(p,'uv')});
+window.__result=out.join('\n');
+}catch(e){window.__error=String(e&&e.stack||e);}
+</script>

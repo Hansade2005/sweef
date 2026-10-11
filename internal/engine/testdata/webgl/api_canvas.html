@@ -1,0 +1,19 @@
+<!doctype html><meta charset=utf-8><canvas id=c width=64 height=64></canvas>
+<script>
+function ctx(v, attrs){ var c=document.getElementById('c'); return c.getContext(v||'webgl', Object.assign({preserveDrawingBuffer:true, antialias:false}, attrs||{})); }
+function J(v){ if(v===undefined) return 'undefined'; if(v===null) return 'null'; if(typeof v==='number') return String(v); if(ArrayBuffer.isView(v)) return v.constructor.name+'['+Array.prototype.join.call(v,',')+']'; if(Array.isArray(v)) return '['+v.map(J).join(',')+']'; if(typeof v==='object') return Object.prototype.toString.call(v); return JSON.stringify(v); }
+try{var out=[];var c=document.getElementById('c');var gl=ctx('webgl');
+out.push('same='+(c.getContext('webgl')===gl)+' exp='+(c.getContext('experimental-webgl')===gl)+' 2d='+c.getContext('2d')+' gl2='+c.getContext('webgl2'));
+out.push('canvasRef='+(gl.canvas===c)+' size='+gl.drawingBufferWidth+'x'+gl.drawingBufferHeight);
+gl.clearColor(1,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
+c.width=64;c.height=32;out.push('after resize='+gl.drawingBufferWidth+'x'+gl.drawingBufferHeight+' vp='+J(gl.getParameter(gl.VIEWPORT)));
+var px=new Uint8Array(4);gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);out.push('cleared after resize='+J(px));
+gl.clearColor(0,1,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
+var url=c.toDataURL();out.push('toDataURL len>100='+(url.length>100)+' prefix='+url.slice(0,22));
+var c2=document.createElement('canvas');c2.width=64;c2.height=32;var x=c2.getContext('2d');x.drawImage(c,0,0);var d=x.getImageData(5,5,1,1).data;out.push('drawImage px='+Array.prototype.join.call(d,','));
+var oc=new OffscreenCanvas(8,8);var g3=oc.getContext('webgl');out.push('offscreen webgl='+(g3?'ctx':'null'));
+var s=document.createElement('canvas').getContext('webgl',{alpha:false,depth:false,stencil:true,antialias:false});out.push('attrs2='+JSON.stringify(s.getContextAttributes()));out.push('bits='+[s.getParameter(s.DEPTH_BITS),s.getParameter(s.STENCIL_BITS),s.getParameter(s.ALPHA_BITS)].join());
+var s2=document.createElement('canvas').getContext('webgl2',{alpha:true,depth:true,stencil:true,antialias:true});out.push('bits2='+[s2.getParameter(s2.DEPTH_BITS),s2.getParameter(s2.STENCIL_BITS),s2.getParameter(s2.ALPHA_BITS),s2.getParameter(s2.SAMPLES)].join());
+window.__result=out.join('\n');
+}catch(e){window.__error=String(e&&e.stack||e);}
+</script>

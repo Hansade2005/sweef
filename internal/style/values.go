@@ -1167,3 +1167,6 @@ func parseColorMix(args string, cc colorCtx) (Color, bool, bool) {
 	// interpolate in srgb (the common case); other spaces approximated by srgb
 	return Color{mix(it[0].c.R, it[1].c.R), mix(it[0].c.G, it[1].c.G), mix(it[0].c.B, it[1].c.B), alpha8(a * alphaMul)}, false, true
 }
+
+// ParseColor parses a CSS color for callers outside the cascade (light scheme).
+func ParseColor(s string) (Color, bool, bool) { return parseColor(s, colorCtx{cur: Color{0, 0, 0, 255}}) }

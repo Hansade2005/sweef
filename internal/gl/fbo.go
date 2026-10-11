@@ -68,8 +68,11 @@ func (c *Context) Resize(w, h int) {
 			c.defColor.U8[i] = 255
 		}
 	}
-	c.viewport = [4]int{0, 0, w, h}
-	c.scissor = [4]int{0, 0, w, h}
+	if !c.sized {
+		c.viewport = [4]int{0, 0, w, h}
+		c.scissor = [4]int{0, 0, w, h}
+		c.sized = true
+	}
 	c.bmMu.Lock()
 	c.presented = nil
 	c.bmMu.Unlock()
@@ -701,7 +704,7 @@ func (c *Context) clearColorBuffer(rt *rtarget, i int, col [4]float32, ci [4]int
 	var tmp *Image
 	switch f.Class {
 	case ClsU8:
-		tmp = &Image{Fmt: f, U8: make([]uint8, 4)}
+		tmp = &Image{Fmt: f, U8: make([]uint8, 4), clearConv: true}
 		tmp.setFloat(0, col)
 	case ClsF32:
 		tmp = &Image{Fmt: f, F: make([]float32, 4)}
@@ -880,7 +883,11 @@ func (c *Context) ReadPixels(x, y, w, h int, format, typ uint32, dst []byte, pbo
 	if !okCombo {
 		switch format {
 		case GL_RGBA, GL_RGB, GL_ALPHA, GL_LUMINANCE, GL_LUMINANCE_ALPHA, GL_RED, GL_RG, GL_RGBA_INTEGER, GL_RED_INTEGER, GL_RG_INTEGER, GL_RGB_INTEGER:
-			c.setErr(GL_INVALID_OPERATION)
+			if c.Version == 1 && format == GL_RGBA && typ != GL_UNSIGNED_BYTE {
+				c.setErr(GL_INVALID_ENUM)
+			} else {
+				c.setErr(GL_INVALID_OPERATION)
+			}
 		default:
 			c.setErr(GL_INVALID_ENUM)
 		}
@@ -986,6 +993,14 @@ func (c *Context) SnapshotImage() *image.RGBA {
 // Present snapshots the drawing buffer for the compositor and, unless
 // preserveDrawingBuffer is set, clears it.
 func (c *Context) Present() {
+	for _, sy := range c.syncs {
+		sy.Signaled = true
+	}
+	for _, q := range c.queries {
+		if q.pending {
+			q.pending, q.Ready = false, true
+		}
+	}
 	if !c.dirty {
 		return
 	}

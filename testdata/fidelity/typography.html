@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>typography</title>
+<style>
+body { font-family: Arial, Helvetica, sans-serif; margin: 24px; color: #222; }
+h1 { font-size: 32px; } h2 { font-size: 24px; margin-bottom: 4px; } h3 { margin-top: 0; }
+.serif { font-family: Georgia, 'Times New Roman', serif; font-size: 18px; line-height: 1.6; }
+.mono { font-family: 'Courier New', monospace; font-size: 13px; }
+.small { font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; }
+.lh { line-height: 30px; font-size: 15px; }
+.ws { white-space: pre-wrap; background: #f6f6f6; padding: 8px; }
+.ind { text-indent: 2em; text-align: justify; width: 520px; }
+.ws2 { word-spacing: 6px; }
+p { margin: 0 0 12px; }
+.big { font-size: 2.5rem; font-weight: 300; }
+.sys { font-family: system-ui, sans-serif; }
+</style></head><body>
+<h1>Heading level one</h1>
+<h2>Second level heading</h2>
+<h3>Third level heading with some longer text that may wrap on narrow screens but not here</h3>
+<p class="serif">The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump! Sphinx of black quartz, judge my vow.</p>
+<p class="mono">monospace text: function foo(a, b) { return a + b; }</p>
+<p class="small">Small caps style label text</p>
+<p class="lh">Line height thirty pixels. This paragraph is long enough that it should wrap across multiple lines when the viewport is narrower than the text, which here it may not be unless we constrain it a bit more with a width.</p>
+<div class="ws">  preserved   spaces
+  and
+    newlines</div>
+<p class="ind">Justified text with an indent. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>
+<p class="ws2">Word spacing applied to this sentence here.</p>
+<p class="big">Light big text</p>
+<p class="sys">System UI font paragraph with <b>bold</b>, <i>italic</i>, <code>code</code>, <small>small</small>, <sub>sub</sub> and <sup>sup</sup>.</p>
+<p>Normal <em>emphasis</em> <strong>strong</strong> <u>underline</u> <s>strike</s> <mark>mark</mark> <kbd>kbd</kbd> <samp>samp</samp> <abbr title="x">abbr</abbr> <q>quote</q></p>
+<blockquote>A block quote with some text inside it.</blockquote>
+<pre>pre formatted
+  text block</pre>
+<hr>
+<p style="font-size:11px">Tiny text eleven pixels.</p>
+<p style="font-size:20.5px">Fractional size twenty point five.</p>
+</body></html>

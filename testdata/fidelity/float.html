@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>float</title>
+<style>
+body { margin: 16px; font: 14px/1.4 Arial, sans-serif; }
+.wrap { width: 600px; border: 1px solid #888; margin-bottom: 20px; }
+.l { float: left; width: 120px; height: 80px; background: #fcc; margin: 0 12px 6px 0; }
+.r { float: right; width: 100px; height: 60px; background: #cfc; margin: 4px 0 6px 12px; }
+.clear { clear: both; }
+.cf::after { content: ""; display: table; clear: both; }
+.col { float: left; width: 33.33%; box-sizing: border-box; padding: 8px; background: #eef; border: 1px solid #99c; }
+.shrink { float: left; background: #ffd; padding: 6px; margin: 4px; }
+.bfc { overflow: hidden; background: #eee; }
+.nav li { float: left; list-style: none; margin-right: 10px; padding: 4px 8px; background: #ddd; }
+ul { margin: 0; padding: 0; }
+</style></head><body>
+<div class="wrap"><div class="l"></div><div class="r"></div><p>Text flows around the floats. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p><div class="clear"></div></div>
+<div class="wrap cf"><div class="col">One</div><div class="col">Two with more text to make it taller than the others in the row</div><div class="col">Three</div></div>
+<div class="wrap"><div class="shrink">shrink to fit</div><div class="shrink">second float wider content</div><div class="shrink">3</div></div>
+<div class="wrap bfc"><div class="l"></div><p>Overflow hidden contains float and text wraps beside it a bit.</p></div>
+<div class="wrap"><ul class="nav cf"><li>Home</li><li>About us</li><li>Contact</li></ul></div>
+<div class="wrap"><div class="l"></div><div class="l" style="height:30px"></div><div class="l" style="width:300px;height:20px"></div><div class="l" style="width:200px;height:20px"></div><p class="clear">cleared paragraph</p></div>
+</body></html>

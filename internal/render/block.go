@@ -15,6 +15,7 @@ type layoutIn struct {
 	bx, by     float64 // BFC coordinates of this box's border-box origin (when it joins the parent's BFC)
 	bfc        *bfcState
 	stretchW   bool // width was stretched by a parent (flex/grid align stretch)
+	item       bool // flex/grid/table item: no auto-margin fixups
 }
 
 func noFix() (float64, float64) { return -1, -1 }
@@ -265,18 +266,17 @@ func (c *ctx) usedContentWidth(b *lbox, in layoutIn) float64 {
 	}
 	if !ok {
 		if in.shrink {
-			avail := in.availW - b.mar[1] - b.mar[3] - b.hExtra() - b.sbW
+			avail := in.availW - b.mar[1] - b.mar[3] - b.hExtra()
 			mn, mx := c.minContent(b), c.maxContent(b)
-			cw = math.Min(math.Max(mn, avail), mx)
+			cw = math.Min(math.Max(mn, avail), mx) - b.sbW
 		} else {
-			cw = in.cbw - b.mar[1] - b.mar[3] - b.hExtra()
+			cw = in.cbw - b.mar[1] - b.mar[3] - b.hExtra() - b.sbW
 		}
-		cw -= b.sbW
 		if cw < 0 {
 			cw = 0
 		}
 	} else {
-		cw = math.Max(0, cw-b.sbW*0)
+		cw = math.Max(0, cw-b.sbW)
 	}
 	cw = c.clampW(b, cw, in.cbw)
 	return cw
@@ -315,6 +315,7 @@ func (c *ctx) layoutBox(b *lbox, in layoutIn) {
 	}
 	b.lastIn, b.hasLast = in, true
 	b.hasFloat, b.touchesBFC = false, false
+	b.legendBase = -1
 	c.edges(b, in.cbw)
 	switch b.inner {
 	case iFlex:
@@ -370,6 +371,8 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 		c.horizontalMargins(b, in, bw)
 		// establish context
 		var bfc *bfcState
+		c.fieldsetLegend(b, cw)
+		bw += 0
 		bx, by := in.bx, in.by
 		root := b.isBFCRoot()
 		if root {
@@ -386,6 +389,8 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 		}
 		if in.fixH >= 0 {
 			cbh = math.Max(0, in.fixH-b.vExtra()-b.sbH)
+		} else if cbh >= 0 {
+			cbh = math.Max(0, cbh-b.sbH)
 		}
 		if b.parent == nil && b.n != nil && cbh < 0 && st.Height.K == style.LAuto {
 			cbh = -1
@@ -399,8 +404,12 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 			// handled after
 		}
 		c.inFlow = append(c.inFlow, b)
-		if b.inner == iFlex {
+		if b.inner == iGrid {
+			contentH = c.layoutGridContent(b, cw, cbh, in)
+		} else if b.inner == iFlex {
 			contentH = c.layoutFlexContent(b, cw, cbh, in)
+		} else if b.isMulticol() && !b.ifc && b.inner == iFlow {
+			contentH = c.layoutMulticolContent(b, cw, cx, cy, bfc, cbh, topAdj, in)
 		} else if b.ifc {
 			contentH = c.layoutInlineContent(b, cw, cx, cy, bfc, cbh)
 		} else {
@@ -412,7 +421,7 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 		h := contentH
 		hSpec := false
 		if in.fixH >= 0 {
-			h = math.Max(0, in.fixH-b.vExtra()-b.sbH)
+			h = math.Max(0, in.fixH-b.vExtra())
 			hSpec = true
 		} else if hh, ok := c.specH(b, st.Height, in.cbh); ok {
 			h = hh
@@ -426,7 +435,21 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 			}
 			hSpec = true
 		}
+		if b.inner == iCell && hSpec && h < contentH {
+			h = contentH
+		}
 		h = c.clampH(b, h, in.cbh, contentH)
+		if c.quirks && !hSpec && in.fixH < 0 && (b == c.bodyBox || b == c.rootBox) {
+			want := c.vh - b.vExtra() - b.sbH
+			if b == c.bodyBox && c.rootBox != nil {
+				want -= b.mar[0] + b.mar[2] + c.rootBox.vExtra() + c.rootBox.mar[0] + c.rootBox.mar[2]
+			} else {
+				want -= b.mar[0] + b.mar[2]
+			}
+			if want > h {
+				h = want
+			}
+		}
 		if hSpec || h != contentH {
 			// bottom margin cannot collapse through an explicit height
 			b.mbotOut = b.mar[2]
@@ -436,7 +459,11 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 			b.mbotOut = b.mar[2]
 			b.mtopOut = b.mar[0]
 		}
-		b.h = h + b.vExtra() + b.sbH
+		if hSpec {
+			b.h = h + b.vExtra()
+		} else {
+			b.h = h + b.vExtra() + b.sbH
+		}
 		// scrollbar necessity for overflow:auto
 		if pass == 0 && (st.OverflowY == "auto" || st.OverflowX == "auto") && st.Scrollbar != "none" {
 			need := false
@@ -516,7 +543,7 @@ func (c *ctx) clampH(b *lbox, h, cbh, contentH float64) float64 {
 
 // horizontalMargins resolves auto margins and over-constrained margins.
 func (c *ctx) horizontalMargins(b *lbox, in layoutIn, bw float64) {
-	if in.shrink || b.floated || b.oof {
+	if in.shrink || b.floated || b.oof || in.item || in.fixW >= 0 && false {
 		for _, i := range []int{1, 3} {
 			if b.marAuto[i] {
 				b.mar[i] = 0
@@ -540,9 +567,19 @@ func (c *ctx) horizontalMargins(b *lbox, in layoutIn, bw float64) {
 	case right:
 		b.mar[1] = math.Max(0, rest)
 	default:
-		if b.st.Direction == "rtl" {
+		ta := ""
+		if b.parent != nil {
+			ta = b.parent.st.TextAlign
+		}
+		switch {
+		case ta == "-webkit-center" && rest > 0:
+			b.mar[3] += rest / 2
+			b.mar[1] += rest / 2
+		case ta == "-webkit-right" && rest > 0:
 			b.mar[3] += rest
-		} else {
+		case b.st.Direction == "rtl":
+			b.mar[3] += rest
+		default:
 			b.mar[1] += rest
 		}
 	}
@@ -594,6 +631,9 @@ func (c *ctx) layoutBlockKids(b *lbox, cw, cx, cy float64, bfc *bfcState, cbh fl
 		if k.kind == kMarker || k.kind == kText || k.kind == kBreak || k.kind == kInline {
 			continue
 		}
+		if k == b.legend {
+			continue
+		}
 		if k.oof {
 			c.registerOOF(b, k, cx-0, y, st, leading, cw)
 			continue
@@ -629,8 +669,40 @@ func (c *ctx) layoutBlockKids(b *lbox, cw, cx, cy float64, bfc *bfcState, cbh fl
 		if clearTo > pos {
 			pos = clearTo
 		}
-		in := layoutIn{cbw: cw, cbh: ccbh, fixW: -1, fixH: -1, bx: cx - b.bor[3] - b.pad[3] + 0, by: pos, bfc: bfc}
-		in.bx = cx
+		in := layoutIn{cbw: cw, cbh: ccbh, fixW: -1, fixH: -1, bfc: bfc, bx: cx, by: pos}
+		shiftX := 0.0
+		pushedPos := math.Inf(-1)
+		if len(bfc.floats) > 0 && k.isBFCRoot() {
+			// a BFC root must not overlap floats: narrow it or move it down
+			for try := 0; try < 64; try++ {
+				l, r := bfc.band(pos, pos+1, cx, cx+cw)
+				if l <= cx && r >= cx+cw {
+					break
+				}
+				avail := r - l
+				in.cbw = avail
+				in.bx, in.by = l, pos
+				k.hasLast = false
+				c.layoutBox(k, in)
+				if k.w+k.mar[1]+k.mar[3] <= avail+0.01 {
+					shiftX = l - cx
+					break
+				}
+				next := math.Inf(1)
+				for _, f := range bfc.floats {
+					if f.y1 > pos && f.y1 < next && f.y1 > f.y0 {
+						next = f.y1
+					}
+				}
+				if math.IsInf(next, 1) {
+					break
+				}
+				pos = next
+				pushedPos = next
+				in.cbw, in.bx = cw, cx
+			}
+			in.by = pos
+		}
 		c.layoutBox(k, in)
 		if k.hasFloat || k.touchesBFC {
 			b.touchesBFC = true
@@ -648,9 +720,12 @@ func (c *ctx) layoutBlockKids(b *lbox, cw, cx, cy float64, bfc *bfcState, cbh fl
 		} else {
 			ky = y + gap
 		}
-		if clearTo > cy+ky && !(leading && k.through) {
+		if clearTo > cy+ky {
 			ky = clearTo - cy
 			cleared = true
+		}
+		if pushedPos > cy+ky {
+			ky = pushedPos - cy
 		}
 		if cleared && leading {
 			// clearance prevents collapsing with the parent
@@ -663,7 +738,7 @@ func (c *ctx) layoutBlockKids(b *lbox, cw, cx, cy float64, bfc *bfcState, cbh fl
 		if k.through && !cleared {
 			// margins collapse through the empty box
 			st.add(k.mtopOut)
-			k.x = k.mar[3]
+			k.x = k.mar[3] + shiftX
 			k.y = ky
 			if leading {
 				k.y = 0
@@ -690,7 +765,7 @@ func (c *ctx) layoutBlockKids(b *lbox, cw, cx, cy float64, bfc *bfcState, cbh fl
 			in.by = cy + ky
 			c.layoutBox(k, in)
 		}
-		k.x = k.mar[3]
+		k.x = k.mar[3] + shiftX
 		k.y = ky
 		k.lp = b
 		y = ky + k.h

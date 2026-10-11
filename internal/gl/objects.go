@@ -480,7 +480,9 @@ func (c *Context) CreateRenderbuffer() uint32 {
 	return id
 }
 
-func (c *Context) IsRenderbuffer(id uint32) bool { return c.rbs[id] != nil && c.rbs[id].ID != 0 && c.rbs[id].Img != nil || c.rbs[id] != nil }
+func (c *Context) IsRenderbuffer(id uint32) bool {
+	return c.rbs[id] != nil && c.rbs[id].ID != 0 && c.rbs[id].Img != nil || c.rbs[id] != nil
+}
 
 func (c *Context) DeleteRenderbuffer(id uint32) {
 	r := c.rbs[id]
@@ -810,7 +812,8 @@ func (c *Context) EndQuery(target uint32) {
 		c.setErr(GL_INVALID_OPERATION)
 		return
 	}
-	q.Active, q.Ready = false, true
+	q.Active = false
+	q.pending = true
 	delete(c.activeQ, target)
 }
 
@@ -839,6 +842,9 @@ func (c *Context) GetQueryParameter(id, pname uint32) (uint64, bool) {
 	case GL_QUERY_RESULT_AVAILABLE:
 		return uint64(b2i(q.Ready)), true
 	case GL_QUERY_RESULT:
+		if !q.Ready {
+			return 0, true
+		}
 		if q.Target == GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN {
 			return q.Result, true
 		}
@@ -859,11 +865,21 @@ func (c *Context) IsSync(id uint32) bool { return c.syncs[id] != nil }
 func (c *Context) DeleteSync(id uint32) { delete(c.syncs, id) }
 
 func (c *Context) ClientWaitSync(id uint32) uint32 {
-	if c.syncs[id] == nil {
+	s := c.syncs[id]
+	if s == nil {
 		c.setErr(GL_INVALID_VALUE)
 		return GL_WAIT_FAILED
 	}
+	if !s.Signaled {
+		return GL_TIMEOUT_EXPIRED
+	}
 	return GL_ALREADY_SIGNALED
+}
+
+// SyncSignaled reports a fence's status.
+func (c *Context) SyncSignaled(id uint32) bool {
+	s := c.syncs[id]
+	return s != nil && s.Signaled
 }
 
 // ---- transform feedback objects ------------------------------------------------

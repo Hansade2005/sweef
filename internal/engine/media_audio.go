@@ -6,6 +6,7 @@ package engine
 import (
 	_ "embed"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"math"
 
@@ -53,9 +54,9 @@ func (m *mediaHost) waHost(f map[string]hostFn) {
 		if err != nil {
 			return nil, err
 		}
-		opts, _ := a[2].(map[string]any)
-		if opts == nil {
-			opts = map[string]any{}
+		opts := map[string]any{}
+		if js := argS(a, 2); js != "" {
+			_ = json.Unmarshal([]byte(js), &opts)
 		}
 		typ := argS(a, 1)
 		id, err := c.AddNode(typ, opts)
@@ -80,17 +81,29 @@ func (m *mediaHost) waHost(f map[string]hostFn) {
 		if err != nil {
 			return nil, err
 		}
-		return nil, c.Set(int(argI(a, 1)), argS(a, 2), a[3])
+		val := a[3]
+		if argS(a, 2) == "curve" {
+			if cs, ok := val.(string); ok {
+				fl := b64f32(cs)
+				arr := make([]any, len(fl))
+				for i, f := range fl {
+					arr[i] = float64(f)
+				}
+				val = arr
+			}
+		}
+		return nil, c.Set(int(argI(a, 1)), argS(a, 2), val)
 	}
 	f["waSetBuffer"] = func(a []any) (any, error) { // ctx, bufId, rate, [b64...]
 		c, err := m.waCtx(a)
 		if err != nil {
 			return nil, err
 		}
-		chs, _ := a[3].([]any)
+		var chs []string
+		_ = json.Unmarshal([]byte(argS(a, 3)), &chs)
 		data := make([][]float32, len(chs))
 		for i, s := range chs {
-			data[i] = b64f32(argS([]any{s}, 0))
+			data[i] = b64f32(s)
 		}
 		c.SetBuffer(int(argI(a, 1)), argF(a, 2), data)
 		return nil, nil
@@ -114,16 +127,10 @@ func (m *mediaHost) waHost(f map[string]hostFn) {
 		if err != nil {
 			return nil, err
 		}
-		re, _ := a[2].([]any)
-		im, _ := a[3].([]any)
-		toF := func(x []any) []float64 {
-			o := make([]float64, len(x))
-			for i, v := range x {
-				o[i] = anyF(v)
-			}
-			return o
-		}
-		c.SetWave(int(argI(a, 1)), toF(re), toF(im), argB(a, 4))
+		var re, im []float64
+		_ = json.Unmarshal([]byte(argS(a, 2)), &re)
+		_ = json.Unmarshal([]byte(argS(a, 3)), &im)
+		c.SetWave(int(argI(a, 1)), re, im, argB(a, 4))
 		return nil, nil
 	}
 	param := func(c *webaudio.Context, a []any) (*webaudio.Param, error) {
@@ -308,11 +315,8 @@ func (m *mediaHost) waHost(f map[string]hostFn) {
 		if err != nil {
 			return nil, err
 		}
-		fr, _ := a[2].([]any)
-		fs := make([]float64, len(fr))
-		for i, v := range fr {
-			fs[i] = anyF(v)
-		}
+		var fs []float64
+		_ = json.Unmarshal([]byte(argS(a, 2)), &fs)
 		mag, ph := c.FrequencyResponse(int(argI(a, 1)), fs)
 		toA := func(x []float64) []any {
 			o := make([]any, len(x))
@@ -375,10 +379,11 @@ func (m *mediaHost) waHost(f map[string]hostFn) {
 		if err != nil {
 			return nil, err
 		}
-		chs, _ := a[2].([]any)
+		var chs []string
+		_ = json.Unmarshal([]byte(argS(a, 2)), &chs)
 		out := make([][]float32, len(chs))
 		for i, s := range chs {
-			out[i] = b64f32(argS([]any{s}, 0))
+			out[i] = b64f32(s)
 		}
 		c.Provide(c.Node(int(argI(a, 1))), out)
 		return nil, nil

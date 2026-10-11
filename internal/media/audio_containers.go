@@ -468,6 +468,10 @@ func mp3FromFrame(r io.ReaderAt, size, first int64, h mp3Header) *Info {
 	br := h.bitrate
 	if frames > 0 {
 		info.Duration = float64(frames) * float64(h.spf) / float64(h.rate)
+		if info.SkipStart+info.SkipEnd > 0 && float64(info.SkipStart+info.SkipEnd) < float64(frames*int64(h.spf)) {
+			// Chromium (ffmpeg) trims the LAME encoder delay and padding
+			info.Duration = (float64(frames)*float64(h.spf) - float64(info.SkipStart) - float64(info.SkipEnd)) / float64(h.rate)
+		}
 		if xingBytes == 0 {
 			xingBytes = info.DataEnd - info.DataStart
 		}

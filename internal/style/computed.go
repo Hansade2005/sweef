@@ -145,6 +145,8 @@ type Inherited struct {
 	Color                   Color
 	FontFamily              []string
 	FontSize                float64
+	FontSizeKw              int8
+	FontAbs                 bool
 	FontWeight              int
 	FontStyle               uint8 // 0 normal 1 italic 2 oblique
 	SmallCaps               bool
@@ -314,6 +316,7 @@ type Computed struct {
 	// internal helpers
 	Zoom  float64
 	Flags uint32
+	OrigInline bool
 	id    uint64
 }
 
@@ -334,7 +337,9 @@ func Initial() *Computed {
 	c := &Computed{}
 	c.Color = Color{0, 0, 0, 255}
 	c.FontFamily = []string{"serif"}
+	c.FontSizeKw = 4
 	c.FontSize = 16
+	c.FontSizeKw = 4
 	c.FontWeight = 400
 	c.FontStretch = 100
 	c.TextAlign = "start"

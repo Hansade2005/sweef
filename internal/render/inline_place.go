@@ -15,14 +15,16 @@ func (c *ctx) placeInline(b *lbox) {
 	}
 	reset(b)
 	for _, ln := range b.lines {
-		for _, lb := range ln.boxes {
+		for li := range ln.boxes {
+			lb := &ln.boxes[li]
 			bx := lb.box
 			fs := c.spec(bx.st)
 			x := b.ax + ln.x + lb.x0
 			y := b.ay + ln.y + lb.base - fs.asc - bx.pad[0] - bx.bor[0]
 			w := lb.x1 - lb.x0
 			h := fs.asc + fs.desc + bx.pad[0] + bx.pad[2] + bx.bor[0] + bx.bor[2]
-			bx.absFrags = append(bx.absFrags, Rect{x, y, w, h})
+			lb.rect = Rect{x, y, w, h}
+			bx.absFrags = append(bx.absFrags, lb.rect)
 		}
 	}
 }
@@ -51,6 +53,10 @@ func (c *ctx) collectInlineKids(b *lbox) {
 // shiftContent moves child positions from content-box to border-box origin.
 func (c *ctx) shiftContent(b *lbox) {
 	dx, dy := b.bor[3]+b.pad[3], b.bor[0]+b.pad[0]
+	if b.hasBase {
+		b.baseline += dy
+		b.lastBase += dy
+	}
 	if b.ifc {
 		c.collectInlineKids(b)
 		for _, k := range b.inlineKids {

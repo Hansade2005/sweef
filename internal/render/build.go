@@ -478,6 +478,7 @@ func (c *ctx) fixupChildren(b *lbox) {
 	if b.kind == kInline {
 		return // inline boxes keep their children as is; splitting handled by caller
 	}
+	c.wrapTableInternals(b)
 	hasBlock := false
 	for _, k := range b.kids {
 		if k.isInFlowBlock() {
@@ -589,8 +590,13 @@ func (c *ctx) fixupItems(b *lbox) {
 			flush()
 			// blockify: items are block-level
 			if k.kind == kInline || k.kind == kAtomic {
+				wasInline := k.kind == kInline
 				k.kind = kBlock
 				k.inlineLv = false
+				if wasInline && k.inner == iFlow {
+					c.fixupChildren(k)
+					k.kind = kBlock
+				}
 			}
 			nk = append(nk, k)
 		}
@@ -616,12 +622,19 @@ func (c *ctx) splitInline(b *lbox) []*lbox {
 	}
 	var out []*lbox
 	var cur []*lbox
+	var blocks []*lbox
+	for _, k := range b.kids {
+		if k.isInFlowBlock() {
+			blocks = append(blocks, k)
+		}
+	}
 	piece := 0
 	mk := func() *lbox {
 		nb := *b
 		nb.kids = nil
 		nb.cont = piece
 		nb.split = true
+		nb.contBlocks = blocks
 		piece++
 		for _, k := range cur {
 			nb.addKid(k)
@@ -740,4 +753,55 @@ func roman(v int) string {
 		}
 	}
 	return sb.String()
+}
+
+// wrapTableInternals puts table-internal children of a non-table box into anonymous tables.
+func (c *ctx) wrapTableInternals(b *lbox) {
+	any := false
+	for _, k := range b.kids {
+		switch k.inner {
+		case iRow, iRowGroup, iCell, iCaption, iColGroup, iCol:
+			if k.kind == kBlock && !k.oof && !k.floated {
+				any = true
+			}
+		}
+	}
+	if !any {
+		return
+	}
+	var nk []*lbox
+	var run []*lbox
+	flush := func() {
+		if len(run) == 0 {
+			return
+		}
+		t := c.anonBox(b, "table", iTable)
+		for _, r := range run {
+			t.addKid(r)
+		}
+		c.fixupTable(t)
+		nk = append(nk, t)
+		run = nil
+	}
+	for _, k := range b.kids {
+		isInt := false
+		switch k.inner {
+		case iRow, iRowGroup, iCell, iCaption, iColGroup, iCol:
+			isInt = k.kind == kBlock && !k.oof && !k.floated
+		}
+		if isInt {
+			run = append(run, k)
+			continue
+		}
+		if len(run) > 0 && k.kind == kText && onlyWhitespace(k.text) {
+			continue
+		}
+		flush()
+		nk = append(nk, k)
+	}
+	flush()
+	b.kids = nil
+	for _, k := range nk {
+		b.addKid(k)
+	}
 }

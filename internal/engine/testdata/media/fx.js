@@ -11,10 +11,10 @@
   function watch(el, label, skip) {
     EV.forEach(function (n) {
       if (skip && skip.indexOf(n) >= 0) return;
-      el.addEventListener(n, function () { R.events.push([(label || '') + n, ms(), +el.currentTime.toFixed(3), el.readyState, el.networkState, el.paused ? 1 : 0]); });
+      el.addEventListener(n, function () { if (window.__done) return; R.events.push([(label || '') + n, ms(), +el.currentTime.toFixed(3), el.readyState, el.networkState, el.paused ? 1 : 0]); });
     });
   }
-  function finish() { window.__done = true; }
+  function finish() { R.finishedAt = ms(); window.__done = true; }
   function after(t, f) { setTimeout(f, t); }
   function onGo(f) { document.getElementById('go').addEventListener('click', f); }
   function props(a, keys) { keys.forEach(function (k) { var v = a[k]; R.x[k] = (typeof v === 'number' && isNaN(v)) ? 'NaN' : (v === Infinity ? 'Infinity' : v); }); }

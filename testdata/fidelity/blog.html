@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Blog article</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root { --fg: #1f2328; --muted: #59636e; --accent: #0969da; --border: #d1d9e0; --max: 720px; }
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.6; color: var(--fg); background: #fff; }
+a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+.site-header { border-bottom: 1px solid var(--border); background: #f6f8fa; }
+.site-header .inner { max-width: 1012px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+.logo { font-weight: 700; font-size: 20px; color: var(--fg); letter-spacing: -0.02em; }
+.nav a { margin-left: 20px; color: var(--muted); font-size: 14px; }
+.hero { max-width: var(--max); margin: 48px auto 24px; padding: 0 24px; }
+.hero .meta { color: var(--muted); font-size: 14px; display: flex; gap: 12px; align-items: center; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #f093fb, #f5576c); display: inline-block; }
+h1 { font-size: 40px; line-height: 1.2; margin: 12px 0 8px; letter-spacing: -0.02em; }
+.lead { font-size: 20px; color: var(--muted); margin: 0; }
+article { max-width: var(--max); margin: 0 auto; padding: 0 24px 64px; }
+article h2 { font-size: 28px; margin: 40px 0 12px; line-height: 1.25; }
+article h3 { font-size: 22px; margin: 28px 0 8px; }
+article p { margin: 0 0 16px; }
+article ul, article ol { padding-left: 28px; margin: 0 0 16px; } article li { margin: 4px 0; }
+blockquote { margin: 24px 0; padding: 4px 20px; border-left: 4px solid var(--accent); color: var(--muted); font-style: italic; }
+figure { margin: 32px 0; } figure .ph { height: 280px; border-radius: 8px; background: linear-gradient(120deg, #84fab0, #8fd3f4); }
+figcaption { font-size: 14px; color: var(--muted); text-align: center; margin-top: 8px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 85%; background: #eff1f3; padding: 0.2em 0.4em; border-radius: 6px; }
+pre { background: #f6f8fa; padding: 16px; border-radius: 8px; overflow: auto; font-size: 14px; line-height: 1.45; } pre code { background: none; padding: 0; font-size: 100%; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 32px; } .tag { font-size: 12px; padding: 2px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); }
+.author { display: flex; gap: 16px; margin-top: 40px; padding: 20px; border: 1px solid var(--border); border-radius: 8px; background: #f6f8fa; }
+.author .avatar { width: 56px; height: 56px; flex: none; }
+footer { border-top: 1px solid var(--border); padding: 24px; text-align: center; color: var(--muted); font-size: 14px; }
+</style></head><body>
+<header class="site-header"><div class="inner"><a class="logo" href="#">Notebook</a><nav class="nav"><a href="#">Articles</a><a href="#">Topics</a><a href="#">About</a><a href="#">Subscribe</a></nav></div></header>
+<div class="hero"><div class="meta"><span class="avatar"></span><span>By <a href="#">Jordan Lee</a></span><span>·</span><span>March 3, 2026</span><span>·</span><span>8 min read</span></div>
+<h1>Designing resilient layouts for the modern web</h1><p class="lead">A practical walk through flexbox, grid and the quirks that make real pages harder than the specs suggest.</p></div>
+<article>
+<p>Layout engines make thousands of small decisions before a single pixel appears on the screen. Understanding those decisions helps you write <a href="#">simpler CSS</a> and debug the odd corner cases that every project eventually meets.</p>
+<h2>Start with the box model</h2>
+<p>Every element generates a box. The <code>box-sizing</code> property decides whether <code>width</code> includes padding and borders, and most modern resets set it to <code>border-box</code> for good reason.</p>
+<ul><li>Content, padding, border and margin form the four layers.</li><li>Percentages resolve against the containing block, not the parent's font size.</li><li>Margins between siblings collapse; padding never does.</li></ul>
+<blockquote>Simplicity is prerequisite for reliability. The less magic in the stylesheet the more predictable the result.</blockquote>
+<h3>A short example</h3>
+<pre><code>.card {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 16px;
+}</code></pre>
+<figure><div class="ph"></div><figcaption>Figure 1: A gradient placeholder standing in for a photograph.</figcaption></figure>
+<h2>Flexible components</h2>
+<p>Flexbox excels at one dimensional arrangements such as toolbars, navigation and button rows. Grid is better suited to two dimensional structure. Combine them freely, but prefer the simplest tool that solves the problem at hand.</p>
+<ol><li>Set <code>display: flex</code> on the container.</li><li>Let items grow and shrink with <code>flex</code>.</li><li>Use <code>gap</code> instead of margins between items.</li></ol>
+<div class="tags"><span class="tag">css</span><span class="tag">layout</span><span class="tag">flexbox</span><span class="tag">grid</span><span class="tag">performance</span></div>
+<div class="author"><span class="avatar"></span><div><strong>Jordan Lee</strong><br><span style="color:var(--muted)">Frontend engineer writing about the web platform and the tools around it.</span></div></div>
+</article>
+<footer>© 2026 Notebook. All rights reserved.</footer>
+</body></html>

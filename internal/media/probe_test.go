@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -54,6 +55,13 @@ func TestProbeAgainstFFprobe(t *testing.T) {
 			continue
 		}
 		f := f
+		if strings.HasPrefix(filepath.Base(f), "garbage") {
+			b, _ := os.ReadFile(f)
+			if _, err := ProbeBytes(b); err == nil {
+				t.Errorf("garbage fixture must not probe")
+			}
+			continue
+		}
 		t.Run(filepath.Base(f), func(t *testing.T) {
 			b, err := os.ReadFile(f)
 			if err != nil {

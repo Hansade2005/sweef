@@ -19,6 +19,10 @@ func (c *compiler) safe(f func()) {
 func (c *compiler) top(t *Top) {
 	c.safe(func() {
 		switch t.K {
+		case TopPrecision:
+			if len(t.Decls) == 1 {
+				c.precs[t.Decls[0].T.Name] = t.Decls[0].Name
+			}
 		case TopStruct:
 			c.defineStruct(t.Struct)
 		case TopDecl:
@@ -88,9 +92,9 @@ func (c *compiler) globalDecl(d *Decl) {
 			c.fail(d.Line, d.Name, "cannot initialize this type of qualifier")
 		}
 		off := c.alloc(t.Size())
-		u := &Uniform{Name: d.Name, T: t, Off: off, Block: -1, Prec: q.Prec}
+		u := &Uniform{Name: d.Name, T: t, Off: off, Block: -1, Prec: c.precOf(d.T, t)}
 		c.unis = append(c.unis, u)
-		c.declare(d.Line, &sym{name: d.Name, kind: symVar, t: t, off: off, ro: true, storage: "uniform", uni: u})
+		c.declare(d.Line, &sym{name: d.Name, kind: symVar, t: t, off: off, ro: true, storage: "uniform", uni: u, prec: c.precOf(d.T, t)})
 	case "attribute", "in", "varying", "out":
 		storage := q.Storage
 		isInput := storage == "attribute" || (storage == "in") || (storage == "varying" && c.stage == Fragment)
@@ -127,14 +131,14 @@ func (c *compiler) globalDecl(d *Decl) {
 			}
 			c.outputs = append(c.outputs, iov)
 		}
-		c.declare(d.Line, &sym{name: d.Name, kind: symVar, t: t, off: off, ro: isInput, storage: storage, iov: iov})
+		c.declare(d.Line, &sym{name: d.Name, kind: symVar, t: t, off: off, ro: isInput, storage: storage, iov: iov, prec: c.precOf(d.T, t)})
 	case "":
 		off := c.alloc(t.Size())
-		s := &sym{name: d.Name, kind: symVar, t: t, off: off, storage: "global"}
+		s := &sym{name: d.Name, kind: symVar, t: t, off: off, storage: "global", prec: c.precOf(d.T, t)}
 		c.declare(d.Line, s)
 		if init != nil {
 			if !sameType(init.T, t) {
-				c.fail(d.Line, "=", "cannot convert from '%s' to '%s'", init.T, t)
+				c.fail(d.Line, "=", "cannot convert from '%s' to '%s'", c.tlong(init), c.dlong(d.T, t))
 			}
 			if init.C == nil {
 				c.fail(d.Line, d.Name, "global variable initializers must be constant expressions")
@@ -302,7 +306,7 @@ func (c *compiler) funcDef(fd *FuncDef) {
 		off := c.alloc(params[i].t.Size())
 		f.params[i].off = off
 		if p.Name != "" {
-			c.declare(fd.Line, &sym{name: p.Name, kind: symVar, t: params[i].t, off: off, ro: p.Const, storage: "param"})
+			c.declare(fd.Line, &sym{name: p.Name, kind: symVar, t: params[i].t, off: off, ro: p.Const, storage: "param", prec: c.precOf(p.T, params[i].t)})
 		}
 	}
 	if ret.K != KVoid {

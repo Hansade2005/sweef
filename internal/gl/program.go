@@ -49,6 +49,7 @@ type UniformLeaf struct {
 	Offset int // block byte offset
 	Stride int // array stride (bytes)
 	MatStr int
+	prec   string
 }
 
 type locEntry struct {
@@ -88,13 +89,13 @@ type varyLink struct {
 
 // UBlock is a program-level uniform block.
 type UBlock struct {
-	Name       string
-	Binding    int
-	DataSize   int
-	VS, FS     int // index in shader blocks or -1
-	Members    []int
-	RefVS      bool
-	RefFS      bool
+	Name     string
+	Binding  int
+	DataSize int
+	VS, FS   int // index in shader blocks or -1
+	Members  []int
+	RefVS    bool
+	RefFS    bool
 }
 
 type tfOut struct {
@@ -109,30 +110,30 @@ type poolPair struct{ vs, fs sync.Pool }
 
 // Program is a GL program object.
 type Program struct {
-	ID        uint32
-	Linked    bool
-	Log       string
-	Validated bool
-	deleted   bool
-	attached  []*Shader
-	vs, fs    *glsl.Shader
-	bindAttr  map[string]int
-	Attribs   []ActiveAttrib
-	Leaves    []*UniformLeaf
-	locs      []locEntry
-	store     []uint32
-	vsCopy    []copyRange
-	fsCopy    []copyRange
-	vary      []varyLink
-	varyLanes int
-	Blocks    []*UBlock
-	tfNames   []string
-	tfMode    uint32
-	tfOuts    []tfOut
-	tfLanes   int
-	pools     *poolPair
-	maxAttrib int
-	depthOut  bool
+	ID            uint32
+	Linked        bool
+	Log           string
+	Validated     bool
+	deleted       bool
+	attached      []*Shader
+	vs, fs        *glsl.Shader
+	bindAttr      map[string]int
+	Attribs       []ActiveAttrib
+	Leaves        []*UniformLeaf
+	locs          []locEntry
+	store         []uint32
+	vsCopy        []copyRange
+	fsCopy        []copyRange
+	vary          []varyLink
+	varyLanes     int
+	Blocks        []*UBlock
+	tfNames       []string
+	tfMode        uint32
+	tfOuts        []tfOut
+	tfLanes       int
+	pools         *poolPair
+	maxAttrib     int
+	depthOut      bool
 	samplerLeaves []*UniformLeaf
 }
 
@@ -284,7 +285,7 @@ func b2i(b bool) int {
 
 func (c *Context) GetShaderInfoLog(id uint32) string {
 	if s := c.shaders[id]; s != nil {
-		return s.Log
+		return nulTerm(s.Log)
 	}
 	c.setErr(GL_INVALID_VALUE)
 	return ""
@@ -543,6 +544,10 @@ func (c *Context) LinkProgram(pid uint32) {
 						fail("Uniform '%s' differs between vertex and fragment shaders", l.Name)
 						return false
 					}
+					if o.prec != "" && u.Prec != "" && o.prec != u.Prec && o.Kind != ukSampler {
+						fail("Precisions of uniform '%s' differ between VERTEX and FRAGMENT shaders", u.Name)
+						return false
+					}
 					if isVS {
 						o.vsOff = l.vsOff
 					} else {
@@ -550,6 +555,7 @@ func (c *Context) LinkProgram(pid uint32) {
 					}
 					continue
 				}
+				l.prec = u.Prec
 				byName[l.Name] = l
 				np.Leaves = append(np.Leaves, l)
 			}
@@ -590,13 +596,17 @@ func (c *Context) LinkProgram(pid uint32) {
 			}
 			for mi, m := range sh.Blocks[idx].Members {
 				var leaves []*UniformLeaf
-				flatten(&leaves, ub.Name+"."+m.Name, m.T, m.Off, true)
+				pre := ""
+				if sh.Blocks[idx].Inst != "" {
+					pre = ub.Name + "."
+				}
+				flatten(&leaves, pre+m.Name, m.T, m.Off, true)
 				_ = mi
 				for _, l := range leaves {
 					l.Block = bi
 					l.Offset = m.Byte
 					l.Stride = m.Stride
-					
+
 					np.Leaves = append(np.Leaves, l)
 					ub.Members = append(ub.Members, len(np.Leaves)-1)
 				}
@@ -709,9 +719,16 @@ func (c *Context) GetProgramParameter(pid uint32, pname uint32) (int, bool) {
 	return 0, false
 }
 
+func nulTerm(s string) string {
+	if s == "" {
+		return s
+	}
+	return s + "\x00"
+}
+
 func (c *Context) GetProgramInfoLog(pid uint32) string {
 	if p := c.progs[pid]; p != nil {
-		return p.Log
+		return nulTerm(p.Log)
 	}
 	c.setErr(GL_INVALID_VALUE)
 	return ""

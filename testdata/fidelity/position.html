@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>position</title>
+<style>
+body { margin: 0; font: 14px Arial, sans-serif; }
+.rel { position: relative; width: 500px; height: 200px; margin: 20px; background: #eef; border: 2px solid #99c; padding: 10px; }
+.abs1 { position: absolute; top: 10px; left: 20px; width: 100px; height: 50px; background: #fcc; }
+.abs2 { position: absolute; right: 0; bottom: 0; background: #cfc; padding: 4px; }
+.abs3 { position: absolute; top: 0; left: 0; right: 0; height: 20px; background: rgba(0,0,0,0.2); }
+.abs4 { position: absolute; left: 50%; top: 50%; width: 80px; height: 40px; margin: -20px 0 0 -40px; background: #ffc; }
+.abs5 { position: absolute; inset: 60px 200px 60px 250px; background: #cff; }
+.relshift { position: relative; top: 5px; left: 10px; background: #fdd; display: inline-block; }
+.fixed { position: fixed; bottom: 10px; right: 10px; width: 120px; height: 30px; background: #333; color: #fff; }
+.sticky { position: sticky; top: 0; background: #ffa; padding: 4px; }
+.z1 { position: absolute; top: 120px; left: 300px; width: 60px; height: 60px; background: #f99; z-index: 2; }
+.z2 { position: absolute; top: 140px; left: 320px; width: 60px; height: 60px; background: #9f9; z-index: 1; }
+.static { margin: 20px; }
+.autoabs { position: absolute; background: #eee; }
+</style></head><body>
+<div class="sticky">Sticky header</div>
+<div class="rel">
+  <div class="abs1">abs1</div><div class="abs2">bottom right</div><div class="abs3"></div>
+  <div class="abs4"></div><div class="abs5"></div><div class="z1"></div><div class="z2"></div>
+  in-flow text inside relative box
+</div>
+<div class="static">Static <span class="relshift">relative shifted</span> after text <div class="autoabs">auto-positioned abs at static pos</div></div>
+<div class="fixed">fixed</div>
+<div style="height:400px"></div>
+</body></html>

@@ -44,48 +44,48 @@ func (dc *drawCtx) tfLanes(set *vtxSet, v int32) []uint32 {
 
 // drawCtx is the immutable per-draw snapshot used by workers.
 type drawCtx struct {
-	c       *Context
-	p       *Program
-	vs, fs  *glsl.Shader
-	rt      *rtarget
-	tex     []glsl.Sampler
+	c        *Context
+	p        *Program
+	vs, fs   *glsl.Shader
+	rt       *rtarget
+	tex      []glsl.Sampler
 	needQuad bool
 	nvf, nvi int
 	vsF, fsF []int // register offsets of interpolated lanes
 	vsI, fsI []int
-	outs    []fragOut
-	vp      [4]int
-	dr      [2]float32
+	outs     []fragOut
+	vp       [4]int
+	dr       [2]float32
 	// state copies
-	depthTest, depthMask bool
-	depthFunc            uint32
-	stencilTest          bool
-	stF, stB             stencilState
-	blend                bool
-	blendEq              [2]uint32
-	blendF               [4]uint32
-	blendColor           [4]float32
-	colorMask            [4]bool
-	cull                 bool
-	cullMode             uint32
-	frontCCW             bool
-	polyOff              bool
+	depthTest, depthMask  bool
+	depthFunc             uint32
+	stencilTest           bool
+	stF, stB              stencilState
+	blend                 bool
+	blendEq               [2]uint32
+	blendF                [4]uint32
+	blendColor            [4]float32
+	colorMask             [4]bool
+	cull                  bool
+	cullMode              uint32
+	frontCCW              bool
+	polyOff               bool
 	polyFactor, polyUnits float32
-	scissor              [4]int
-	scissorOn            bool
-	samples              int
-	version              int
-	pointSizeW           bool
-	blocksVS, blocksFS   []blockData
-	vsPool, fsPool       *sync.Pool
-	occ                  *atomic.Uint64
-	tfActive             bool
-	discard              bool
-	earlyZ               bool
-	fragDepth            bool
-	a2c                  bool
-	sampleCov            bool
-	covMask              uint8
+	scissor               [4]int
+	scissorOn             bool
+	samples               int
+	version               int
+	pointSizeW            bool
+	blocksVS, blocksFS    []blockData
+	vsPool, fsPool        *sync.Pool
+	occ                   *atomic.Uint64
+	tfActive              bool
+	discard               bool
+	earlyZ                bool
+	fragDepth             bool
+	a2c                   bool
+	sampleCov             bool
+	covMask               uint8
 }
 
 const (
@@ -100,12 +100,12 @@ type blockData struct {
 }
 
 type fragOut struct {
-	off  int
-	buf  int // draw buffer index
-	comp int
-	kind uint8
+	off   int
+	buf   int // draw buffer index
+	comp  int
+	kind  uint8
 	bcast bool
-	n    int
+	n     int
 }
 
 func primCount(mode uint32, n int) int {
@@ -131,6 +131,10 @@ func primCount(mode uint32, n int) int {
 
 // DrawArrays draws count vertices starting at first.
 func (c *Context) DrawArrays(mode uint32, first, count, instances int) {
+	if c.program == nil || !c.program.Linked {
+		c.setErr(GL_INVALID_OPERATION)
+		return
+	}
 	if first < 0 || count < 0 || instances < 0 {
 		c.setErr(GL_INVALID_VALUE)
 		return
@@ -148,17 +152,6 @@ func (c *Context) DrawElements(mode uint32, count int, typ uint32, off int, inst
 }
 
 func (c *Context) draw(mode uint32, first, count int, indexed bool, itype uint32, ioff int, instances int) {
-	switch mode {
-	case GL_POINTS, GL_LINES, GL_LINE_LOOP, GL_LINE_STRIP, GL_TRIANGLES, GL_TRIANGLE_STRIP, GL_TRIANGLE_FAN:
-	default:
-		c.setErr(GL_INVALID_ENUM)
-		return
-	}
-	p := c.program
-	if p == nil || !p.Linked {
-		c.setErr(GL_INVALID_OPERATION)
-		return
-	}
 	var isize int
 	if indexed {
 		switch itype {
@@ -176,10 +169,21 @@ func (c *Context) draw(mode uint32, first, count int, indexed bool, itype uint32
 			c.setErr(GL_INVALID_ENUM)
 			return
 		}
-		if ioff%isize != 0 {
-			c.setErr(GL_INVALID_OPERATION)
-			return
-		}
+	}
+	p := c.program
+	if p == nil || !p.Linked {
+		c.setErr(GL_INVALID_OPERATION)
+		return
+	}
+	switch mode {
+	case GL_POINTS, GL_LINES, GL_LINE_LOOP, GL_LINE_STRIP, GL_TRIANGLES, GL_TRIANGLE_STRIP, GL_TRIANGLE_FAN:
+	default:
+		c.setErr(GL_INVALID_ENUM)
+		return
+	}
+	if indexed && ioff%isize != 0 {
+		c.setErr(GL_INVALID_OPERATION)
+		return
 	}
 	if c.tf.Active && !c.tf.Paused {
 		okMode := (c.tf.Mode == GL_POINTS && mode == GL_POINTS) ||
@@ -638,11 +642,11 @@ func (dc *drawCtx) vertexStage(uniq []uint32, inst int) *vtxSet {
 	vao := c.vao
 	// snapshot attribute state
 	type afetch struct {
-		at       *Attrib
-		a        *ActiveAttrib
-		col      int
-		generic  [4]uint32
-		gtyp     uint32
+		at      *Attrib
+		a       *ActiveAttrib
+		col     int
+		generic [4]uint32
+		gtyp    uint32
 	}
 	var fetches []afetch
 	for ai := range p.Attribs {

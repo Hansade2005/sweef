@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -89,7 +90,7 @@ func (n *netSource) get(idx int64) ([]byte, error) {
 	n.chunks[idx] = []byte(body)
 	n.order = append(n.order, idx)
 	n.fetched += int64(len(body))
-	for len(n.order) > 64 {
+	for len(n.order) > 32 {
 		delete(n.chunks, n.order[0])
 		n.order = n.order[1:]
 	}
@@ -259,6 +260,34 @@ func (m *mediaHost) openSource(src media.Source, net *netSource) (any, error) {
 
 func (m *mediaHost) fns() map[string]hostFn {
 	f := map[string]hostFn{}
+	// binary-safe HTTP for fetch()/XHR wrappers: the body comes back base64-encoded
+	f["mediaHttpBytes"] = func(a []any) (any, error) {
+		if m.j.tab == nil {
+			return nil, fmt.Errorf("TypeError: Failed to fetch")
+		}
+		hdr := map[string]string{}
+		if hs := argS(a, 2); hs != "" {
+			_ = json.Unmarshal([]byte(hs), &hdr)
+		}
+		abs, err := resolveURL(m.j.tab.URL(), argS(a, 1))
+		if err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(abs, "data:") {
+			b, err := mediaDataURL(abs)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"status": 200, "statusText": "OK", "url": abs, "headers": "{}", "b64": base64.StdEncoding.EncodeToString(b)}, nil
+		}
+		r, err := m.j.tab.httpForScript(argS(a, 0), abs, hdr, "")
+		if err != nil {
+			return nil, err
+		}
+		body, _ := r["body"].(string)
+		hj, _ := json.Marshal(r["headers"])
+		return map[string]any{"status": r["status"], "statusText": r["statusText"], "url": r["url"], "headers": string(hj), "b64": base64.StdEncoding.EncodeToString([]byte(body))}, nil
+	}
 	f["mediaCanPlay"] = func(a []any) (any, error) { return media.CanPlayType(argS(a, 0)), nil }
 	f["mediaIsTypeSupported"] = func(a []any) (any, error) { return media.IsTypeSupportedMSE(argS(a, 0)), nil }
 	f["mediaFFmpeg"] = func(a []any) (any, error) { return media.FFmpegPath() != "", nil }

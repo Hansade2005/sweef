@@ -130,6 +130,12 @@ type lbox struct {
 	absFrags                         []Rect
 	fragsAbs                         []Rect
 	isBtn                            bool
+	contBlocks                       []*lbox
+	mcN                              int
+	mcW, mcGap                       float64
+	legend                           *lbox
+	legendPad                        float64
+	legendBase                       float64
 	borOv, borMin                    [4]float64
 	hasBorOv                         bool
 	cl                               *collapsed

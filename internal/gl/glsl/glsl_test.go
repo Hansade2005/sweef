@@ -92,7 +92,7 @@ func TestBuiltins(t *testing.T) {
 	expect(t, evalColor(t, "", "vec3 n = normalize(vec3(0.,3.,4.)); vec3 r = reflect(vec3(1.,-1.,0.), vec3(0.,1.,0.)); gl_FragColor = vec4(n.y, r.xy, float(any(lessThan(vec2(1.,2.), vec2(2.,1.)))));"), [4]float32{0.6, 1, 1, 1})
 	expect(t, evalColor(t, "", "gl_FragColor = vec4(floor(1.7), ceil(1.2), fract(1.25), abs(-3.0));"), [4]float32{1, 2, 0.25, 3})
 	expect(t, evalColor(t, "", "gl_FragColor = vec4(min(1.0, 2.0), max(vec2(1.,5.), 3.0), sign(-2.0));"), [4]float32{1, 3, 5, -1})
-	expect(t, evalColor300(t, "", "gl_FragColor = vec4(float(uint(7)/uint(2)), float(bitCount(7u)), uintBitsToFloat(floatBitsToUint(2.5)), unpackHalf2x16(packHalf2x16(vec2(1.5,2.5))).y);"), [4]float32{3, 3, 2.5, 2.5})
+	expect(t, evalColor300(t, "", "gl_FragColor = vec4(float(uint(7)/uint(2)), float(7u>>1u), uintBitsToFloat(floatBitsToUint(2.5)), unpackHalf2x16(packHalf2x16(vec2(1.5,2.5))).y);"), [4]float32{3, 3, 2.5, 2.5})
 }
 
 func TestStructsArrays(t *testing.T) {
@@ -112,7 +112,7 @@ func TestConstFolding(t *testing.T) {
 func TestErrors(t *testing.T) {
 	cases := []struct{ src, want string }{
 		{"void main() { gl_FragColor = vec4(x); }", "0:2: 'x' : undeclared identifier"},
-		{"void main() {\n float f = 1;\n}", "0:3: '=' : cannot convert from 'const int' to 'float'"},
+		{"void main() {\n float f = 1;\n}", "0:3: '=' : cannot convert from 'const int' to 'mediump float'"},
 		{"void main() { vec3 v = vec3(1.0); v.w = 1.0; }", "0:2: 'w' : vector field selection out of range"},
 		{"void main() { gl_FragColor = 1.0; }", "cannot convert"},
 		{"void main() { int a = 1; a = ; }", "syntax error"},

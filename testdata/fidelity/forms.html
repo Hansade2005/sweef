@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>forms</title>
+<style>
+body { margin: 16px; font: 14px Arial, sans-serif; }
+.row { margin-bottom: 10px; }
+label { display: inline-block; width: 120px; }
+</style></head><body>
+<div class="row"><label>Text</label><input type="text" value="hello"></div>
+<div class="row"><label>Empty</label><input></div>
+<div class="row"><label>Size 10</label><input size="10"></div>
+<div class="row"><label>Size 40</label><input size="40"></div>
+<div class="row"><label>Password</label><input type="password"></div>
+<div class="row"><label>Email</label><input type="email" placeholder="you@example.com"></div>
+<div class="row"><label>Number</label><input type="number" value="3"></div>
+<div class="row"><label>Search</label><input type="search"></div>
+<div class="row"><label>Date</label><input type="date"></div>
+<div class="row"><label>Checkbox</label><input type="checkbox" checked> <input type="radio" name="r"> <input type="radio" name="r" checked></div>
+<div class="row"><label>Range</label><input type="range"> <input type="color"> <input type="file"></div>
+<div class="row"><label>Button</label><button>Click me</button> <button type="submit">Submit</button> <input type="button" value="Input btn"> <input type="submit"> <input type="reset"></div>
+<div class="row"><label>Select</label><select><option>One</option><option>Two longer option</option></select> <select multiple><option>a</option><option>b</option><option>c</option></select> <select size="3"><option>x</option><option>y</option></select></div>
+<div class="row"><label>Textarea</label><textarea>Some text</textarea> <textarea rows="5" cols="30"></textarea></div>
+<div class="row"><label>Progress</label><progress value="30" max="100"></progress> <meter value="0.6"></meter></div>
+<div class="row"><label>Styled</label><input style="width:200px;height:40px;padding:8px;border:2px solid #888;border-radius:6px"> <button style="padding:10px 24px;font-size:16px;border:0;background:#06c;color:#fff;border-radius:4px">Primary</button></div>
+<form><fieldset><legend>Group</legend><input type="text"> <button>Go</button></fieldset></form>
+</body></html>

@@ -330,7 +330,7 @@ func (c *ctx) layoutFlexContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 			k := it.b
 			ccbh := -1.0
 			if column {
-				in2 := layoutIn{cbw: cw, cbh: innerMain, fixW: -1, fixH: it.target, bfc: &bfcState{}}
+				in2 := layoutIn{item: true, cbw: cw, cbh: innerMain, fixW: -1, fixH: it.target, bfc: &bfcState{}}
 				cross, _ := crossSizeFor(it)
 				in2.fixW = cross
 				if it.align == "stretch" && !it.autoCross[0] && !it.autoCross[1] && k.st.Width.K == style.LAuto {
@@ -343,7 +343,7 @@ func (c *ctx) layoutFlexContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 			if crossDefinite {
 				ccbh = innerCross
 			}
-			in2 := layoutIn{cbw: cw, cbh: ccbh, fixW: it.target, fixH: -1, bfc: &bfcState{}}
+			in2 := layoutIn{item: true, cbw: cw, cbh: ccbh, fixW: it.target, fixH: -1, bfc: &bfcState{}}
 			// definite height items
 			if h, ok := c.specH(k, k.st.Height, innerCrossOr(crossDefinite, innerCross)); ok {
 				in2.fixH = h + k.vExtra()
@@ -583,14 +583,14 @@ func (c *ctx) layoutFlexContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 			it.crossFinal = cs
 			if cs != it.cross || !column && (cs != k.h) {
 				if column {
-					in2 := layoutIn{cbw: cw, cbh: innerMain, fixW: cs, fixH: it.target, bfc: &bfcState{}}
+					in2 := layoutIn{item: true, cbw: cw, cbh: innerMain, fixW: cs, fixH: it.target, bfc: &bfcState{}}
 					c.layoutBox(k, in2)
 				} else {
 					ccbh := -1.0
 					if crossDefinite || true {
 						ccbh = cs - k.vExtra()
 					}
-					in2 := layoutIn{cbw: cw, cbh: ccbh, fixW: it.target, fixH: cs, bfc: &bfcState{}}
+					in2 := layoutIn{item: true, cbw: cw, cbh: ccbh, fixW: it.target, fixH: cs, bfc: &bfcState{}}
 					c.layoutBox(k, in2)
 				}
 			}
@@ -714,7 +714,7 @@ func (c *ctx) contentHeightAt(k *lbox, borderW, cbw float64) float64 {
 		_, h := c.replacedUsedSize(k, cbw, -1, false)
 		return h
 	}
-	in := layoutIn{cbw: cbw, cbh: -1, fixW: borderW, fixH: -1, bfc: &bfcState{}}
+	in := layoutIn{item: true, cbw: cbw, cbh: -1, fixW: borderW, fixH: -1, bfc: &bfcState{}}
 	// ignore a specified height: we want the natural content size
 	save := k.st
 	if k.st.Height.K != style.LAuto {

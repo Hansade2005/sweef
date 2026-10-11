@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // MSEBuffer parses the byte stream appended to one SourceBuffer (fragmented
 // MP4 or WebM) and reports initialisation data and per-track time spans.
 type MSEBuffer struct {
+	mu       sync.Mutex
 	Mime     string
 	webm     bool
 	mp4init  *MP4Init
@@ -44,6 +46,8 @@ func NewMSEBuffer(mime string) *MSEBuffer {
 
 // Append consumes a chunk. It errors on malformed data.
 func (b *MSEBuffer) Append(data []byte) (*MSEResult, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if b.webm {
 		return b.appendWebM(data)
 	}
@@ -200,4 +204,12 @@ func blockSpans(blocks []WebMBlock, in *WebMInit) []MSESpan {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Track < out[j].Track })
 	return out
+}
+
+// Snapshot returns a copy of every byte accepted so far (init segment plus
+// media segments), which is a valid stream for ffmpeg or the frame decoders.
+func (b *MSEBuffer) Snapshot() []byte {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]byte(nil), b.All...)
 }

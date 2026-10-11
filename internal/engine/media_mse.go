@@ -2,7 +2,10 @@ package engine
 
 import (
 	"encoding/base64"
+	"math"
 	"os"
+	"sync"
+	"sync/atomic"
 
 	"github.com/sweefbrowser/sweef/internal/media"
 )
@@ -20,6 +23,60 @@ func (m *mediaHost) mseFns(f map[string]hostFn) {
 		ms.next++
 		ms.bufs[id] = media.NewMSEBuffer(argS(a, 0))
 		return id, nil
+	}
+	// frames for MSE video: the appended bytes form a playable stream
+	type mseVid struct {
+		vs       *videoSource
+		inflight atomic.Bool
+		want     atomic.Uint64
+		mu       sync.Mutex
+	}
+	vids := map[int]*mseVid{}
+	f["mseBind"] = func(a []any) (any, error) { // node, bufId
+		node := argI(a, 0)
+		vs := m.vsFor(node)
+		vs.mu.Lock()
+		vs.frame = nil
+		vs.w, vs.h = int(argI(a, 2)), int(argI(a, 3))
+		vs.mu.Unlock()
+		vids[int(argI(a, 1))] = &mseVid{vs: vs}
+		m.publish(node, vs)
+		return nil, nil
+	}
+	f["mseFrame"] = func(a []any) (any, error) { // bufId, t
+		id := int(argI(a, 0))
+		v, b := vids[id], ms.bufs[id]
+		if v == nil || b == nil {
+			return false, nil
+		}
+		v.want.Store(math.Float64bits(argF(a, 1)))
+		if v.inflight.CompareAndSwap(false, true) {
+			go func() {
+				defer v.inflight.Store(false)
+				for {
+					t := math.Float64frombits(v.want.Load())
+					data := b.Snapshot()
+					if info, err := media.ProbeBytes(data); err == nil {
+						if fs, err := media.OpenFrames(media.BytesSource(data), info, ""); err == nil {
+							if img, err := fs.Frame(t); err == nil && img != nil {
+								v.vs.mu.Lock()
+								v.vs.frame = img
+								if bd := img.Bounds(); v.vs.w == 0 {
+									v.vs.w, v.vs.h = bd.Dx(), bd.Dy()
+								}
+								v.vs.seq++
+								v.vs.mu.Unlock()
+							}
+							fs.Close()
+						}
+					}
+					if math.Float64bits(t) == v.want.Load() {
+						return
+					}
+				}
+			}()
+		}
+		return true, nil
 	}
 	f["mseClose"] = func(a []any) (any, error) { delete(ms.bufs, int(argI(a, 0))); return nil, nil }
 	f["mseAppend"] = func(a []any) (any, error) {

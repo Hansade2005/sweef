@@ -2,7 +2,6 @@ package render
 
 import (
 	"math"
-	"os"
 	"strconv"
 
 	"github.com/sweefbrowser/sweef/internal/style"
@@ -508,7 +507,6 @@ func (c *ctx) layoutTable(b *lbox, in layoutIn) {
 			}
 			cb.borOv = [4]float64{top / 2, right / 2, bot / 2, left / 2}
 			cb.hasBorOv = true
-			cb.borMin = [4]float64{math.Ceil(top / 2), math.Ceil(right / 2), math.Ceil(bot / 2), math.Ceil(left / 2)}
 		} else {
 			cb.hasBorOv = false
 		}
@@ -529,11 +527,6 @@ func (c *ctx) layoutTable(b *lbox, in layoutIn) {
 		cb.hasIntr = false
 		cmin := c.minContent(cb) + cb.hExtra()
 		cmax := c.maxContent(cb) + cb.hExtra()
-		if collapse {
-			// the minimum width uses rounded-up half borders
-			cmin += (cb.borMin[1] + cb.borMin[3]) - (cb.bor[1] + cb.bor[3])
-			cmax += (cb.borMin[1] + cb.borMin[3]) - (cb.bor[1] + cb.bor[3])
-		}
 		if cmax < cmin {
 			cmax = cmin
 		}
@@ -688,12 +681,6 @@ func (c *ctx) layoutTable(b *lbox, in layoutIn) {
 	if tw < 0 {
 		tw = 0
 	}
-	if os.Getenv("TBLDBG") != "" {
-		for _, col := range m.cols {
-			println("COL", int(col.min*1000), int(col.max*1000), col.hasFixed, col.hasPct)
-		}
-		println("TW", int(tw*1000))
-	}
 	c.distributeColumns(m, tw, fixedLayout, in.cbw)
 	b.w = bw
 	// col x positions
@@ -718,7 +705,7 @@ func (c *ctx) layoutTable(b *lbox, in layoutIn) {
 		w += spH * float64(tc.cs-1)
 		cb := tc.b
 		cb.hasLast = false
-		in2 := layoutIn{cbw: bw - boxExtra, cbh: -1, fixW: w, fixH: -1, bfc: &bfcState{}}
+		in2 := layoutIn{item: true, cbw: bw - boxExtra, cbh: -1, fixW: w, fixH: -1, bfc: &bfcState{}}
 		// cells with a specified height are laid out with it as the minimum
 		c.layoutBox(cb, in2)
 		tc.h = cb.h
@@ -788,7 +775,7 @@ func (c *ctx) layoutTable(b *lbox, in layoutIn) {
 	capTop, capBot := 0.0, 0.0
 	for _, cp := range m.caps {
 		cp.hasLast = false
-		in2 := layoutIn{cbw: bw, cbh: -1, fixW: bw - cp.mar[1] - cp.mar[3], fixH: -1, bfc: &bfcState{}}
+		in2 := layoutIn{item: true, cbw: bw, cbh: -1, fixW: bw - cp.mar[1] - cp.mar[3], fixH: -1, bfc: &bfcState{}}
 		c.layoutBox(cp, in2)
 		h := cp.h + cp.mar[0] + cp.mar[2]
 		if cp.st.CaptionSide == "bottom" {

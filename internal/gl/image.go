@@ -5,14 +5,15 @@ import "math"
 // Image is one mip level (or renderbuffer / framebuffer storage) of pixels,
 // stored as RGBA in the format's class.
 type Image struct {
-	W, H, D int
-	S       int // samples (1 = single sampled)
-	Fmt     *Format
-	U8      []uint8
-	F       []float32
-	I       []int32
-	St      []uint8 // stencil plane (W*H*D*S)
-	stride  int     // elements per sample: 4 for color, 1 for depth
+	W, H, D   int
+	S         int // samples (1 = single sampled)
+	Fmt       *Format
+	U8        []uint8
+	F         []float32
+	I         []int32
+	St        []uint8 // stencil plane (W*H*D*S)
+	stride    int     // elements per sample: 4 for color, 1 for depth
+	clearConv bool    // use the glClear float->unorm conversion
 }
 
 // NewImage allocates zeroed storage.
@@ -107,7 +108,11 @@ func (im *Image) setFloat(i int, c [4]float32) {
 				m := float32(int(1)<<uint(b) - 1)
 				v = float32(math.Floor(float64(clampf(v, 0, 1)*m+0.5))) / m
 			}
-			im.U8[i+k] = unormToByte(v)
+			if im.clearConv {
+				im.U8[i+k] = unormToByteClear(v)
+			} else {
+				im.U8[i+k] = unormToByte(v)
+			}
 		}
 	case ClsF32:
 		for k := 0; k < 4; k++ {
@@ -260,7 +265,9 @@ func (p Pack) RequiredBytes(w, h, d, format, typ uint32) int {
 // formats) according to format/type.
 func decodePx(src []byte, off int, format, typ uint32) (c [4]float32, ci [4]int32) {
 	le16 := func(o int) uint16 { return uint16(src[o]) | uint16(src[o+1])<<8 }
-	le32 := func(o int) uint32 { return uint32(src[o]) | uint32(src[o+1])<<8 | uint32(src[o+2])<<16 | uint32(src[o+3])<<24 }
+	le32 := func(o int) uint32 {
+		return uint32(src[o]) | uint32(src[o+1])<<8 | uint32(src[o+2])<<16 | uint32(src[o+3])<<24
+	}
 	switch typ {
 	case GL_UNSIGNED_SHORT_4_4_4_4:
 		v := le16(off)
@@ -461,7 +468,9 @@ func (im *Image) Download(x, y, w, h int, format, typ uint32, dst []byte, pk Pac
 	base := pk.SkipRows*rs + pk.SkipPixels*pb
 	f := im.Fmt
 	put16 := func(o int, v uint16) { dst[o], dst[o+1] = byte(v), byte(v>>8) }
-	put32 := func(o int, v uint32) { dst[o], dst[o+1], dst[o+2], dst[o+3] = byte(v), byte(v>>8), byte(v>>16), byte(v>>24) }
+	put32 := func(o int, v uint32) {
+		dst[o], dst[o+1], dst[o+2], dst[o+3] = byte(v), byte(v>>8), byte(v>>16), byte(v>>24)
+	}
 	n := formatComponents(format)
 	for yy := 0; yy < h; yy++ {
 		for xx := 0; xx < w; xx++ {

@@ -382,7 +382,7 @@ func (c *Context) resolveTexFormat(internal, format, typ uint32) (*Format, uint3
 		switch format {
 		case GL_DEPTH_COMPONENT:
 			if !c.Ext["WEBGL_depth_texture"] {
-				return nil, GL_INVALID_ENUM
+				return nil, GL_INVALID_VALUE
 			}
 			switch typ {
 			case GL_UNSIGNED_SHORT:
@@ -393,7 +393,7 @@ func (c *Context) resolveTexFormat(internal, format, typ uint32) (*Format, uint3
 			return nil, GL_INVALID_OPERATION
 		case GL_DEPTH_STENCIL:
 			if !c.Ext["WEBGL_depth_texture"] {
-				return nil, GL_INVALID_ENUM
+				return nil, GL_INVALID_VALUE
 			}
 			if typ != GL_UNSIGNED_INT_24_8 {
 				return nil, GL_INVALID_OPERATION
@@ -580,6 +580,7 @@ func (c *Context) TexImage2D(target uint32, level int, internal uint32, w, h, bo
 			return
 		}
 	}
+	_ = 0
 	if target >= GL_TEXTURE_CUBE_MAP_POSITIVE_X && target <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z && w != h {
 		c.setErr(GL_INVALID_VALUE)
 		return
@@ -637,20 +638,11 @@ func (c *Context) TexSubImage2D(target uint32, level, x, y, w, h int, format, ty
 		c.setErr(GL_INVALID_VALUE)
 		return
 	}
-	f, e := c.resolveTexFormat(im.Fmt.Internal, format, typ)
-	if dom {
-		f, e = im.Fmt, 0
-		if _, e2 := c.resolveTexFormat(im.Fmt.Base, format, typ); e2 != 0 && im.Fmt.Base != GL_RGBA && false {
-			_ = e2
+	if !dom {
+		if e := c.subFormatCheck(im.Fmt, format, typ); e != 0 {
+			c.setErr(e)
+			return
 		}
-	}
-	if e != 0 {
-		c.setErr(e)
-		return
-	}
-	if f != im.Fmt && !dom && !(f != nil && f.Internal == im.Fmt.Internal) {
-		c.setErr(GL_INVALID_OPERATION)
-		return
 	}
 	pk := c.pixStore.Unpack
 	sf, st := format, typ
@@ -736,7 +728,7 @@ func (c *Context) TexSubImage3D(target uint32, level, x, y, z, w, h, d int, form
 	if dom {
 		sf, st = GL_RGBA, GL_UNSIGNED_BYTE
 		pk = Pack{Alignment: 1}
-	} else if _, e := c.resolveTexFormat(im.Fmt.Internal, format, typ); e != 0 {
+	} else if e := c.subFormatCheck(im.Fmt, format, typ); e != 0 {
 		c.setErr(e)
 		return
 	}
@@ -761,8 +753,12 @@ func (c *Context) TexStorage(target uint32, levels int, internal uint32, w, h, d
 		c.setErr(GL_INVALID_ENUM)
 		return
 	}
-	if levels < 1 || w < 1 || h < 1 || d < 1 || levels > mipCount(w, h, d) {
+	if levels < 1 || w < 1 || h < 1 || d < 1 {
 		c.setErr(GL_INVALID_VALUE)
+		return
+	}
+	if levels > mipCount(w, h, d) {
+		c.setErr(GL_INVALID_OPERATION)
 		return
 	}
 	if t.Immutable {
@@ -1040,3 +1036,25 @@ func (c *Context) copyRegion(dst *Image, dx, dy, dz int, src *Image, rt *rtarget
 }
 
 var _ = math.Pi
+
+// subFormatCheck validates texSubImage format/type against the level's format.
+func (c *Context) subFormatCheck(f *Format, format, typ uint32) uint32 {
+	internal := f.Internal
+	if c.Version == 1 {
+		internal = f.Base
+		if f.IsDepth() {
+			return GL_INVALID_OPERATION
+		}
+	}
+	got, e := c.resolveTexFormat(internal, format, typ)
+	if e != 0 {
+		return e
+	}
+	if got == nil || got.Class != f.Class && !(f.Class == ClsU8 && got.Class == ClsU8) {
+		return GL_INVALID_OPERATION
+	}
+	if c.Version == 1 && (got.Bits != f.Bits) {
+		return GL_INVALID_OPERATION
+	}
+	return 0
+}

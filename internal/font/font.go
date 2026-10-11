@@ -46,6 +46,8 @@ type Face struct {
 	data   []byte
 	adv    map[rune]float64 // advance in font units (-1 = no glyph)
 	kern   map[[2]rune]float64
+	mOK    bool
+	mU     [5]float64
 }
 
 // Metrics are in pixels at the requested size.
@@ -126,6 +128,30 @@ func (f *Face) RawMetrics() (ascent, descent, lineGap, avgChar, maxAdvance float
 	return
 }
 
+// BBoxWidth is the width of the font's global bounding box (head xMax-xMin) in font units.
+func (f *Face) BBoxWidth() float64 {
+	d := f.data
+	if len(d) < 12 {
+		return 0
+	}
+	n := int(d[4])<<8 | int(d[5])
+	for i := 0; i < n; i++ {
+		o := 12 + i*16
+		if o+16 > len(d) {
+			break
+		}
+		if string(d[o:o+4]) == "head" {
+			off := int(d[o+8])<<24 | int(d[o+9])<<16 | int(d[o+10])<<8 | int(d[o+11])
+			if off+44 <= len(d) {
+				xmin := int16(uint16(d[off+36])<<8 | uint16(d[off+37]))
+				xmax := int16(uint16(d[off+40])<<8 | uint16(d[off+41]))
+				return float64(xmax) - float64(xmin)
+			}
+		}
+	}
+	return 0
+}
+
 func tableAvgMax(d []byte) (avg, maxAdv float64) {
 	if len(d) < 12 {
 		return
@@ -160,17 +186,23 @@ func Parse(family string, st Style, data []byte) (*Face, error) {
 
 func (f *Face) scale(size float64) fixed.Int26_6 { return fixed.Int26_6(size * 64) }
 
-// Metrics returns vertical metrics scaled to size (px).
+// Metrics returns vertical metrics scaled to size (px), computed exactly from
+// font units (not from 26.6 fixed-point values) so rounding matches browsers.
 func (f *Face) Metrics(size float64) Metrics {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	m, err := f.font.Metrics(&f.buf, f.scale(size), xfont.HintingNone)
-	if err != nil {
-		return Metrics{Ascent: size * 0.9, Descent: size * 0.2, UnitsPerEm: f.upm}
+	if !f.mOK {
+		m, err := f.font.Metrics(&f.buf, fixed.Int26_6(f.upm*64), xfont.HintingNone)
+		if err != nil {
+			return Metrics{Ascent: size * 0.9, Descent: size * 0.2, UnitsPerEm: f.upm}
+		}
+		u := func(v fixed.Int26_6) float64 { return float64(v) / 64 }
+		f.mU = [5]float64{u(m.Ascent), u(m.Descent), u(m.Height - m.Ascent - m.Descent), u(m.XHeight), u(m.CapHeight)}
+		f.mOK = true
 	}
-	px := func(v fixed.Int26_6) float64 { return float64(v) / 64 }
-	return Metrics{Ascent: px(m.Ascent), Descent: px(m.Descent), LineGap: px(m.Height - m.Ascent - m.Descent),
-		XHeight: px(m.XHeight), CapHeight: px(m.CapHeight), UnitsPerEm: f.upm}
+	k := size / float64(f.upm)
+	return Metrics{Ascent: f.mU[0] * k, Descent: f.mU[1] * k, LineGap: f.mU[2] * k,
+		XHeight: f.mU[3] * k, CapHeight: f.mU[4] * k, UnitsPerEm: f.upm}
 }
 
 // Advance is the horizontal advance of r at size (px), unrounded.

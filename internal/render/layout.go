@@ -4,6 +4,7 @@ import (
 	"image"
 	"math"
 	"sort"
+	"strings"
 
 	"golang.org/x/net/html"
 
@@ -38,10 +39,11 @@ type ctx struct {
 	inFlow  []*lbox
 	noCache bool
 	docEl   *html.Node
+	quirks  bool
 	res     *Result
 
-	paintCache map[*lbox]*paintInfo
-	all        []*lbox
+	painter *painter
+	all     []*lbox
 }
 
 // Layout lays out the document rooted at root (a document or html element).
@@ -76,8 +78,9 @@ func Layout(root *html.Node, o Options) *Result {
 		}
 		sheets = append(sheets, style.SheetIn{Text: s.Text, Media: s.Media})
 	}
-	c.eng = style.NewEngine(env, sheets)
-	c.eng.SysFont = "dejavu sans"
+	c.quirks = isQuirks(root)
+	c.eng = style.NewEngineQ(env, sheets, c.quirks)
+	c.eng.SysFont = "arial"
 	registerFonts(c.eng.Fonts)
 	if c.docEl == nil {
 		res.Width, res.Height = o.Width, o.Height
@@ -565,7 +568,10 @@ func (c *ctx) buildBoxes() {
 					bx.Frags = append(bx.Frags, f)
 					r = r.union(f)
 				}
-				if len(b.absFrags) == 0 {
+				for _, cbk := range b.contBlocks {
+					r = r.union(Rect{cbk.ax, cbk.ay, cbk.w, cbk.h})
+				}
+				if len(b.absFrags) == 0 && len(b.contBlocks) == 0 {
 					continue
 				}
 			} else {
@@ -621,6 +627,22 @@ func (c *ctx) buildBoxes() {
 		}
 		res.Boxes[n] = bx
 	}
+	for _, bs := range c.byNode {
+		for _, b := range bs {
+			if b.rep == nil || b.rep.ctrl != "select" {
+				continue
+			}
+			ci := c.controlInfo(b)
+			if !ci.list {
+				continue
+			}
+			cr := Rect{b.ax + b.bor[3], b.ay + b.bor[0], b.w - b.bor[1] - b.bor[3], b.h - b.bor[0] - b.bor[2]}
+			for i, o := range ci.options {
+				res.Boxes[o] = &Box{Border: Rect{cr.X, cr.Y + float64(i)*ci.optH, cr.W - 15, ci.optH}, Display: "block", Visible: true, Transform: [6]float64{1, 0, 0, 1, 0, 0}}
+				res.Boxes[o].Padding, res.Boxes[o].Content = res.Boxes[o].Border, res.Boxes[o].Border
+			}
+		}
+	}
 	if rb := res.Boxes[c.docEl]; rb != nil {
 		rb.ClientW, rb.ClientH = c.vw-c.sbViewport, c.vh
 		rb.ScrollW, rb.ScrollH = res.Width, res.Height
@@ -646,4 +668,36 @@ func sortedNodes(m map[*html.Node]*Box) []*html.Node {
 	}
 	sort.Slice(out, func(i, j int) bool { return false })
 	return out
+}
+
+// isQuirks reports whether the document lacks a standards-mode doctype.
+func isQuirks(root *html.Node) bool {
+	if root == nil || root.Type != html.DocumentNode {
+		return false
+	}
+	for ch := root.FirstChild; ch != nil; ch = ch.NextSibling {
+		if ch.Type == html.DoctypeNode {
+			if strings.EqualFold(ch.Data, "html") {
+				for _, a := range ch.Attr {
+					if a.Key == "public" && a.Val != "" {
+						l := strings.ToLower(a.Val)
+						if strings.Contains(l, "html 4.01 transitional") || strings.Contains(l, "html 4.01 frameset") || strings.Contains(l, "html 3") || strings.Contains(l, "html 2") {
+							for _, b := range ch.Attr {
+								if b.Key == "system" && b.Val != "" {
+									return false
+								}
+							}
+							return true
+						}
+					}
+				}
+				return false
+			}
+			return true
+		}
+		if ch.Type == html.ElementNode {
+			break
+		}
+	}
+	return true
 }

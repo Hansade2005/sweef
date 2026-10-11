@@ -256,7 +256,22 @@ func clampf(x, lo, hi float32) float32 {
 	return x
 }
 
+// unormToByte converts a float color to 8 bits the way SwiftShader does:
+// round to 16-bit unorm first, then rescale to 8 bits.
 func unormToByte(f float32) uint8 {
+	if !(f > 0) {
+		return 0
+	}
+	if f >= 1 {
+		return 255
+	}
+	x := f * 65535
+	v16 := uint32(math.RoundToEven(float64(x)))
+	return uint8((v16*255 + 32767) / 65535)
+}
+
+// unormToByteClear is the conversion glClear uses (round to nearest in float32).
+func unormToByteClear(f float32) uint8 {
 	if !(f > 0) {
 		return 0
 	}

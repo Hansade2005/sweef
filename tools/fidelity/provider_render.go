@@ -16,6 +16,7 @@ import (
 	"golang.org/x/net/html"
 
 	snet "github.com/sweefbrowser/sweef/internal/net"
+	"github.com/sweefbrowser/sweef/internal/raster"
 	"github.com/sweefbrowser/sweef/internal/render"
 )
 
@@ -148,7 +149,8 @@ func (renderProvider) Run(url string, w, h int) ([]ElemBox, image.Image, error) 
 	}
 	walk(doc.Root)
 	_ = fmt.Sprint
-	return boxes, nil, nil
+	img := raster.Paint(res.List, w, h, 1, raster.PaintEnv{Background: raster.RGBA8(255, 255, 255, 255)})
+	return boxes, img, nil
 }
 
 func init() { Register(renderProvider{}) }

@@ -1,0 +1,12 @@
+<!doctype html><meta charset=utf-8><canvas id=c width=64 height=64></canvas>
+<script>
+function ctx(v, attrs){ var c=document.getElementById('c'); return c.getContext(v||'webgl', Object.assign({preserveDrawingBuffer:true, antialias:false}, attrs||{})); }
+function J(v){ if(v===undefined) return 'undefined'; if(v===null) return 'null'; if(typeof v==='number') return String(v); if(ArrayBuffer.isView(v)) return v.constructor.name+'['+Array.prototype.join.call(v,',')+']'; if(Array.isArray(v)) return '['+v.map(J).join(',')+']'; if(typeof v==='object') return Object.prototype.toString.call(v); return JSON.stringify(v); }
+try{window.__wait=true;var out=[];var c=document.getElementById('c');var gl=ctx('webgl');var ext=gl.getExtension('WEBGL_lose_context');
+c.addEventListener('webglcontextlost',function(e){out.push('lost cancelable='+e.cancelable+' type='+(e instanceof WebGLContextEvent)+' isLost='+gl.isContextLost());e.preventDefault();});
+c.addEventListener('webglcontextrestored',function(e){out.push('restored isLost='+gl.isContextLost()+' err='+gl.getError());var b=gl.createBuffer();out.push('buf '+(b?'ok':'null')+' oldValid='+gl.isBuffer(oldBuf));window.__result=out.join('\n');window.__done=true;});
+var oldBuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,oldBuf);
+ext.loseContext();out.push('after lose isLost='+gl.isContextLost());out.push('createBuffer='+gl.createBuffer());out.push('getError='+gl.getError()+','+gl.getError());out.push('getParameter='+gl.getParameter(gl.VERSION));out.push('attrs='+JSON.stringify(gl.getContextAttributes()));out.push('ext='+gl.getExtension('OES_texture_float'));out.push('supported='+gl.getSupportedExtensions());
+setTimeout(function(){ext.restoreContext();},20);
+}catch(e){window.__error=String(e&&e.stack||e);}
+</script>

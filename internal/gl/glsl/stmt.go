@@ -464,18 +464,33 @@ func (c *compiler) localDecl(d *Decl) []op {
 	off := c.alloc(t.Size())
 	c.mark = c.next
 	var ops []op
+	declared := false
+	defer func() {
+		// declare the variable even when its initializer failed, so later
+		// uses do not cascade into "undeclared identifier" errors
+		if r := recover(); r != nil {
+			if !declared {
+				func() {
+					defer func() { _ = recover() }()
+					c.declare(d.Line, &sym{name: d.Name, kind: symVar, t: t, off: off, storage: "local", prec: c.precOf(d.T, t)})
+				}()
+			}
+			panic(r)
+		}
+	}()
 	if d.Q.Storage == "const" {
 		if d.Init == nil {
 			c.fail(d.Line, d.Name, "variables with qualifier 'const' must be initialized")
 		}
 		v := c.expr(d.Init)
 		if !sameType(v.T, t) {
-			c.fail(d.Line, "=", "cannot convert from '%s' to '%s'", vtn(v), t)
+			c.fail(d.Line, "=", "cannot convert from '%s' to '%s'", c.tlong(v), c.dlong(d.T, t))
 		}
 		if v.C == nil {
 			c.fail(d.Line, d.Name, "initializer of a const variable must be a constant expression")
 		}
 		c.declare(d.Line, &sym{name: d.Name, kind: symVar, t: t, c: v.C, ro: true, storage: "const"})
+		declared = true
 		return nil
 	}
 	if d.Init != nil {
@@ -483,7 +498,7 @@ func (c *compiler) localDecl(d *Decl) []op {
 		v := c.mat(c.expr(d.Init))
 		c.hint = -1
 		if !sameType(v.T, t) {
-			c.fail(d.Line, "=", "cannot convert from '%s' to '%s'", vtn(v), t)
+			c.fail(d.Line, "=", "cannot convert from '%s' to '%s'", c.tlong(v), c.dlong(d.T, t))
 		}
 		ops = append(ops, v.Ops...)
 		if v.C != nil {
@@ -495,6 +510,7 @@ func (c *compiler) localDecl(d *Decl) []op {
 		n := t.Size()
 		ops = append(ops, func(f *Frame) { clear(f.R[off : off+n]) })
 	}
-	c.declare(d.Line, &sym{name: d.Name, kind: symVar, t: t, off: off, storage: "local"})
+	c.declare(d.Line, &sym{name: d.Name, kind: symVar, t: t, off: off, storage: "local", prec: c.precOf(d.T, t)})
+	declared = true
 	return ops
 }

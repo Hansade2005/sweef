@@ -35,7 +35,7 @@ func NewPeriodicWave(rate float64, real, imag []float64, disableNorm bool) *Peri
 		maxPartials := int(math.Pow(2, -float64(r)*w.centsPer/1200) * float64(waveSize/2))
 		spec := make([]complex128, waveSize)
 		for k := 1; k < n; k++ {
-			if k >= maxPartials {
+			if k > maxPartials {
 				break
 			}
 			var re, im float64
@@ -310,12 +310,17 @@ func (b *bufSrcProc) process(n *Node, c *Context, start int64, frames int, in []
 		for k := 0; k < ch; k++ {
 			d := b.buf.Data[k]
 			a := d[i0]
-			var bb float32
-			if i0+1 < nf {
-				bb = d[i0+1]
-			} else if b.loop {
-				bb = d[int(ls)]
+			// Chromium interpolates with the true next sample (even past a loop
+			// end); at the very end of a non-looping buffer the last sample repeats.
+			next := i0 + 1
+			if next >= nf {
+				if b.loop {
+					next = int(ls)
+				} else {
+					next = nf - 1
+				}
 			}
+			bb := d[next]
 			out[k][i] = a + (bb-a)*f
 		}
 		r := float64(rate[i])

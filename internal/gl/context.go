@@ -4,8 +4,8 @@
 package gl
 
 import (
-	"math"
 	"image"
+	"math"
 	"sync"
 
 	"github.com/sweefbrowser/sweef/internal/gl/glsl"
@@ -52,22 +52,22 @@ type VAO struct {
 
 // Renderbuffer is a GL renderbuffer.
 type Renderbuffer struct {
-	ID         uint32
-	Img        *Image
-	Internal   uint32
-	W, H       int
-	Samples    int
-	deleted    bool
+	ID       uint32
+	Img      *Image
+	Internal uint32
+	W, H     int
+	Samples  int
+	deleted  bool
 }
 
 // Attach is a framebuffer attachment.
 type Attach struct {
-	Kind   uint8 // 0 none, 1 texture, 2 renderbuffer
-	Tex    *Texture
-	Face   int
-	Level  int
-	Layer  int
-	RB     *Renderbuffer
+	Kind  uint8 // 0 none, 1 texture, 2 renderbuffer
+	Tex   *Texture
+	Face  int
+	Level int
+	Layer int
+	RB    *Renderbuffer
 }
 
 // Framebuffer is a GL framebuffer object.
@@ -118,12 +118,14 @@ type Query struct {
 	Active  bool
 	Ready   bool
 	Created bool
+	pending bool
 	deleted bool
 }
 
 // Sync is a fence object (always signalled immediately).
 type Sync struct {
-	ID uint32
+	ID       uint32
+	Signaled bool
 }
 
 // TransformFeedback is a transform feedback object.
@@ -147,18 +149,18 @@ type Context struct {
 	errCode uint32
 	lost    bool
 
-	nextID  uint32
-	buffers map[uint32]*Buffer
+	nextID   uint32
+	buffers  map[uint32]*Buffer
 	textures map[uint32]*Texture
-	rbs     map[uint32]*Renderbuffer
-	fbs     map[uint32]*Framebuffer
-	vaos    map[uint32]*VAO
-	progs   map[uint32]*Program
-	shaders map[uint32]*Shader
-	queries map[uint32]*Query
+	rbs      map[uint32]*Renderbuffer
+	fbs      map[uint32]*Framebuffer
+	vaos     map[uint32]*VAO
+	progs    map[uint32]*Program
+	shaders  map[uint32]*Shader
+	queries  map[uint32]*Query
 	samplers map[uint32]*SamplerObj
-	tfs     map[uint32]*TransformFeedback
-	syncs   map[uint32]*Sync
+	tfs      map[uint32]*TransformFeedback
+	syncs    map[uint32]*Sync
 
 	// bindings
 	arrayBuf   *Buffer
@@ -171,7 +173,7 @@ type Context struct {
 	tfBuf      *Buffer
 	vao        *VAO
 	defVAO     *VAO
-	units      [32]texUnit
+	units      [64]texUnit
 	activeUnit int
 	readFB     *Framebuffer
 	drawFB     *Framebuffer
@@ -186,34 +188,34 @@ type Context struct {
 	genericTyp [16]uint32 // GL_FLOAT, GL_INT, GL_UNSIGNED_INT
 
 	// state
-	viewport     [4]int
-	scissor      [4]int
-	depthRange   [2]float32
-	clearColor   [4]float32
-	clearDepth   float32
-	clearStencil int32
-	colorMask    [4]bool
-	depthMask    bool
-	depthFunc    uint32
-	stencilF     stencilState
-	stencilB     stencilState
-	blendColor   [4]float32
-	blendEqRGB   uint32
-	blendEqA     uint32
-	blendSrcRGB  uint32
-	blendDstRGB  uint32
-	blendSrcA    uint32
-	blendDstA    uint32
-	cullMode     uint32
-	frontFace    uint32
-	lineWidth    float32
-	polyFactor   float32
-	polyUnits    float32
-	sampleCovVal float32
-	sampleCovInv bool
+	viewport                                                                                         [4]int
+	scissor                                                                                          [4]int
+	depthRange                                                                                       [2]float32
+	clearColor                                                                                       [4]float32
+	clearDepth                                                                                       float32
+	clearStencil                                                                                     int32
+	colorMask                                                                                        [4]bool
+	depthMask                                                                                        bool
+	depthFunc                                                                                        uint32
+	stencilF                                                                                         stencilState
+	stencilB                                                                                         stencilState
+	blendColor                                                                                       [4]float32
+	blendEqRGB                                                                                       uint32
+	blendEqA                                                                                         uint32
+	blendSrcRGB                                                                                      uint32
+	blendDstRGB                                                                                      uint32
+	blendSrcA                                                                                        uint32
+	blendDstA                                                                                        uint32
+	cullMode                                                                                         uint32
+	frontFace                                                                                        uint32
+	lineWidth                                                                                        float32
+	polyFactor                                                                                       float32
+	polyUnits                                                                                        float32
+	sampleCovVal                                                                                     float32
+	sampleCovInv                                                                                     bool
 	enBlend, enCull, enDepth, enStencil, enScissor, enPoly, enDither, enRDiscard, enA2C, enSampleCov bool
-	hints        [2]uint32
-	pixStore     struct {
+	hints                                                                                            [2]uint32
+	pixStore                                                                                         struct {
 		FlipY, Premul bool
 		Colorspace    uint32
 		Unpack, Pack  Pack
@@ -228,9 +230,10 @@ type Context struct {
 	bmMu      sync.Mutex
 
 	// caches
-	viewCache map[*Texture]*texView
-	occCount  uint64 // samples passed counter for active occlusion queries
+	viewCache  map[*Texture]*texView
+	occCount   uint64 // samples passed counter for active occlusion queries
 	tfWritePos [4]int
+	sized      bool
 	defColor   *Image
 	defDepth   *Image
 
@@ -265,10 +268,10 @@ type Limits struct {
 
 // DefaultLimits returns SwiftShader-like limits.
 func DefaultLimits() Limits {
-	return Limits{MaxTextureSize: 8192, MaxCubeMapSize: 8192, Max3DTextureSize: 2048, MaxArrayLayers: 2048,
-		MaxRenderbufferSize: 8192, MaxViewportDims: [2]int{8192, 8192}, MaxVertexAttribs: 16, MaxVertexUniformVecs: 256,
-		MaxFragUniformVecs: 224, MaxVaryingVecs: 15, MaxTextureUnits: 16, MaxVertexTexUnits: 16, MaxCombinedTexUnits: 32,
-		MaxDrawBuffers: 8, MaxColorAttachments: 8, MaxSamples: 4, MaxUBOBindings: 24, MaxUBOSize: 65536}
+	return Limits{MaxTextureSize: 8192, MaxCubeMapSize: 16384, Max3DTextureSize: 2048, MaxArrayLayers: 2048,
+		MaxRenderbufferSize: 8192, MaxViewportDims: [2]int{8192, 8192}, MaxVertexAttribs: 16, MaxVertexUniformVecs: 4096,
+		MaxFragUniformVecs: 4096, MaxVaryingVecs: 31, MaxTextureUnits: 32, MaxVertexTexUnits: 32, MaxCombinedTexUnits: 64,
+		MaxDrawBuffers: 6, MaxColorAttachments: 6, MaxSamples: 4, MaxUBOBindings: 72, MaxUBOSize: 65536}
 }
 
 // New creates a context with a drawing buffer of w x h pixels.
@@ -290,6 +293,7 @@ func New(version int, attrs Attrs, w, h int) *Context {
 	c.defFB.DrawBuffers[0] = GL_BACK
 	c.readFB, c.drawFB = c.defFB, c.defFB
 	c.resetState()
+	c.sampleCovVal = 1
 	c.Resize(w, h)
 	return c
 }
@@ -350,12 +354,6 @@ func (c *Context) LoseContext() {
 	c.lost = true
 }
 
-// RestoreContext re-initialises all state.
-func (c *Context) RestoreContext() {
-	w, h := c.W, c.H
-	*c = *New(c.Version, c.Attrs, w, h)
-}
-
 func (c *Context) newID() uint32 {
 	id := c.nextID
 	c.nextID++
@@ -366,3 +364,18 @@ func (c *Context) newID() uint32 {
 var _ = glsl.Vertex
 
 func f32bits(f float32) uint32 { return math.Float32bits(f) }
+
+func f32frombits(u uint32) float32 { return math.Float32frombits(u) }
+
+// Lock serialises access from host calls and the compositor.
+func (c *Context) Lock()   { c.mu.Lock() }
+func (c *Context) Unlock() { c.mu.Unlock() }
+
+// PackState returns the current PACK_* parameters.
+func (c *Context) PackState() Pack { return c.pixStore.Pack }
+
+// PackBufferBound reports whether a PIXEL_PACK_BUFFER is bound.
+func (c *Context) PackBufferBound() bool { return c.packBuf != nil && c.Version == 2 }
+
+// PeekError returns the error flag without clearing it.
+func (c *Context) PeekError() uint32 { return c.errCode }

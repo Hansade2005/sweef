@@ -66,7 +66,7 @@ func preprocess(toks []Tok, predefined map[string]string, supported map[string]b
 			for j < len(toks) && !toks[j].BOL && toks[j].K != TEOF {
 				j++
 			}
-			line := toks[i : j]
+			line := toks[i:j]
 			p.directive(line, first, supported)
 			first = false
 			i = j

@@ -127,11 +127,12 @@
     el.dispatchEvent(ev);
   }
   // queue an event; events of a load generation are dropped when the element reloads
+  function ev(el, type) { var s = st(el), g = s.evGen || 0; task(function () { if ((s.evGen || 0) === g) fire(el, type); }); }
   function qev(el, type, ctor) {
     var s = st(el), id = s.loadId;
     task(function () { if (s.loadId !== id && type !== 'emptied' && type !== 'abort' && type !== 'error') { if (!(s.loadId === id + 0)) return; } fire(el, type, ctor); });
   }
-  function qevAny(el, type, ctor) { task(function () { fire(el, type, ctor); }); }
+  function qevAny(el, type) { ev(el, type); }
 
   // ---- time keeping ----------------------------------------------------------------------
   function playing(s) { return !s.paused && !s.ended && s.ready >= 3 && !s.seekingBlock; }
@@ -302,17 +303,18 @@
   function loadAlgorithm(el) {
     var s = st(el);
     s.loadId++;
+    s.evGen = (s.evGen || 0) + 1;
     var id = s.loadId;
     s.adopted = true;
     if (s.timer) { _clearTimeout(s.timer); s.timer = null; }
-    if (s.net === 1 || s.net === 2) task(function () { fire(el, 'abort'); });
+    if (s.net === 1 || s.net === 2) ev(el, 'abort');
     if (s.net !== 0) {
-      task(function () { fire(el, 'emptied'); });
+      ev(el, 'emptied');
       closeRes(s);
       s.ready = 0;
       if (!s.paused) { s.paused = true; rejectPending(s, 'AbortError', 'The play() request was interrupted by a new load request. https://goo.gl/LdLk22'); }
       s.seeking = false; s.seekBlock = false;
-      if (s.pos !== 0) { s.pos = 0; task(function () { fire(el, 'timeupdate'); }); }
+      if (s.pos !== 0) { s.pos = 0; ev(el, 'timeupdate'); }
       s.ended = false; s.duration = NaN; s.currentSrc = ''; s.played = []; s.playStart = undefined;
       if (el.localName === 'video' || el.localName === 'audio') bindFrames(el, 0);
     } else { closeRes(s); }
@@ -412,10 +414,10 @@
     if (ms instanceof global.Blob) {
       var res = sw.mediaOpenBytes(b64OfBytes(ms._bytes || new Uint8Array(0)));
       if (res.ok) { s.h = res.h; s.info = res.info; s.streamLike = false; s.frameMode = res.frameMode; return onMetadata(el, s, id); }
-      s.error = makeError(4, 'MEDIA_ELEMENT_ERROR: Format error'); s.net = 3; task(function () { fire(el, 'error'); }); return;
+      s.error = makeError(4, 'MEDIA_ELEMENT_ERROR: Format error'); s.net = 3; ev(el, 'error'); return;
     }
-    task(function () { fire(el, 'durationchange'); });
-    s.ready = 1; task(function () { fire(el, 'loadedmetadata'); });
+    ev(el, 'durationchange');
+    s.ready = 1; ev(el, 'loadedmetadata');
     s.net = 1;
     setReady(el, 4);
   }
@@ -439,13 +441,29 @@
       if (v) fire(el, 'resize');
       fire(el, 'loadedmetadata');
       if (s.defaultStart > 0) { s.pos = Math.min(s.defaultStart, isFinite(s.duration) ? s.duration : s.defaultStart); }
-      var wantMore = el.preload !== 'metadata' || !s.paused || (el.hasAttribute('autoplay') && s.autoplaying);
+      var wantMore = el.preload !== 'metadata' || (s.rawInfo && s.rawInfo.info && s.rawInfo.info.size <= 4194304) || !s.paused || (el.hasAttribute('autoplay') && s.autoplaying);
       if (!wantMore) { s.resumeLoad = function () { s.resumeLoad = null; task(function () { if (s.loadId === id) finishLoad(el, s, id); }); }; return; }
       finishLoad(el, s, id);
     });
   }
 
+  // progressive download for resources fetched in Range chunks
+  function topUpBuffer(el, s) {
+    if (!s.h || !s.rawInfo || s.mse) return;
+    var now = _now(); if (s.bufTopAt && now - s.bufTopAt < 400) return; s.bufTopAt = now;
+    var b = bufferedList(s), cur = curTime(s), end = 0, i;
+    for (i = 0; i < b.length; i++) if (cur >= b[i][0] - 0.01 && cur <= b[i][1] + 0.01) end = b[i][1];
+    if (!end) end = cur;
+    if (isFinite(s.duration) && end < s.duration - 0.05 && end - cur < 15) {
+      try { sw.mediaFetch(s.h, end, 20); } catch (e) { return; }
+      s.bufCache = null;
+      var nb = bufferedList(s), ne = end;
+      for (i = 0; i < nb.length; i++) if (nb[i][1] > ne) ne = nb[i][1];
+      if (ne > end + 0.01) ev(el, 'progress');
+    }
+  }
   function finishLoad(el, s, id) {
+    topUpBuffer(el, s);
     s.ready = 2; s.loadedData = true;
     fire(el, 'loadeddata');
     requestFrame(el, s, true);
@@ -501,10 +519,11 @@
       if (s.ready >= 1 && isFinite(s.duration) && (s.ended || (curTime(s) >= s.duration && s.rate >= 0))) seekTo(el, 0, false);
       s.pendingPlay.push({ res: res, rej: rej });
       if (s.paused) {
+        var p0 = s.pos;
         s.paused = false; s.ended = false; s.started = true;
-        s.pos = curTime(s); s.wall = _now() + LAT; s.playStart = s.pos;
-        task(function () { fire(el, 'play'); });
-        if (s.ready <= 2) { task(function () { if (!s.paused && s.ready <= 2) fire(el, 'waiting'); }); }
+        s.pos = p0; s.wall = _now() + LAT; s.playStart = s.pos;
+        ev(el, 'play');
+        if (s.ready <= 2) { ev(el, 'waiting'); }
         else notifyPlaying(el, s);
       } else if (s.ready >= 3) { resolvePending(s); }
       void wasResume;
@@ -523,8 +542,8 @@
       s.playStart = undefined;
       s.pos = t; s.wall = _now();
       s.paused = true; s.autoplaying = false;
-      task(function () { fire(el, 'timeupdate'); });
-      task(function () { fire(el, 'pause'); });
+      ev(el, 'timeupdate');
+      ev(el, 'pause');
       rejectPending(s, 'AbortError', 'The play() request was interrupted by a call to pause(). https://goo.gl/LdLk22');
       reschedule(el);
     } else { s.autoplaying = false; }
@@ -538,7 +557,7 @@
     if (t < 0) t = 0;
     if (isFinite(d) && t > d) t = d;
     if (s.resumeLoad) { var r = s.resumeLoad; s.resumeLoad = null; r(); }
-    var run = playing(s);
+    var run = playing(s), wasPlaying = !s.paused;
     s.pos = t; s.wall = _now();
     s.seekBlock = true;
     s.seeking = true; s.ended = false;
@@ -548,9 +567,9 @@
     task(function () {
       if (s.loadId !== lid) return;
       fire(el, 'seeking');
-      if (!s.paused && s.seekId === sid) fire(el, 'waiting');
+      if (wasPlaying && s.seekId === sid) fire(el, 'waiting');
     });
-    task(function () {
+    var finishSeek = function () {
       if (s.seekId !== sid || s.loadId !== lid) return;
       if (s.h) { try { sw.mediaFetch(s.h, t, 10); s.bufCache = null; } catch (e) { /* ignore */ } }
       s.seekBlock = false; s.seeking = false; s.wall = _now() + LAT;
@@ -564,7 +583,8 @@
       if (!s.paused) qevAny(el, 'playing');
       qevAny(el, 'canplaythrough');
       reschedule(el);
-    });
+    };
+    task(function () { _setTimeout(function () { task(finishSeek); }, 0); });
     void run;
   }
 
@@ -597,6 +617,7 @@
       if (isFinite(s.duration) && s.rate > 0 && t >= s.duration - 0.0005) { return handleEnd(el, s); }
       if (now - s.lastTU >= 249) { s.lastTU = now; fire(el, 'timeupdate'); }
       updateCues(el, s, t);
+      topUpBuffer(el, s);
       if (s.video && now - s.lastFrameAt >= 250) requestFrame(el, s, false);
     }
     runRvfc(el, s);
@@ -638,6 +659,7 @@
     } catch (e) { /* ignore */ }
   }
   function requestFrame(el, s, force) {
+    if (s.mseFrameBuf && s.video) { s.lastFrameAt = _now(); try { sw.mseFrame(s.mseFrameBuf, curTime(s)); } catch (e) { /* ignore */ } return; }
     if (!s.h || !s.video || !s.frameMode) return;
     if (el.hasAttribute('poster') && !s.started && !s.seekId && !force) return;
     if (el.hasAttribute('poster') && !s.started && !s.seekId) return;
@@ -684,7 +706,7 @@
   });
   defMethod(VP, 'webkitEnterFullscreen', function () { });
   defMethod(VP, 'webkitExitFullscreen', function () { });
-  defMethod(VP, 'requestPictureInPicture', function () { return Promise.reject(dex('Picture-in-Picture is not supported.', 'NotSupportedError')); });
+  defMethod(VP, 'requestPictureInPicture', function () { if (st(this).ready === 0) return Promise.reject(dex('Metadata for the video element are not loaded yet.', 'InvalidStateError')); return Promise.reject(dex('Picture-in-Picture is not supported.', 'NotSupportedError')); });
   if (global.document) {
     try {
       Object.defineProperty(global.Document.prototype, 'pictureInPictureEnabled', { get: function () { return false; }, configurable: true, enumerable: true });
@@ -702,7 +724,7 @@
     Object.defineProperty(r, 'state', { get: function () { return 'disconnected'; }, enumerable: true });
     return r;
   })();
-  defMethod(MediaP, 'setMediaKeys', function () { return Promise.reject(dex('Unsupported keySystem or supportedConfigurations.', 'NotSupportedError')); });
+  defMethod(MediaP, 'setMediaKeys', function (k) { if (k === null) return Promise.resolve(); return Promise.reject(dex('Unsupported keySystem or supportedConfigurations.', 'NotSupportedError')); });
   defMethod(MediaP, 'setSinkId', function (id) {
     var s = st(this); id = String(id === undefined ? '' : id);
     if (id === '' || id === 'default') { s.sinkId = ''; return Promise.resolve(); }
@@ -710,10 +732,13 @@
   });
   defMethod(MediaP, 'captureStream', function () {
     var el = this, s = st(el);
-    if (s.ready === 0 && !s.srcObject) { /* Chromium allows it; tracks arrive later */ }
     var ms = new global.MediaStream();
-    if (!s.info || s.info.tracks.some(function (t) { return t.kind === 'audio'; }) || !s.info.tracks.length) ms.addTrack(global.__swMakeTrack('audio', 'silent'));
-    if (isVideo(el) && (!s.info || s.video || !s.info.tracks.length)) ms.addTrack(global.__swMakeTrack('video', 'media-element'));
+    if (s.info && s.info.tracks && s.info.tracks.length) {
+      if (s.info.tracks.some(function (t) { return t.kind === 'audio'; })) ms.addTrack(global.__swMakeTrack('audio', 'silent'));
+      if (isVideo(el) && s.video) ms.addTrack(global.__swMakeTrack('video', 'media-element', { width: s.videoW, height: s.videoH, frameRate: s.fps }));
+    } else if (s.streamLike && s.srcObject instanceof global.MediaStream) {
+      s.srcObject.getTracks().forEach(function (t) { ms.addTrack(t.clone()); });
+    }
     return ms;
   });
   MediaP.mozCaptureStream = undefined; delete MediaP.mozCaptureStream;
@@ -982,6 +1007,9 @@
   var TP = global.HTMLTrackElement.prototype;
   [['NONE', 0], ['LOADING', 1], ['LOADED', 2], ['ERROR', 3]].forEach(function (c) { Object.defineProperty(global.HTMLTrackElement, c[0], { value: c[1], enumerable: true }); Object.defineProperty(TP, c[0], { value: c[1], enumerable: true }); });
   defGetter(TP, 'kind', function () { var k = (this.getAttribute('kind') || 'subtitles').toLowerCase(); return /^(subtitles|captions|descriptions|chapters|metadata)$/.test(k) ? k : (this.hasAttribute('kind') ? 'metadata' : 'subtitles'); }, function (v) { this.setAttribute('kind', String(v)); });
+  [TP, global.HTMLSourceElement.prototype].forEach(function (proto) { // plain reflection: the base src setter fires bogus load events
+    defGetter(proto, 'src', function () { var v = this.getAttribute('src'); if (v === null) return ''; try { return new global.URL(v, global.document.baseURI || global.location.href).href; } catch (e) { return v; } }, function (v) { this.setAttribute('src', String(v)); });
+  });
   defGetter(TP, 'srclang', function () { return this.getAttribute('srclang') || ''; }, function (v) { this.setAttribute('srclang', String(v)); });
   defGetter(TP, 'label', function () { return this.getAttribute('label') || ''; }, function (v) { this.setAttribute('label', String(v)); });
   defGetter(TP, 'default', boolAttr('default').get, boolAttr('default').set);
@@ -1347,7 +1375,8 @@
     r.updating = true;
     var payload = b64OfBytes(bytes);
     task(function () { fire(sb, 'updatestart'); });
-    task(function () {
+    task(function () { _setTimeout(function () { task(processAppend); }, 0); });
+    var processAppend = function () {
       if (r.removed) return;
       var res;
       try { res = sw.mseAppend(r.id, payload); } catch (e) { res = { ok: false, error: String(e && e.message || e) }; }
@@ -1373,7 +1402,7 @@
       if (!isNaN(mr.dur) && isFinite(mr.dur)) { var mx = 0; sb._ranges().forEach(function (x) { mx = Math.max(mx, x[1]); }); if (mx > mr.dur && mr.ready === 'open') setMSDuration(ms, mx); }
       fire(sb, 'update'); fire(sb, 'updateend');
       if (mr.el) msUpdate(mr.el);
-    });
+    };
   });
   defMethod(SourceBuffer.prototype, 'appendBufferAsync', undefined); delete SourceBuffer.prototype.appendBufferAsync;
   defMethod(SourceBuffer.prototype, 'abort', function () {
@@ -1402,7 +1431,7 @@
 
   function attachMSE(el, s, id, ms) {
     var ok = ms._attach(el, s);
-    if (!ok) { s.error = makeError(4, 'MEDIA_ELEMENT_ERROR: Format error'); s.net = 3; task(function () { fire(el, 'error'); }); return; }
+    if (!ok) { s.error = makeError(4, 'MEDIA_ELEMENT_ERROR: Format error'); s.net = 3; ev(el, 'error'); return; }
     s.mse = { ms: ms, detach: function () { ms._detach(); }, bufferedUnion: function () { return ms._buffered(); } };
     s.info = { container: 'mse', duration: NaN, tracks: [] };
     s.net = 2; s.frameMode = '';
@@ -1420,7 +1449,9 @@
       s.duration = isNaN(r.dur) ? Infinity : r.dur;
       var v = null; tracks.forEach(function (t) { if (t.kind === 'video' && !v) v = t; });
       s.video = v; s.videoW = v ? v.width : 0; s.videoH = v ? v.height : 0; s.fps = v && v.frameRate > 0 ? v.frameRate : 30;
-      s.net = 1;
+      s.net = 1; if (s.mseMetaPending) return; s.mseMetaPending = true;
+      var vbuf = null; r.bufs.forEach(function (b) { if (!vbuf && b._r.initInfo && b._r.initInfo.tracks.some(function (t) { return t.kind === 'video'; })) vbuf = b; });
+      if (v && vbuf && isVideo(el)) { try { s.node = global.__swIdOf(el); sw.mseBind(s.node, vbuf._r.id, s.videoW, s.videoH); s.mseFrameBuf = vbuf._r.id; } catch (e) { /* ignore */ } }
       task(function () { fire(el, 'durationchange'); s.ready = 1; populateTracks(el, s); if (v) fire(el, 'resize'); fire(el, 'loadedmetadata'); msUpdate(el); });
       return;
     }
@@ -1436,7 +1467,7 @@
       }
     }
     if (target < 2 && s.loadedData) target = Math.min(target, 1);
-    if (target >= 2 && s.ready < 2) { s.ready = 2; qevAny(el, 'loadeddata'); s.loadedData = true; }
+    if (target >= 2 && s.ready < 2) { s.ready = 2; qevAny(el, 'loadeddata'); s.loadedData = true; requestFrame(el, s, true); }
     if (target !== s.ready) setReady(el, Math.max(1, target)); else reschedule(el);
   }
   // starvation check on tick for MSE playback
@@ -1516,6 +1547,107 @@
       if (name === 'DOMContentLoaded' || name === 'load') { try { adoptTree(global.document.documentElement); } catch (e) { reportErr(e); } }
       return r;
     }, writable: true, configurable: true });
+  })();
+
+  Object.defineProperty(global, '__swMediaEl', { value: function (el) { var s = STATE.get(el); if (!s) return { h: 0, pos: 0, paused: true, ready: 0, rate: 1 }; return { h: s.h, pos: curTime(s), paused: s.paused, ready: s.ready, rate: s.rate }; }, configurable: true });
+  // ======================= binary-safe fetch / XHR ===============================================
+  // The base prelude moves HTTP bodies through UTF-8 strings, which corrupts
+  // binary payloads. Media (decodeAudioData, MSE segments, blobs for <video>)
+  // needs the exact bytes, so binary GETs go through a base64 host call.
+  (function () {
+    var BIN = /\.(mp3|wav|ogg|oga|ogv|opus|m4a|m4v|m4s|mp4|webm|aac|flac|ts|mkv|mov|bin|wasm|png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|pdf|zip|gz|mid|midi)(\?|#|$)/i;
+    var TEXTY = /(^text\/|json|xml|javascript|ecmascript|html|x-www-form|svg)/i;
+    function bytesOfB64(s) { var bin = global.atob(s), u = new Uint8Array(bin.length); for (var i = 0; i < u.length; i++) u[i] = bin.charCodeAt(i); return u; }
+    function headersOf(h) {
+      var o = {};
+      if (!h) return o;
+      if (typeof h.forEach === 'function' && !Array.isArray(h)) h.forEach(function (v, k) { o[k] = v; });
+      else if (Array.isArray(h)) h.forEach(function (p) { o[p[0]] = p[1]; });
+      else Object.keys(h).forEach(function (k) { o[k] = h[k]; });
+      return o;
+    }
+    function getBytes(method, url, hdr) {
+      var r = sw.mediaHttpBytes(method, url, JSON.stringify(hdr || {}), '');
+      return { status: r.status, statusText: r.statusText || '', url: r.url || url, headers: JSON.parse(r.headers || '{}'), bytes: bytesOfB64(r.b64) };
+    }
+    var origFetch = global.fetch;
+    if (typeof origFetch === 'function') {
+      var wrapped = function fetch(input, init) {
+        var method = String((init && init.method) || (input && typeof input === 'object' && input.method) || 'GET').toUpperCase();
+        var url = typeof input === 'string' ? input : (input && input.url) || String(input);
+        var hasBody = !!(init && init.body) || (input && typeof input === 'object' && input.body);
+        var abs = url; try { abs = new global.URL(url, global.document.baseURI || global.location.href).href; } catch (e) { /* keep */ }
+        if (method === 'GET' && !hasBody && !(init && init.signal && init.signal.aborted) && BIN.test(abs)) {
+          return new Promise(function (res, rej) {
+            _setTimeout(function () {
+              try {
+                var hdr = Object.assign({}, headersOf(input && typeof input === 'object' ? input.headers : null), headersOf(init && init.headers));
+                var r = getBytes('GET', abs, hdr);
+                var rh = new global.Headers(r.headers); rh.delete('content-length'); rh.delete('content-encoding');
+                var st = r.status === 204 || r.status === 205 || (r.status >= 100 && r.status < 200) ? 200 : r.status;
+                var ctype = rh.get('content-type') || '';
+                var resp = new global.Response(null, { status: st, statusText: r.statusText, headers: rh, url: r.url });
+                var bytes = r.bytes, used = false;
+                var take = function () { if (used) return Promise.reject(new TypeError("Failed to execute 'body stream' on 'Response': body stream already read")); used = true; return Promise.resolve(bytes); };
+                var d2 = function (k, f) { Object.defineProperty(resp, k, { value: f, configurable: true, writable: true }); };
+                d2('arrayBuffer', function () { return take().then(function (u) { return u.slice().buffer; }); });
+                d2('bytes', function () { return take().then(function (u) { return u.slice(); }); });
+                d2('blob', function () { return take().then(function (u) { return new global.Blob([u], { type: ctype }); }); });
+                d2('text', function () { return take().then(function (u) { return new global.TextDecoder().decode(u); }); });
+                d2('json', function () { return take().then(function (u) { return JSON.parse(new global.TextDecoder().decode(u)); }); });
+                Object.defineProperty(resp, 'bodyUsed', { get: function () { return used; }, configurable: true });
+                if (typeof global.ReadableStream === 'function') Object.defineProperty(resp, 'body', { get: function () { return new global.ReadableStream({ start: function (c) { c.enqueue(bytes); c.close(); } }); }, configurable: true });
+                d2('clone', function () { return resp; });
+                res(resp);
+              } catch (e) { rej(new TypeError('Failed to fetch')); }
+            }, 0);
+          });
+        }
+        var p = origFetch.apply(this, arguments);
+        if (method !== 'GET' || hasBody) return p;
+        return p.then(function (resp) {
+          var ct = ''; try { ct = resp.headers.get('content-type') || ''; } catch (e) { /* ignore */ }
+          if (ct && !TEXTY.test(ct) && resp.ok) {
+            var lazy = null;
+            var fetchBin = function () { return lazy || (lazy = new Promise(function (res2, rej2) { _setTimeout(function () { try { res2(getBytes('GET', resp.url || abs, headersOf(init && init.headers)).bytes); } catch (e) { rej2(e); } }, 0); })); };
+            var def = function (k, f) { Object.defineProperty(resp, k, { value: f, configurable: true, writable: true }); };
+            def('arrayBuffer', function () { return fetchBin().then(function (u) { return u.slice().buffer; }); });
+            def('bytes', function () { return fetchBin().then(function (u) { return u.slice(); }); });
+            def('blob', function () { return fetchBin().then(function (u) { return new global.Blob([u], { type: ct }); }); });
+          }
+          return resp;
+        });
+      };
+      Object.defineProperty(wrapped, 'name', { value: 'fetch' });
+      global.fetch = wrapped;
+    }
+    var X = global.XMLHttpRequest;
+    if (X && X.prototype) {
+      var xsend = X.prototype.send;
+      Object.defineProperty(X.prototype, 'send', { value: function (body) {
+        var x = this, rt = x.responseType;
+        if ((rt === 'arraybuffer' || rt === 'blob') && x._async !== false && (body === undefined || body === null) && String(x._method).toUpperCase() === 'GET' && x.readyState === 1 && !/^blob:/.test(x._url)) {
+          x._sent = true;
+          _setTimeout(function () {
+            if (x._aborted) return;
+            var abs = x._url; try { abs = new global.URL(x._url, global.document.baseURI || global.location.href).href; } catch (e) { /* keep */ }
+            var r;
+            try { r = getBytes('GET', abs, headersOf(x._reqHeaders)); } catch (e) {
+              x.status = 0; x.readyState = 4; x.dispatchEvent(new Event('readystatechange'));
+              ['error', 'loadend'].forEach(function (t) { x.dispatchEvent(new global.ProgressEvent(t)); }); return;
+            }
+            x.status = r.status; x.statusText = r.statusText; x.responseURL = r.url; x._resHeaders = new global.Headers(r.headers);
+            var resp = rt === 'blob' ? new global.Blob([r.bytes], { type: x._resHeaders.get('content-type') || '' }) : r.bytes.slice().buffer;
+            Object.defineProperty(x, 'response', { value: resp, configurable: true });
+            var n = r.bytes.length;
+            [2, 3, 4].forEach(function (st) { x.readyState = st; x.dispatchEvent(new Event('readystatechange')); });
+            ['progress', 'load', 'loadend'].forEach(function (t) { x.dispatchEvent(new global.ProgressEvent(t, { lengthComputable: true, loaded: n, total: n })); });
+          }, 0);
+          return;
+        }
+        return xsend.apply(this, arguments);
+      }, writable: true, configurable: true });
+    }
   })();
 
   // Audio constructor

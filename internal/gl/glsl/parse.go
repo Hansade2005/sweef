@@ -179,7 +179,7 @@ func (p *parser) fail(t Tok, what string) {
 	panic(parseErr{fmt.Sprintf("ERROR: 0:%d: '%s' : %s", t.Line, s, what)})
 }
 
-func (p *parser) cur() Tok  { return p.toks[p.i] }
+func (p *parser) cur() Tok { return p.toks[p.i] }
 func (p *parser) peek(n int) Tok {
 	if p.i+n < len(p.toks) {
 		return p.toks[p.i+n]
@@ -395,11 +395,11 @@ func (p *parser) topLevel() []*Top {
 	t := p.cur()
 	if p.isK("precision") {
 		p.i++
-		p.cur()
+		q := p.cur().S
 		p.i++ // precision qualifier
-		p.typeSpec()
+		ts := p.typeSpec()
 		p.expectP(";")
-		return []*Top{{K: TopPrecision, Line: t.Line}}
+		return []*Top{{K: TopPrecision, Line: t.Line, Decls: []*Decl{{Name: q, T: ts}}}}
 	}
 	if p.isK("invariant") && p.peek(1).K == TIdent && !p.isTypeStartAt(1) && p.peek(1).S != "varying" && p.peek(1).S != "out" {
 		p.i++

@@ -2,7 +2,6 @@ package glsl
 
 import (
 	"math"
-	"math/bits"
 )
 
 func isGenF(t Type) bool { return t.K == KFloat && t.Arr == 0 && t.M == 1 }
@@ -776,19 +775,6 @@ func (c *compiler) builtin(e *Expr, h int) *V {
 			}
 		}
 		return mk(vecT(KFloat, 2), d, append(cat(args...), o))
-	case "bitCount":
-		need(1)
-		t := a0()
-		if !isGenI(t) {
-			c.noMatch(e)
-		}
-		n, s, d := t.Size(), args[0].Off, c.dst(h, t.Size())
-		o := func(f *Frame) {
-			for i := 0; i < n; i++ {
-				f.R[d+i] = uint32(bits.OnesCount32(f.R[s+i]))
-			}
-		}
-		return mk(Type{K: KInt, N: t.N, M: 1}, d, append(cat(args...), o))
 	}
 	c.noMatch(e)
 	return nil

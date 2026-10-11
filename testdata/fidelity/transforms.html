@@ -1,0 +1,15 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>transforms</title>
+<style>
+body { margin: 30px; font: 14px Arial, sans-serif; }
+.b { width: 100px; height: 60px; background: #fcb; margin: 30px 40px; display: inline-block; vertical-align: top; }
+.t1 { transform: translate(20px, 10px); } .t2 { transform: rotate(30deg); } .t3 { transform: scale(1.5); }
+.t4 { transform: skewX(20deg); } .t5 { transform: rotate(45deg) scale(0.8); transform-origin: top left; }
+.t6 { transform: translate(-50%, 20%); } .t7 { transform: matrix(1, 0.2, -0.2, 1, 10, 5); }
+.inner { width: 40px; height: 20px; background: #6a6; margin: 5px; }
+.ab { position: relative; } .ab > i { position: absolute; left: 0; top: 0; width: 20px; height: 20px; background: #36c; }
+.op { opacity: 0.5; }
+</style></head><body>
+<div class="b t1">translate</div><div class="b t2">rotate<div class="inner"></div></div><div class="b t3">scale</div><div class="b t4">skew</div><div class="b t5">origin</div><div class="b t6">percent</div><div class="b t7">matrix</div>
+<div class="b ab op t2" style="margin-top:80px"><i></i>abs in rotated</div>
+</body></html>

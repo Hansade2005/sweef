@@ -1,0 +1,11 @@
+<!doctype html><meta charset=utf-8><canvas id=c width=64 height=64></canvas>
+<script>
+function ctx(v, attrs){ var c=document.getElementById('c'); return c.getContext(v||'webgl', Object.assign({preserveDrawingBuffer:true, antialias:false}, attrs||{})); }
+function J(v){ if(v===undefined) return 'undefined'; if(v===null) return 'null'; if(typeof v==='number') return String(v); if(ArrayBuffer.isView(v)) return v.constructor.name+'['+Array.prototype.join.call(v,',')+']'; if(Array.isArray(v)) return '['+v.map(J).join(',')+']'; if(typeof v==='object') return Object.prototype.toString.call(v); return JSON.stringify(v); }
+try{var out=[];var gl=ctx('webgl');var gl2=document.createElement('canvas').getContext('webgl2');
+out.push('gl1='+gl.getSupportedExtensions().slice().sort().join(','));out.push('gl2='+gl2.getSupportedExtensions().slice().sort().join(','));
+gl.getSupportedExtensions().forEach(function(n){var e=gl.getExtension(n);out.push(n+':'+(e?Object.keys(e).sort().join(','):'null')+' same='+(gl.getExtension(n)===e)+' lower='+(gl.getExtension(n.toLowerCase())===e));});
+out.push('bogus='+gl.getExtension('NOT_AN_EXT'));
+window.__result=out.join('\n');
+}catch(e){window.__error=String(e&&e.stack||e);}
+</script>

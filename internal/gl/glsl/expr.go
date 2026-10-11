@@ -1,6 +1,9 @@
 package glsl
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 func (c *compiler) initExpr(e *Expr, t Type) *V { return c.expr(e) }
 
@@ -147,14 +150,14 @@ func (c *compiler) lvCheck(lv *V, line int, opname string) {
 		if lv.Sym != nil {
 			switch lv.Sym.storage {
 			case "uniform":
-				why = " (can't modify a uniform)"
+				why = fmt.Sprintf(" (can't modify a uniform \"%s\")", lv.Sym.name)
 			case "const":
 				why = " (can't modify a const)"
 			case "attribute", "in", "varying":
 				why = " (can't modify an input)"
 			}
 		}
-		c.fail(line, opname, "l-value required%s", why)
+		c.fail(line, c.opName(opname), "l-value required%s", why)
 	}
 }
 
@@ -238,7 +241,7 @@ func (c *compiler) ident(e *Expr) *V {
 	if s.c != nil {
 		return &V{T: s.t, C: s.c, Sym: s}
 	}
-	return &V{T: s.t, Off: s.off, Place: true, RO: s.ro, Sym: s}
+	return &V{T: s.t, Off: s.off, Place: true, RO: s.ro, Sym: s, prec: s.prec}
 }
 
 func (c *compiler) index(b, i *V, line int) *V {
@@ -747,7 +750,7 @@ func (c *compiler) assign(e *Expr) *V {
 		rhs := c.mat(c.expr(e.Args[1]))
 		c.hint = -1
 		if !sameType(lv.T, rhs.T) {
-			c.fail(e.Line, "=", "cannot convert from '%s' to '%s'", vtn(rhs), lv.T)
+			c.assignMismatch(e.Line, lv, rhs)
 		}
 		ops := append(append([]op{}, lv.Ops...), rhs.Ops...)
 		ops = append(ops, c.store(lv, rhs, e.Line)...)
@@ -818,4 +821,109 @@ func vtn(v *V) string {
 		return "const " + v.T.String()
 	}
 	return v.T.String()
+}
+
+func (c *compiler) opName(op string) string {
+	if op == "=" {
+		return "assign"
+	}
+	return op
+}
+
+func baseName(k Kind) string {
+	return map[Kind]string{KBool: "bool", KInt: "int", KUint: "uint", KFloat: "float"}[k]
+}
+
+func typeDesc(t Type) string {
+	var s string
+	switch {
+	case t.Arr > 0:
+		e := t.Elem()
+		return fmt.Sprintf("%d-element array of %s", t.Arr, typeDesc(e))
+	case t.K == KStruct:
+		return "structure"
+	case t.K == KSampler:
+		return t.String()
+	case t.M > 1:
+		s = fmt.Sprintf("%dX%d matrix of float", t.M, t.N)
+	case t.N > 1:
+		s = fmt.Sprintf("%d-component vector of %s", t.N, baseName(t.K))
+	default:
+		s = baseName(t.K)
+	}
+	return s
+}
+
+// precOf resolves the precision of a declared variable.
+func (c *compiler) precOf(ts *TypeSpec, t Type) string {
+	if ts != nil && ts.Prec != "" {
+		return ts.Prec
+	}
+	switch t.K {
+	case KFloat:
+		return c.precs["float"]
+	case KInt, KUint:
+		return c.precs["int"]
+	case KSampler:
+		if c.stage == Fragment {
+			return "lowp"
+		}
+		return c.precs["sampler2D"]
+	}
+	return ""
+}
+
+func (c *compiler) dlong(ts *TypeSpec, t Type) string {
+	return strings.TrimSpace(c.precOf(ts, t) + " " + typeDesc(t))
+}
+
+// tlong describes an expression's type the way ANGLE prints it.
+func (c *compiler) tlong(v *V) string {
+	var parts []string
+	if v.C != nil {
+		parts = append(parts, "const")
+	} else if v.Sym != nil {
+		switch v.Sym.name {
+		case "gl_Position":
+			parts = append(parts, "Position")
+		case "gl_FragColor":
+			parts = append(parts, "FragColor")
+		case "gl_FragData":
+			parts = append(parts, "FragData")
+		case "gl_PointSize":
+			parts = append(parts, "PointSize")
+		default:
+			switch v.Sym.storage {
+			case "uniform", "attribute", "varying":
+				parts = append(parts, v.Sym.storage)
+			case "in":
+				parts = append(parts, "in")
+			case "out":
+				parts = append(parts, "out")
+			}
+		}
+	}
+	if v.C == nil {
+		p := v.prec
+		if p == "" && v.T.K != KBool && v.T.K != KSampler {
+			// results of expressions take the precision of their operands; assume the default
+			if v.T.K == KFloat {
+				p = c.precs["float"]
+			} else {
+				p = c.precs["int"]
+			}
+		}
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	parts = append(parts, typeDesc(v.T))
+	return strings.Join(parts, " ")
+}
+
+func (c *compiler) assignMismatch(line int, lv, rhs *V) {
+	if lv.T.K == rhs.T.K && lv.T.Arr == 0 && rhs.T.Arr == 0 && lv.T.K != KStruct && lv.T.K != KSampler && (lv.T.N != rhs.T.N || lv.T.M != rhs.T.M) {
+		c.fail(line, "=", "dimension mismatch\nERROR: 0:%d: 'assign' : cannot convert from '%s' to '%s'", line, c.tlong(rhs), c.tlong(lv))
+	}
+	c.fail(line, "=", "cannot convert from '%s' to '%s'", c.tlong(rhs), c.tlong(lv))
 }

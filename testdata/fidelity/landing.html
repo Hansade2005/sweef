@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Landing</title>
+<style>
+* { box-sizing: border-box; margin: 0; }
+body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #0f172a; line-height: 1.5; }
+.container { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+nav { position: sticky; top: 0; background: rgba(255,255,255,0.9); border-bottom: 1px solid #e2e8f0; z-index: 10; }
+nav .container { display: flex; align-items: center; height: 64px; }
+nav .brand { font-weight: 800; font-size: 20px; margin-right: auto; }
+nav a { color: #475569; text-decoration: none; font-size: 15px; margin-left: 28px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 20px; border-radius: 10px; font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid transparent; }
+.btn-primary { background: #4f46e5; color: #fff; box-shadow: 0 4px 14px rgba(79,70,229,.35); } .btn-ghost { background: #fff; color: #0f172a; border-color: #cbd5e1; }
+.hero { padding: 96px 0 72px; text-align: center; background: radial-gradient(1000px 400px at 50% -100px, #e0e7ff, #fff); }
+.hero h1 { font-size: 56px; line-height: 1.08; letter-spacing: -0.03em; max-width: 780px; margin: 0 auto 20px; }
+.hero p { font-size: 20px; color: #475569; max-width: 620px; margin: 0 auto 32px; }
+.hero .cta { display: flex; gap: 12px; justify-content: center; }
+.logos { display: flex; justify-content: space-between; gap: 24px; padding: 40px 0; opacity: .6; font-weight: 700; color: #64748b; }
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 64px 0; }
+.card { border: 1px solid #e2e8f0; border-radius: 16px; padding: 28px; background: #fff; }
+.card .icon { width: 44px; height: 44px; border-radius: 12px; background: #eef2ff; margin-bottom: 16px; }
+.card h3 { font-size: 20px; margin-bottom: 8px; } .card p { color: #475569; font-size: 15px; }
+.pricing { background: #f8fafc; padding: 72px 0; } .pricing h2 { text-align: center; font-size: 36px; margin-bottom: 40px; }
+.plans { display: flex; gap: 24px; align-items: stretch; }
+.plan { flex: 1; background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px; display: flex; flex-direction: column; }
+.plan.pop { border-color: #4f46e5; box-shadow: 0 10px 30px rgba(79,70,229,.15); transform: translateY(-8px); }
+.plan .price { font-size: 44px; font-weight: 800; margin: 12px 0; } .plan .price small { font-size: 16px; font-weight: 400; color: #64748b; }
+.plan ul { list-style: none; padding: 0; margin: 16px 0 24px; flex: 1; } .plan li { padding: 6px 0; color: #334155; }
+.cta-band { background: #0f172a; color: #fff; text-align: center; padding: 72px 24px; } .cta-band h2 { font-size: 34px; margin-bottom: 12px; } .cta-band p { color: #94a3b8; margin-bottom: 24px; }
+footer { padding: 40px 0; color: #64748b; font-size: 14px; } footer .container { display: flex; justify-content: space-between; }
+@media (max-width: 800px) { .features { grid-template-columns: 1fr; } .plans { flex-direction: column; } .hero h1 { font-size: 38px; } nav a { display: none; } }
+</style></head><body>
+<nav><div class="container"><span class="brand">Acme</span><a href="#">Product</a><a href="#">Pricing</a><a href="#">Docs</a><a class="btn btn-primary" style="margin-left:28px;height:36px" href="#">Sign up</a></div></nav>
+<section class="hero"><div class="container"><h1>Build, ship and scale products your customers love</h1><p>One platform for teams to plan, collaborate and release faster without the busywork that slows everyone down.</p><div class="cta"><a class="btn btn-primary" href="#">Get started free</a><a class="btn btn-ghost" href="#">Book a demo</a></div></div></section>
+<div class="container"><div class="logos"><span>NORTHWIND</span><span>Globex</span><span>INITECH</span><span>Umbrella</span><span>Hooli</span></div>
+<div class="features"><div class="card"><div class="icon"></div><h3>Plan together</h3><p>Roadmaps, tasks and docs live in one place so everybody stays aligned on what matters.</p></div><div class="card"><div class="icon"></div><h3>Ship faster</h3><p>Automated workflows remove manual steps and give you confidence at every release.</p></div><div class="card"><div class="icon"></div><h3>Measure impact</h3><p>Dashboards that show what moved the needle, without exporting spreadsheets.</p></div></div></div>
+<section class="pricing"><div class="container"><h2>Simple, transparent pricing</h2><div class="plans">
+<div class="plan"><h3>Starter</h3><div class="price">$0<small>/mo</small></div><p>For individuals getting started.</p><ul><li>3 projects</li><li>Community support</li><li>1 GB storage</li></ul><a class="btn btn-ghost" href="#">Choose Starter</a></div>
+<div class="plan pop"><h3>Team</h3><div class="price">$24<small>/user/mo</small></div><p>For growing teams that need more.</p><ul><li>Unlimited projects</li><li>Priority support</li><li>100 GB storage</li><li>Advanced analytics</li></ul><a class="btn btn-primary" href="#">Choose Team</a></div>
+<div class="plan"><h3>Enterprise</h3><div class="price">Custom</div><p>Security and control at scale.</p><ul><li>SSO and audit logs</li><li>Dedicated manager</li></ul><a class="btn btn-ghost" href="#">Contact sales</a></div></div></div></section>
+<section class="cta-band"><h2>Ready to get started?</h2><p>Join thousands of teams already shipping with Acme.</p><a class="btn btn-primary" href="#">Create your account</a></section>
+<footer><div class="container"><span>© 2026 Acme Inc.</span><span>Privacy · Terms · Status</span></div></footer>
+</body></html>

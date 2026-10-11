@@ -1,0 +1,1 @@
+{"name": "decode_bad", "rate": 44100, "length": 1, "ch": ["AAAAAA=="], "extra": {"r": "EncodingError", "cb": "EncodingError"}}

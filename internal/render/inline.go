@@ -73,6 +73,7 @@ type lineBox struct {
 	x0, x1       float64
 	base         float64
 	contL, contR bool // continues from previous line / to the next
+	rect         Rect // absolute border-box fragment (filled by placeInline)
 }
 
 // ---- flatten ------------------------------------------------------------------------------
@@ -334,6 +335,7 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 		hasContent := false
 		lineOpen := append([]*lbox(nil), openStack...)
 		var openAtBP []*lbox
+		var lineOOF []*lbox
 		_ = openAtBP
 		endLine := false
 		startI := i
@@ -366,6 +368,12 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 				a.box.staticY = b.bor[0] + b.pad[0] + y
 				a.box.lp = b
 				a.box.staticSet = true
+				if !a.box.st.OrigInline {
+					a.box.staticX = b.bor[3] + b.pad[3]
+					if hasContent {
+						lineOOF = append(lineOOF, a.box)
+					}
+				}
 				c.addOOF(a.box)
 				i++
 			case aFloat:
@@ -455,7 +463,7 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 				lastBP = bp{n: len(items) - 1, next: i + 1, x: curX}
 				i++
 			case aText:
-				if a.space && !hasTextContent(items) && !preservesSpace(a.it.st) {
+				if a.space && !hasTextContent(items) && !c.hasAtomic(items) && !preservesSpace(a.it.st) {
 					// collapsible space at line start
 					i++
 					continue
@@ -534,9 +542,12 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 		if i == startI && len(items) == 0 {
 			i++
 		}
-		c.finishLine(b, ln, items, lineOpen, openStack, cw, curX-lineIndent, lineIndent, rootAsc, rootDesc, rootFS, justify && !ln.forced && i < len(atoms), first)
+		c.finishLine(b, ln, items, openStack, openStack, cw, curX-lineIndent, lineIndent, rootAsc, rootDesc, rootFS, justify && !ln.forced && i < len(atoms), first)
 		if len(ln.frags) > 0 || ln.hasContent {
 			ln.y = y
+			for _, ob := range lineOOF {
+				ob.staticY = b.bor[0] + b.pad[0] + y + ln.h
+			}
 			b.lines = append(b.lines, ln)
 			// place floats that were deferred below this line
 			y += ln.h
@@ -1035,20 +1046,26 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 		calcShift(bx)
 	}
 	T, B := rootIB.ascL, -rootIB.descL
+	if c.quirks {
+		hasText, hasAtom, hasBr := false, false, false
+		for _, p := range pl {
+			switch {
+			case p.fr.kind == aText:
+				hasText = true
+			case p.atom != nil:
+				hasAtom = true
+			case p.fr.kind == aBreak:
+				hasBr = true
+			}
+		}
+		if !hasText && hasAtom && !hasBr {
+			T, B = 0, 0
+		}
+	}
 	atomTop := func(p placed) (float64, float64, float64, string) {
 		ab := p.atom
 		mh := ab.h + ab.mar[0] + ab.mar[2]
-		bo := ab.baseline + ab.mar[0]
-		if !ab.hasBase || ab.st.OverflowY != "visible" && ab.inner == iFlow || ab.rep != nil && ab.inner == iReplaced {
-			bo = mh
-		}
-		if ab.inner == iFlow && ab.kind == kAtomic && ab.hasBase && ab.st.OverflowY == "visible" {
-			bo = ab.lastBase + ab.mar[0]
-		}
-		if ab.inner == iControl {
-			bo = ab.ctrlBase + ab.mar[0]
-		}
-		return mh, bo, 0, ab.st.VerticalAlign
+		return mh, atomBO(ab), 0, ab.st.VerticalAlign
 	}
 	type vt struct {
 		h    float64
@@ -1068,9 +1085,7 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 				continue
 			case "baseline":
 			case "middle":
-				vshiftA = ib.shift + (p.ib.fs.xh / 2) - (mh/2 - bo) + 0
-				vshiftA = ib.shift + p.ib.fs.xh/2 - (mh/2 - bo) - 0
-				vshiftA -= ib.shift
+				vshiftA = ib.fs.xh/2 + mh/2 - bo
 			case "sub":
 				vshiftA = -(ib.fs.size/5 + 1)
 			case "super":
@@ -1126,16 +1141,10 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 					t.fr.base = T - (t.h)
 				}
 				// place the margin box at the line top
-				bo := t.p.atom.baseline + t.p.atom.mar[0]
-				if !t.p.atom.hasBase || t.p.atom.rep != nil {
-					bo = t.h
-				}
+				bo := atomBO(t.p.atom)
 				t.fr.base = T - bo
 			} else {
-				bo := t.p.atom.baseline + t.p.atom.mar[0]
-				if !t.p.atom.hasBase || t.p.atom.rep != nil {
-					bo = t.h
-				}
+				bo := atomBO(t.p.atom)
 				t.fr.base = B + (t.h - bo)
 			}
 		}
@@ -1180,17 +1189,7 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 	for _, fr := range ln.frags {
 		if fr.kind == aAtomic {
 			ab := fr.box
-			bo := ab.baseline + ab.mar[0]
-			mh := ab.h + ab.mar[0] + ab.mar[2]
-			if !ab.hasBase || ab.st.OverflowY != "visible" && ab.inner == iFlow || ab.rep != nil && ab.inner == iReplaced {
-				bo = mh
-			}
-			if ab.inner == iFlow && ab.hasBase && ab.st.OverflowY == "visible" {
-				bo = ab.lastBase + ab.mar[0]
-			}
-			if ab.inner == iControl {
-				bo = ab.ctrlBase + ab.mar[0]
-			}
+			bo := atomBO(ab)
 			ab.x = ln.x + fr.x
 			ab.y = ln.y + fr.base - bo + ab.mar[0]
 			ab.lp = b
@@ -1246,3 +1245,23 @@ func runesToString(r []rune) string { return string(r) }
 
 var _ = utf8.RuneLen
 var _ = font.Style{}
+
+// atomBO is the baseline offset of an atomic inline from its margin-box top.
+func atomBO(ab *lbox) float64 {
+	mh := ab.h + ab.mar[0] + ab.mar[2]
+	switch {
+	case ab.inner == iControl:
+		return ab.ctrlBase + ab.mar[0]
+	case ab.inner == iReplaced:
+		return mh
+	case ab.inner == iFlow:
+		if ab.hasBase && ab.overflowY() == "visible" {
+			return ab.lastBase + ab.mar[0]
+		}
+		return mh
+	}
+	if ab.hasBase {
+		return ab.baseline + ab.mar[0]
+	}
+	return mh
+}

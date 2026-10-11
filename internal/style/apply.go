@@ -1624,16 +1624,20 @@ func (s *cstate) fontSize(v, l string) bool {
 	c := s.c
 	if k, ok := s.sizeKeyword(l); ok {
 		c.FontSize = k
+		c.FontSizeKw = s.kwIndex(l)
+		c.FontAbs = false
 		s.setupMetrics()
 		return true
 	}
 	switch l {
 	case "smaller":
 		c.FontSize = smallerSize(s.p.FontSize)
+		c.FontSizeKw, c.FontAbs = 0, s.p.FontAbs
 		s.setupMetrics()
 		return true
 	case "larger":
 		c.FontSize = largerSize(s.p.FontSize)
+		c.FontSizeKw, c.FontAbs = 0, s.p.FontAbs
 		s.setupMetrics()
 		return true
 	}
@@ -1658,6 +1662,7 @@ func (s *cstate) fontSize(v, l string) bool {
 			x = Px(x.V * s.p.FontSize / 100)
 		}
 		c.FontSize = x.Resolve(s.p.FontSize)
+		c.FontSizeKw, c.FontAbs = 0, s.p.FontAbs
 		s.setupMetrics()
 		return true
 	}
@@ -1671,8 +1676,53 @@ func (s *cstate) fontSize(v, l string) bool {
 		return false
 	}
 	c.FontSize = x.Resolve(s.p.FontSize)
+	c.FontSizeKw = 0
+	c.FontAbs = !fontRelativeUnit(l)
+	if c.FontAbs == false && x.K != LPct && !strings.Contains(l, "%") {
+		c.FontAbs = s.p.FontAbs
+	} else if x.K == LPct || strings.Contains(l, "%") {
+		c.FontAbs = s.p.FontAbs
+	}
 	s.setupMetrics()
 	return true
+}
+
+func fontRelativeUnit(l string) bool {
+	return strings.Contains(l, "em") || strings.Contains(l, "ex") || strings.Contains(l, "ch") || strings.Contains(l, "%") || strings.Contains(l, "lh") || strings.Contains(l, "cap")
+}
+
+func (s *cstate) kwIndex(l string) int8 {
+	for i, k := range []string{"xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large"} {
+		if k == l {
+			return int8(i + 1)
+		}
+	}
+	return 0
+}
+
+// fixMonospace applies Blink's monospace size adjustment once the font group is done.
+func (s *cstate) fixMonospace() {
+	c, p := s.c, s.p
+	if c.FontAbs {
+		return
+	}
+	nm, om := isMonospaceOnly(c.FontFamily), isMonospaceOnly(p.FontFamily)
+	if nm == om {
+		return
+	}
+	if c.FontSizeKw > 0 {
+		if nm {
+			c.FontSize = fixedTable[4][c.FontSizeKw-1]
+		} else {
+			c.FontSize = keywordSizes[c.FontSizeKw-1]
+		}
+		return
+	}
+	if nm {
+		c.FontSize = c.FontSize * 13 / 16
+	} else {
+		c.FontSize = c.FontSize * 16 / 13
+	}
 }
 
 func smallerSize(p float64) float64 {

@@ -1,0 +1,29 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>sizing</title>
+<style>
+body { margin: 16px; font: 14px Arial, sans-serif; }
+div { background: #def; margin-bottom: 8px; }
+.a { width: 50%; } .b { width: 300px; max-width: 200px; } .c { min-width: 400px; width: 100px; }
+.d { width: 300px; padding: 10px; border: 5px solid #369; box-sizing: border-box; }
+.e { width: 300px; padding: 10px; border: 5px solid #369; }
+.f { height: 60px; max-height: 40px; } .g { min-height: 80px; }
+.h { aspect-ratio: 16/9; width: 320px; background: #fdb; }
+.i { width: calc(100% - 100px); } .j { width: clamp(100px, 30vw, 500px); }
+.k { width: fit-content; } .l { width: min-content; } .m { width: max-content; max-width: 100%; }
+.n { width: 10em; height: 3ex; } .o { width: 50vw; height: 5vh; }
+.p { display: inline-block; width: 30%; vertical-align: top; } 
+.q { height: 100px; } .q > div { height: 50%; margin: 0; }
+img { max-width: 100%; height: auto; }
+.r { width: 200px; } .r img { width: 100%; }
+</style></head><body>
+<div class="a">50% width</div><div class="b">width 300 max 200</div><div class="c">min-width 400</div>
+<div class="d">border-box 300</div><div class="e">content-box 300</div>
+<div class="f">height 60 max 40</div><div class="g">min-height 80</div>
+<div class="h">aspect ratio</div><div class="i">calc</div><div class="j">clamp</div>
+<div class="k">fit-content width</div><div class="l">min-content width wraps words</div><div class="m">max-content width stays on one line</div>
+<div class="n">em and ex</div><div class="o">vw vh</div>
+<div class="p">30% inline-block</div><div class="p">another 30%</div><div class="p">third</div>
+<div class="q"><div>half height</div></div>
+<div class="r"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" width="400" height="200"></div>
+<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" width="2000" height="100">
+</body></html>

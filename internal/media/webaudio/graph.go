@@ -559,6 +559,10 @@ func (c *Context) Step() (*Node, [][][]float32) {
 
 // Provide sets the output of an external node for the current quantum.
 func (c *Context) Provide(n *Node, out [][]float32) {
+	if len(n.outBufs) == 0 {
+		n.provided = true
+		return
+	}
 	if len(out) == 0 {
 		out = [][]float32{make([]float32, quantum)}
 	}

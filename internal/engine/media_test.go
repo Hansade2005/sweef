@@ -1,8 +1,11 @@
 package engine
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/sweefbrowser/sweef/internal/media"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -31,13 +35,16 @@ var clickScenarios = map[string]bool{"seek_tu": true, "loop_events": true, "ende
 
 func runFixture(t *testing.T, srv *httptest.Server, name string) *fixtureResult {
 	t.Helper()
-	e := New(DefaultOptions())
+	o := DefaultOptions()
+	o.SettleMs = 30
+	e := New(o)
 	defer e.Close()
 	tab, err := e.NewTab(srv.URL + "/fx.html?s=" + name)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if clickScenarios[name] {
+		tab.Settle(430 * time.Millisecond) // the Chromium reference clicked ~450 ms after load
 		if err := tab.Click("#go"); err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +122,7 @@ func eventTime(ev [][]any, name string, nth int) float64 {
 }
 
 // Scenarios whose event ORDER must equal Chromium's.
-var orderScenarios = []string{"load_auto", "load_meta", "load_none", "play_wav", "seek", "seek_playing", "seek_tu", "seek_paused_tu", "rate_events", "ended_replay", "play_pause_promise", "loop_events", "pause_resume", "error_404", "error_garbage", "error_nosrc", "video_webm", "play_muted_video", "autoplay_blocked", "reload"}
+var orderScenarios = []string{"mse_basic", "load_auto", "load_meta", "load_none", "play_wav", "seek", "seek_playing", "seek_tu", "seek_paused_tu", "rate_events", "ended_replay", "play_pause_promise", "loop_events", "pause_resume", "error_404", "error_garbage", "error_nosrc", "video_webm", "play_muted_video", "autoplay_blocked", "reload"}
 
 func TestMediaEventOrderMatchesChromium(t *testing.T) {
 	srv := mediaServer(t)
@@ -128,6 +135,9 @@ func TestMediaEventOrderMatchesChromium(t *testing.T) {
 			g, r := eventNames(got.Events, keepTU), eventNames(ref.Events, keepTU)
 			if keepTU {
 				g, r = squeezeTU(g), squeezeTU(r)
+			}
+			if name == "mse_basic" { // the final durationchange depends on the exact last-frame duration
+				g, r = dropName(g, "durationchange"), dropName(r, "durationchange")
 			}
 			if strings.Join(g, " ") != strings.Join(r, " ") {
 				t.Errorf("event order differs\n sweef:    %s\n chromium: %s", strings.Join(g, " "), strings.Join(r, " "))
@@ -182,6 +192,8 @@ func TestMediaKeyPropertiesMatchChromium(t *testing.T) {
 		"play_wav":           {"play", "currentTime", "ended", "paused", "duration", "played"},
 		"ended_replay":       {"endedState"},
 		"play_pause_promise": {"p1"},
+		"misc_apis":          {"pip", "mediaKeys", "sink", "sinkId", "eme", "gum", "gumEmpty", "capTracks", "remote", "cps", "devices", "recorder", "voices", "vtt"},
+		"mse_basic":          {"supported", "rs0", "rsOpen", "bytes", "rsEnded", "readyState", "videoWidth"},
 	}
 	for name, keys := range cases {
 		name, keys := name, keys
@@ -194,6 +206,20 @@ func TestMediaKeyPropertiesMatchChromium(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMediaMSEDuration(t *testing.T) {
+	srv := mediaServer(t)
+	ref, got := loadRef(t, "mse_basic"), runFixture(t, srv, "mse_basic")
+	for _, k := range []string{"dur", "duration"} {
+		if math.Abs(got.X[k].(float64)-ref.X[k].(float64)) > 0.05 {
+			t.Errorf("%s = %v, Chromium %v", k, got.X[k], ref.X[k])
+		}
+	}
+	gb, rb := got.X["buffered"].([]any), ref.X["buffered"].([]any)
+	if len(gb) != len(rb) || math.Abs(gb[0].([]any)[1].(float64)-rb[0].([]any)[1].(float64)) > 0.05 {
+		t.Errorf("buffered %v vs Chromium %v", gb, rb)
 	}
 }
 
@@ -293,4 +319,235 @@ func TestMediaFrameInBitmapRegistry(t *testing.T) {
 		t.Fatalf("video bitmap size %dx%d, want 160x120", w, h)
 	}
 	_ = exec.Command
+}
+
+func dropName(in []string, n string) []string {
+	var out []string
+	for _, s := range in {
+		if s != n {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func videoFrame(t *testing.T, tab *Tab, sel string) (w, h int, sum uint64) {
+	t.Helper()
+	raw, _ := tab.Evaluate("__swIdOf(document.querySelector('" + sel + "'))")
+	var id int64
+	json.Unmarshal(raw, &id)
+	tab.mu.RLock()
+	d := tab.dom
+	tab.mu.RUnlock()
+	n := d.NodeByID(id)
+	if n == nil {
+		return
+	}
+	src := tab.BitmapSourceFor(n)
+	if src == nil || src.Bitmap() == nil {
+		return
+	}
+	w, h = src.Size()
+	img := src.Bitmap()
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y += 3 {
+		for x := b.Min.X; x < b.Max.X; x += 3 {
+			r, g, bl, _ := img.At(x, y).RGBA()
+			sum = sum*131 + uint64(r>>8)*3 + uint64(g>>8)*5 + uint64(bl>>8)*7
+		}
+	}
+	return
+}
+
+func waitFrame(t *testing.T, tab *Tab, sel string, notSum uint64) (int, int, uint64) {
+	for i := 0; i < 120; i++ {
+		tab.Settle(50 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
+		if w, h, s := videoFrame(t, tab, sel); w > 0 && s != notSum {
+			return w, h, s
+		}
+	}
+	return 0, 0, 0
+}
+
+func TestMediaH264NeedsFFmpegAndFramesFollowTime(t *testing.T) {
+	srv := mediaServer(t)
+	for _, withFF := range []bool{true, false} {
+		withFF := withFF
+		name := "ffmpeg"
+		if !withFF {
+			name = "no-ffmpeg"
+		}
+		t.Run(name, func(t *testing.T) {
+			media.SetFFmpegEnabled(withFF)
+			defer media.SetFFmpegEnabled(true)
+			if withFF && media.FFmpegPath() == "" {
+				t.Skip("no ffmpeg")
+			}
+			e := New(DefaultOptions())
+			defer e.Close()
+			tab, err := e.NewTab(srv.URL + "/fx.html?s=none")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var cp []string
+			evalJSON(t, tab, `(function(){var v=document.createElement('video');return [v.canPlayType('video/mp4; codecs="avc1.64001e, mp4a.40.2"'),v.canPlayType('audio/mp4; codecs="mp4a.40.2"'),v.canPlayType('video/webm; codecs="vp8"')]})()`, &cp)
+			wantH264 := ""
+			if withFF {
+				wantH264 = "probably"
+			}
+			if cp[0] != wantH264 || cp[1] != wantH264 || cp[2] != "probably" {
+				t.Fatalf("canPlayType = %v", cp)
+			}
+			// MP4 (H.264+AAC)
+			var res map[string]any
+			evalJSON(t, tab, `new Promise(function(res){var v=document.createElement('video');v.id='m';v.muted=true;v.preload='auto';v.src='clip.mp4';document.body.appendChild(v);v.onerror=function(){res({err:v.error.code})};v.onloadedmetadata=function(){res({w:v.videoWidth,h:v.videoHeight,d:v.duration})};})`, &res)
+			if !withFF {
+				if res["err"] != float64(4) {
+					t.Fatalf("H.264 without ffmpeg must fail with MEDIA_ERR_SRC_NOT_SUPPORTED, got %v", res)
+				}
+			} else {
+				if res["w"] != float64(160) || res["d"].(float64) < 1.9 {
+					t.Fatalf("mp4 metadata: %v", res)
+				}
+				w, h, s0 := waitFrame(t, tab, "#m", 0)
+				if w != 160 || h != 120 {
+					t.Fatalf("mp4 frame %dx%d", w, h)
+				}
+				evalJSON(t, tab, `(function(){document.getElementById('m').currentTime=1.5;return 1})()`, nil)
+				_, _, s1 := waitFrame(t, tab, "#m", s0)
+				if s1 == 0 || s1 == s0 {
+					t.Fatalf("frame did not change after seeking to 1.5 s")
+				}
+			}
+			// WebM VP8: key frame without ffmpeg, real frames with it
+			evalJSON(t, tab, `new Promise(function(res){var v=document.createElement('video');v.id='w';v.muted=true;v.preload='auto';v.src='clip.webm';document.body.appendChild(v);v.onloadeddata=function(){res(1)};v.onerror=function(){res(0)}})`, nil)
+			w, h, s0 := waitFrame(t, tab, "#w", 0)
+			if w != 160 || h != 120 {
+				t.Fatalf("webm frame %dx%d", w, h)
+			}
+			evalJSON(t, tab, `(function(){document.getElementById('w').currentTime=1.5;return 1})()`, nil)
+			tab.Settle(300 * time.Millisecond)
+			time.Sleep(300 * time.Millisecond)
+			_, _, s1 := videoFrame(t, tab, "#w")
+			changed := s1 != s0
+			if withFF && !changed {
+				t.Errorf("with ffmpeg the frame must follow currentTime")
+			}
+			if !withFF && changed {
+				t.Errorf("without ffmpeg only the key frame is available")
+			}
+		})
+	}
+}
+
+func TestMSEVideoFrames(t *testing.T) {
+	srv := mediaServer(t)
+	e := New(DefaultOptions())
+	defer e.Close()
+	tab, err := e.NewTab(srv.URL + "/fx.html?s=none")
+	if err != nil {
+		t.Fatal(err)
+	}
+	evalJSON(t, tab, `new Promise(function(res){
+	  var ms=new MediaSource(),v=document.createElement('video');v.id='ms';v.muted=true;document.body.appendChild(v);v.src=URL.createObjectURL(ms);
+	  ms.addEventListener('sourceopen',function(){
+	    var sb=ms.addSourceBuffer('video/webm; codecs="vp8, vorbis"'),x=new XMLHttpRequest();x.open('GET','clip.webm');x.responseType='arraybuffer';
+	    x.onload=function(){sb.addEventListener('updateend',function(){ms.endOfStream();res(1)});sb.appendBuffer(x.response)};x.send();
+	  });
+	})`, nil)
+	w, h, s0 := waitFrame(t, tab, "#ms", 0)
+	if w != 160 || h != 120 {
+		t.Fatalf("MSE video frame %dx%d", w, h)
+	}
+	evalJSON(t, tab, `(function(){document.getElementById('ms').currentTime=1.5;return 1})()`, nil)
+	tab.Settle(300 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
+	if _, _, s1 := videoFrame(t, tab, "#ms"); media.FFmpegPath() != "" && s1 == s0 {
+		t.Errorf("MSE frame did not follow currentTime")
+	}
+}
+
+// bigWAV builds a mono 16-bit 8 kHz WAV of the given length in seconds.
+func bigWAV(seconds int) []byte {
+	const rate = 8000
+	n := rate * seconds
+	b := make([]byte, 44+2*n)
+	copy(b, "RIFF")
+	binary.LittleEndian.PutUint32(b[4:], uint32(36+2*n))
+	copy(b[8:], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(b[16:], 16)
+	binary.LittleEndian.PutUint16(b[20:], 1)
+	binary.LittleEndian.PutUint16(b[22:], 1)
+	binary.LittleEndian.PutUint32(b[24:], rate)
+	binary.LittleEndian.PutUint32(b[28:], rate*2)
+	binary.LittleEndian.PutUint16(b[32:], 2)
+	binary.LittleEndian.PutUint16(b[34:], 16)
+	copy(b[36:], "data")
+	binary.LittleEndian.PutUint32(b[40:], uint32(2*n))
+	for i := 0; i < n; i++ {
+		binary.LittleEndian.PutUint16(b[44+2*i:], uint16(int16(8000*math.Sin(2*math.Pi*300*float64(i)/rate))))
+	}
+	return b
+}
+
+func TestMediaRangeRequestsAndHonestBuffered(t *testing.T) {
+	wav := bigWAV(600) // ~9.6 MB
+	var mu sync.Mutex
+	var ranges []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/big.wav", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		ranges = append(ranges, r.Header.Get("Range"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "audio/wav")
+		http.ServeContent(w, r, "big.wav", time.Time{}, bytes.NewReader(wav))
+	})
+	mux.Handle("/", http.FileServer(http.Dir("testdata/media")))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	e := New(DefaultOptions())
+	defer e.Close()
+	tab, err := e.NewTab(srv.URL + "/fx.html?s=none")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res map[string]any
+	evalJSON(t, tab, `new Promise(function(res){var a=new Audio('big.wav');a.onloadeddata=function(){var b=a.buffered;res({dur:a.duration,end:b.length?b.end(b.length-1):0,n:b.length})}})`, &res)
+	if res["dur"].(float64) != 600 {
+		t.Fatalf("duration %v", res["dur"])
+	}
+	end := res["end"].(float64)
+	if end <= 1 || end >= 100 {
+		t.Fatalf("buffered must be a partial range (fetched by Range), got end=%v of 600", end)
+	}
+	mu.Lock()
+	first := append([]string(nil), ranges...)
+	mu.Unlock()
+	if len(first) == 0 || !strings.HasPrefix(first[0], "bytes=0-") {
+		t.Fatalf("first request must be a Range request, got %v", first)
+	}
+	// seeking far away fetches that region by byte offset, leaving the gap unbuffered
+	var after map[string]any
+	evalJSON(t, tab, `new Promise(function(res){var a=new Audio('big.wav');a.onloadeddata=function(){a.currentTime=450;a.onseeked=function(){var b=a.buffered,o=[];for(var i=0;i<b.length;i++)o.push([b.start(i),b.end(i)]);res({ranges:o,ct:a.currentTime})}}})`, &after)
+	rs := after["ranges"].([]any)
+	if len(rs) < 2 {
+		t.Fatalf("expected two disjoint buffered ranges after a far seek, got %v", rs)
+	}
+	last := rs[len(rs)-1].([]any)
+	if last[0].(float64) > 450 || last[1].(float64) < 450 {
+		t.Fatalf("range around the seek target missing: %v", rs)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	sawFar := false
+	for _, r := range ranges {
+		var s int64
+		if _, err := fmt.Sscanf(r, "bytes=%d-", &s); err == nil && s > int64(len(wav))/2 {
+			sawFar = true
+		}
+	}
+	if !sawFar {
+		t.Fatalf("no Range request near byte offset of t=450: %v", ranges)
+	}
 }

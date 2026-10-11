@@ -35,6 +35,7 @@ type sym struct {
 	iov     *IOVar
 	uni     *Uniform
 	blk     *Block
+	prec    string
 }
 
 type fnParam struct {
@@ -73,33 +74,35 @@ type V struct {
 	Lanes []int
 	Sym   *sym
 	roWhy string
+	prec  string
 }
 
 type compiler struct {
-	sh      *Shader
-	stage   Stage
-	version int
-	opt     Options
-	errs    []string
-	scopes  []map[string]*sym
-	next    int
-	mark    int
-	high    int
-	pool    []uint32
-	poolIdx map[string]int
-	hint    int
-	curFn   *fn
-	inputs  []*IOVar
-	outputs []*IOVar
-	unis    []*Uniform
-	blocks  []*Block
-	globInit []op
-	loops   int
-	exts    map[string]string
-	structs int
-	mainFn  *fn
+	sh         *Shader
+	stage      Stage
+	version    int
+	opt        Options
+	errs       []string
+	scopes     []map[string]*sym
+	next       int
+	mark       int
+	high       int
+	pool       []uint32
+	poolIdx    map[string]int
+	hint       int
+	curFn      *fn
+	inputs     []*IOVar
+	outputs    []*IOVar
+	unis       []*Uniform
+	blocks     []*Block
+	globInit   []op
+	loops      int
+	exts       map[string]string
+	structs    int
+	mainFn     *fn
 	fragOutLoc int
-	line    int
+	line       int
+	precs      map[string]string
 }
 
 func (c *compiler) fail(line int, tok, f string, a ...any) {
@@ -147,7 +150,7 @@ func Compile(stage Stage, src string, opt Options) *Shader {
 		sh.Log = strings.Join(pp.errs, "\n") + "\n"
 		return sh
 	}
-	c := &compiler{sh: sh, stage: stage, version: pp.version, opt: opt, poolIdx: map[string]int{}, hint: -1, exts: map[string]string{}}
+	c := &compiler{precs: map[string]string{}, sh: sh, stage: stage, version: pp.version, opt: opt, poolIdx: map[string]int{}, hint: -1, exts: map[string]string{}}
 	for _, d := range pp.exts {
 		c.exts[d.Name] = d.Behavior
 		sh.Exts[d.Name] = d.Behavior
@@ -160,6 +163,11 @@ func Compile(stage Stage, src string, opt Options) *Shader {
 	c.pool = make([]uint32, 0, 64)
 	c.next = poolCap
 	c.mark, c.high = poolCap, poolCap
+	if stage == Vertex {
+		c.precs["float"], c.precs["int"] = "highp", "highp"
+	} else {
+		c.precs["int"] = "mediump"
+	}
 	c.pushScope()
 	c.declareBuiltins()
 	for _, t := range tops {
@@ -278,9 +286,9 @@ func (c *compiler) declareBuiltins() {
 	for _, k := range []struct {
 		n string
 		v int32
-	}{{"gl_MaxVertexAttribs", 16}, {"gl_MaxVertexUniformVectors", 1024}, {"gl_MaxVaryingVectors", 30},
-		{"gl_MaxVertexTextureImageUnits", 16}, {"gl_MaxCombinedTextureImageUnits", 32}, {"gl_MaxTextureImageUnits", 16},
-		{"gl_MaxFragmentUniformVectors", 1024}, {"gl_MaxDrawBuffers", int32(c.opt.MaxDrawBuffers)},
+	}{{"gl_MaxVertexAttribs", 16}, {"gl_MaxVertexUniformVectors", 4096}, {"gl_MaxVaryingVectors", 31},
+		{"gl_MaxVertexTextureImageUnits", 32}, {"gl_MaxCombinedTextureImageUnits", 64}, {"gl_MaxTextureImageUnits", 32},
+		{"gl_MaxFragmentUniformVectors", 4096}, {"gl_MaxDrawBuffers", int32(c.opt.MaxDrawBuffers)},
 		{"gl_MinProgramTexelOffset", -8}, {"gl_MaxProgramTexelOffset", 7}, {"gl_MaxVaryingComponents", 120},
 		{"gl_MaxVertexOutputVectors", 16}, {"gl_MaxFragmentInputVectors", 15}} {
 		if k.n == "gl_MaxVaryingComponents" && c.version == 300 || k.n == "gl_MaxVaryingVectors" && c.version == 300 {

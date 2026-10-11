@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>overflow</title>
+<style>
+body { margin: 16px; font: 14px Arial, sans-serif; }
+.b { width: 200px; height: 80px; border: 2px solid #666; margin: 0 16px 16px 0; float: left; padding: 4px; }
+.h { overflow: hidden; } .s { overflow: scroll; } .a { overflow: auto; } .x { overflow-x: auto; overflow-y: hidden; }
+.in { width: 300px; height: 120px; background: #def; }
+.clr { clear: both; }
+.tall { height: 400px; background: linear-gradient(#fff, #ccc); }
+.rad { border-radius: 20px; overflow: hidden; }
+</style></head><body>
+<div class="b h"><div class="in">hidden</div></div>
+<div class="b s"><div class="in">scroll</div></div>
+<div class="b a"><div class="in">auto overflow</div></div>
+<div class="b a"><div style="height:20px">auto, fits</div></div>
+<div class="b x"><div class="in">overflow-x</div></div>
+<div class="b rad"><div class="in">rounded</div></div>
+<div class="clr"></div>
+<div class="b a" style="height:60px"><p>Auto height scroll with long wrapped text that will overflow vertically for sure because there is plenty of text here to fill.</p></div>
+<div class="b s" style="height:auto"><p>scroll auto height</p></div>
+<div class="clr"></div>
+<div class="tall"></div>
+</body></html>

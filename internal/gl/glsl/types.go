@@ -127,9 +127,13 @@ func (t Type) Size() int {
 	return t.BaseSize()
 }
 
-func (t Type) IsScalar() bool { return t.Arr == 0 && t.K != KStruct && t.K != KSampler && t.K != KVoid && t.N == 1 && t.M == 1 }
-func (t Type) IsVec() bool    { return t.Arr == 0 && t.K != KStruct && t.K != KSampler && t.K != KVoid && t.N > 1 && t.M == 1 }
-func (t Type) IsMat() bool    { return t.Arr == 0 && t.K == KFloat && t.M > 1 }
+func (t Type) IsScalar() bool {
+	return t.Arr == 0 && t.K != KStruct && t.K != KSampler && t.K != KVoid && t.N == 1 && t.M == 1
+}
+func (t Type) IsVec() bool {
+	return t.Arr == 0 && t.K != KStruct && t.K != KSampler && t.K != KVoid && t.N > 1 && t.M == 1
+}
+func (t Type) IsMat() bool { return t.Arr == 0 && t.K == KFloat && t.M > 1 }
 func (t Type) IsNumeric() bool {
 	return t.K == KInt || t.K == KUint || t.K == KFloat
 }
