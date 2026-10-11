@@ -181,6 +181,8 @@ func (p *Painter) op(op render.Op) {
 		p.scrollCorner(o)
 	case render.BackdropFilter:
 		p.backdrop(o)
+	case render.PushClipPath, render.PopClipPath, render.PushMask, render.PopMask:
+		p.clipOp(op)
 	}
 }
 
@@ -533,7 +535,7 @@ func (p *Painter) text(o render.TextRun) {
 		if g.Face == nil {
 			continue
 		}
-		sh.Glyphs = append(sh.Glyphs, Glyph{R: g.R, X: g.X, Face: g.Face})
+		sh.Glyphs = append(sh.Glyphs, Glyph{R: g.R, X: g.X, Face: g.Face, GID: g.GID})
 	}
 	c.Save()
 	defer c.Restore()

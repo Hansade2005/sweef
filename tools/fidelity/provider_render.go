@@ -137,7 +137,7 @@ func (renderProvider) Run(url string, w, h int) ([]ElemBox, image.Image, error) 
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode {
-			eb := ElemBox{Tag: n.Data}
+			eb := ElemBox{Tag: strings.ToLower(n.Data)}
 			if r, ok := res.ClientRect(n); ok {
 				eb.X, eb.Y, eb.W, eb.H, eb.Has = r.X, r.Y, r.W, r.H, true
 			}

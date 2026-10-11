@@ -191,6 +191,7 @@ type Inherited struct {
 	FontKerning             string
 	TextRendering           string
 	FontVariantNum          string
+	FontLigOff              bool // font-variant-ligatures: none / font-feature-settings "liga" 0 (render text shaping)
 	UserSelect              string
 	WritingMode             string
 	TextOrientation         string // mixed | upright | sideways
@@ -215,6 +216,7 @@ type Computed struct {
 	Inherited
 
 	Display              string
+	UnicodeBidi          string // normal | embed | isolate | bidi-override | isolate-override | plaintext
 	Position             string
 	Float                string
 	Clear                string
@@ -276,6 +278,8 @@ type Computed struct {
 	BackdropFilter           []FilterFn
 	MixBlend                 string
 	ClipPath                 bool
+	ClipPathV                *ClipPathVal // parsed clip-path (nil = none)
+	Mask                     []MaskLayer  // mask layers (first = top-most)
 	WillChange               string
 	MaskImage                bool
 
@@ -317,13 +321,14 @@ type Computed struct {
 	ContainerName []string // container-name idents
 
 	// multi-column
-	ColumnCount     int
-	ColumnWidth     Length
-	ColumnRuleW     float64
-	ColumnRuleStyle string
-	ColumnRuleColor Color
-	ColumnFill      string
-	ColumnSpan      string
+	ColumnCount        int
+	ColumnWidth        Length
+	ColumnRuleW        float64
+	ColumnRuleStyle    string
+	ColumnRuleColor    Color
+	ColumnFill         string
+	BoxDecorationBreak string // slice (default, empty) | clone
+	ColumnSpan         string
 
 	// generated content
 	Content                               []ContentItem

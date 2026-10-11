@@ -30,7 +30,8 @@ type textItem struct {
 	fs     *fontSpec
 	st     *style.Computed
 	marker bool
-	off    int // offset of runes within the source text box's collapsed text (small-caps segments)
+	lv     []uint8 // bidi level per rune (nil: not a bidi paragraph)
+	off    int     // offset of runes within the source text box's collapsed text (small-caps segments)
 }
 
 type atom struct {
@@ -44,6 +45,8 @@ type atom struct {
 	forced bool
 	space  bool // chunk consists only of collapsible spaces
 	tab    bool
+	bidi   bool  // the paragraph has bidi levels
+	lv     uint8 // bidi level of an atomic inline
 }
 
 type frag struct {
@@ -56,6 +59,7 @@ type frag struct {
 	justSp float64 // extra width added to each space (justify)
 	nsp    int
 	trail  float64
+	rtl    bool // right-to-left level: glyphs run right to left inside the fragment
 }
 
 type line struct {
@@ -101,6 +105,7 @@ func (c *ctx) buildAtoms(b *lbox) []atom {
 	fl.walk(b, b)
 	// text-transform / collapse across boundaries is done during walk
 	b.atoms, b.atomsDone = fl.atoms, true
+	c.assignBidi(b, b.atoms)
 	return b.atoms
 }
 
@@ -875,6 +880,10 @@ func (c *ctx) layoutAtomic(ab *lbox, cw, cbh float64) {
 // finishLine positions the accepted atoms of one line and computes its metrics.
 func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack []*lbox, cw, usedW, indent, rootAsc, rootDesc float64, rootFS *fontSpec, justify, first bool) {
 	st := b.st
+	rtlBase := st.Direction == "rtl"
+	if st.UnicodeBidi == "plaintext" {
+		rtlBase = paraRTL(b, b.atoms)
+	}
 	// remove trailing collapsible space from the last text atom
 	lastText := -1
 	endsWithContent := false
@@ -931,11 +940,6 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 		contL[bx] = true
 		getBox(bx)
 	}
-	type placed struct {
-		fr   *frag
-		ib   *ibox
-		atom *lbox
-	}
 	var pl []placed
 	nsp := 0
 	hasBreak := false
@@ -990,11 +994,7 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 			}
 			ib.used = true
 			fr := &frag{kind: aText, it: a.it, a: a.a, e: a.e, x: x, w: w, trail: trail, box: owner}
-			for k := a.a; k < a.e; k++ {
-				if a.it.runes[k] == ' ' {
-					nsp++
-				}
-			}
+			nsp += fr.justSpaces()
 			frs = append(frs, fr)
 			pl = append(pl, placed{fr: fr, ib: ib})
 			x += w
@@ -1037,6 +1037,15 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 		_ = ib
 	}
 	_ = hasBreak
+	if lineHasBidi(items) {
+		var nx float64
+		pl, ln.boxes, nx = reorderLine(items, pl, indent, rtlBase, ln.boxes)
+		frs = frs[:0]
+		for _, p := range pl {
+			frs = append(frs, p.fr)
+		}
+		x = nx
+	}
 	ln.contentW = x - indent
 	if len(frs) == 0 && !ln.hasContent {
 		// check inline boxes with edges
@@ -1072,14 +1081,14 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 		}
 	}
 	if align == "start" || align == "match-parent" {
-		if st.Direction == "rtl" {
+		if rtlBase {
 			align = "right"
 		} else {
 			align = "left"
 		}
 	}
 	if align == "end" {
-		if st.Direction == "rtl" {
+		if rtlBase {
 			align = "left"
 		} else {
 			align = "right"
@@ -1097,13 +1106,8 @@ func (c *ctx) finishLine(b *lbox, ln *line, items []atom, openAtStart, openStack
 			for _, p := range pl {
 				if p.fr.kind == aText {
 					p.fr.x += acc
-					cnt := 0
-					for k := p.fr.a; k < p.fr.e; k++ {
-						if p.fr.it.runes[k] == ' ' {
-							cnt++
-						}
-					}
-					// do not count a hanging trailing space
+					// a hanging trailing space is not justified
+					cnt := p.fr.justSpaces()
 					p.fr.justSp = extra
 					p.fr.nsp = cnt
 					add := extra * float64(cnt)
@@ -1455,4 +1459,22 @@ func hasInlineEdge(b *lbox, start bool) bool {
 		}
 	}
 	return false
+}
+
+// justSpaces counts the spaces of a fragment that take part in justification:
+// a removed trailing space at the end of the line does not.
+func (fr *frag) justSpaces() int {
+	e := fr.e
+	if fr.trail > 0 && fr.it.st.WhiteSpace != "pre-wrap" {
+		for e > fr.a && fr.it.runes[e-1] == ' ' {
+			e--
+		}
+	}
+	n := 0
+	for k := fr.a; k < e; k++ {
+		if fr.it.runes[k] == ' ' {
+			n++
+		}
+	}
+	return n
 }

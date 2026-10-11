@@ -49,6 +49,7 @@ type ctx struct {
 	vIntrinsic bool
 	curFL      *lbox // IFC root whose first line is being finished
 	all        []*lbox
+	fo         map[*lbox][]*lbox // foreignObject wrappers per inline <svg> box
 }
 
 // Layout lays out the document rooted at root (a document or html element).
@@ -235,6 +236,7 @@ func (c *ctx) finishResult(rb *lbox) {
 	res.Viewport = Rect{0, 0, vw, c.vh - c.sbViewportH}
 	res.Width = math.Max(vw, math.Max(rb.ovRight, rb.ax+rb.w+rb.mar[1]))
 	res.Height = math.Max(c.vh, math.Max(rb.ovBottom, rb.ay+rb.h+rb.mar[2]))
+	c.layoutForeignObjects()
 	c.buildBoxes()
 	c.paintAll(rb)
 	c.installHit(rb)
@@ -638,6 +640,10 @@ func (c *ctx) buildBoxes() {
 				r = Rect{b.ax, b.ay, b.w, b.h}
 				if b.kind == kAtomic || b.kind == kBlock {
 					bx.Margin = b.mar
+				}
+				if b.kind == kBlock && len(b.mcFrags) > 1 {
+					// a block split over columns reports one rectangle per column
+					bx.Frags = append(bx.Frags, b.colFrags()...)
 				}
 			}
 			if first {

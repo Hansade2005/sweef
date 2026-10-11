@@ -134,6 +134,7 @@ type lbox struct {
 	hiddenFlow                       bool
 	mcN                              int
 	mcSegs                           []mcSeg // vertical ranges where the columns apply (column-span splits them)
+	mcFrags                          []Rect  // per-column fragments of a block split across columns, relative to its bounding box origin
 	mcW, mcGap                       float64
 	legend                           *lbox
 	legendPad                        float64

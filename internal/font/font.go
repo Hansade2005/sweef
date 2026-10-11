@@ -47,6 +47,7 @@ type Face struct {
 	data   []byte
 	adv    map[rune]float64 // advance in font units (-1 = no glyph)
 	kern   map[[2]rune]float64
+	gids   map[rune]int
 	idx    int
 	ot     otCache
 	mOK    bool

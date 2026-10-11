@@ -26,6 +26,10 @@ type mcUnit struct {
 	botM        float64 // bot plus the trailing margin kept when a forced break follows
 	owner       *mcBlock
 	forceBefore bool
+	// box-decoration-break: clone: space the blocks that continue across a break
+	// before this unit repeat at the top of the new column (cPush) and at the
+	// bottom of the previous one (cRes)
+	cPush, cRes float64
 }
 
 type mcBlock struct {
@@ -202,6 +206,7 @@ func (c *ctx) mcFragment(b *lbox, kids []*lbox, n int, colW, gap, Y0, fixedH, h 
 		return 0, 1
 	}
 	c.mcMarkForced(root, units)
+	mcCloneSpace(root, units)
 	st := b.st
 	fillAuto := st.ColumnFill == "auto"
 	var starts []int
@@ -255,7 +260,7 @@ func (c *ctx) mcFragment(b *lbox, kids []*lbox, n int, colW, gap, Y0, fixedH, h 
 	}
 	startY := make([]float64, ncol)
 	for ci := range startY {
-		startY[ci] = units[starts[ci]].top
+		startY[ci] = units[starts[ci]].top - units[starts[ci]].cPush
 	}
 	startY[0] = 0 // the first column starts at the top of the segment (its first margin is kept)
 	colH := 0.0
@@ -263,6 +268,9 @@ func (c *ctx) mcFragment(b *lbox, kids []*lbox, n int, colW, gap, Y0, fixedH, h 
 		bot := u.bot
 		if i+1 < len(units) && units[i+1].forceBefore {
 			bot = u.botM
+		}
+		if i+1 < len(units) && units[i+1].col != u.col {
+			bot += units[i+1].cRes
 		}
 		colH = math.Max(colH, bot-startY[u.col])
 	}
@@ -280,6 +288,8 @@ func (c *ctx) mcFragment(b *lbox, kids []*lbox, n int, colW, gap, Y0, fixedH, h 
 		bb := mb.b
 		fx, fy := mb.x, mb.y+Y0
 		fw, fh := bb.w, bb.h
+		bb.mcFrags = nil
+		var frags []Rect // fragment rectangles in container coordinates
 		if len(mb.units) > 0 {
 			cmin, cmax := mb.units[0].col, mb.units[0].col
 			for _, u := range mb.units {
@@ -305,6 +315,17 @@ func (c *ctx) mcFragment(b *lbox, kids []*lbox, n int, colW, gap, Y0, fixedH, h 
 					y1 = bot
 				}
 				fx, fy, fw, fh = x0, y0, x1-x0, y1-y0
+				for ci := cmin; ci <= cmax; ci++ {
+					dx, _ := shift(ci)
+					top, bot := Y0, Y0+fragH
+					if ci == cmin {
+						top = mb.y + dyFirst
+					}
+					if ci == cmax {
+						bot = mb.y + bb.h + dyLast
+					}
+					frags = append(frags, Rect{mb.x + dx, top, bb.w, bot - top})
+				}
 			}
 			if cmin == cmax {
 				fw, fh = bb.w, bb.h
@@ -313,6 +334,9 @@ func (c *ctx) mcFragment(b *lbox, kids []*lbox, n int, colW, gap, Y0, fixedH, h 
 			fx, fy = mb.parent.finalX+(mb.x-mb.parent.x), mb.parent.finalY+(mb.y-mb.parent.y)
 		}
 		mb.finalX, mb.finalY = fx, fy
+		for _, f := range frags {
+			bb.mcFrags = append(bb.mcFrags, Rect{f.X - fx, f.Y - fy, f.W, f.H})
+		}
 		bb.x, bb.y = fx-px, fy-py
 		bb.w, bb.h = fw, fh
 		for _, ch := range mb.kids {
@@ -344,23 +368,27 @@ func (c *ctx) mcFragment(b *lbox, kids []*lbox, n int, colW, gap, Y0, fixedH, h 
 // first unit of every column.
 func mcBreaks(units []*mcUnit, H float64) []int {
 	starts := []int{0}
-	y0 := units[0].top
+	y0 := 0.0 // the first column starts at the top of the segment: its first margin counts
 	i := 0
 	for i < len(units) {
 		colStart := starts[len(starts)-1]
 		u := units[i]
 		if i > colStart && u.forceBefore {
 			starts = append(starts, i)
-			y0 = u.top
+			y0 = u.top - u.cPush
 			continue
 		}
-		if i > colStart && u.bot-y0 > H+0.01 {
+		res := 0.0
+		if i+1 < len(units) {
+			res = units[i+1].cRes
+		}
+		if i > colStart && u.bot+res-y0 > H+0.01 {
 			b := mcAdjustBreak(units, colStart, i)
 			if b <= colStart {
 				b = i
 			}
 			starts = append(starts, b)
-			y0 = units[b].top
+			y0 = units[b].top - units[b].cPush
 			i = b
 			continue
 		}
@@ -474,7 +502,7 @@ func (c *ctx) mcCollect(kids []*lbox, mb *mcBlock, ox, oy float64, units *[]*mcU
 		if k.ifc {
 			c.collectInlineKids(k)
 			for li, ln := range k.lines {
-				add(&mcUnit{blk: k, ln: ln, li: li, nl: len(k.lines), x: kb.x, y: kb.y + ln.y, w: k.w, h: ln.h})
+				add(&mcUnit{blk: k, ln: ln, li: li, nl: len(k.lines), x: kb.x + ln.x, y: kb.y + ln.y, w: k.w, h: ln.h})
 			}
 			continue
 		}
@@ -489,5 +517,22 @@ func (c *ctx) mcCollect(kids []*lbox, mb *mcBlock, ox, oy float64, units *[]*mcU
 			continue
 		}
 		c.mcCollect(k.kids, kb, kb.x, kb.y, units)
+	}
+}
+
+// mcCloneSpace fills mcUnit.cPush / cRes for the blocks with
+// box-decoration-break: clone that continue across a break.
+func mcCloneSpace(mb *mcBlock, units []*mcUnit) {
+	for _, k := range mb.kids {
+		if len(k.units) > 0 && k.b.st.BoxDecorationBreak == "clone" {
+			f, l := k.units[0].idx, k.units[len(k.units)-1].idx
+			t := k.b.bor[0] + k.b.pad[0]
+			bt := k.b.bor[2] + k.b.pad[2]
+			for i := f + 1; i <= l; i++ {
+				units[i].cPush += t
+				units[i].cRes += bt
+			}
+		}
+		mcCloneSpace(k, units)
 	}
 }

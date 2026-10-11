@@ -45,7 +45,8 @@ type sStyle struct {
 	weight             int
 	italic             bool
 	anchor             string
-	baseline           string
+	baseline           string // dominant-baseline (inherited)
+	alignBase, shift   string // alignment-baseline and baseline-shift (not inherited)
 	letterSp, wordSp   string
 	visible            bool
 	mStart, mMid, mEnd string
@@ -355,8 +356,13 @@ func (r *svgR) inherit(par sStyle, a map[string]string) sStyle {
 	}
 	if v, ok := get("dominant-baseline"); ok {
 		st.baseline = v
-	} else if v, ok := get("alignment-baseline"); ok {
-		st.baseline = v
+	}
+	st.alignBase, st.shift = "", ""
+	if v, ok := get("alignment-baseline"); ok {
+		st.alignBase = v
+	}
+	if v, ok := get("baseline-shift"); ok {
+		st.shift = v
 	}
 	if v, ok := get("letter-spacing"); ok {
 		st.letterSp = v

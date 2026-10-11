@@ -25,6 +25,7 @@ func (p *painter) paintInlineSVG(b *lbox, cr Rect, rad Radii) {
 		p.emit(PushClip{Rect: cr, Radii: rad})
 	}
 	p.emit(p.svgDraw(b, cr, doc))
+	p.paintForeign(b)
 	if clip {
 		p.emit(PopClip{})
 	}

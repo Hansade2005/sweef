@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>mask svg</title>
+<style>
+body { margin: 12px; font: 11px Arial, sans-serif; background: #fff; }
+.g { display: grid; grid-template-columns: repeat(8, 150px); gap: 6px; }
+.c { width: 100px; height: 60px; background: linear-gradient(135deg, #e44 0%, #fa0 50%, #26c 100%); border: 4px solid #333; padding: 8px; position: relative; }
+.c b { display: block; background: rgba(255,255,255,.8); padding: 2px; }
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<mask id="m1"><rect width="100" height="60" fill="#fff"/><circle cx="50" cy="30" r="25" fill="#444"/><rect x="10" y="10" width="30" height="20" fill="#000"/></mask>
+<mask id="m2" style="mask-type:alpha"><circle cx="60" cy="40" r="35" fill="#000"/></mask>
+<mask id="m3" maskContentUnits="objectBoundingBox"><rect x="0.1" y="0.1" width="0.8" height="0.5" fill="#fff"/><ellipse cx="0.5" cy="0.8" rx="0.3" ry="0.2" fill="#aaa"/></mask>
+</defs></svg>
+<div class="g">
+<div class="c" style="mask: url(#m1)"><b>svg mask lum</b></div>
+<div class="c" style="mask-image: url(#m2)"><b>svg mask alpha</b></div>
+<div class="c" style="mask-image: url(#m3)"><b>svg mask bbox</b></div>
+<div class="c" style="mask-image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48Y2lyY2xlIGN4PSIyMCIgY3k9IjIwIiByPSIxNCIgZmlsbD0iIzAwMCIvPjxyZWN0IHg9IjIiIHk9IjIiIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiIgZmlsbD0iIzg4OCIvPjwvc3ZnPg==); mask-size: 40px 40px; mask-repeat: repeat"><b>svg image</b></div>
+<div class="c" style="mask-image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzAwMCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiBmaWxsPSJ1cmwoI2cpIi8+PC9zdmc+); mask-mode: luminance; mask-size: 100% 100%"><b>svg grad image</b></div>
+<div class="c" style="mask-image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzAwMCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiBmaWxsPSJ1cmwoI2cpIi8+PC9zdmc+); mask-size: 100% 100%"><b>svg grad alpha</b></div>
+<div class="c" style="mask-image: url(#nothere)"><b>url missing</b></div>
+<div class="c" style="mask-image: url(#m1), linear-gradient(to right, #000, transparent); mask-composite: intersect"><b>mixed</b></div>
+<div class="c" style="-webkit-mask: url(#m2) no-repeat"><b>-webkit-mask url</b></div>
+<div class="c" style="border-radius: 30px; mask-image: linear-gradient(#000,#000)"><b>mask border-box</b></div>
+<div class="c" style="border-radius: 30px; mask-image: linear-gradient(#000,#000); mask-clip: padding-box"><b>mask padding clip radius</b></div>
+<div class="c" style="margin: 6px; mask-image: linear-gradient(#000,#000); mask-clip: margin-box; "><b>margin-box clip</b></div>
+<div class="c" style="mask-image: linear-gradient(#000,#000); mask-origin: fill-box; mask-clip: fill-box; "><b>fill-box</b></div>
+<div class="c" style="mask-image: linear-gradient(#000,#000); mask-origin: stroke-box; mask-clip: stroke-box; "><b>stroke-box</b></div>
+<div class="c" style="mask-image: linear-gradient(#000,#000); mask-origin: view-box; mask-clip: view-box; "><b>view-box</b></div>
+<div class="c" style="mask-image: linear-gradient(#000,#000); mask-size: 40px 30px; mask-repeat: no-repeat; mask-position-x: 80%; mask-position-y: 10px"><b>pos x y</b></div>
+</div>
+</body></html>

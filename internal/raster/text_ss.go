@@ -15,6 +15,10 @@ import (
 // unhinted and sit on FreeType's 26.6 grid, translated by the 1/4 pixel
 // subpixel position.
 
+// textFxMode selects the glyph scan converter: 0 fixed-point Skia edges,
+// 1 float snapped polygons, 2 exact curves (experiments only).
+var textFxMode = 0
+
 func aaaSnapY(y float64) float64 {
 	y = math.Floor(y*256+0.5) / 256
 	return math.Floor(y*4+0.5) / 4
@@ -389,6 +393,12 @@ func skiaGlyph(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Mask {
 	h := int(math.Ceil(maxY)) - oy
 	if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
 		return nil
+	}
+	if textFxMode == 0 {
+		return fxFillPath(p, IRect{ox, oy, ox + w, oy + h})
+	}
+	if textFxMode == 2 {
+		return RasterizePolys(p.Flatten(0.01), NonZero, IRect{ox, oy, ox + w, oy + h})
 	}
 	m := RasterizePolys(aaaFlatten(p), NonZero, IRect{ox, oy, ox + w, oy + h})
 	return m

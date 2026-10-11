@@ -306,6 +306,7 @@ func paintCases() []paintCase {
 				render.PopClip{},
 			}
 		}})
+	cases = append(cases, paintClipMaskCases()...)
 	return cases
 }
 

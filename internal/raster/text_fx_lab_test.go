@@ -35,6 +35,8 @@ var labFaces = []labFace{
 	{"DejaVuSerifSynthItalic", "italic 400 SZpx 'DejaVu Serif'", "DejaVu Serif", 400, true},
 }
 
+var labQuad [2][2]int
+
 var (
 	labSizes  = []int{9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 32, 48}
 	labGlyphs = []rune("oesg8OQSa")
@@ -174,6 +176,14 @@ func labCompare(ref image.Image, f labFace, fi, si int, gi int, face *font.Face)
 				st.g8++
 			}
 			if d > 24 {
+				qy, qx := 0, 0
+				if y-bdy >= (m.B.Y0+m.B.Y1)/2 {
+					qy = 1
+				}
+				if x-(bdx+4) >= (m.B.X0+m.B.X1)/2 {
+					qx = 1
+				}
+				labQuad[qy][qx]++
 				st.g24++
 			}
 			if d > 64 {
@@ -193,6 +203,28 @@ func TestGlyphLab(t *testing.T) {
 	fh.Close()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if v := os.Getenv("GLYPHLAB_MODE"); v != "" {
+		fmt.Sscan(v, &textFxMode)
+	}
+	fxEvenRound = os.Getenv("FX_EVEN") != ""
+	fxBigSnap = os.Getenv("FX_NOBIG") == ""
+	if v := os.Getenv("FX_BV"); v != "" {
+		fmt.Sscan(v, &fxBigVariant)
+	}
+	if v := os.Getenv("FX_SB"); v != "" {
+		fmt.Sscan(v, &fxShiftBias)
+	}
+	fxQuadOffset = os.Getenv("FX_QOFF") != ""
+	if v := os.Getenv("FX_DS"); v != "" {
+		fmt.Sscan(v, &fxDS)
+	}
+	fxQSnap = os.Getenv("FX_QNOSNAP") == ""
+	fxQNoSnapMid = os.Getenv("FX_NOMID") != ""
+	if v := os.Getenv("FX_THRESH"); v != "" {
+		var f float64
+		fmt.Sscan(v, &f)
+		fxBigThresh = int(f * fxOne)
 	}
 	if os.Getenv("GLYPHLAB_DUMP") != "" {
 		labDump(t, ref, os.Getenv("GLYPHLAB_DUMP"))
@@ -254,6 +286,7 @@ func TestGlyphLab(t *testing.T) {
 		}
 	}
 	sb.WriteString(line("TOTAL", tot) + "\n")
+	fmt.Fprintf(&sb, "cell-half counts >24 (rows top/bottom of cell, cols left/right): %v\n", labQuad)
 	if os.Getenv("GLYPHLAB_V") != "" {
 		sort.Slice(all, func(i, j int) bool { return all[i].g24 > all[j].g24 })
 		for i := 0; i < 40 && i < len(all); i++ {
@@ -311,6 +344,21 @@ func labDump(t *testing.T, ref image.Image, spec string) {
 			}
 		}
 		sb.WriteString("\n")
+	}
+	if os.Getenv("GLYPHLAB_RAW") != "" {
+		for _, which := range []string{"ours", "ref"} {
+			fmt.Fprintf(&sb, "%s (coverage)\n", which)
+			for y := m.B.Y0; y < m.B.Y1; y++ {
+				for x := m.B.X0 - 1; x < m.B.X1+1; x++ {
+					v := int(lut[m.At(x, y)])
+					if which == "ref" {
+						v = 255 - labGray(ref, x0+4+st.dx+x, top+st.dy+y)
+					}
+					fmt.Fprintf(&sb, "%4d", v)
+				}
+				sb.WriteString("\n")
+			}
+		}
 	}
 	t.Log(sb.String())
 }

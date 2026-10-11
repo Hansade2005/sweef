@@ -2,6 +2,7 @@ package render
 
 import (
 	"encoding/base64"
+	"image"
 	"math"
 	"net/url"
 	"sort"
@@ -24,6 +25,12 @@ type SVGNode struct {
 	Kids []*SVGNode
 	Text string
 	dom  *html.Node
+	// External resolution done at layout time through the Env: Img is the
+	// decoded raster of an <image>/<feImage> href, Sub the parsed SVG of an
+	// external .svg (SubID is the fragment of <use href="other.svg#id">).
+	Img   image.Image
+	Sub   *SVGDoc
+	SubID string
 }
 
 // SVGDoc is a resolved SVG scene.
@@ -38,6 +45,14 @@ type SVGDoc struct {
 	IntrW, IntrH, Ratio float64
 	dom                 map[*html.Node]*SVGNode
 	base                *style.Computed
+	// Base is the URL relative references of this scene resolve against; Src
+	// the markup of a standalone image (kept to re-evaluate @media for the
+	// size it is painted at); depth the nesting level of external documents.
+	Base     string
+	Src      string
+	HasMedia bool
+	depth    int
+	extDone  bool
 }
 
 // SVGDraw paints an SVG scene. The root's viewBox / preserveAspectRatio map

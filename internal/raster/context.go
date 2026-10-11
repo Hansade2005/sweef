@@ -59,6 +59,7 @@ type layerRec struct {
 type layerMeta struct {
 	opacity float64
 	blend   string
+	mask    *maskJob // set for layers opened by PushMask
 }
 
 type Context struct {

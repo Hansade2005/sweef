@@ -72,6 +72,7 @@ type Glyph struct {
 	R    rune
 	X    float64
 	Face *font.Face // face that has the glyph (fallback may differ per glyph)
+	GID  int        // additive: glyph id to draw instead of R's glyph (ligatures); 0 = use R
 }
 
 // TextRun draws shaped text. X, Y is the baseline origin.
