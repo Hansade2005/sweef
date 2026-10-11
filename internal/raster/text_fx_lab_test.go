@@ -394,6 +394,9 @@ func labApplyEnv() {
 	if v := os.Getenv("FX_SR"); v != "" {
 		fmt.Sscan(v, &fxSmallRound)
 	}
+	if v := os.Getenv("FX_CMIN"); v != "" {
+		fmt.Sscan(v, &fxCrossMin)
+	}
 	if v := os.Getenv("FX_CROSS"); v != "" {
 		fmt.Sscan(v, &fxCross)
 	}

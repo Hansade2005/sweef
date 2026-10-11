@@ -226,3 +226,33 @@ func TestDbgRows(t *testing.T) {
 		fmt.Printf("%3d %6d %6d %6d\n", y, sr, s1, s2)
 	}
 }
+
+func TestDbgWalk(t *testing.T) {
+	spec := os.Getenv("DBG_SPEC")
+	if spec == "" {
+		t.Skip()
+	}
+	p := strings.Split(spec, "/")
+	var fi, gi int
+	for i, f := range labFaces {
+		if f.name == p[0] {
+			fi = i
+		}
+	}
+	var sz int
+	fmt.Sscan(p[1], &sz)
+	for i, g := range labGlyphs {
+		if string(g) == p[2] {
+			gi = i
+		}
+	}
+	f := labFaces[fi]
+	face := font.Lookup(f.family, font.Style{Weight: f.weight, Italic: f.italic})
+	fxWalkTrace = func(ya, yb, ul, ur, ll, lr int) {
+		if float64(yb)/65536 > float64(os.Getenv("DBG_Y0")[0]-'0')*0+0 && ll >= lr-4 {
+			fmt.Printf("y %.3f..%.3f ul %.4f ur %.4f ll %.4f lr %.4f  cross=%v (%d)\n", float64(ya)/65536, float64(yb)/65536, float64(ul)/65536, float64(ur)/65536, float64(ll)/65536, float64(lr)/65536, ll > lr, ll-lr)
+		}
+	}
+	defer func() { fxWalkTrace = nil }()
+	skiaGlyph(Glyph{R: labGlyphs[gi], Face: face}, float64(sz), float64(sz), 0, false)
+}

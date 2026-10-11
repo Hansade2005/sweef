@@ -559,7 +559,9 @@ func fxFillPath(p *Path, clip IRect) *Mask {
 	return r.mask(NonZero)
 }
 
-var fxCross = 1
+var fxCross = 0
+var fxCrossMin = 0
+var fxWalkTrace func(ya, yb, ul, ur, ll, lr int)
 
 type fxAct struct {
 	xa, xb int
@@ -632,11 +634,17 @@ func fxWalk(r *rasterizer, edges []fxEdge, ox, oy float64) {
 				l, rr := act[left], act[i]
 				left = -1
 				ul, ur, ll, lr := l.xa, rr.xa, l.xb, rr.xb
+				if fxWalkTrace != nil {
+					fxWalkTrace(ya, yb, ul, ur, ll, lr)
+				}
 				if ul > ur {
 					continue
 				}
-				if ll > lr {
+				if ll > lr+fxCrossMin {
 					switch fxCross {
+					case 3:
+						a, b := fxMin(ul, ll), maxInt(ur, lr)
+						ul, ll, ur, lr = a, a, b, b
 					case 1:
 						ll, lr = ul, ur
 					case 2:
