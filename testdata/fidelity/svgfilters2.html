@@ -56,4 +56,10 @@ svg{background:#fff;border:1px solid #ccd}
 <div class="h" style="filter:url(#hf1) drop-shadow(4px 4px 3px #000a)">Chain</div>
 <svg width="150" height="110"><filter id="mo"><feMorphology operator="dilate" radius="3"/></filter><filter id="mo2"><feMorphology operator="erode" radius="2 1"/></filter><text x="10" y="40" font-size="30" font-weight="bold" filter="url(#mo)" fill="#369">Dil</text><text x="10" y="90" font-size="30" font-weight="bold" filter="url(#mo2)" fill="#963">Ero</text></svg>
 </div>
+<div class="row">
+<svg width="150" height="110"><filter id="ra" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="10" dy="0" stdDeviation="2" flood-color="#000"/></filter><rect x="40" y="25" width="60" height="40" fill="#39c" transform="rotate(30 70 45)" filter="url(#ra)"/></svg>
+<svg width="150" height="110"><filter id="rb" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="6 0"/></filter><rect x="40" y="25" width="60" height="40" fill="#c33" transform="rotate(45 70 45)" filter="url(#rb)"/></svg>
+<svg width="150" height="110"><filter id="rc" x="-30%" y="-30%" width="160%" height="160%"><feOffset dx="12" dy="6"/></filter><rect x="40" y="25" width="60" height="40" fill="#3a6" transform="skewX(25)" filter="url(#rc)"/></svg>
+<svg width="150" height="110"><filter id="rd" x="-30%" y="-30%" width="160%" height="160%"><feMorphology operator="dilate" radius="6 1"/></filter><rect x="50" y="30" width="40" height="30" fill="#a3c" transform="rotate(25 70 45)" filter="url(#rd)"/></svg>
+</div>
 </body></html>

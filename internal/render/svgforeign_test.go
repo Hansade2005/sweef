@@ -143,3 +143,34 @@ func TestSVGTextPathGeometry(t *testing.T) {
 		t.Fatalf("rotated glyph cells: %v", rr)
 	}
 }
+
+type imgEnv struct {
+	nilEnv
+	im image.Image
+}
+
+func (e imgEnv) Image(u string) image.Image {
+	if u == "http://x/pic.png" {
+		return e.im
+	}
+	return nil
+}
+
+func TestSVGImageHrefResolvedThroughEnv(t *testing.T) {
+	im := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	doc := parseHTML(t, `<body><svg width="100" height="100"><image id="i" href="pic.png" width="40" height="20"/></svg></body>`)
+	res := Layout(doc, Options{Width: 800, Height: 600, BaseURL: "http://x/p.html", Env: imgEnv{im: im}})
+	for _, op := range res.List {
+		if d, ok := op.(SVGDraw); ok {
+			for _, k := range d.Doc.Root.Kids {
+				if k.Tag == "image" {
+					if k.Img == nil {
+						t.Fatal("image href was not resolved through Env.Image")
+					}
+					return
+				}
+			}
+		}
+	}
+	t.Fatal("no image node in the scene")
+}

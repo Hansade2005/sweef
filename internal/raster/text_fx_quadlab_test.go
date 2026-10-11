@@ -3,6 +3,7 @@ package raster
 import (
 	"fmt"
 	"image/png"
+	"math"
 	"math/rand"
 	"os"
 	"strings"
@@ -16,7 +17,7 @@ import (
 const (
 	qlCell = 100
 	qlCols = 8
-	qlN    = 96
+	qlN    = 192
 )
 
 type qlShape struct{ x0, y0, x1, y1, x2, y2 float64 }
@@ -33,6 +34,18 @@ func qlShapes() []qlShape {
 		}
 		if i%3 == 2 {
 			s.x1 = s.x0
+		}
+		if i >= 96 { // shallow curves: control point close to the chord
+			a := qlShape{ox + f(8, 40), oy + f(8, 90), 0, 0, ox + f(55, 92), oy + f(8, 90)}
+			mx, my := (a.x0+a.x2)/2, (a.y0+a.y2)/2
+			dx, dy := a.x2-a.x0, a.y2-a.y0
+			l := math.Hypot(dx, dy)
+			off := f(0.5, 14)
+			if i%2 == 0 {
+				off = -off
+			}
+			a.x1, a.y1 = float64(int((mx-dy/l*off)*100))/100, float64(int((my+dx/l*off)*100))/100
+			s = a
 		}
 		out = append(out, s)
 	}

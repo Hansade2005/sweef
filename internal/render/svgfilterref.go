@@ -158,6 +158,9 @@ func (c *ctx) svgFilterRefs(n *html.Node, st *style.Computed) *style.Computed {
 			k++
 			continue
 		}
+		if !strings.HasSuffix(t, ")") {
+			continue
+		}
 		id := strings.TrimSpace(t[4 : len(t)-1])
 		id = strings.Trim(id, "'\"")
 		if i := strings.IndexByte(id, '#'); i >= 0 {

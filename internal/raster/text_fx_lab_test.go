@@ -38,11 +38,11 @@ var labFaces = []labFace{
 var labQuad [2][2]int
 
 var (
-	labSizes  = []int{9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 32, 48}
+	labSizes  = []int{9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 32, 48, 72, 100}
 	labGlyphs = []rune("oesg8OQSa")
 )
 
-const labPitch = 64
+const labPitch = 96
 
 func labRowH(size int) int { return size*3/2 + 10 }
 
@@ -353,6 +353,9 @@ func labDump(t *testing.T, ref image.Image, spec string) {
 }
 
 func labApplyEnv() {
+	if v := os.Getenv("GLYPHLAB_MODE"); v != "" {
+		fmt.Sscan(v, &textFxMode)
+	}
 	fxEvenRound = os.Getenv("FX_EVEN") != ""
 	fxBigSnap = os.Getenv("FX_NOBIG") == ""
 	if v := os.Getenv("FX_BV"); v != "" {
@@ -390,6 +393,9 @@ func labApplyEnv() {
 	}
 	if v := os.Getenv("FX_SR"); v != "" {
 		fmt.Sscan(v, &fxSmallRound)
+	}
+	if v := os.Getenv("FX_CROSS"); v != "" {
+		fmt.Sscan(v, &fxCross)
 	}
 	if v := os.Getenv("FX_THRESH"); v != "" {
 		var f float64

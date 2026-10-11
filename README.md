@@ -178,7 +178,7 @@ Measured against Chromium 1194 on this repo's fixtures (`go run ./tools/fidelity
 | Pixels (ink agreement with Chromium screenshots) | 97.7% overall; blog and landing pages 99.6% and 99.9% |
 | Page painter, 8 display-list fixtures | 96% to 100% of pixels within 8/255 (text case 99.9%) |
 | Canvas 2D, 40 fixtures | shapes and gradients 99.1%, text 99.2% within 8/255 |
-| SVG (paths, gradients, clips, masks, filters, markers) | icons page 97.6% ink, feature page 99.5% |
+| SVG (shapes, gradients, clips and basic-shape clip-path, masks, every filter primitive, markers, text on a path, per-glyph text positioning, `foreignObject`, nested and external images, `filter: url(#id)` on HTML) | 7 SVG pages: element boxes mean IoU 0.999; ink 97.6% to 99.8% |
 | WebGL, 76 fixtures | mean 99.9% of pixels within 4/255 (three.js 99.9%, PixiJS 99.99%, regl 100%) |
 | Web Audio, 26 offline graphs | sample-exact for filters, delay, convolver and panner; oscillators within 6e-4 |
 | Media elements, 21 scenarios | event order identical to Chromium; `canPlayType` matches in 67 of 67 recorded answers |
@@ -189,7 +189,7 @@ What is still different, honestly:
 
 - **Glyph edges.** Text uses Skia's analytic anti-aliasing, its coverage tables and GPOS kerning, so most glyphs match. About 1 to 3% of glyph pixels still differ on curve tops, and strokes and synthetic bold are approximations. HTML text does not yet use ligatures, bidi or Arabic joining (canvas text does).
 - **CSS not done:** `content-visibility: auto` skipping, `@container style()` queries, subgrid line names, CJK fallback metrics (WenQuanYi is not matched), vertical text with RTL or nested orthogonal flows.
-- **SVG not done:** `foreignObject`, `textPath`, `feTurbulence`, lighting and a few other filters.
+- **SVG not done:** `foreignObject` content is laid out and painted in SVG paint order but is not available inside `<pattern>`, `<mask>`, `<clipPath>` or `<use>`d symbols, and ancestor clip-paths do not clip its hit-testing; SVG text is unkerned, has no vertical writing modes and no ligatures or bidi; filters run in axis-aligned device space (no rotated filter regions), `BackgroundImage`/`FillPaint` inputs are empty, `kernelUnitLength` and `filterRes` are ignored; CSS `mask` image layers on SVG elements.
 - **clip-path / mask / multicol painting not done:** `clip-path` and `mask` on inline (non-atomic) elements, `mask-border`, `path()` and external-document `url()` in hit testing; `box-decoration-break: clone` on inline fragments; fragmented blocks that are tables, flex or grid containers are painted as one box per column fragment without reserving their own repeated edges.
 - **Codecs.** MP3, Vorbis, FLAC and PCM decode in pure Go. AAC, Opus, H.264, VP9 and AV1 need `ffmpeg` on the machine; without it they report unsupported like a browser without the codec. Video without ffmpeg shows VP8 key frames only.
 - **WebGL.** No compressed textures, `EXT_sRGB` or multi-draw; lines are 1 px; `sin` differs from SwiftShader in the last digit.

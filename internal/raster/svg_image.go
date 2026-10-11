@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/sweefbrowser/sweef/internal/render"
 )
@@ -20,7 +21,10 @@ type svgPic struct {
 	iw, ih float64
 }
 
-var svgDataDocs sync.Map // href -> *render.SVGDoc (or nil)
+var (
+	svgDataDocs  sync.Map // href -> *render.SVGDoc (or nil)
+	svgDataCount atomic.Int32
+)
 
 // dataSVGDoc parses a data: URI holding an SVG image.
 func dataSVGDoc(href string) *render.SVGDoc {
@@ -52,6 +56,10 @@ func dataSVGDoc(href string) *render.SVGDoc {
 				}
 			}
 		}
+	}
+	if svgDataCount.Add(1) > 512 {
+		svgDataDocs.Range(func(k, _ any) bool { svgDataDocs.Delete(k); return true })
+		svgDataCount.Store(0)
 	}
 	svgDataDocs.Store(href, doc)
 	return doc
@@ -136,4 +144,31 @@ func (r *svgR) drawImage(n *svgNode, st sStyle, m Matrix) {
 	defer r.c.Restore()
 	r.c.SetTransform(m)
 	r.drawPic(pic, x, y, w, h, n.A["preserveaspectratio"], st.imageRendering)
+}
+
+// drawForeign plays the HTML content of a <foreignObject>: a display list in
+// the object's user space, laid out by the CSS engine.
+func (r *svgR) drawForeign(n *svgNode, m Matrix) {
+	if len(n.Ops) == 0 {
+		return
+	}
+	p := r.painter
+	if p == nil {
+		p = &Painter{c: r.c, dpr: r.c.Transform().MaxScale()}
+	}
+	c := r.c
+	depth, ld := c.SaveDepth(), c.LayerDepth()
+	c.Save()
+	c.SetTransform(m)
+	for _, op := range n.Ops {
+		p.op(op)
+	}
+	// unbalanced ops must not leak into the rest of the scene
+	for c.LayerDepth() > ld {
+		c.EndLayer(1, SourceOver)
+	}
+	for c.SaveDepth() > depth+1 {
+		c.Restore()
+	}
+	c.Restore()
 }

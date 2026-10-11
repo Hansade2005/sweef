@@ -1,6 +1,10 @@
 package raster
 
-import "math"
+import (
+	"math"
+	"slices"
+	"sort"
+)
 
 // Fixed-point edge setup after Skia's SkAnalyticEdge / SkEdge (SkFixed 16.16,
 // FDot6 26.6, forward differencing for quads and cubics). The coverage walk
@@ -551,16 +555,98 @@ func fxFillPath(p *Path, clip IRect) *Mask {
 	closeContour()
 	r := newRasterizer(IRect{b.X0, b.Y0, b.X1, b.Y1})
 	defer r.release()
+	fxWalk(r, fb.edges, ox, oy)
+	return r.mask(NonZero)
+}
+
+var fxCross = 1
+
+type fxAct struct {
+	xa, xb int
+	e      *fxEdge
+}
+
+// fxWalk accumulates the coverage of the edges row segment by row segment
+// the way SkScan_AAAPath's aaa_walk_edges does: the active edges are ordered
+// by x, pairs bound intervals, and every interval of every segment is a
+// trapezoid whose corners come from the edges' fixed-point x positions.
+func fxWalk(r *rasterizer, edges []fxEdge, ox, oy float64) {
+	if len(edges) == 0 {
+		return
+	}
+	ys := make([]int, 0, len(edges)*2+64)
+	minY, maxY := edges[0].y0, edges[0].y1
+	for _, e := range edges {
+		ys = append(ys, e.y0, e.y1)
+		minY = fxMin(minY, e.y0)
+		maxY = maxInt(maxY, e.y1)
+	}
+	for y := (minY>>16 + 1) << 16; y < maxY; y += fxOne {
+		ys = append(ys, y)
+	}
+	sort.Ints(ys)
+	ys = slices.Compact(ys)
 	const k = 1.0 / fxOne
-	for _, e := range fb.edges {
-		xe := e.x + fxMul(e.slope, e.y1-e.y0)
-		x0, y0 := float64(e.x)*k+ox, float64(e.y0)*k+oy
-		x1, y1 := float64(xe)*k+ox, float64(e.y1)*k+oy
-		if e.wind > 0 {
-			r.line(x0, y0, x1, y1)
-		} else {
-			r.line(x1, y1, x0, y0)
+	order := make([]int, len(edges))
+	for i := range order {
+		order[i] = i
+	}
+	sort.Slice(order, func(a, b int) bool { return edges[order[a]].y0 < edges[order[b]].y0 })
+	next := 0
+	var live []int
+	var act []fxAct
+	for n := 0; n+1 < len(ys); n++ {
+		ya, yb := ys[n], ys[n+1]
+		for next < len(order) && edges[order[next]].y0 <= ya {
+			live = append(live, order[next])
+			next++
+		}
+		act = act[:0]
+		keep := live[:0]
+		for _, i := range live {
+			e := &edges[i]
+			if e.y1 <= ya {
+				continue
+			}
+			keep = append(keep, i)
+			act = append(act, fxAct{e.x + fxMul(e.slope, ya-e.y0), e.x + fxMul(e.slope, yb-e.y0), e})
+		}
+		live = keep
+		if len(act) < 2 {
+			continue
+		}
+		sort.SliceStable(act, func(i, j int) bool {
+			if act[i].xa != act[j].xa {
+				return act[i].xa < act[j].xa
+			}
+			return act[i].e.slope < act[j].e.slope
+		})
+		w := 0
+		left := -1
+		for i := range act {
+			prev := w
+			w += act[i].e.wind
+			if prev == 0 && w != 0 {
+				left = i
+			} else if prev != 0 && w == 0 && left >= 0 {
+				l, rr := act[left], act[i]
+				left = -1
+				ul, ur, ll, lr := l.xa, rr.xa, l.xb, rr.xb
+				if ul > ur {
+					continue
+				}
+				if ll > lr {
+					switch fxCross {
+					case 1:
+						ll, lr = ul, ur
+					case 2:
+						ll = lr
+					}
+				}
+				fy0, fy1 := float64(ya)*k+oy, float64(yb)*k+oy
+				r.line(float64(ul)*k+ox, fy0, float64(ll)*k+ox, fy1)
+				r.line(float64(lr)*k+ox, fy1, float64(ur)*k+ox, fy0)
+			}
 		}
 	}
-	return r.mask(NonZero)
 }

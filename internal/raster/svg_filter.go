@@ -208,6 +208,12 @@ func (fx *fxState) subregion(p *svgNode, def IRect) (IRect, Rect) {
 	return fx.devRect(x, y, w, h).Intersect(fx.region), u
 }
 
+// vec maps a user-space offset (dx, dy) to a device-space vector.
+func (fx *fxState) vec(dx, dy float64) (float64, float64) {
+	dx, dy = dx*fx.pux, dy*fx.puy
+	return fx.m[0]*dx + fx.m[2]*dy, fx.m[1]*dx + fx.m[3]*dy
+}
+
 func (fx *fxState) num(p *svgNode, k string, d float64) float64 {
 	if v, ok := svgNumber(p.A[k]); ok {
 		return v
@@ -333,13 +339,13 @@ func (fx *fxState) primitive(p *svgNode, lin bool) (*Surface, IRect) {
 	case "feoffset":
 		inDef("in")
 		in := fx.input(p, "in", lin)
-		dx, dy := fx.num(p, "dx", 0)*fx.pux*fx.scx, fx.num(p, "dy", 0)*fx.puy*fx.scy
+		dx, dy := fx.vec(fx.num(p, "dx", 0), fx.num(p, "dy", 0))
 		return offsetSurface(in, dx, dy), def
 	case "fedropshadow":
 		inDef("in")
 		in := fx.input(p, "in", lin)
 		sx, sy := fx.pairs(p, "stddeviation", 2)
-		dx, dy := fx.num(p, "dx", 2)*fx.pux*fx.scx, fx.num(p, "dy", 2)*fx.puy*fx.scy
+		dx, dy := fx.vec(fx.num(p, "dx", 2), fx.num(p, "dy", 2))
 		sh := cloneSurface(in)
 		col := RGBA8(0, 0, 0, 255)
 		if v, ok := p.A["flood-color"]; ok {
@@ -898,4 +904,66 @@ func (fx *fxState) lighting(p *svgNode, in *Surface, sub IRect, lin bool) *Surfa
 		}
 	})
 	return out
+}
+
+// drawFilteredLocal draws n with its SVG filter evaluated in the element's
+// own (axis-aligned, scaled) space: blur directions, offsets, morphology
+// radii and displacement follow the element's rotation. The filtered layer is
+// then mapped to the device with the rotation part of m.
+func (r *svgR) drawFilteredLocal(n *svgNode, st sStyle, m Matrix, filterS, maskS string, opacity float64, blend string, isRoot bool) bool {
+	sx, sy := math.Hypot(m[0], m[1]), math.Hypot(m[2], m[3])
+	if sx <= 1e-9 || sy <= 1e-9 {
+		return false
+	}
+	S := Scale(sx, sy)
+	spec := r.prepareFilter(n, &st, filterS, S)
+	if spec == nil || spec.region.Empty() {
+		return false
+	}
+	reg := spec.region
+	w, h := reg.W(), reg.H()
+	if w <= 0 || h <= 0 || w*h > 36_000_000 {
+		return false
+	}
+	ls := Translate(-float64(reg.X0), -float64(reg.Y0)).Mul(S)
+	spec = r.prepareFilter(n, &st, filterS, ls)
+	if spec == nil || spec.region.Empty() {
+		return false
+	}
+	surf := NewSurface(w, h)
+	tc := NewContextSurface(surf)
+	tc.SetSmoothing(true, QualityLow)
+	tc.SetTransform(ls)
+	sr := r.sub(tc)
+	sr.drawContent(n, st, ls, isRoot)
+	sr.runFilterAt(spec, n, &st, ls, 0, 0)
+	if maskS != "" {
+		if id, ok := urlRef(maskS); ok {
+			if mn := r.doc.ByID[id]; mn != nil && mn.Tag == "mask" {
+				sr.applyMask(mn, n, &st, ls)
+			}
+		}
+	}
+	r.nodes = sr.nodes
+	inv, ok := S.Invert()
+	if !ok {
+		return false
+	}
+	// layer pixel -> device: undo the layer origin and the scale, apply m
+	P := m.Mul(inv).Mul(Translate(float64(reg.X0), float64(reg.Y0)))
+	op := SourceOver
+	if blend != "" {
+		if o, ok := ParseOp(blend); ok {
+			op = o
+		}
+	}
+	c := r.c
+	c.Save()
+	c.SetTransform(P)
+	c.SetGlobalAlpha(opacity)
+	c.SetOp(op)
+	c.SetSmoothing(true, QualityLow)
+	c.DrawImage(surf, 0, 0, float64(w), float64(h), 0, 0, float64(w), float64(h))
+	c.Restore()
+	return true
 }

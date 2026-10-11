@@ -396,6 +396,9 @@ func skiaGlyph(g Glyph, sizeX, sizeY float64, sub int, skew bool) *Mask {
 	if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
 		return nil
 	}
+	if textFxMode == 3 {
+		return saaFillPath(p, IRect{ox, oy, ox + w, oy + h})
+	}
 	if textFxMode == 0 {
 		return fxFillPath(p, IRect{ox, oy, ox + w, oy + h})
 	}

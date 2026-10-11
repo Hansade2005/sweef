@@ -69,6 +69,8 @@ type svgR struct {
 	active map[*svgNode]bool
 	draw   render.SVGDraw
 	nodes  int
+	// painter plays display lists nested in the scene (foreignObject)
+	painter *Painter
 }
 
 func (r *svgR) sub(c *Context) *svgR {
@@ -552,7 +554,7 @@ func viewBoxMatrix(vb []float64, par string, w, h float64) (Matrix, bool) {
 // ---- entry point ---------------------------------------------------------------------
 
 func (p *Painter) svgDraw(o render.SVGDraw) {
-	svgDrawOn(p.c, o)
+	svgDrawOnP(p, p.c, o)
 }
 
 // RenderSVG rasterizes an SVG scene into a new w x h surface (device pixels),
@@ -569,7 +571,9 @@ func RenderSVG(doc *render.SVGDoc, w, h int, color render.Color) *Surface {
 	return s
 }
 
-func svgDrawOn(c *Context, o render.SVGDraw) {
+func svgDrawOn(c *Context, o render.SVGDraw) { svgDrawOnP(nil, c, o) }
+
+func svgDrawOnP(pt *Painter, c *Context, o render.SVGDraw) {
 	if o.Doc == nil || o.Doc.Root == nil || o.Dst.W <= 0 || o.Dst.H <= 0 {
 		return
 	}
@@ -587,7 +591,7 @@ func svgDrawOn(c *Context, o render.SVGDraw) {
 		}
 		c.Restore()
 	}()
-	r := &svgR{c: c, doc: o.Doc, draw: o, active: map[*svgNode]bool{}, dpr: c.Transform().MaxScale()}
+	r := &svgR{c: c, doc: o.Doc, draw: o, active: map[*svgNode]bool{}, dpr: c.Transform().MaxScale(), painter: pt}
 	r.root = baseStyle(o)
 	r.root = r.inherit(r.root, o.Doc.Inherit)
 	root := o.Doc.Root
@@ -620,7 +624,7 @@ func nonRendered(tag string) bool {
 	switch tag {
 	case "defs", "clippath", "mask", "marker", "pattern", "lineargradient", "radialgradient", "filter", "style", "title", "desc",
 		"metadata", "script", "symbol", "stop", "fegaussianblur", "feoffset", "fedropshadow", "fecolormatrix", "feblend", "femerge",
-		"feflood", "fecomposite", "femergenode", "fecomponenttransfer", "feimage", "feturbulence", "femorphology", "foreignobject":
+		"feflood", "fecomposite", "femergenode", "fecomponenttransfer", "feimage", "feturbulence", "femorphology":
 		return true
 	}
 	return false
@@ -675,10 +679,7 @@ func (r *svgR) drawChildren(n *svgNode, st sStyle, m Matrix) {
 			if k.Tag == "#text" || nonRendered(k.Tag) {
 				continue
 			}
-			if tl, ok := k.A["systemlanguage"]; ok && !strings.HasPrefix(strings.ToLower(tl), "en") {
-				continue
-			}
-			if _, ok := k.A["requiredextensions"]; ok {
+			if !svgConditionsPass(k) {
 				continue
 			}
 			r.drawNode(k, r.inherit(st, k.A), m, false)
@@ -734,6 +735,9 @@ func (r *svgR) drawNode(n *svgNode, st sStyle, m Matrix, isRoot bool) {
 		return
 	}
 	if v := n.A["display"]; v == "none" {
+		return
+	}
+	if !svgConditionsPass(n) {
 		return
 	}
 	if r.depth > 40 {
@@ -801,6 +805,14 @@ func (r *svgR) drawNode(n *svgNode, st sStyle, m Matrix, isRoot bool) {
 			return
 		}
 	}
+	if filt != nil && !filt.region.Empty() && (math.Abs(m[1]) > 1e-9 || math.Abs(m[2]) > 1e-9) {
+		// rotated or skewed: the filter runs in the element's own axes
+		// (scaled by the transform's scale), then the result is placed with
+		// the remaining rotation, like Skia does
+		if r.drawFilteredLocal(n, st, m, filterS, maskS, opacity, blend, isRoot) {
+			return
+		}
+	}
 	var cssFilters []Filter
 	if filterS != "" && filt == nil {
 		if fl, ok := ParseFilterList(filterS, st.color); ok {
@@ -849,6 +861,8 @@ func (r *svgR) drawContent(n *svgNode, st sStyle, m Matrix, isRoot bool) {
 		r.drawUse(n, st, m)
 	case "image":
 		r.drawImage(n, st, m)
+	case "foreignobject":
+		r.drawForeign(n, m)
 	case "text":
 		r.drawText(n, st, m)
 	case "rect", "circle", "ellipse", "line", "polyline", "polygon", "path":
@@ -1168,7 +1182,7 @@ func (r *svgR) bbox(n *svgNode, st *sStyle) (Rect, bool) {
 		tm := r.nodeTransform(t, &ts)
 		b, _ = transformRect(b, Translate(x, y).Mul(tm))
 		return b, true
-	case "image":
+	case "image", "foreignobject":
 		w, h := r.attrLen(n, "width", 'x', st, 0), r.attrLen(n, "height", 'y', st, 0)
 		return Rect{r.attrLen(n, "x", 'x', st, 0), r.attrLen(n, "y", 'y', st, 0), w, h}, w > 0 && h > 0
 	case "text":
@@ -1209,4 +1223,23 @@ func (r *svgR) groupBBox(n *svgNode, st *sStyle) (Rect, bool) {
 		out = Rect{x0, y0, x1 - x0, y1 - y0}
 	}
 	return out, have
+}
+
+// svgConditionsPass evaluates the conditional processing attributes of n:
+// requiredExtensions with a value is never satisfied, systemLanguage must list
+// a language the user has (English).
+func svgConditionsPass(n *svgNode) bool {
+	if v, ok := n.A["requiredextensions"]; ok && strings.TrimSpace(v) != "" {
+		return false
+	}
+	if v, ok := n.A["systemlanguage"]; ok {
+		for _, l := range strings.Split(v, ",") {
+			l = strings.ToLower(strings.TrimSpace(l))
+			if l == "en" || strings.HasPrefix(l, "en-") {
+				return true
+			}
+		}
+		return false
+	}
+	return true
 }

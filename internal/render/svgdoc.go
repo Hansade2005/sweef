@@ -32,6 +32,10 @@ type SVGNode struct {
 	Img   image.Image
 	Sub   *SVGDoc
 	SubID string
+	// Ops is the display list of a <foreignObject>'s HTML content in the
+	// object's user space; the rasterizer plays it where the element sits in
+	// the SVG paint order, under the ancestors' transforms, clips and effects.
+	Ops []Op
 }
 
 // SVGDoc is a resolved SVG scene.
@@ -544,7 +548,8 @@ func (c *ctx) svgEnsureExt(doc *SVGDoc) {
 			if i := strings.IndexByte(abs, '#'); i >= 0 {
 				abs, frag = abs[:i], abs[i+1:]
 			}
-			if n.Tag != "use" {
+			isSVG := strings.HasSuffix(strings.ToLower(strings.SplitN(strings.SplitN(abs, "?", 2)[0], "#", 2)[0]), ".svg")
+			if n.Tag != "use" && !isSVG {
 				if im := c.env.Image(abs); im != nil {
 					n.Img = im
 					break

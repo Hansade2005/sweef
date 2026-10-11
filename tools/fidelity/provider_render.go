@@ -60,6 +60,7 @@ func (e *httpEnv) Image(u string) image.Image {
 	e.cache[u] = im
 	return im
 }
+
 // SVGSource lets layout resolve <img src=*.svg>, <use href=x.svg#id> and
 // <image href=x.svg> through the same fetch.
 func (e *httpEnv) SVGSource(u string) (string, bool) {

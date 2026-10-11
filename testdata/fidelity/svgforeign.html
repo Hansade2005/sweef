@@ -28,4 +28,21 @@ svg{background:#f4f4f8;border:1px solid #ccd}
 <foreignObject x="10" y="80" width="180" height="60"><ul xmlns="http://www.w3.org/1999/xhtml" style="margin:0;padding-left:18px;font:12px serif"><li>one</li><li>two <a href="#">link</a></li></ul></foreignObject>
 </svg>
 </div>
+<div class="row">
+<svg width="260" height="130">
+<rect x="0" y="0" width="260" height="130" fill="#fed"/>
+<foreignObject x="10" y="10" width="120" height="60"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;background:#38c;color:#fff;font:bold 16px Arial;padding:6px;box-sizing:border-box">under the circle</div></foreignObject>
+<circle cx="110" cy="50" r="35" fill="#c33" fill-opacity=".8"/>
+<g opacity=".5"><foreignObject x="140" y="10" width="110" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;background:#2a6;color:#000;font:14px Arial">group opacity</div></foreignObject></g>
+<foreignObject x="10" y="80" width="110" height="40" style="opacity:.6"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;background:#a3c;color:#fff;font:14px Arial">own opacity</div></foreignObject>
+<foreignObject x="140" y="75" width="110" height="45" style="clip-path:circle(30px at 50% 50%)"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;background:#e90;font:14px Arial">clipped</div></foreignObject>
+</svg>
+<svg width="200" height="130">
+<rect width="200" height="130" fill="#dfe"/>
+<foreignObject x="10" y="10" width="180" height="50" visibility="hidden"><div xmlns="http://www.w3.org/1999/xhtml" style="background:#f00">hidden</div></foreignObject>
+<foreignObject x="10" y="10" width="180" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="position:relative;background:#cde;height:100%"><span style="position:absolute;right:4px;bottom:4px;background:#fc0">abs</span> flow text <input style="width:60px" value="inp"></div></foreignObject>
+<foreignObject x="10" y="70" width="0" height="40"><div xmlns="http://www.w3.org/1999/xhtml">zero width</div></foreignObject>
+<foreignObject x="10" y="70" width="180" height="50" requiredExtensions="http://example.com/none"><div xmlns="http://www.w3.org/1999/xhtml" style="background:#fcc">required ext</div></foreignObject>
+</svg>
+</div>
 </body></html>

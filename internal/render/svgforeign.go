@@ -154,7 +154,12 @@ func (c *ctx) layoutForeign(owner *lbox, n *html.Node, m m6, vw, vh float64, st,
 		cp.Transform = []style.TOp{op}
 	}
 	cp.TransformOrigin = [2]style.Length{style.Px(0), style.Px(0)}
-	cp.Opacity, cp.OpacitySet = st.Opacity, st.OpacitySet
+	// the SVG painter applies opacity, filter, clip-path and mask of the
+	// foreignObject itself (it reads them from the scene)
+	cp.Opacity, cp.OpacitySet = 1, false
+	cp.Filter, cp.BackdropFilter = nil, nil
+	cp.MixBlend = "normal"
+	cp.ClipPath, cp.ClipPathV, cp.MaskImage, cp.Mask = false, nil, false, nil
 	zero := style.Px(0)
 	cp.Margin = [4]style.Length{zero, zero, zero, zero}
 	cp.Inset = [4]style.Length{}
@@ -185,9 +190,28 @@ func (c *ctx) layoutForeign(owner *lbox, n *html.Node, m m6, vw, vh float64, st,
 	c.fo[owner] = append(c.fo[owner], wb)
 }
 
-// paintForeign emits the foreignObject content of an inline svg.
-func (p *painter) paintForeign(b *lbox) {
-	for _, w := range p.c.fo[b] {
-		p.paintSC(w, false)
+// paintForeign captures the display list of each foreignObject of an inline
+// svg into its scene node; the scene plays it in SVG paint order.
+func (p *painter) paintForeign(b *lbox, doc *SVGDoc) {
+	ws := p.c.fo[b]
+	if len(ws) == 0 {
+		return
+	}
+	for _, w := range ws {
+		ops := p.capture(func() { p.paintSC(w, false) })
+		// the wrapper's own matrix is the user-space matrix the scene already
+		// applies: drop it
+		if len(ops) >= 2 {
+			if _, ok := ops[0].(PushTransform); ok {
+				if _, ok := ops[len(ops)-1].(PopTransform); ok {
+					ops = ops[1 : len(ops)-1]
+				}
+			}
+		}
+		if doc != nil {
+			if sn := doc.dom[w.n]; sn != nil {
+				sn.Ops = ops
+			}
+		}
 	}
 }

@@ -12,7 +12,7 @@ import (
 // and the steps below run over it when it closes.
 
 type layerStep struct {
-	css []Filter       // a run of plain CSS filter functions
+	css []Filter // a run of plain CSS filter functions
 	ref *render.SVGFilterRef
 	box Rect // border box (user space of ctm)
 	ctm Matrix
