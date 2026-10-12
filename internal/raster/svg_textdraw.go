@@ -211,7 +211,7 @@ func fragmentsOf(placed []textGlyph) []fragment {
 		if k := len(frs) - 1; k >= 0 {
 			f := &frs[k]
 			pv := &f.gl[len(f.gl)-1]
-			if pv.node == p.node && pv.st == p.st && pv.plain() && p.plain() && pv.y == p.y && pv.size == p.size &&
+			if !p.fragStart && pv.node == p.node && pv.st == p.st && pv.plain() && p.plain() && pv.y == p.y && pv.size == p.size &&
 				math.Abs(pv.x+pv.w-p.x) < 1e-6 && math.Abs(pv.w-pv.nat) < 1e-6 && math.Abs(p.w-p.nat) < 1e-6 {
 				f.gl = append(f.gl, p)
 				continue
@@ -264,6 +264,9 @@ func fragmentPGs(fr fragment, xf svgTextXf) []svgPG {
 		p := &fr.gl[i]
 		if i == 0 || !p.plain() {
 			fx = xf.frag(p.x, p.y, p.angle, p.sx, p.pivX)
+			if svgTextDebug {
+				fmt.Fprintf(os.Stderr, "F %q x=%.5f y=%.5f ang=%.4f piv=%.5f\n", p.r, p.x, p.y, p.angle, p.pivX)
+			}
 			off = 0
 		}
 		if !(p.skip || strings.TrimSpace(string(p.r)) == "") {

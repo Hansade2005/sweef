@@ -2,7 +2,6 @@ package raster
 
 import (
 	"math"
-	"os"
 	"strings"
 
 	"github.com/sweefbrowser/sweef/internal/font"
@@ -39,6 +38,7 @@ type textGlyph struct {
 	skew      bool    // synthetic italic
 	nom       int     // index of the addressable character
 	pivX      float64 // rotation pivot (x)
+	fragStart bool    // starts a new painted fragment
 }
 
 func (g *textGlyph) plain() bool { return g.angle == 0 && g.sx == 1 }
@@ -162,12 +162,8 @@ func shapeSVGRun(spec FontSpec, rs []rune, letterSp, wordSp float64) svgRun {
 		if r == ' ' {
 			out.ex[i] += wordSp
 		}
-		fl := pen
-		if os.Getenv("SVG_ADVFLOOR") != "" {
-			fl = math.Floor(pen*64+1e-6) / 64
-		}
-		out.adv[i] = fl - prev
-		prev = fl
+		out.adv[i] = pen - prev
+		prev = pen
 	}
 	return out
 }
@@ -221,9 +217,8 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 		if t == nil || t.Tag != "path" {
 			return nil
 		}
-		sp := &render.SVGTextPath{Contours: render.SVGPathContours(t.A["d"])}
-		sp.Start = render.SVGParsePct(ch.Path.A["startoffset"], sp.Length())
-		sp.Scale(k)
+		sp := render.NewSVGTextPath(t.A["d"], k)
+		sp.Start = render.SVGParsePct(ch.Path.A["startoffset"], sp.Length()/k) * k
 		paths[ch.Path] = sp
 	}
 	// shaping runs: consecutive characters with the same font and spacing
@@ -267,6 +262,27 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 		}
 		i = j
 	}
+	// Blink splits the text into fragments (text items, and every character
+	// with an entry in a position list or on a path); the width of a fragment
+	// is ceiled to 1/64 and the next fragment starts after it.
+	fragStart := make([]bool, len(chars))
+	advs := make([]float64, len(chars))
+	for i := range chars {
+		fragStart[i] = i == 0 || chars[i].Node != chars[i-1].Node || chars[i].Explicit || chars[i].Path != nil
+		advs[i] = shaped[i].ex[0]
+	}
+	for a := 0; a < len(chars); {
+		b := a + 1
+		for b < len(chars) && !fragStart[b] {
+			b++
+		}
+		var sum float64
+		for i := a; i < b; i++ {
+			sum += shaped[i].ex[0]
+		}
+		advs[b-1] += math.Ceil(sum*64-1e-9)/64 - sum
+		a = b
+	}
 	ins := make([]render.SVGTextIn, len(chars))
 	nats := make([]float64, len(chars))
 	for i, ch := range chars {
@@ -275,8 +291,8 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 			sty = st
 		}
 		sr := &shaped[i]
-		adv := sr.adv[0]
-		nats[i] = adv
+		adv := advs[i]
+		nats[i] = sr.ex[0]
 		var off float64
 		fsK := sr.size
 		if sty.alignBase != "" && sty.alignBase != "baseline" && sty.alignBase != "auto" {
@@ -323,7 +339,7 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 		}
 		sr := &shaped[i]
 		out = append(out, textGlyph{r: chars[i].R, g: sr.glyph[0], skip: sr.skip[0], st: sty, node: chars[i].Node,
-			x: p.X, y: p.Y, angle: p.Angle, sx: p.ScaleX, w: p.Adv, nat: nats[i], ex: sr.ex[0], asc: sr.asc, desc: sr.desc,
+			x: p.X, y: p.Y, angle: p.Angle, sx: p.ScaleX, w: p.Adv, nat: nats[i], ex: sr.ex[0], fragStart: fragStart[i], asc: sr.asc, desc: sr.desc,
 			size: sr.size, fake: sr.fake, skew: sr.skew, nom: i})
 	}
 	byNom := make(map[int]*textGlyph, len(out))
@@ -335,7 +351,7 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 		g.pivX = g.x
 		// the pivot is the character position Blink reports: the run start
 		// plus the floored offset
-		if st0 := byNom[runOf[g.nom]]; st0 != nil && os.Getenv("SVG_PIVRAW") == "" {
+		if st0 := byNom[runOf[g.nom]]; st0 != nil {
 			g.pivX = st0.x + float64(lu64(g.x)-lu64(st0.x))
 		}
 	}

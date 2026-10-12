@@ -3,7 +3,7 @@ package hevc
 // In-loop deblocking filter (8.7.2), applied to a whole picture after all of
 // its slices have been decoded.
 
-var dbgNoDeblock bool
+var dbgNoDeblock, dbgNoVcopy bool
 var dbgEdge func(d *Decoder, pic *Picture, vertical bool, xq, yq int, e uint8)
 var dbgDeblock func(pic *Picture, ci int, vertical bool, cx, cy, bs, qpL, tc int, noP, noQ bool)
 
@@ -60,27 +60,6 @@ func motionBS(a, b *mvField) uint8 {
 	return 1
 }
 
-func (d *Decoder) deblockPicture(pic *Picture) {
-	s := pic.sps
-	pp := d.apps
-	if pp == nil || s != d.asps || len(d.slices) == 0 {
-		return
-	}
-	d.sp, d.pp = s, pp
-	any := false
-	for _, sh := range d.slices {
-		if !sh.deblockDisabled {
-			any = true
-			break
-		}
-	}
-	if !any || dbgNoDeblock {
-		return
-	}
-	d.deblockPass(pic, true)
-	d.deblockPass(pic, false)
-}
-
 func (d *Decoder) sliceOfCtb(ctb int) *sliceHeader {
 	i := d.ctbSliceIdx[ctb]
 	if i < 0 || int(i) >= len(d.slices) {
@@ -89,137 +68,186 @@ func (d *Decoder) sliceOfCtb(ctb int) *sliceHeader {
 	return d.slices[i]
 }
 
-func (d *Decoder) deblockPass(pic *Picture, vertical bool) {
+// deblockUnit filters the edge segment on the left (vertical) or top
+// (horizontal) side of the 4x4 unit (bx, by): the luma segment of 4 samples
+// and, when the edge lies on the chroma 8 sample grid and has strength 2, the
+// 4 chroma samples starting at the same position.
+func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma, doChroma bool) {
 	s, pp := d.sp, d.pp
-	w4, h4 := s.wTb4, s.hTb4
+	w4 := s.wTb4
+	if bx >= w4 || by >= s.hTb4 {
+		return
+	}
+	var e uint8
+	if vertical {
+		if bx&1 != 0 || bx == 0 {
+			return
+		}
+		e = d.edge[by*w4+bx] & 3
+	} else {
+		if by&1 != 0 || by == 0 {
+			return
+		}
+		e = (d.edge[by*w4+bx] >> 2) & 3
+	}
+	if e == 0 {
+		return
+	}
 	l2c := uint(s.log2Ctb)
 	l2m := uint(s.log2MinCb)
-	cat := s.chromaArrayType
-	for by := 0; by < h4; by++ {
-		for bx := 0; bx < w4; bx++ {
-			var e uint8
-			if vertical {
-				if bx&1 != 0 || bx == 0 {
-					continue
-				}
-				e = d.edge[by*w4+bx] & 3
-			} else {
-				if by&1 != 0 || by == 0 {
-					continue
-				}
-				e = (d.edge[by*w4+bx] >> 2) & 3
-			}
-			if e == 0 {
-				continue
-			}
-			xq, yq := bx<<2, by<<2
-			xp, yp := xq, yq
-			if vertical {
-				xp--
-			} else {
-				yp--
-			}
-			ctbQ := (yq>>l2c)*s.wCtb + xq>>l2c
-			ctbP := (yp>>l2c)*s.wCtb + xp>>l2c
-			if dbgEdge != nil {
-				dbgEdge(d, pic, vertical, xq, yq, e)
-			}
-			sl := d.sliceOfCtb(ctbQ)
-			if sl == nil || sl.deblockDisabled {
-				continue
-			}
-			if ctbP != ctbQ {
-				slP := d.sliceOfCtb(ctbP)
-				if slP == nil {
-					continue
-				}
-				if d.ctbSliceAddr[ctbP] != d.ctbSliceAddr[ctbQ] && !sl.loopFilterAcross {
-					continue
-				}
-				if pp.tileRs[ctbP] != pp.tileRs[ctbQ] && !pp.loopFilterAcrossTiles {
-					continue
-				}
-			}
-			cq := d.cuTab[(yq>>l2m)*s.wMinCb+xq>>l2m]
-			cp := d.cuTab[(yp>>l2m)*s.wMinCb+xp>>l2m]
-			var bs uint8
+	xq, yq := bx<<2, by<<2
+	xp, yp := xq, yq
+	if vertical {
+		xp--
+	} else {
+		yp--
+	}
+	ctbQ := (yq>>l2c)*s.wCtb + xq>>l2c
+	ctbP := (yp>>l2c)*s.wCtb + xp>>l2c
+	sl := d.sliceOfCtb(ctbQ)
+	if sl == nil || sl.deblockDisabled {
+		return
+	}
+	if ctbP != ctbQ {
+		if d.sliceOfCtb(ctbP) == nil {
+			return
+		}
+		if d.ctbSliceAddr[ctbP] != d.ctbSliceAddr[ctbQ] && !sl.loopFilterAcross {
+			return
+		}
+		if pp.tileRs[ctbP] != pp.tileRs[ctbQ] && !pp.loopFilterAcrossTiles {
+			return
+		}
+	}
+	cq := d.cuTab[(yq>>l2m)*s.wMinCb+xq>>l2m]
+	cp := d.cuTab[(yp>>l2m)*s.wMinCb+xp>>l2m]
+	var bs uint8
+	switch {
+	case cq.flags&cuIntra != 0 || cp.flags&cuIntra != 0:
+		bs = 2
+	case e&1 != 0 && (d.cbfTab[by*w4+bx] != 0 || d.cbfTab[(yp>>2)*w4+xp>>2] != 0):
+		bs = 1
+	default:
+		bs = motionBS(&pic.mvf[(yq>>2)*pic.w4+xq>>2], &pic.mvf[(yp>>2)*pic.w4+xp>>2])
+	}
+	if bs == 0 {
+		return
+	}
+	qpL := (int(cq.qp) + int(cp.qp) + 1) >> 1
+	noP := cp.flags&cuNoFilter != 0
+	noQ := cq.flags&cuNoFilter != 0
+	if doLuma {
+		bq := clip3(0, 51, qpL+(sl.betaOffsetDiv2<<1))
+		beta := int(betaTable[bq]) << uint(s.bitDepthY-8)
+		tq := clip3(0, 53, qpL+2*(int(bs)-1)+(sl.tcOffsetDiv2<<1))
+		tc := int(tcTable[tq]) << uint(s.bitDepthY-8)
+		stride := pic.stride[0]
+		if vertical {
+			filterLuma(pic.planes[0], yq*stride+xq, 1, stride, beta, tc, noP, noQ, s.bitDepthY)
+		} else {
+			filterLuma(pic.planes[0], yq*stride+xq, stride, 1, beta, tc, noP, noQ, s.bitDepthY)
+		}
+	}
+	if !doChroma || s.chromaArrayType == 0 || bs != 2 {
+		return
+	}
+	cx, cy := xq>>s.subW, yq>>s.subH
+	// chroma edges lie on an 8 sample chroma grid and are filtered in
+	// segments of 4 chroma samples that use the strength and QPs of the
+	// luma position of their first sample.
+	if vertical {
+		if cx&7 != 0 || yq&((4<<s.subH)-1) != 0 {
+			return
+		}
+	} else if cy&7 != 0 || xq&((4<<s.subW)-1) != 0 {
+		return
+	}
+	for ci := 1; ci <= 2; ci++ {
+		off := pp.cbQpOffset
+		if ci == 2 {
+			off = pp.crQpOffset
+		}
+		qpi := qpL + off
+		var qpc int
+		if s.chromaArrayType == 1 {
 			switch {
-			case cq.flags&cuIntra != 0 || cp.flags&cuIntra != 0:
-				bs = 2
-			case e&1 != 0 && (d.cbfTab[by*w4+bx] != 0 || d.cbfTab[(yp>>2)*w4+xp>>2] != 0):
-				bs = 1
+			case qpi < 30:
+				qpc = qpi
+			case qpi >= 43:
+				qpc = qpi - 6
 			default:
-				bs = motionBS(&pic.mvf[(yq>>2)*pic.w4+xq>>2], &pic.mvf[(yp>>2)*pic.w4+xp>>2])
+				qpc = qpCTable[qpi-30]
 			}
-			if bs == 0 {
-				continue
+		} else {
+			qpc = qpi
+			if qpc > 51 {
+				qpc = 51
 			}
-			qpL := (int(cq.qp) + int(cp.qp) + 1) >> 1
-			noP := cp.flags&cuNoFilter != 0
-			noQ := cq.flags&cuNoFilter != 0
-			// luma
-			{
-				bq := clip3(0, 51, qpL+(sl.betaOffsetDiv2<<1))
-				beta := int(betaTable[bq]) << uint(s.bitDepthY-8)
-				tq := clip3(0, 53, qpL+2*(int(bs)-1)+(sl.tcOffsetDiv2<<1))
-				tc := int(tcTable[tq]) << uint(s.bitDepthY-8)
-				stride := pic.stride[0]
-				if vertical {
-					filterLuma(pic.planes[0], yq*stride+xq, 1, stride, beta, tc, noP, noQ, s.bitDepthY)
-				} else {
-					filterLuma(pic.planes[0], yq*stride+xq, stride, 1, beta, tc, noP, noQ, s.bitDepthY)
-				}
-			}
-			if cat == 0 || bs != 2 {
-				continue
-			}
-			// chroma
-			var cx, cy int
-			cx, cy = xq>>s.subW, yq>>s.subH
-			// chroma edges lie on an 8 sample chroma grid and are filtered in
-			// segments of 4 chroma samples that use the strength and QPs of the
-			// luma position of their first sample.
-			if vertical {
-				if cx&7 != 0 || yq&((4<<s.subH)-1) != 0 {
-					continue
-				}
-			} else if cy&7 != 0 || xq&((4<<s.subW)-1) != 0 {
-				continue
-			}
-			for ci := 1; ci <= 2; ci++ {
-				off := pp.cbQpOffset
-				if ci == 2 {
-					off = pp.crQpOffset
-				}
-				qpi := qpL + off
-				var qpc int
-				if cat == 1 {
-					switch {
-					case qpi < 30:
-						qpc = qpi
-					case qpi >= 43:
-						qpc = qpi - 6
-					default:
-						qpc = qpCTable[qpi-30]
-					}
-				} else {
-					qpc = qpi
-					if qpc > 51 {
-						qpc = 51
-					}
-				}
-				tq := clip3(0, 53, qpc+2*(int(bs)-1)+(sl.tcOffsetDiv2<<1))
-				tc := int(tcTable[tq]) << uint(s.bitDepthC-8)
-				stride := pic.stride[ci]
-				if dbgDeblock != nil {
-					dbgDeblock(pic, ci, vertical, cx, cy, int(bs), qpL, tc, noP, noQ)
-				}
-				if vertical {
-					filterChroma(pic.planes[ci], cy*stride+cx, 1, stride, 4, tc, noP, noQ, s.bitDepthC)
-				} else {
-					filterChroma(pic.planes[ci], cy*stride+cx, stride, 1, 4, tc, noP, noQ, s.bitDepthC)
-				}
-			}
+		}
+		tq := clip3(0, 53, qpc+2*(int(bs)-1)+(sl.tcOffsetDiv2<<1))
+		tc := int(tcTable[tq]) << uint(s.bitDepthC-8)
+		stride := pic.stride[ci]
+		if vertical {
+			filterChroma(pic.planes[ci], cy*stride+cx, 1, stride, 4, tc, noP, noQ, s.bitDepthC)
+		} else {
+			filterChroma(pic.planes[ci], cy*stride+cx, stride, 1, 4, tc, noP, noQ, s.bitDepthC)
+		}
+	}
+}
+
+// deblockCTB deblocks the edges belonging to the CTB at luma position
+// (x0, y0). The order of operations follows a CTB-by-CTB schedule in which the
+// horizontal edges of a CTB column are filtered when the next CTB is
+// processed, so that the vertical edge on its right has already been done.
+func (d *Decoder) deblockCTB(pic *Picture, x0, y0 int) {
+	s := d.sp
+	ctb := s.ctbSize
+	xEnd := min(x0+ctb, s.width)
+	yEnd := min(y0+ctb, s.height)
+	xEnd2 := xEnd
+	if xEnd2 != s.width {
+		xEnd2 -= 8
+	}
+	for y := y0; y < yEnd; y += 8 {
+		for x := max(x0, 8); x < xEnd; x += 8 {
+			d.deblockUnit(pic, true, x>>2, y>>2, true, false)
+			d.deblockUnit(pic, true, x>>2, y>>2+1, true, false)
+		}
+		if y == 0 {
+			continue
+		}
+		xs := 0
+		if x0 > 0 {
+			xs = x0 - 8
+		}
+		for x := xs; x < xEnd2; x += 8 {
+			d.deblockUnit(pic, false, x>>2, y>>2, true, false)
+			d.deblockUnit(pic, false, x>>2+1, y>>2, true, false)
+		}
+	}
+	if s.chromaArrayType == 0 {
+		return
+	}
+	h, v := 1<<s.subW, 1<<s.subH
+	for y := y0; y < yEnd; y += 8 * v {
+		for x := max(x0, 8*h); x < xEnd; x += 8 * h {
+			d.deblockUnit(pic, true, x>>2, y>>2, false, true)
+			d.deblockUnit(pic, true, x>>2, (y+4*v)>>2, false, true)
+		}
+		if y == 0 {
+			continue
+		}
+		xe := xEnd
+		if xEnd != s.width {
+			xe = xEnd - 8*h
+		}
+		xs := 0
+		if x0 > 0 {
+			xs = x0 - 8*h
+		}
+		for x := xs; x < xe; x += 8 * h {
+			d.deblockUnit(pic, false, x>>2, y>>2, false, true)
+			d.deblockUnit(pic, false, (x+4*h)>>2, y>>2, false, true)
 		}
 	}
 }

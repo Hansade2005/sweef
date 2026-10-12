@@ -26,6 +26,7 @@ type scratch struct {
 	pred   [2][64 * 64]int16
 	mcTmp  [(64 + 7) * 64]int16
 	edgeBf [(64 + 8) * (64 + 8)]uint16
+	saoBuf [(64 + 2) * (64 + 2)]uint16
 }
 
 // chromaQp returns Qp'C for component cIdx (1 or 2).

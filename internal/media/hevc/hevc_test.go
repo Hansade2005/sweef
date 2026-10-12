@@ -208,7 +208,7 @@ func TestStructure(t *testing.T) {
 		{"nosao", genOpts{x265: "sao=0"}},
 		{"nodeblock", genOpts{x265: "deblock=false"}},
 		{"nosao-nodeblock", genOpts{x265: "sao=0:deblock=false"}},
-		{"deblock-offsets", genOpts{x265: "deblock=3:-3"}},
+		{"deblock-offsets", genOpts{x265: "deblock=3,-3"}},
 		{"tskip", genOpts{x265: "tskip=1:tskip-fast=0"}},
 		{"nosignhide", genOpts{x265: "signhide=0"}},
 		{"nostrong", genOpts{x265: "strong-intra-smoothing=0"}},
@@ -219,7 +219,7 @@ func TestStructure(t *testing.T) {
 		{"aq", genOpts{x265: "aq-mode=3:qg-size=16:ctu=32"}},
 		{"aq-qg8", genOpts{x265: "aq-mode=2:qg-size=8:ctu=32:min-cu-size=8"}},
 		{"cbqp", genOpts{x265: "cbqpoffs=3:crqpoffs=-4"}},
-		{"slices", genOpts{x265: "slices=4:wpp=0"}},
+		{"slices", genOpts{x265: "slices=4:wpp=1"}},
 		{"slices-wpp", genOpts{x265: "slices=3:wpp=1:ctu=32"}},
 		{"nowpp", genOpts{x265: "wpp=0:ctu=32"}},
 		{"tu-depth", genOpts{x265: "tu-intra-depth=4:tu-inter-depth=4:rd=4"}},
@@ -238,4 +238,13 @@ func TestStructure(t *testing.T) {
 		{"odd-size", genOpts{src: defaultSrc("226x138"), x265: "ctu=32"}},
 		{"tiny", genOpts{src: defaultSrc("72x40"), x265: "ctu=16"}},
 	})
+}
+
+func TestFormats(t *testing.T) {
+	var vs []variant
+	for _, pf := range []string{"yuv420p10le", "yuv422p", "yuv422p10le", "yuv444p", "yuv444p10le", "gray", "gray10le", "yuv420p12le", "yuv422p12le", "yuv444p12le", "gray12le"} {
+		vs = append(vs, variant{pf, genOpts{pixFmt: pf, x265: "", frames: 8}})
+		vs = append(vs, variant{pf + "-intra", genOpts{pixFmt: pf, x265: "keyint=1", frames: 3}})
+	}
+	runVariants(t, vs)
 }

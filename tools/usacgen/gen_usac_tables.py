@@ -14,8 +14,9 @@ Every table is range-checked against its Go element type, and the flattened
 element count is compared with the declared dimensions.
 """
 import os
-import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 SRC = sys.argv[1]
 OUT = sys.argv[2]
@@ -32,68 +33,7 @@ package media
 """
 
 
-def strip_comments(s):
-    s = re.sub(r'/\*.*?\*/', '', s, flags=re.S)
-    s = re.sub(r'//[^\n]*', '', s)
-    return s
-
-
-def find_array(src, name):
-    """Return (dims, flat_values) of array `name`."""
-    m = re.search(r'\b' + re.escape(name) + r'((?:\s*\[[^\]]*\])+)\s*=\s*\{', src)
-    if not m:
-        raise SystemExit('array %s not found' % name)
-    dims_txt = re.findall(r'\[([^\]]*)\]', m.group(1))
-    # body: balanced braces
-    i = m.end() - 1
-    depth = 0
-    j = i
-    while True:
-        c = src[j]
-        if c == '{':
-            depth += 1
-        elif c == '}':
-            depth -= 1
-            if depth == 0:
-                break
-        j += 1
-    body = src[i:j + 1]
-    toks = re.findall(r'[-+]?(?:0[xX][0-9a-fA-F]+|\d+\.\d*(?:[eE][-+]?\d+)?f?|\d+[eE][-+]?\d+f?|\d+)', body.replace('{', ' ').replace('}', ' '))
-    vals = []
-    for t in toks:
-        t = t.rstrip('f')
-        if t.lower().startswith(('0x', '-0x', '+0x')):
-            vals.append(int(t, 16))
-        elif '.' in t or 'e' in t.lower():
-            vals.append(float(t))
-        else:
-            vals.append(int(t))
-    return dims_txt, vals
-
-
-RANGES = {
-    'uint8': (0, 255), 'int8': (-128, 127), 'uint16': (0, 65535), 'int16': (-32768, 32767),
-    'uint32': (0, 2**32 - 1), 'int32': (-2**31, 2**31 - 1), 'int': (-2**31, 2**31 - 1),
-}
-
-
-def emit(f, goname, gotype, dims, vals, doc, per_line=12):
-    isf = gotype.startswith('float')
-    if not isf:
-        lo, hi = RANGES[gotype]
-        for v in vals:
-            assert lo <= v <= hi, (goname, v)
-    f.write('\n// %s\n' % doc)
-    f.write('var %s = [...]%s{\n' % (goname, gotype))
-    for k in range(0, len(vals), per_line):
-        chunk = vals[k:k + per_line]
-        if isf:
-            f.write('\t' + ', '.join(repr(float(v)) for v in chunk) + ',\n')
-        elif gotype.startswith('uint') and max(chunk) > 255:
-            f.write('\t' + ', '.join(str(v) for v in chunk) + ',\n')
-        else:
-            f.write('\t' + ', '.join(str(v) for v in chunk) + ',\n')
-    f.write('}\n')
+from usacgen_common import strip_comments, find_array, emit  # noqa: E402
 
 
 def main():
@@ -108,7 +48,13 @@ def main():
         (aactab, 'ff_aac_ac_lookup_m', 'usacAcLookupM', 'uint8', 'arithmetic coder context lookup (742)'),
         (aactab, 'ff_aac_ac_hash_m', 'usacAcHashM', 'uint32', 'arithmetic coder context hash (742): hash<<8 | pki'),
         (aactab, 'ff_aac_usac_mdst_filt_cur', 'usacMdstFilt', 'float32', 'complex prediction MDST filter coefficients [4 window][4 shape][7]'),
+        (aactab, 'ff_aac_num_swb_768', 'usacNumSwb768', 'uint8', 'number of scalefactor bands, 768 long window, per sampling_frequency_index'),
+        (aactab, 'ff_aac_num_swb_96', 'usacNumSwb96', 'uint8', 'number of scalefactor bands, 96 short window, per sampling_frequency_index'),
+        (aactab, 'ff_tns_max_bands_usac_1024', 'usacTnsMaxBands1024', 'uint8', 'TNS max bands (USAC long) per sampling_frequency_index'),
+        (aactab, 'ff_tns_max_bands_usac_128', 'usacTnsMaxBands128', 'uint8', 'TNS max bands (USAC short) per sampling_frequency_index'),
     ]
+    for tbl in ['768_96', '768_64', '768_48', '768_24', '768_16', '768_8', '96_96', '96_48', '96_24', '96_16', '96_8']:
+        jobs.append((aactab, 'swb_offset_' + tbl, 'usacSwbOffset' + tbl.replace('_', 'x'), 'uint16', 'scalefactor band offsets swb_offset_' + tbl))
     with open(os.path.join(OUT, 'usac_tables_gen.go'), 'w') as f:
         f.write(HEADER.format(files='aactab.c'))
         for src, cname, goname, gotype, doc in jobs:

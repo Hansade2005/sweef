@@ -3,11 +3,11 @@ package hevc
 import (
 	"bytes"
 	"fmt"
-	"github.com/sweefbrowser/sweef/internal/media/yuv"
 	"os"
-	"os/exec"
 	"testing"
 )
+
+// Debug helpers driven by environment variables (skipped otherwise).
 
 func TestFile(t *testing.T) {
 	p := os.Getenv("HEVC_FILE")
@@ -31,7 +31,11 @@ func TestFirstBad(t *testing.T) {
 		fmt.Sscan(v, &ctb)
 	}
 	data, _ := os.ReadFile(p)
-	ref := ffmpegRaw(t, p, "yuv420p")
+	pf := os.Getenv("HEVC_PIXFMT")
+	if pf == "" {
+		pf = "yuv420p"
+	}
+	ref := ffmpegRaw(t, p, pf)
 	frames, err := decodeAnnexB(t, data)
 	t.Log("err", err)
 	for fi, f := range frames {
@@ -62,7 +66,7 @@ func TestFirstBad(t *testing.T) {
 					}
 				}
 				if bad > 0 {
-					t.Logf("frame %d ctb (%d,%d): %d bad luma samples, first at (%d,%d)", fi, cx, cy, bad, fx, fy)
+					t.Logf("frame %d ctb (%d,%d): %d bad samples, first at (%d,%d)", fi, cx, cy, bad, fx, fy)
 					cnt++
 				}
 			}
@@ -71,7 +75,67 @@ func TestFirstBad(t *testing.T) {
 	}
 }
 
-func TestDumpParams(t *testing.T) {
+func TestTUAt(t *testing.T) {
+	p := os.Getenv("HEVC_FILE")
+	if p == "" {
+		t.Skip()
+	}
+	var x, y, r int
+	fmt.Sscan(os.Getenv("HEVC_X"), &x)
+	fmt.Sscan(os.Getenv("HEVC_Y"), &y)
+	fmt.Sscan(os.Getenv("HEVC_R"), &r)
+	data, _ := os.ReadFile(p)
+	n := 0
+	dbgTU = func(d *Decoder, x0, y0, log2, blkIdx int, cbfL bool, cb, cr [2]bool) {
+		if n == 0 && x0+(1<<uint(log2)) > x-r && x0 < x+r && y0+(1<<uint(log2)) > y-r && y0 < y+r {
+			cu := &d.cu
+			t.Logf("TU luma (%d,%d) log2=%d blk=%d cbfL=%v cb=%v cr=%v | CU (%d,%d) log2=%d intra=%v part=%d chromaMode=%v syn=%v lumaMode=%d", x0, y0, log2, blkIdx, cbfL, cb, cr, cu.x0, cu.y0, cu.log2, cu.intra, cu.partMode, cu.chromaMode, cu.chromaModeSyn, d.ipm[(y0>>2)*d.sp.wTb4+x0>>2])
+		}
+	}
+	decodeAnnexB(t, data)
+}
+
+func TestDump(t *testing.T) {
+	p := os.Getenv("HEVC_FILE")
+	if p == "" {
+		t.Skip()
+	}
+	var x, y, plane, w, h int
+	fmt.Sscan(os.Getenv("HEVC_X"), &x)
+	fmt.Sscan(os.Getenv("HEVC_Y"), &y)
+	fmt.Sscan(os.Getenv("HEVC_PLANE_N"), &plane)
+	fmt.Sscan(os.Getenv("HEVC_W"), &w)
+	fmt.Sscan(os.Getenv("HEVC_H"), &h)
+	pf := os.Getenv("HEVC_PIXFMT")
+	if pf == "" {
+		pf = "yuv420p"
+	}
+	data, _ := os.ReadFile(p)
+	ref := ffmpegRaw(t, p, pf)
+	frames, _ := decodeAnnexB(t, data)
+	f := frames[0]
+	fb := frameBytes(f)
+	r := ref[:len(fb)]
+	off := 0
+	pw := f.Width
+	if plane >= 1 {
+		off = f.Width * f.Height
+		pw = f.CWidth
+	}
+	if plane == 2 {
+		off += f.CWidth * f.CHeight
+	}
+	for j := 0; j < h; j++ {
+		var a, b []int
+		for i := 0; i < w; i++ {
+			a = append(a, int(r[off+(y+j)*pw+x+i]))
+			b = append(b, int(fb[off+(y+j)*pw+x+i]))
+		}
+		t.Logf("row %d ffmpeg %v mine %v", y+j, a, b)
+	}
+}
+
+func TestDumpFlags(t *testing.T) {
 	p := os.Getenv("HEVC_FILE")
 	if p == "" {
 		t.Skip()
@@ -82,264 +146,83 @@ func TestDumpParams(t *testing.T) {
 		switch typ {
 		case 33:
 			s, err := parseSPS(unescape(n[2:]))
-			t.Logf("SPS err=%v %+v", err, s)
+			if err != nil {
+				t.Log("SPS err", err)
+				continue
+			}
+			t.Logf("SPS cf=%d bd=%d/%d ctb=%d mincb=%d tb=%d..%d amp=%v sao=%v pcm=%v scal=%v strong=%v tsRot=%v tsCtx=%v implRdpcm=%v explRdpcm=%v intraSmoothOff=%v highPrec=%v persRice=%v", s.chromaFormat, s.bitDepthY, s.bitDepthC, s.log2Ctb, s.log2MinCb, s.log2MinTb, s.log2MaxTb, s.amp, s.sao, s.pcm, s.scalingEnabled, s.strongIntra, s.tsRotation, s.tsContext, s.implicitRdpcm, s.explicitRdpcm, s.intraSmoothingOff, s.highPrecOffsets, s.persistentRice)
 		case 34:
 			s, err := parsePPS(unescape(n[2:]))
-			if s != nil {
-				s.colBd, s.rowBd = nil, nil
+			if err != nil {
+				t.Log("PPS err", err)
+				continue
 			}
-			t.Logf("PPS err=%v %+v", err, s)
+			t.Logf("PPS tskip=%v log2maxts=%d cuQpDelta=%v depth=%d signhide=%v tqbypass=%v wpp=%v tiles=%v cross=%v cqpoff=%v wp=%v/%v constrained=%v", s.transformSkip, s.log2MaxTsSize, s.cuQpDelta, s.diffCuQpDeltaDepth, s.signHiding, s.transquantBypass, s.wpp, s.tiles, s.crossComponentPred, s.chromaQpOffsetList, s.weightedPred, s.weightedBi, s.constrainedIntra)
 		}
 	}
 }
 
-func TestSaoPoint(t *testing.T) {
+func BenchmarkDecode(b *testing.B) {
 	p := os.Getenv("HEVC_FILE")
 	if p == "" {
-		t.Skip()
+		b.Skip()
 	}
 	data, _ := os.ReadFile(p)
-	type rec struct {
-		pic *Picture
-		pre uint16
-		sp  saoParams
-		nb  [4]uint16
+	b.ResetTimer()
+	n := 0
+	for i := 0; i < b.N; i++ {
+		d := NewDecoder()
+		fr, _ := d.Push(data)
+		fr = append(fr, d.Flush()...)
+		n += len(fr)
 	}
-	var recs []rec
-	dbgSAOHook = func(d *Decoder, pic *Picture) {
-		st := pic.stride[1]
-		t.Logf("poc %d left %+v up %+v cur %+v saoflags %v %v", pic.poc, d.sao[10*d.sp.wCtb+15], d.sao[9*d.sp.wCtb+16], d.sao[10*d.sp.wCtb+16], d.slices[0].saoLuma, d.slices[0].saoChroma)
-		recs = append(recs, rec{pic, pic.planes[1][85*st+135], d.sao[10*d.sp.wCtb+16],
-			[4]uint16{pic.planes[1][84*st+136], pic.planes[1][86*st+134], pic.planes[1][85*st+134], pic.planes[1][85*st+136]}})
-	}
-	frames, _ := decodeAnnexB(t, data)
-	f := frames[1]
-	for _, r := range recs {
-		if &r.pic.planes[1][0] == &f.Planes[1][0] {
-			t.Logf("poc %d pre %d post %d sao %+v nb(a=(x+1,y-1),b=(x-1,y+1),l,r) %v", r.pic.poc, r.pre, f.Planes[1][85*f.Stride[1]+135], r.sp, r.nb)
-		}
-	}
+	b.ReportMetric(float64(n)/b.Elapsed().Seconds(), "fps")
 }
 
-func TestDeblockPoint(t *testing.T) {
+// TestGenDebug decodes a saved generated stream and reports transform blocks
+// near the first mismatching sample (luma plane of frame 0 in coding order).
+func TestGenDebug(t *testing.T) {
 	p := os.Getenv("HEVC_FILE")
+	pf := os.Getenv("HEVC_PIXFMT")
 	if p == "" {
 		t.Skip()
 	}
 	data, _ := os.ReadFile(p)
-	dbgDeblock = func(pic *Picture, ci int, vertical bool, cx, cy, bs, qpL, tc int, noP, noQ bool) {
-		if pic.poc == 5 && ci == 1 && vertical && cx == 136 && cy >= 84 && cy <= 94 {
-			for r := 0; r < 4; r++ {
-				t.Logf("  row %d pre: %v", cy+r, pic.planes[1][(cy+r)*pic.stride[1]+cx-3:(cy+r)*pic.stride[1]+cx+3])
-			}
-			st := pic.stride[1]
-			t.Logf("edge cx=%d cy=%d bs=%d qp=%d tc=%d noP=%v noQ=%v row0: %v", cx, cy, bs, qpL, tc, noP, noQ, pic.planes[1][cy*st+cx-3:cy*st+cx+3])
-		}
-	}
-	decodeAnnexB(t, data)
-}
-
-func TestEdgePoint(t *testing.T) {
-	p := os.Getenv("HEVC_FILE")
-	if p == "" {
-		t.Skip()
-	}
-	data, _ := os.ReadFile(p)
-	dbgEdge = func(d *Decoder, pic *Picture, vertical bool, xq, yq int, e uint8) {
-		if pic.poc == 5 && vertical && xq == 272 && yq >= 168 && yq <= 184 {
-			s := d.sp
-			cq := d.cuAt(xq, yq)
-			cp := d.cuAt(xq-1, yq)
-			t.Logf("luma edge x=%d y=%d e=%d cq=%+v cp=%+v mvfq=%+v mvfp=%+v", xq, yq, e, *cq, *cp, pic.mvf[(yq>>2)*pic.w4+xq>>2], pic.mvf[(yq>>2)*pic.w4+(xq-1)>>2])
-			_ = s
-		}
-	}
-	decodeAnnexB(t, data)
-}
-
-func TestListBad(t *testing.T) {
-	p := os.Getenv("HEVC_FILE")
-	if p == "" {
-		t.Skip()
-	}
-	data, _ := os.ReadFile(p)
-	ref := ffmpegRaw(t, p, "yuv420p")
-	frames, _ := decodeAnnexB(t, data)
-	fi := 5
-	f := frames[fi]
-	fb := frameBytes(f)
-	r := ref[fi*len(fb) : (fi+1)*len(fb)]
-	w, h := f.Width, f.Height
-	cnt := 0
-	for i := range fb {
-		if fb[i] != r[i] {
-			pl, x, y := "Y", i%w, i/w
-			if i >= w*h {
-				j := i - w*h
-				pl = "U"
-				if j >= f.CWidth*f.CHeight {
-					j -= f.CWidth * f.CHeight
-					pl = "V"
-				}
-				x, y = j%f.CWidth, j/f.CWidth
-			}
-			if cnt < 40 {
-				t.Logf("%s (%d,%d) ff=%d mine=%d", pl, x, y, r[i], fb[i])
-			}
-			cnt++
-		}
-	}
-	t.Log("total", cnt)
-}
-
-func TestSaoRow(t *testing.T) {
-	p := os.Getenv("HEVC_FILE")
-	if p == "" {
-		t.Skip()
-	}
-	data, _ := os.ReadFile(p)
-	dbgSAOHook = func(d *Decoder, pic *Picture) {
-		if pic.poc != 5 {
-			return
-		}
-		for x := 15; x <= 17; x++ {
-			t.Logf("ctb(%d,11) %+v", x, d.sao[11*d.sp.wCtb+x])
-		}
-		t.Logf("slices %d: %+v", len(d.slices), d.slices[0].entry)
-	}
-	decodeAnnexB(t, data)
-}
-
-func TestPerFrame(t *testing.T) {
-	p := os.Getenv("HEVC_FILE")
-	if p == "" {
-		t.Skip()
-	}
-	data, _ := os.ReadFile(p)
-	ref := ffmpegRaw(t, p, "yuv420p")
-	var order []int
-	dbgSAOHook = func(d *Decoder, pic *Picture) { order = append(order, pic.poc) }
+	ref, err := ffmpegRaw1(t, p, pf)
+	t.Log("ffmpeg err:", err)
 	frames, _ := decodeAnnexB(t, data)
 	for fi, f := range frames {
 		fb := frameBytes(f)
-		r := ref[fi*len(fb) : (fi+1)*len(fb)]
-		w, h := f.Width, f.Height
-		cnt, cl := 0, 0
-		for i := range fb {
-			if fb[i] != r[i] {
-				cnt++
-				if i < w*h {
-					cl++
-				}
-			}
-		}
-		t.Logf("frame %d: %d bad samples (luma %d)", fi, cnt, cl)
-	}
-	t.Log("decode order (poc):", order)
-}
-
-func TestSaoSample(t *testing.T) {
-	p := os.Getenv("HEVC_FILE")
-	if p == "" {
-		t.Skip()
-	}
-	data, _ := os.ReadFile(p)
-	dbgSAOHook = func(d *Decoder, pic *Picture) {
-		if pic.poc != 5 {
-			return
-		}
-		st := pic.stride[1]
-		for y := 87; y <= 91; y++ {
-			t.Logf("row %d: %v", y, pic.planes[1][y*st+130:y*st+140])
-		}
-	}
-	decodeAnnexB(t, data)
-}
-
-func TestNoDeblock(t *testing.T) {
-	p := os.Getenv("HEVC_FILE")
-	if p == "" {
-		t.Skip()
-	}
-	dbgNoDeblock = true
-	defer func() { dbgNoDeblock = false }()
-	data, _ := os.ReadFile(p)
-	cmd := exec.Command("ffmpeg", "-v", "error", "-nostdin", "-skip_loop_filter", "all", "-i", p, "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-")
-	ref, err := cmd.Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	frames, _ := decodeAnnexB(t, data)
-	for fi, f := range frames {
-		fb := frameBytes(f)
-		r := ref[fi*len(fb) : (fi+1)*len(fb)]
-		cnt := 0
-		for i := range fb {
-			if fb[i] != r[i] {
-				cnt++
-			}
-		}
-		t.Logf("frame %d: %d bad", fi, cnt)
-	}
-}
-
-func TestSaoAnalyze(t *testing.T) {
-	p := os.Getenv("HEVC_FILE")
-	if p == "" {
-		t.Skip()
-	}
-	data, _ := os.ReadFile(p)
-	ref := ffmpegRaw(t, p, "yuv420p")
-	type pre struct {
-		planes [3][]uint16
-		sao    []saoParams
-		w      int
-	}
-	var pres []pre
-	var pics []*Picture
-	dbgSAOHook = func(d *Decoder, pic *Picture) {
-		var pr pre
-		for i := 0; i < 3; i++ {
-			pr.planes[i] = append([]uint16(nil), pic.planes[i]...)
-		}
-		pr.sao = append([]saoParams(nil), d.sao...)
-		pr.w = d.sp.wCtb
-		pres = append(pres, pr)
-		pics = append(pics, pic)
-	}
-	frames, _ := decodeAnnexB(t, data)
-	for k, pic := range pics {
-		var f *yuv.Frame
-		fi := -1
-		for i, fr := range frames {
-			if &fr.Planes[0][0] == &pic.planes[0][0] {
-				f, fi = fr, i
-			}
-		}
-		fb := frameBytes(f)
-		r := ref[fi*len(fb) : (fi+1)*len(fb)]
-		w, h := f.Width, f.Height
-		cnt := 0
-		for i := range fb {
-			if fb[i] != r[i] && i >= w*h && cnt < 12 {
-				j := i - w*h
-				ci := 1
-				if j >= f.CWidth*f.CHeight {
-					j -= f.CWidth * f.CHeight
-					ci = 2
-				}
-				x, y := j%f.CWidth, j/f.CWidth
-				ctb := (y/8)*pres[k].w + x/8
-				sp := pres[k].sao[ctb]
-				st := f.CWidth
-				pl := pres[k].planes[ci]
-				t.Logf("poc %d c%d (%d,%d) rel(%d,%d) typ %d eo %d off %v pre %d  nb: l %d r %d u %d d %d ul %d ur %d dl %d dr %d | mine %d ff %d", pic.poc, ci, x, y, x%8, y%8, sp.typ[ci], sp.eo[ci], sp.offset[ci], pl[y*st+x],
-					pl[y*st+x-1], pl[y*st+x+1], pl[(y-1)*st+x], pl[(y+1)*st+x], pl[(y-1)*st+x-1], pl[(y-1)*st+x+1], pl[(y+1)*st+x-1], pl[(y+1)*st+x+1], fb[i], r[i])
-				cnt++
-			}
-		}
-		if cnt > 0 {
+		if (fi+1)*len(fb) > len(ref) {
 			break
 		}
+		r := ref[fi*len(fb) : (fi+1)*len(fb)]
+		if bytes.Equal(fb, r) {
+			continue
+		}
+		bps := 1
+		if f.Depth > 8 {
+			bps = 2
+		}
+		// first diff
+		for i := range fb {
+			if fb[i] != r[i] {
+				pos := i / bps
+				plane, x, y := 0, pos%f.Width, pos/f.Width
+				if pos >= f.Width*f.Height {
+					pos -= f.Width * f.Height
+					plane = 1
+					if f.CWidth > 0 && pos >= f.CWidth*f.CHeight {
+						pos -= f.CWidth * f.CHeight
+						plane = 2
+					}
+					x, y = pos%f.CWidth, pos/f.CWidth
+				}
+				t.Logf("frame %d first diff plane %d (%d,%d) ffmpeg %d native %d", fi, plane, x, y, r[i], fb[i])
+				// list the TBs that cover the position (decode order of that frame unknown: print all in first picture)
+				break
+			}
+		}
+		break
 	}
 }

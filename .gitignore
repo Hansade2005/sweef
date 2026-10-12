@@ -2,3 +2,4 @@
 *.bundle
 page.png
 /.claude/worktrees/
+*.test

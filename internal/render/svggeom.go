@@ -115,7 +115,7 @@ func (c *ctx) svgText(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 			paths = nil
 			break
 		}
-		sp := &SVGTextPath{Contours: SVGPathContours(t.A["d"])}
+		sp := NewSVGTextPath(t.A["d"], 1)
 		sp.Start = SVGParsePct(ch.Path.A["startoffset"], sp.Length())
 		paths[ch.Path] = sp
 	}

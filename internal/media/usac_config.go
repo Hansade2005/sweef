@@ -40,10 +40,10 @@ var usacRates = [32]int{
 type usacSbrCfg struct {
 	harmonic, interTES, pvc bool
 
-	startFreq, stopFreq                      int
-	freqScale, alterScale, noiseBands        int
-	limiterBands, limiterGains               int
-	interpolFreq, smoothingMode              int
+	startFreq, stopFreq               int
+	freqScale, alterScale, noiseBands int
+	limiterBands, limiterGains        int
+	interpolFreq, smoothingMode       int
 }
 
 type usacMpsCfg struct {
@@ -74,14 +74,14 @@ type usacElemCfg struct {
 }
 
 type usacLoudnessInfo struct {
-	drcSetID, downmixID int
-	samplePeak          int // 12 bit, -1 absent
-	truePeak            int
-	nMeas               int
-	methodDef           [16]int
-	methodVal           [16]int
-	measurement         [16]int
-	reliability         [16]int
+	drcSetID, eqSetID, downmixID int
+	samplePeak                   int // 12 bit, -1 absent
+	truePeak                     int
+	nMeas                        int
+	methodDef                    [16]int
+	methodVal                    [16]float64 // dB (loudness values) or the raw value
+	measurement                  [16]int
+	reliability                  [16]int
 }
 
 type usacConfig struct {
@@ -192,8 +192,13 @@ func (r *aacBits) usacMps212Cfg(e *usacElemCfg) {
 	}
 }
 
-func (r *aacBits) usacLoudnessInfo(li *usacLoudnessInfo) {
+// usacLoudnessInfo parses a loudnessInfo() of ISO/IEC 23003-4 (version 0 and,
+// with version 1, the eqSetId field).
+func (r *aacBits) usacLoudnessInfo(li *usacLoudnessInfo, version int) {
 	li.drcSetID = r.bits(6)
+	if version >= 1 {
+		li.eqSetID = r.bits(6)
+	}
 	li.downmixID = r.bits(7)
 	li.samplePeak, li.truePeak = -1, -1
 	if r.bit() {
@@ -205,17 +210,29 @@ func (r *aacBits) usacLoudnessInfo(li *usacLoudnessInfo) {
 		r.bits(2)
 	}
 	li.nMeas = r.bits(4)
-	for i := 0; i < li.nMeas; i++ {
+	for i := 0; i < li.nMeas && i < len(li.methodDef); i++ {
 		li.methodDef[i] = r.bits(4)
 		switch li.methodDef[i] {
-		case 0:
-			li.methodVal[i] = r.bits(8)
-		case 1, 2, 3, 4, 5, 6:
-			li.methodVal[i] = r.bits(8)
-		case 7, 8, 9:
-			li.methodVal[i] = r.bits(5)
-		default:
-			li.methodVal[i] = r.bits(8)
+		case 8: // mixing level
+			li.methodVal[i] = float64(r.bits(5)) + 80
+		case 9: // room type
+			li.methodVal[i] = float64(r.bits(2))
+		case 7: // loudness range
+			v := r.bits(8)
+			switch {
+			case v == 0:
+				li.methodVal[i] = 0
+			case v <= 128:
+				li.methodVal[i] = float64(v) * 0.25
+			case v <= 204:
+				li.methodVal[i] = 0.5*float64(v) - 32
+			default:
+				li.methodVal[i] = float64(v) - 134
+			}
+		case 10: // short-term loudness
+			li.methodVal[i] = -116 + 0.5*float64(r.bits(8))
+		default: // program, anchor, max loudness range, momentary max, short-term max, unknown
+			li.methodVal[i] = -57.75 + 0.25*float64(r.bits(8))
 		}
 		li.measurement[i] = r.bits(4)
 		li.reliability[i] = r.bits(2)
@@ -351,13 +368,43 @@ func parseUsacConfig(r *aacBits) (*usacConfig, error) {
 				ni := r.bits(6)
 				for k := 0; k < na; k++ {
 					var li usacLoudnessInfo
-					r.usacLoudnessInfo(&li)
+					r.usacLoudnessInfo(&li, 0)
 					c.albumLoudness = append(c.albumLoudness, li)
 				}
 				for k := 0; k < ni; k++ {
 					var li usacLoudnessInfo
-					r.usacLoudnessInfo(&li)
+					r.usacLoudnessInfo(&li, 0)
 					c.loudness = append(c.loudness, li)
+				}
+				// loudnessInfoSetExtension: V1 entries (with eqSetId) follow
+				if r.bit() {
+					for {
+						typ := r.bits(4)
+						if typ == 0 {
+							break
+						}
+						bl := r.bits(4) + 4
+						size := r.bits(bl) + 1
+						ep := r.pos
+						if typ == 1 {
+							na1 := r.bits(6)
+							ni1 := r.bits(6)
+							for k := 0; k < na1; k++ {
+								var li usacLoudnessInfo
+								r.usacLoudnessInfo(&li, 1)
+								c.albumLoudness = append(c.albumLoudness, li)
+							}
+							for k := 0; k < ni1; k++ {
+								var li usacLoudnessInfo
+								r.usacLoudnessInfo(&li, 1)
+								c.loudness = append(c.loudness, li)
+							}
+						}
+						r.pos = ep + size
+						if r.err {
+							break
+						}
+					}
 				}
 			case usacCfgExtSID:
 				c.streamID = r.bits(16)
@@ -400,4 +447,16 @@ func isUSACConfig(b []byte) bool {
 		aot = 32 + r.bits(6)
 	}
 	return aot == 42
+}
+
+// signature identifies the decoding-relevant parameters of a configuration.
+func (c *usacConfig) signature() string {
+	s := fmt.Sprintf("%d/%d/%d/%d/%d", c.rate, c.coreSbrIdx, c.chCfgIdx, c.nOutCh, len(c.chPos))
+	for _, p := range c.chPos {
+		s += fmt.Sprintf(",%d", p)
+	}
+	for _, e := range c.elems {
+		s += fmt.Sprintf("|%d,%v,%v,%+v,%d,%+v,%d,%d,%v", e.typ, e.twMDCT, e.noiseFill, e.sbr, e.stereoCfg, e.mps, e.extType, e.extDefLen, e.extFrag)
+	}
+	return s
 }

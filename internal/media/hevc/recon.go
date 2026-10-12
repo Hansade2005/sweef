@@ -2,12 +2,17 @@ package hevc
 
 // reconTB turns the coefficients in scratch.coef into a residual block and
 // adds it to the prediction already present in the picture.
+var dbgTB func(d *Decoder, cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMode int)
+
 func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMode int, resScale int) {
 	s, p := d.sp, d.pp
 	cu := &d.cu
 	sc := &d.scratch
 	n := 1 << uint(log2)
 	nn := n * n
+	if dbgTB != nil {
+		dbgTB(d, cIdx, xC, yC, log2, ti, intra, predMode)
+	}
 	var res []int32
 	if cIdx == 0 && p.crossComponentPred {
 		res = sc.resY[:nn]
@@ -25,14 +30,7 @@ func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMo
 			res[i] = 0
 		}
 	case cu.bypass:
-		rot := s.tsRotation && n == 4 && intra
-		if rot {
-			for i := 0; i < nn; i++ {
-				res[i] = coef[nn-1-i]
-			}
-		} else {
-			copy(res, coef)
-		}
+		copy(res, coef)
 		d.rdpcm(res, n, ti, intra, predMode)
 	case ti.ts:
 		rot := s.tsRotation && n == 4 && intra
@@ -116,6 +114,41 @@ func (d *Decoder) rdpcm(res []int32, n int, ti *tbInfo, intra bool, predMode int
 	}
 }
 
+// idct computes an n point inverse DCT of coefficients in[j*stride], j <= maxK
+// (all others are zero) with even/odd decomposition; out has n entries.
+func idct(in []int32, stride, n, maxK int, out []int32) {
+	if n == 2 {
+		var s1 int32
+		if maxK >= 1 {
+			s1 = in[stride]
+		}
+		out[0] = 64*in[0] + 64*s1
+		out[1] = 64*in[0] - 64*s1
+		return
+	}
+	h := n >> 1
+	var e, o [16]int32
+	step := 32 / n
+	idct(in, 2*stride, h, maxK>>1, e[:h])
+	for k := 0; k < h; k++ {
+		o[k] = 0
+	}
+	for j := 1; j <= maxK; j += 2 {
+		c := in[j*stride]
+		if c == 0 {
+			continue
+		}
+		m := &dctMat[j*step]
+		for k := 0; k < h; k++ {
+			o[k] += int32(m[k]) * c
+		}
+	}
+	for k := 0; k < h; k++ {
+		out[k] = e[k] + o[k]
+		out[n-1-k] = e[k] - o[k]
+	}
+}
+
 // inverseTransform computes the 2-D inverse DCT (or DST) of coef into res.
 func inverseTransform(coef, res []int32, log2 int, dst bool, bdShift uint, maxX, maxY int, tmp *[32 * 32]int32) {
 	n := 1 << uint(log2)
@@ -134,21 +167,41 @@ func inverseTransform(coef, res []int32, log2 int, dst bool, bdShift uint, maxX,
 		}
 		return
 	}
-	step := 32 >> uint(log2)
-	// first stage: columns
-	for x := 0; x <= maxX; x++ {
-		for y := 0; y < n; y++ {
-			var sum int32
-			if dst {
+	var line [32]int32
+	if dst {
+		for x := 0; x <= maxX; x++ {
+			for y := 0; y < n; y++ {
+				var sum int32
 				for k := 0; k <= maxY; k++ {
 					sum += int32(dstMat[k][y]) * coef[k*n+x]
 				}
-			} else {
-				for k := 0; k <= maxY; k++ {
-					sum += int32(dctMat[k*step][y]) * coef[k*n+x]
+				v := (sum + 64) >> 7
+				if v > 32767 {
+					v = 32767
+				} else if v < -32768 {
+					v = -32768
 				}
+				tmp[y*n+x] = v
 			}
-			v := (sum + 64) >> 7
+		}
+		for y := 0; y < n; y++ {
+			t := tmp[y*n : y*n+maxX+1]
+			o := res[y*n : y*n+n]
+			for x := 0; x < n; x++ {
+				var sum int32
+				for k, tv := range t {
+					sum += int32(dstMat[k][x]) * tv
+				}
+				o[x] = (sum + rnd2) >> bdShift
+			}
+		}
+		return
+	}
+	// columns
+	for x := 0; x <= maxX; x++ {
+		idct(coef[x:], n, n, maxY, line[:n])
+		for y := 0; y < n; y++ {
+			v := (line[y] + 64) >> 7
 			if v > 32767 {
 				v = 32767
 			} else if v < -32768 {
@@ -157,22 +210,12 @@ func inverseTransform(coef, res []int32, log2 int, dst bool, bdShift uint, maxX,
 			tmp[y*n+x] = v
 		}
 	}
-	// second stage: rows
+	// rows
 	for y := 0; y < n; y++ {
-		t := tmp[y*n : y*n+maxX+1]
+		idct(tmp[y*n:y*n+n], 1, n, maxX, line[:n])
 		o := res[y*n : y*n+n]
 		for x := 0; x < n; x++ {
-			var sum int32
-			if dst {
-				for k, tv := range t {
-					sum += int32(dstMat[k][x]) * tv
-				}
-			} else {
-				for k, tv := range t {
-					sum += int32(dctMat[k*step][x]) * tv
-				}
-			}
-			o[x] = (sum + rnd2) >> bdShift
+			o[x] = (line[x] + rnd2) >> bdShift
 		}
 	}
 }

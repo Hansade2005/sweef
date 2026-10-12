@@ -129,7 +129,9 @@ type Decoder struct {
 
 	cu cuState
 
-	scratch scratch
+	scratch    scratch
+	saoApplied [3][]bool
+	saoH, saoV [3][]uint16
 }
 
 type cuState struct {
@@ -777,8 +779,7 @@ func (d *Decoder) finishPicture() {
 	}
 	d.picInit = false
 	d.cur = nil
-	d.deblockPicture(p)
-	d.saoPicture(p)
+	d.loopFilterPicture(p)
 	if p.needOutput {
 		d.pending = p
 		// C.5.2.3: latency counts and additional bumping

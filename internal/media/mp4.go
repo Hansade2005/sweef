@@ -342,6 +342,7 @@ func (t *mp4Track) parseVideoConfig(typ string, kids []mp4box) {
 		t.Codec = typ
 		if c := findBox(kids, "hvcC"); c != nil && len(c.data) >= 13 {
 			t.Codec = hevcCodecString(typ, c.data)
+			t.vcfg = c.data
 		}
 	case "vp08":
 		t.CodecName, t.Codec = "vp8", "vp8"

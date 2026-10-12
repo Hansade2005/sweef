@@ -156,6 +156,7 @@ func (d *Decoder) decodeSliceData(sh *sliceHeader, data []byte) error {
 			return err
 		}
 		d.decodedCtbs++
+		d.cab.term = termEndOfSlice
 		end := d.cab.terminate() != 0
 		if pp.wpp && ctbX == colStart+1 {
 			d.wppCtx = d.cab.st
@@ -184,6 +185,7 @@ func (d *Decoder) decodeSliceData(sh *sliceHeader, data []byte) error {
 			newRow = nx == cs
 		}
 		if newTile || newRow {
+			d.cab.term = termEndOfSubset
 			d.cab.terminate() // end_of_subset_one_bit
 			d.cab.start(data, d.cab.bytePos())
 		}
@@ -471,6 +473,7 @@ func (d *Decoder) codingUnit(x0, y0, log2Cb, depth int) error {
 		cu.intraSplit = intra && cu.partMode == partNxN
 		if intra {
 			if cu.partMode == part2Nx2N && s.pcm && log2Cb >= s.log2MinPcm && log2Cb <= s.log2MaxPcm {
+				c.term = termPCM
 				cu.pcm = c.terminate() != 0
 			}
 			if cu.pcm {
@@ -581,15 +584,20 @@ func (d *Decoder) parsePartMode(intra bool, log2Cb int) int {
 
 func (d *Decoder) decodePCM(x0, y0, log2Cb int) {
 	s := d.sp
-	pos := d.cab.bytePos()
-	r := &bitReader{b: d.data, pos: pos * 8}
+	var r *bitReader
+	rd := func(n int) uint32 { return r.u(n) }
+	if d.cab.gen != nil {
+		rd = d.cab.gen.pcmBits
+	} else {
+		r = &bitReader{b: d.data, pos: d.cab.bytePos() * 8}
+	}
 	pic := d.cur
 	n := 1 << uint(log2Cb)
 	shY := uint(s.bitDepthY - s.pcmBitDepthY)
 	for y := 0; y < n; y++ {
 		row := pic.planes[0][(y0+y)*pic.stride[0]+x0:]
 		for x := 0; x < n; x++ {
-			row[x] = uint16(r.u(s.pcmBitDepthY) << shY)
+			row[x] = uint16(rd(s.pcmBitDepthY) << shY)
 		}
 	}
 	if s.chromaArrayType != 0 {
@@ -600,12 +608,16 @@ func (d *Decoder) decodePCM(x0, y0, log2Cb int) {
 			for y := 0; y < ch; y++ {
 				row := pic.planes[c][(cy+y)*pic.stride[c]+cx:]
 				for x := 0; x < cw; x++ {
-					row[x] = uint16(r.u(s.pcmBitDepthC) << shC)
+					row[x] = uint16(rd(s.pcmBitDepthC) << shC)
 				}
 			}
 		}
 	}
-	d.cab.start(d.data, (r.pos+7)>>3)
+	if r != nil {
+		d.cab.start(d.data, (r.pos+7)>>3)
+	} else {
+		d.cab.start(nil, 0)
+	}
 }
 
 // parseIntraModes parses prev_intra_luma_pred_flag / mpm_idx / rem and the
@@ -841,6 +853,9 @@ func (d *Decoder) transformUnit(x0, y0, xBase, yBase, log2, depth, blkIdx int, c
 			d.isCuChromaQpOffsetCoded = true
 		}
 	}
+	if dbgTU != nil {
+		dbgTU(d, x0, y0, log2, blkIdx, cbfL, cb, cr)
+	}
 	// partition index of this TU within an NxN intra CU
 	part := 0
 	if cu.intraSplit {
@@ -923,6 +938,8 @@ func (d *Decoder) transformUnit(x0, y0, xBase, yBase, log2, depth, blkIdx int, c
 	}
 	return nil
 }
+
+var dbgTU func(d *Decoder, x0, y0, log2, blkIdx int, cbfL bool, cb, cr [2]bool)
 
 func boolInt(b bool) int {
 	if b {

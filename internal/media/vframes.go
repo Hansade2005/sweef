@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/sweefbrowser/sweef/internal/media/h264"
+	"github.com/sweefbrowser/sweef/internal/media/hevc"
 	"github.com/sweefbrowser/sweef/internal/media/vp8"
 	"github.com/sweefbrowser/sweef/internal/media/vp9"
 	"github.com/sweefbrowser/sweef/internal/media/yuv"
@@ -82,6 +83,15 @@ func (a *h264Adapter) DecodePic(data []byte) (vpic, error) {
 	return framePic(fr), err
 }
 
+type hevcAdapter struct{ d *hevc.Decoder }
+
+func (a *hevcAdapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Decode(data) }
+func (a *hevcAdapter) Reset()                                   { a.d.Reset() }
+func (a *hevcAdapter) DecodePic(data []byte) (vpic, error) {
+	fr, err := a.d.DecodeFrame(data)
+	return framePic(fr), err
+}
+
 // newNativeDecoder returns a decoder for the stream codec, or nil when no
 // pure-Go decoder exists for it.
 func newNativeDecoder(vs *vstream) vdecoder {
@@ -96,6 +106,12 @@ func newNativeDecoder(vs *vstream) vdecoder {
 			return nil
 		}
 		return &h264Adapter{d}
+	case "hevc":
+		d := hevc.NewDecoder()
+		if err := d.SetHVCC(vs.cfg); err != nil {
+			return nil
+		}
+		return &hevcAdapter{d}
 	case "av1":
 		return newAV1Adapter(vs.cfg)
 	}
@@ -106,7 +122,7 @@ func newNativeDecoder(vs *vstream) vdecoder {
 // without ffmpeg.
 func HasNativeVideo(codec string) bool {
 	switch codec {
-	case "vp8", "vp9", "h264", "av1":
+	case "vp8", "vp9", "h264", "hevc", "av1":
 		return true
 	}
 	return false

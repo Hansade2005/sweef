@@ -96,7 +96,7 @@ func classifyCodec(c string) codecInfo {
 	case strings.HasPrefix(lc, "avc1") || strings.HasPrefix(lc, "avc3"):
 		return codecInfo{"video", ccFFmpeg, "h264"}
 	case strings.HasPrefix(lc, "hvc1") || strings.HasPrefix(lc, "hev1"):
-		return codecInfo{"video", ccNo, ""}
+		return codecInfo{"video", ccFFmpeg, "hevc"}
 	case lc == "theora":
 		return codecInfo{"video", ccNo, ""}
 	case lc == "vorbis" || lc == "opus" || lc == "flac" || lc == "mp3" || lc == "1":
@@ -200,7 +200,7 @@ func CanPlayType(mime string) string {
 			if ci.kind == "audio" && lc != "vorbis" && lc != "opus" {
 				return ""
 			}
-			if ci.kind == "video" && strings.HasPrefix(lc, "avc") {
+			if ci.kind == "video" && (strings.HasPrefix(lc, "avc") || strings.HasPrefix(lc, "hvc1") || strings.HasPrefix(lc, "hev1")) {
 				return ""
 			}
 		case "video/mp4", "audio/mp4":
@@ -225,6 +225,24 @@ func nativeCodecSupport(lc, native string) string {
 	}
 	// The Extended profile (avc1.58) is covered, data partitioning included;
 	// only SP/SI slices fall back to ffmpeg.
+	if strings.HasPrefix(lc, "hvc1") || strings.HasPrefix(lc, "hev1") {
+		// hvc1.<profile>.<compat>.<tier+level>...: Main (1), Main 10 (2) and
+		// Main Still Picture (3) are covered; Range Extensions streams may use
+		// tools the native decoder lacks, and other profiles (SCC, 3D,
+		// multilayer) are not decoded natively.
+		parts := strings.Split(lc, ".")
+		prof := ""
+		if len(parts) > 1 {
+			prof = strings.TrimLeft(parts[1], "abc")
+		}
+		switch prof {
+		case "1", "2", "3":
+			return "probably"
+		case "4":
+			return "maybe"
+		}
+		return ""
+	}
 	return "probably"
 }
 
@@ -263,7 +281,7 @@ func Playable(info *Info) (bool, string) {
 		switch t.Kind {
 		case "video":
 			switch t.CodecName {
-			case "vp8", "vp9", "av1", "h264":
+			case "vp8", "vp9", "av1", "h264", "hevc":
 				if !ff && !HasNativeVideo(t.CodecName) {
 					return false, t.CodecName + " needs ffmpeg"
 				}

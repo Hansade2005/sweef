@@ -20,7 +20,7 @@ var errAACUnsupported = fmt.Errorf("%w: aac feature", ErrUnsupported)
 
 // nativeAAC reports whether the pure-Go AAC decoder handles the track.
 func nativeAAC(a *Track) bool {
-	return a != nil && a.CodecName == "aac" && (a.Codec == "mp4a.40.2" || a.Codec == "mp4a.40.5" || a.Codec == "mp4a.40.29")
+	return a != nil && a.CodecName == "aac" && (a.Codec == "mp4a.40.2" || a.Codec == "mp4a.40.5" || a.Codec == "mp4a.40.29" || nativeUSAC(a))
 }
 
 type aacBits struct {
@@ -1199,6 +1199,9 @@ func (d *aacDecoder) finishChannel(ch int, c *aacChan, out []float32) {
 
 // decodeAACStream decodes every access unit of the stream to planar PCM.
 func decodeAACStream(data []byte, as *audioStream) (*PCM, error) {
+	if isUSACConfig(as.cfg) { // AOT 42: usac_stream.go
+		return decodeUSACStream(as)
+	}
 	cfg, err := parseASC(as.cfg)
 	if err != nil {
 		return nil, err

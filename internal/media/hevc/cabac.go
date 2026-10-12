@@ -58,7 +58,29 @@ type cabac struct {
 	val  uint32
 	need int // -8..-1: look-ahead bits left is -need-1
 	st   [numCtx]uint8
+
+	// gen, when set, replaces the arithmetic decoder by a bin source that
+	// chooses the bins itself (used by tests to generate bitstreams); term
+	// tells it which syntax element a terminating bin belongs to.
+	gen  binSource
+	term int
 }
+
+// binSource supplies bins instead of the bitstream (test streams generator).
+type binSource interface {
+	bin(ctx int, state *uint8) int
+	bypass() int
+	terminate(kind int) int
+	start()
+	pcmBits(n int) uint32
+}
+
+// Kinds of terminating bins.
+const (
+	termEndOfSlice  = 0
+	termEndOfSubset = 1
+	termPCM         = 2
+)
 
 func (c *cabac) next() uint32 {
 	if c.pos < len(c.data) {
@@ -72,6 +94,10 @@ func (c *cabac) next() uint32 {
 
 // start initialises the engine at byte offset pos.
 func (c *cabac) start(data []byte, pos int) {
+	if c.gen != nil {
+		c.gen.start()
+		return
+	}
 	c.data = data
 	c.pos = pos
 	c.rng = 510
@@ -105,6 +131,9 @@ func (c *cabac) initContexts(initType, qp int) {
 }
 
 func (c *cabac) bin(ctx int) int {
+	if c.gen != nil {
+		return c.gen.bin(ctx, &c.st[ctx])
+	}
 	s := c.st[ctx]
 	state := s >> 1
 	mps := int(s & 1)
@@ -146,6 +175,9 @@ func (c *cabac) bin(ctx int) int {
 }
 
 func (c *cabac) bypass() int {
+	if c.gen != nil {
+		return c.gen.bypass()
+	}
 	c.val <<= 1
 	c.need++
 	if c.need >= 0 {
@@ -169,6 +201,9 @@ func (c *cabac) bypassBits(n int) int {
 }
 
 func (c *cabac) terminate() int {
+	if c.gen != nil {
+		return c.gen.terminate(c.term)
+	}
 	c.rng -= 2
 	scaled := c.rng << 7
 	if c.val >= scaled {

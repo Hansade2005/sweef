@@ -564,7 +564,7 @@ func TestMediaNativeVideoWithoutFFmpeg(t *testing.T) {
 	}
 	var cp []any
 	evalJSON(t, tab, `(function(){var v=document.createElement('video');return [v.canPlayType('video/mp4; codecs="avc1.42E01E"'),v.canPlayType('video/mp4; codecs="avc1.640028"'),v.canPlayType('video/webm; codecs="vp8"'),v.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"'),MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"')]})()`, &cp)
-	if cp[0] != "probably" || cp[1] != "probably" || cp[2] != "probably" || cp[3] != "" || cp[4] != true {
+	if cp[0] != "probably" || cp[1] != "probably" || cp[2] != "probably" || cp[3] != "probably" || cp[4] != true {
 		t.Fatalf("canPlayType = %v", cp)
 	}
 	for _, c := range []struct{ id, src string }{{"h", "h264_bframes.mp4"}, {"w", "clip.webm"}} {
