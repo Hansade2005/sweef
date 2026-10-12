@@ -4,7 +4,7 @@ package hevc
 // adds it to the prediction already present in the picture.
 var dbgTB func(d *Decoder, cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMode int)
 
-func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMode int, resScale int) {
+func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMode int, resScale int, out []int32) {
 	s, p := d.sp, d.pp
 	cu := &d.cu
 	sc := &d.scratch
@@ -115,7 +115,20 @@ func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMo
 			res[i] += int32((int64(resScale) * ((int64(ry[i]) << bdC) >> bdY)) >> 3)
 		}
 	}
-	// add to the picture
+	if out != nil {
+		// the residual is kept for the adaptive colour transform
+		copy(out, res)
+		return
+	}
+	d.addResidual(cIdx, xC, yC, n, res)
+}
+
+// addResidual adds the n x n residual res to the prediction in the picture.
+func (d *Decoder) addResidual(cIdx, xC, yC, n int, res []int32) {
+	bd := d.sp.bitDepthY
+	if cIdx > 0 {
+		bd = d.sp.bitDepthC
+	}
 	pic := d.cur
 	stride := pic.stride[cIdx]
 	pl := pic.planes[cIdx]
@@ -132,6 +145,59 @@ func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMo
 			}
 			row[x] = uint16(v)
 		}
+	}
+}
+
+// actInverse applies the inverse adaptive colour transform (8.6.8) to the
+// residuals of the three components, in the order of the coded components
+// (G, B, R for RGB content).
+func (d *Decoder) actInverse(r0, r1, r2 []int32) {
+	s := d.sp
+	bdY, bdC := s.bitDepthY, s.bitDepthC
+	maxBd := max(bdY, bdC)
+	shY, shC := uint(maxBd-bdY), uint(maxBd-bdC)
+	var rndY, rndC int32
+	if shY > 0 {
+		rndY = 1 << (shY - 1)
+	}
+	if shC > 0 {
+		rndC = 1 << (shC - 1)
+	}
+	lossless := d.cu.bypass
+	log2Y, log2C := 15, 15
+	if s.extPrecision {
+		log2Y, log2C = max(15, bdY+6), max(15, bdC+6)
+	}
+	minY, maxY := -(int32(1) << uint(log2Y)), int32(1)<<uint(log2Y)-1
+	minC, maxC := -(int32(1) << uint(log2C)), int32(1)<<uint(log2C)-1
+	clip := func(v, lo, hi int32) int32 {
+		if v < lo {
+			return lo
+		}
+		if v > hi {
+			return hi
+		}
+		return v
+	}
+	for i := range r0 {
+		y0 := clip(r0[i], minY, maxY)
+		cg := clip(r1[i], minC, maxC)
+		co := clip(r2[i], minC, maxC)
+		if !lossless {
+			y0 <<= shY
+			cg <<= shC + 1
+			co <<= shC + 1
+		}
+		t := y0 - (cg >> 1)
+		g := cg + t
+		b := t - (co >> 1)
+		r := co + b
+		if !lossless {
+			g = (g + rndY) >> shY
+			b = (b + rndC) >> shC
+			r = (r + rndC) >> shC
+		}
+		r0[i], r1[i], r2[i] = g, b, r
 	}
 }
 

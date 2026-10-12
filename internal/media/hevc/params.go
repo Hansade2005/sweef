@@ -63,6 +63,21 @@ type SPS struct {
 	fullRange bool
 	matrix    int
 
+	// screen content coding extension
+	currPicRef       bool // sps_curr_pic_ref_enabled_flag
+	paletteMode      bool
+	paletteMaxSize   int
+	palettePredMax   int
+	palettePredInit  [3][]uint16 // SPS palette predictor initializers
+	mvResControl     int         // motion_vector_resolution_control_idc
+	intraBoundaryOff bool        // intra_boundary_filtering_disabled_flag
+
+	// multilayer
+	vpsID       int
+	layer       int
+	multiLayer  bool // MultiLayerExtSpsFlag: size, format and DPB come from the VPS
+	inferScaleL int  // sps_scaling_list_ref_layer_id + 1 when sps_infer_scaling_list_flag is set
+
 	// derived
 	subW, subH         uint // chroma shifts
 	ctbSize            int
@@ -106,6 +121,16 @@ type PPS struct {
 	listsModification            bool
 	log2ParMrgLevel              int
 	sliceHeaderExt               bool
+	pocResetInfo                 bool // poc_reset_info_present_flag
+
+	// screen content coding extension
+	currPicRef      bool // pps_curr_pic_ref_enabled_flag
+	act             bool // residual_adaptive_colour_transform_enabled_flag
+	sliceActOffsets bool // pps_slice_act_qp_offsets_present_flag
+	actQpOffset     [3]int
+	palettePredPres bool // pps_palette_predictor_initializers_present_flag
+	palettePredInit [3][]uint16
+	palettePredMono bool
 
 	// range extension
 	log2MaxTsSize             int
@@ -268,32 +293,75 @@ func ceilLog2(n int) int {
 	return l
 }
 
-// parseSPS parses a sequence parameter set RBSP (after the NAL header).
-func parseSPS(b []byte) (*SPS, error) {
+// parseSPS parses a sequence parameter set RBSP (after the NAL header) of the
+// base layer.
+func parseSPS(b []byte) (*SPS, error) { return parseSPSLayer(b, 0, nil) }
+
+// parseSPSLayer parses an SPS carried in a NAL unit with nuh_layer_id layer.
+// vpsOf supplies the VPS an SPS of an enhancement layer may take its picture
+// format from.
+func parseSPSLayer(b []byte, layer int, vpsOf func(id int) *VPS) (*SPS, error) {
 	r := &bitReader{b: b}
-	s := &SPS{matrix: 2}
-	r.skip(4) // vps id
-	s.maxSubLayers = int(r.u(3)) + 1
-	r.u1()
-	parseProfileTierLevel(r, true, s.maxSubLayers-1)
+	s := &SPS{matrix: 2, layer: layer}
+	vpsID := int(r.u(4)) // vps id
+	s.vpsID = vpsID
+	sub := int(r.u(3))
+	var vps *VPS
+	if layer != 0 && sub == 7 {
+		s.multiLayer = true
+		if vpsOf != nil {
+			vps = vpsOf(vpsID)
+		}
+		if vps == nil || !vps.hasExt {
+			return nil, ErrUnsupported
+		}
+		sub = vps.maxSubLayers - 1
+	}
+	s.maxSubLayers = sub + 1
+	if !s.multiLayer {
+		r.u1()
+		parseProfileTierLevel(r, true, s.maxSubLayers-1)
+	}
 	s.id = int(r.ue())
 	if s.id > 15 {
 		return nil, errBitstream
 	}
-	s.chromaFormat = int(r.ue())
-	if s.chromaFormat > 3 {
-		return nil, errBitstream
-	}
-	if s.chromaFormat == 3 && r.flag() {
-		return nil, ErrUnsupported // separate_colour_plane_flag
+	subW, subH := 1, 1
+	if s.multiLayer {
+		idx := -1
+		if r.flag() { // update_rep_format_flag
+			idx = int(r.u(8))
+		}
+		li := -1
+		if layer < maxLayers {
+			li = vps.layerIdx[layer]
+		}
+		if idx < 0 && li >= 0 {
+			idx = vps.repFormatIdx[li]
+		}
+		if idx < 0 || idx >= len(vps.repFormats) {
+			return nil, errBitstream
+		}
+		rf := vps.repFormats[idx]
+		s.chromaFormat, s.width, s.height, s.bitDepthY, s.bitDepthC = rf.chroma, rf.width, rf.height, rf.bitDepthY, rf.bitDepthC
+		if rf.width <= 0 || rf.height <= 0 || rf.chroma > 3 {
+			return nil, errBitstream
+		}
+	} else {
+		s.chromaFormat = int(r.ue())
+		if s.chromaFormat > 3 {
+			return nil, errBitstream
+		}
+		if s.chromaFormat == 3 && r.flag() {
+			return nil, ErrUnsupported // separate_colour_plane_flag
+		}
+		s.width = int(r.ue())
+		s.height = int(r.ue())
 	}
 	s.chromaArrayType = s.chromaFormat
-	s.width = int(r.ue())
-	s.height = int(r.ue())
 	if s.width <= 0 || s.height <= 0 || s.width > 16384 || s.height > 16384 {
 		return nil, errBitstream
 	}
-	subW, subH := 1, 1
 	switch s.chromaFormat {
 	case 1:
 		s.subW, s.subH = 1, 1
@@ -302,14 +370,16 @@ func parseSPS(b []byte) (*SPS, error) {
 		s.subW, s.subH = 1, 0
 		subW, subH = 2, 1
 	}
-	if r.flag() { // conformance_window_flag
-		s.cropL = int(r.ue()) * subW
-		s.cropR = int(r.ue()) * subW
-		s.cropT = int(r.ue()) * subH
-		s.cropB = int(r.ue()) * subH
+	if !s.multiLayer {
+		if r.flag() { // conformance_window_flag
+			s.cropL = int(r.ue()) * subW
+			s.cropR = int(r.ue()) * subW
+			s.cropT = int(r.ue()) * subH
+			s.cropB = int(r.ue()) * subH
+		}
+		s.bitDepthY = int(r.ue()) + 8
+		s.bitDepthC = int(r.ue()) + 8
 	}
-	s.bitDepthY = int(r.ue()) + 8
-	s.bitDepthC = int(r.ue()) + 8
 	if s.bitDepthY > 16 || s.bitDepthC > 16 {
 		return nil, errBitstream
 	}
@@ -317,20 +387,22 @@ func parseSPS(b []byte) (*SPS, error) {
 	if s.log2MaxPocLsb > 16 {
 		return nil, errBitstream
 	}
-	subLayerInfo := r.flag()
-	start := s.maxSubLayers - 1
-	if subLayerInfo {
-		start = 0
-	}
-	for i := start; i < s.maxSubLayers; i++ {
-		s.maxDecPicBuf[i] = int(r.ue()) + 1
-		s.maxNumReorder[i] = int(r.ue())
-		s.maxLatencyPlus1[i] = int(r.ue())
-	}
-	for i := 0; i < start; i++ {
-		s.maxDecPicBuf[i] = s.maxDecPicBuf[start]
-		s.maxNumReorder[i] = s.maxNumReorder[start]
-		s.maxLatencyPlus1[i] = s.maxLatencyPlus1[start]
+	if !s.multiLayer {
+		subLayerInfo := r.flag()
+		start := s.maxSubLayers - 1
+		if subLayerInfo {
+			start = 0
+		}
+		for i := start; i < s.maxSubLayers; i++ {
+			s.maxDecPicBuf[i] = int(r.ue()) + 1
+			s.maxNumReorder[i] = int(r.ue())
+			s.maxLatencyPlus1[i] = int(r.ue())
+		}
+		for i := 0; i < start; i++ {
+			s.maxDecPicBuf[i] = s.maxDecPicBuf[start]
+			s.maxNumReorder[i] = s.maxNumReorder[start]
+			s.maxLatencyPlus1[i] = s.maxLatencyPlus1[start]
+		}
 	}
 	s.log2MinCb = int(r.ue()) + 3
 	s.log2Ctb = s.log2MinCb + int(r.ue())
@@ -345,6 +417,9 @@ func parseSPS(b []byte) (*SPS, error) {
 	s.maxTHDepthInter = int(r.ue())
 	s.maxTHDepthIntra = int(r.ue())
 	s.scalingEnabled = r.flag()
+	if s.scalingEnabled && s.multiLayer && r.flag() { // sps_infer_scaling_list_flag
+		return nil, ErrUnsupported
+	}
 	if s.scalingEnabled {
 		if r.flag() {
 			sl, err := parseScalingListData(r, s.chromaFormat == 3)
@@ -415,8 +490,41 @@ func parseSPS(b []byte) (*SPS, error) {
 		if multiExt {
 			r.u1()
 		}
-		if ext3d || scc {
+		if ext3d {
 			return nil, ErrUnsupported
+		}
+		if scc {
+			s.currPicRef = r.flag()
+			s.paletteMode = r.flag()
+			if s.paletteMode {
+				s.paletteMaxSize = int(r.ue())
+				s.palettePredMax = s.paletteMaxSize + int(r.ue())
+				if s.paletteMaxSize > 64 || s.palettePredMax > 128 {
+					return nil, errBitstream
+				}
+				if r.flag() { // sps_palette_predictor_initializers_present_flag
+					n := int(r.ue()) + 1
+					if n > s.palettePredMax {
+						return nil, errBitstream
+					}
+					nc := 3
+					if s.chromaFormat == 0 {
+						nc = 1
+					}
+					for c := 0; c < nc; c++ {
+						bd := s.bitDepthY
+						if c > 0 {
+							bd = s.bitDepthC
+						}
+						s.palettePredInit[c] = make([]uint16, n)
+						for i := 0; i < n; i++ {
+							s.palettePredInit[c][i] = uint16(r.u(bd))
+						}
+					}
+				}
+			}
+			s.mvResControl = int(r.u(2))
+			s.intraBoundaryOff = r.flag()
 		}
 	}
 	if r.err {
@@ -797,9 +905,80 @@ func parsePPS(b []byte) (*PPS, error) {
 			p.log2SaoOffsetScaleY = int(r.ue())
 			p.log2SaoOffsetScaleC = int(r.ue())
 		}
-		_ = multiExt
-		if ext3d || scc {
+		if multiExt {
+			p.pocResetInfo = r.flag()
+			if r.flag() { // pps_infer_scaling_list_flag
+				return nil, ErrUnsupported
+			}
+			n := int(r.ue())
+			if n > 64 {
+				return nil, errBitstream
+			}
+			for i := 0; i < n; i++ {
+				r.skip(6)
+				if r.flag() {
+					for k := 0; k < 4; k++ {
+						r.se()
+					}
+				}
+				if r.flag() {
+					for k := 0; k < 4; k++ {
+						r.se()
+					}
+				}
+				if r.flag() {
+					for k := 0; k < 4; k++ {
+						r.ue()
+					}
+				}
+			}
+			if r.flag() { // colour_mapping_enabled_flag
+				return nil, ErrUnsupported
+			}
+		}
+		if ext3d {
 			return nil, ErrUnsupported
+		}
+		p.actQpOffset = [3]int{-5, -5, -3}
+		if scc {
+			p.currPicRef = r.flag()
+			p.act = r.flag()
+			if p.act {
+				p.sliceActOffsets = r.flag()
+				p.actQpOffset[0] = int(r.se()) - 5
+				p.actQpOffset[1] = int(r.se()) - 5
+				p.actQpOffset[2] = int(r.se()) - 3
+			}
+			p.palettePredPres = r.flag()
+			if p.palettePredPres {
+				n := int(r.ue())
+				if n > 128 {
+					return nil, errBitstream
+				}
+				if n > 0 {
+					p.palettePredMono = r.flag()
+					bdY := int(r.ue()) + 8
+					bdC := bdY
+					nc := 1
+					if !p.palettePredMono {
+						bdC = int(r.ue()) + 8
+						nc = 3
+					}
+					if bdY > 16 || bdC > 16 {
+						return nil, errBitstream
+					}
+					for c := 0; c < nc; c++ {
+						bd := bdY
+						if c > 0 {
+							bd = bdC
+						}
+						p.palettePredInit[c] = make([]uint16, n)
+						for i := 0; i < n; i++ {
+							p.palettePredInit[c][i] = uint16(r.u(bd))
+						}
+					}
+				}
+			}
 		}
 	}
 	if r.err || p.log2MaxTsSize > 5 {

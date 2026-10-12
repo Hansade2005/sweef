@@ -235,19 +235,21 @@ func nativeCodecSupport(lc, native string) string {
 	// FMO/ASO, data partitioning and SP/SI slices are all decoded natively
 	// (CABAC cannot occur in it, so no CABAC combination is left out).
 	if strings.HasPrefix(lc, "hvc1") || strings.HasPrefix(lc, "hev1") {
-		// hvc1.<profile>.<compat>.<tier+level>...: Main (1), Main 10 (2) and
-		// Main Still Picture (3) are covered; Range Extensions streams may use
-		// tools the native decoder lacks, and other profiles (SCC, 3D,
-		// multilayer) are not decoded natively.
+		// hvc1.<profile>.<compat>.<tier+level>...: Main (1), Main 10 (2),
+		// Main Still Picture (3), the range extensions (4, 5: all formats up
+		// to 16 bit, extended precision included) and screen content coding
+		// (9, 11: palette, current picture referencing, colour transform) are
+		// decoded natively; multiview and scalable streams (6, 7) play their
+		// base layer; 3D (8) is not covered.
 		parts := strings.Split(lc, ".")
 		prof := ""
 		if len(parts) > 1 {
 			prof = strings.TrimLeft(parts[1], "abc")
 		}
 		switch prof {
-		case "1", "2", "3":
+		case "1", "2", "3", "4", "5", "9", "11":
 			return "probably"
-		case "4":
+		case "6", "7":
 			return "maybe"
 		}
 		return ""

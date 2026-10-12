@@ -413,3 +413,17 @@ func skInvert2x2(a, c, b, d float32) (inv [4]float32, ok bool) {
 	}
 	return inv, true
 }
+
+// transformF32 maps p through m the way SkMatrix::mapPoints does: the matrix
+// entries and the points are single precision and each point is
+// (sx*x + kx*y) + tx evaluated in float.
+func transformF32(p *Path, m Matrix) *Path {
+	a, b, c, d, e, f := float32(m[0]), float32(m[1]), float32(m[2]), float32(m[3]), float32(m[4]), float32(m[5])
+	q := &Path{Cmds: append([]byte(nil), p.Cmds...), Pts: make([]float64, len(p.Pts))}
+	for i := 0; i < len(p.Pts); i += 2 {
+		x, y := float32(p.Pts[i]), float32(p.Pts[i+1])
+		q.Pts[i] = float64(a*x + c*y + e)
+		q.Pts[i+1] = float64(b*x + d*y + f)
+	}
+	return q
+}

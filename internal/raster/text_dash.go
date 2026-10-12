@@ -737,8 +737,8 @@ func dashedStrokeMask(p *Path, m Matrix, st StrokeStyle, clip IRect) *Mask {
 	if ml <= 0 {
 		ml = 10
 	}
-	sp := fxStrokePath(local, st.Width, st.Join, st.Cap, ml, float64(rs))
-	return fxFillPath(sp.Transform(m), clip)
+	sp := skStrokePath(local, float32(st.Width), st.Join, st.Cap, float32(ml), rs)
+	return fxFillPath(sp.toDeviceT([4]float32{float32(m[0]), float32(m[2]), float32(m[1]), float32(m[3])}, float32(m[4]), float32(m[5])), clip)
 }
 
 func dashF32(d []float64) []float32 {

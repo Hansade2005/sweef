@@ -199,12 +199,13 @@ func (c *Context) svgGlyphMask(gs []svgPG, size float64, fake, skew bool, lum ui
 
 // fragment is a group of glyphs painted together (same style, plain).
 type fragment struct {
-	gl []textGlyph
+	gl    []textGlyph
+	start int // index of the first glyph among the placed glyphs
 }
 
 func fragmentsOf(placed []textGlyph) []fragment {
 	var frs []fragment
-	for _, p := range placed {
+	for i, p := range placed {
 		if k := len(frs) - 1; k >= 0 {
 			f := &frs[k]
 			pv := &f.gl[len(f.gl)-1]
@@ -215,7 +216,7 @@ func fragmentsOf(placed []textGlyph) []fragment {
 				continue
 			}
 		}
-		frs = append(frs, fragment{gl: []textGlyph{p}})
+		frs = append(frs, fragment{gl: []textGlyph{p}, start: i})
 	}
 	return frs
 }
@@ -235,26 +236,60 @@ func (r *svgR) drawText(n *svgNode, st sStyle, m Matrix) {
 	bb, hasBB := glyphsBBox(placed, k)
 	xf := newSvgTextXf(m, k)
 	c := r.c
-	for _, fr := range fragmentsOf(placed) {
-		p0 := &fr.gl[0]
-		if !p0.st.visible {
+	frs := fragmentsOf(placed)
+	fi := 0
+	for _, g := range decoGroupsOf(placed) {
+		first := fi
+		for fi < len(frs) && frs[fi].start < g[1] {
+			fi++
+		}
+		grp := placed[g[0]:g[1]]
+		if !grp[0].st.visible {
 			continue
 		}
-		order := []string{"fill", "stroke"}
-		if po := strings.Fields(p0.st.paintOrder); len(po) > 0 && po[0] != "normal" {
-			if po[0] == "stroke" {
-				order = []string{"stroke", "fill"}
+		// Blink paints underline and overline, then the text, then the
+		// line-through, one decoration group (a text fragment) at a time
+		r.decorateGroup(c, grp, k, false)
+		for _, fr := range frs[first:fi] {
+			p0 := &fr.gl[0]
+			order := []string{"fill", "stroke"}
+			if po := strings.Fields(p0.st.paintOrder); len(po) > 0 && po[0] != "normal" {
+				if po[0] == "stroke" {
+					order = []string{"stroke", "fill"}
+				}
+			}
+			for _, step := range order {
+				if step == "fill" {
+					r.fillFragment(c, n, fr, xf, bb, hasBB, m)
+				} else {
+					r.strokeFragment(c, n, fr, xf, bb, hasBB, m)
+				}
 			}
 		}
-		for _, step := range order {
-			if step == "fill" {
-				r.fillFragment(c, n, fr, xf, bb, hasBB, m)
-			} else {
-				r.strokeFragment(c, n, fr, xf, bb, hasBB, m)
-			}
-		}
-		r.decorateFragment(c, fr, k)
+		r.decorateGroup(c, grp, k, true)
 	}
+}
+
+// decoGroupsOf splits the placed glyphs into the runs Blink paints one text
+// decoration for: consecutive glyphs of one style, orientation and size that
+// continue each other along the baseline (a new run starts at every glyph with
+// an absolute position, so rotate=, x= and the like split it).
+func decoGroupsOf(placed []textGlyph) [][2]int {
+	var gs [][2]int
+	start := 0
+	for i := 1; i <= len(placed); i++ {
+		if i < len(placed) {
+			p, pv := &placed[i], &placed[i-1]
+			sn, cs := math.Sincos(pv.angle)
+			if !p.fragStart && pv.node == p.node && pv.st == p.st && pv.angle == p.angle && pv.sx == p.sx && pv.size == p.size &&
+				math.Abs(pv.x+pv.w*cs-p.x) < 0.02 && math.Abs(pv.y+pv.w*sn-p.y) < 0.02 {
+				continue
+			}
+		}
+		gs = append(gs, [2]int{start, i})
+		start = i
+	}
+	return gs
 }
 
 func fragmentPGs(fr fragment, xf svgTextXf) []svgPG {
@@ -390,46 +425,72 @@ func (r *svgR) strokeFragment(c *Context, n *svgNode, fr fragment, xf svgTextXf,
 	}
 }
 
-func (r *svgR) decorateFragment(c *Context, fr fragment, k float64) {
-	p0 := &fr.gl[0]
+func (r *svgR) decorateGroup(c *Context, gl []textGlyph, k float64, lineThrough bool) {
+	p0 := &gl[0]
 	if p0.st.decoration == "" || p0.st.fill.kind != pColor {
 		return
 	}
 	var w float64
-	for _, g := range fr.gl {
+	for _, g := range gl {
 		w += g.w
 	}
-	// geometry of the decoration lines, as measured from Chromium for the
-	// (scaled) font: thickness floor(size/10) with a minimum of 1, the
-	// underline top below the baseline by max(ceil(size/20), ceil(th/2)), the
-	// overline on top of the ascent, the line-through by a size table
+	// Geometry of the lines (measured from Chromium 1194 for 8 to 64 px and
+	// matching the model in Blink's TextDecorationInfo): thickness is
+	// font-size/10 without rounding or a minimum (the rect is drawn with
+	// anti-aliasing, so 0.8 or 2.2 px lines are partial rows); the underline
+	// top is below the baseline by max(1, ceil(thickness/2)); the overline top
+	// is floor(ascent + thickness) above the baseline; the line-through is
+	// centred ascent/3 above it. The ascent is the rounded font ascent.
 	size := p0.size
-	th := math.Max(1, size/10)
+	th := float64(float32(size) / 10)
 	col := p0.st.fill.col
 	col.A *= p0.st.fillOp
-	deco := func(top float64) {
-		pa := NewPath()
-		pa.Rect(0, top, w, th)
-		s, cs := math.Sincos(p0.angle)
-		// the line is drawn from the (floored) fragment origin, rotated about the real one
-		qx, qy := float64(lu64(p0.x)), float64(lu64(p0.y))
-		ox, oy := p0.pivX+cs*(qx-p0.pivX)-s*(qy-p0.pivY), p0.pivY+s*(qx-p0.pivX)+cs*(qy-p0.pivY)
-		pa = pa.Transform(Matrix{cs, s, -s, cs, ox, oy}).Transform(Scale(1/k, 1/k))
-		// Skia fills the rotated line with its analytic scan converter
-		if mk := fxFillPath(pa.Transform(c.st.ctm), c.drawBounds()); mk != nil {
-			c.draw(mk, Solid(col))
+	deco := func(top float64) { r.fillDecoration(c, p0, w, top, th, col, k) }
+	if lineThrough {
+		if strings.Contains(p0.st.decoration, "line-through") {
+			deco(-(p0.asc/3 + th/2))
 		}
+		return
 	}
 	if strings.Contains(p0.st.decoration, "underline") {
-		deco(math.Max(math.Ceil(size/20), math.Ceil(th/2)))
-	}
-	if strings.Contains(p0.st.decoration, "line-through") {
-		deco(-lineThroughCenter(size, th) - th/2)
+		deco(math.Max(1, math.Ceil(th/2)))
 	}
 	if strings.Contains(p0.st.decoration, "overline") {
-		deco(-p0.asc - th)
+		deco(-math.Floor(p0.asc + th))
+	}
+}
+
+// fillDecoration paints one decoration line: a w x th rect whose top is `top`
+// below the (floored) fragment origin, in the scaled text space, rotated with
+// the fragment and drawn through the canvas matrix. Skia fills an axis-aligned
+// rect with exact coverage and anything else as a path with its analytic
+// scan converter.
+func (r *svgR) fillDecoration(c *Context, p0 *textGlyph, w, top, th float64, col Color, k float64) {
+	s, cs := math.Sincos(p0.angle)
+	// the line is drawn from the (floored) fragment origin, rotated about the real one
+	// the decoration box is the fragment rect (top = baseline - ascent) as
+	// LayoutUnits, so the baseline is the truncated box top plus the ascent
+	qx, qy := luTrunc64(p0.x), luTrunc64(p0.y-p0.asc)+p0.asc
+	ox, oy := p0.pivX+cs*(qx-p0.pivX)-s*(qy-p0.pivY), p0.pivY+s*(qx-p0.pivX)+cs*(qy-p0.pivY)
+	m := c.st.ctm.Mul(Scale(1/k, 1/k)).Mul(Matrix{cs, s, -s, cs, ox, oy})
+	if m[1] == 0 && m[2] == 0 {
+		x0, y0 := m.Apply(0, top)
+		x1, y1 := m.Apply(w, top+th)
+		if mk := rectCoverage(x0, y0, x1, y1, c.drawBounds()); mk != nil {
+			c.draw(mk, Solid(col))
+		}
+		return
+	}
+	pa := NewPath()
+	pa.Rect(0, top, w, th)
+	if mk := fxFillPath(transformF32(pa, m), c.drawBounds()); mk != nil {
+		c.draw(mk, Solid(col))
 	}
 }
 
 // lu64 floors v to 1/64 (Blink's LayoutUnit) in single precision.
 func lu64(v float64) float32 { return float32(math.Floor(float64(float32(v))*64)) / 64 }
+
+// luTrunc64 converts to a LayoutUnit the way LayoutUnit(float) does: scaled by
+// 64 and truncated toward zero.
+func luTrunc64(v float64) float64 { return math.Trunc(float64(float32(v))*64) / 64 }

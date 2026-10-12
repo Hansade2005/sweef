@@ -16,6 +16,7 @@ type scratch struct {
 	res  [32 * 32]int32
 	resY [32 * 32]int32
 	tmp  [32 * 32]int32
+	act  [3][32 * 32]int32 // residuals of a block with the adaptive colour transform
 
 	// intra
 	ref  [4*64 + 1]int32
@@ -136,12 +137,7 @@ func (d *Decoder) residualCoding(log2, cIdx int, intra bool, predMode int) tbInf
 	lastPos := int(scanPos[scanIdx][2][(lastY&3)<<2|(lastX&3)])
 
 	// dequantisation parameters
-	var qp int
-	if cIdx == 0 {
-		qp = d.qpY + s.qpBdOffY
-	} else {
-		qp = d.chromaQp(cIdx)
-	}
+	qp := d.tuQp(cIdx)
 	bd := s.bitDepthY
 	if cIdx > 0 {
 		bd = s.bitDepthC
@@ -460,4 +456,32 @@ func (d *Decoder) residualCoding(log2, cIdx int, intra bool, predMode int) tbInf
 	}
 	ti.maxX, ti.maxY = maxX, maxY
 	return ti
+}
+
+// tuQp returns the quantization parameter Qp' of component cIdx of the
+// current transform unit.
+func (d *Decoder) tuQp(cIdx int) int {
+	s, sh := d.sp, d.sh
+	if !d.tuAct {
+		if cIdx == 0 {
+			return d.qpY + s.qpBdOffY
+		}
+		return d.chromaQp(cIdx)
+	}
+	// adaptive colour transform: the offsets of the transform replace the
+	// picture and slice chroma offsets
+	off := d.pp.actQpOffset[cIdx] + sh.actDelta[cIdx]
+	if cIdx == 0 {
+		return clip3(0, 51+s.qpBdOffY, d.qpY+s.qpBdOffY+off)
+	}
+	if cIdx == 1 {
+		off += d.cuQpOffsetCb
+	} else {
+		off += d.cuQpOffsetCr
+	}
+	qpi := clip3(-s.qpBdOffC, 57, d.qpY+off)
+	if qpi > 51 {
+		qpi = 51
+	}
+	return qpi + s.qpBdOffC
 }

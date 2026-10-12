@@ -400,6 +400,10 @@ func (b *fxBuilder) monoCubic(c [4]fpt) {
 	}
 }
 
+// fxAAA selects the port of Skia's analytic scan converter (text_aaa.go)
+// over exact-area accumulation.
+var fxAAA = true
+
 // fxFillPath rasterizes p (device pixels, y down) like Skia's analytic AA,
 // nonzero winding, restricted to clip. Returns nil when nothing is covered.
 func fxFillPath(p *Path, clip IRect) *Mask { return fxFillUnion(p, nil, false, clip) }
@@ -488,6 +492,18 @@ func fxFillUnion(p, q *Path, flipP bool, clip IRect) *Mask {
 	if q != nil {
 		fb.cont = !pathIsConvex(q)
 		fxPathEdges(&fb, q, ox, oy, false)
+	}
+	if fxAAA {
+		npts := 0
+		for _, pp := range []*Path{p, q} {
+			if pp != nil {
+				npts += len(pp.Pts) / 2
+			}
+		}
+		rel := IRect{b.X0 - bounds.X0, b.Y0 - bounds.Y0, b.X1 - bounds.X0, b.Y1 - bounds.Y0}
+		m := aaaFill(fb.edges, IRect{0, 0, bounds.W(), bounds.H()}, rel, q == nil && pathIsConvex(p), npts)
+		m.B = b
+		return m
 	}
 	r := newRasterizer(b)
 	defer r.release()

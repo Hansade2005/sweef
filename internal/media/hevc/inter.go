@@ -130,6 +130,9 @@ func (d *Decoder) predictionUnit(xCb, yCb, nCbS, xPb, yPb, nPbW, nPbH, partIdx i
 			}
 		}
 		mf = d.mergeCand(xCb, yCb, nCbS, xPb, yPb, nPbW, nPbH, partIdx, idx)
+		if d.pp.currPicRef || sh.useIntegerMv {
+			d.roundMerge(&mf)
+		}
 	} else {
 		idc := 0 // 0: L0, 1: L1, 2: BI
 		if sh.sliceType == sliceB {
@@ -169,9 +172,21 @@ func (d *Decoder) predictionUnit(xCb, yCb, nCbS, xPb, yPb, nPbW, nPbH, partIdx i
 			p := d.amvp(xCb, yCb, nCbS, xPb, yPb, nPbW, nPbH, partIdx, X, refIdx[X], mvp[X])
 			mf.pf |= 1 << uint(X)
 			mf.ref[X] = int8(refIdx[X])
-			mf.mv[X][0] = p.x + int16(mvd[X][0])
-			mf.mv[X][1] = p.y + int16(mvd[X][1])
+			if sh.useIntegerMv || sh.refPic[X][refIdx[X]] == d.cur {
+				// integer motion vectors: the predictor is rounded down and
+				// the difference is in full sample units
+				mf.mv[X][0] = (p.x>>2 + int16(mvd[X][0])) << 2
+				mf.mv[X][1] = (p.y>>2 + int16(mvd[X][1])) << 2
+			} else {
+				mf.mv[X][0] = p.x + int16(mvd[X][0])
+				mf.mv[X][1] = p.y + int16(mvd[X][1])
+			}
 		}
+	}
+	if mf.pf == 3 && d.pp.currPicRef && d.biRestricted(&mf, nCbS, nPbW, nPbH) {
+		mf.pf = 1
+		mf.ref[1] = -1
+		mf.mv[1] = [2]int16{}
 	}
 	// fill in POC / long-term info
 	for X := 0; X < 2; X++ {
@@ -180,6 +195,7 @@ func (d *Decoder) predictionUnit(xCb, yCb, nCbS, xPb, yPb, nPbW, nPbH, partIdx i
 				return errBitstream
 			}
 			mf.poc[X] = sh.refPoc[X][mf.ref[X]]
+			mf.lay[X] = sh.refLayer[X][mf.ref[X]]
 			if sh.refLT[X][mf.ref[X]] {
 				mf.lt |= 1 << uint(X)
 			}
@@ -562,4 +578,39 @@ func (d *Decoder) colMv(col *Picture, x, y, refIdx, X int) (mv, bool) {
 		return m, true
 	}
 	return scaleMv(m, colDiff, curDiff), true
+}
+
+// roundMerge rounds the motion vectors of a merge candidate to full sample
+// positions when use_integer_mv_flag is set, and those that refer to the
+// current picture otherwise.
+func (d *Decoder) roundMerge(m *mvField) {
+	sh := d.sh
+	for X := 0; X < 2; X++ {
+		if m.pf&(1<<uint(X)) == 0 {
+			continue
+		}
+		if sh.useIntegerMv || sh.refPic[X][m.ref[X]] == d.cur {
+			m.mv[X][0] = m.mv[X][0] >> 2 << 2
+			m.mv[X][1] = m.mv[X][1] >> 2 << 2
+		}
+	}
+}
+
+// biRestricted implements the bi-prediction restriction of 8x8 blocks that
+// screen content coding adds: with current picture referencing and in-loop
+// filters enabled, 8x8 (and smaller) bi-predicted blocks with fractional,
+// differing motion are converted to uni-prediction.
+func (d *Decoder) biRestricted(m *mvField, nCbS, w, h int) bool {
+	sh, s, p := d.sh, d.sp, d.pp
+	restricted := false
+	if p.currPicRef && (s.sao || !p.deblockDisabled || p.deblockOverride) {
+		int0 := m.mv[0][0]&3 == 0 && m.mv[0][1]&3 == 0
+		int1 := m.mv[1][0]&3 == 0 && m.mv[1][1]&3 == 0
+		same := m.mv[0] == m.mv[1] && sh.refPoc[0][m.ref[0]] == sh.refPoc[1][m.ref[1]]
+		restricted = !int0 && !int1 && !same
+	}
+	if restricted {
+		return w <= 8 && h <= 8
+	}
+	return nCbS == 8 && (w < 8 || h < 8)
 }

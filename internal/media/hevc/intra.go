@@ -159,7 +159,7 @@ func (d *Decoder) intraPredict(cIdx, xC, yC, log2, mode int) {
 				row[x] = uint16(dc)
 			}
 		}
-		if cIdx == 0 && n < 32 {
+		if cIdx == 0 && n < 32 && !s.intraBoundaryOff {
 			dst[0] = uint16((left(0) + 2*dc + top(0) + 2) >> 2)
 			for x := 1; x < n; x++ {
 				dst[x] = uint16((top(x) + 3*dc + 2) >> 2)
@@ -175,7 +175,7 @@ func (d *Decoder) intraPredict(cIdx, xC, yC, log2, mode int) {
 		// Implicit RDPCM together with transquant bypass disables the
 		// boundary filters of the horizontal and vertical modes
 		// (disableIntraBoundaryFilter of 8.4.4.2.6; HM does the same).
-		disableBF := s.implicitRdpcm && d.cu.bypass && !d.compatFFmpeg
+		disableBF := s.implicitRdpcm && d.cu.bypass && !d.compatFFmpeg || s.intraBoundaryOff
 		if mode >= 18 {
 			for x := 0; x <= n; x++ {
 				rb[off+x] = top(x - 1)

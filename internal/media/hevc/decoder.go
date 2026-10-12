@@ -14,6 +14,7 @@ var DebugPanic func(r any, stack []byte)
 type mvField struct {
 	mv  [2][2]int16
 	poc [2]int32
+	lay [2]uint8 // nuh_layer_id of the reference pictures (identity, with poc)
 	ref [2]int8
 	pf  uint8 // bit0: list 0 used, bit1: list 1 used
 	lt  uint8 // bit0/1: reference of list 0/1 is long-term
@@ -36,6 +37,7 @@ type Picture struct {
 	seq               int
 	frame             *yuv.Frame
 	decodeIdx         int
+	layer             int
 }
 
 type cuInfo struct {
@@ -50,6 +52,7 @@ const (
 	cuNoFilter = 4 // pcm with loop filter disabled, or transquant bypass
 	cuPcm      = 8
 	cuBypass   = 16
+	cuPalette  = 32 // palette mode: deblocking leaves the samples unchanged
 )
 
 type saoParams struct {
@@ -59,12 +62,34 @@ type saoParams struct {
 	offset [3][5]int16
 }
 
+// layerState is the per-layer part of the decoding state; the fields of
+// the active layer live in the Decoder itself (see switchLayer).
+type layerState struct {
+	dpb                       []*Picture
+	asps                      *SPS
+	apps                      *PPS
+	stBefore, stAfter, ltCurr []*Picture
+	prevTid0Poc               int
+	firstPic                  bool
+	afterEOS                  bool
+	noRaslOutput              bool
+	skipPic                   bool
+}
+
 // Decoder decodes an HEVC bitstream access unit by access unit.
 type Decoder struct {
 	lenSize int
 
 	sps [16]*SPS
 	pps [64]*PPS
+	vps [16]*VPS
+
+	// OutputLayer is the nuh_layer_id whose pictures are returned; layers
+	// below it that it depends on are decoded as well. The default, the
+	// base layer, ignores all NAL units of other layers.
+	outLayer int
+	curLayer int
+	layers   [maxLayers]*layerState
 
 	asps *SPS
 	apps *PPS
@@ -109,6 +134,9 @@ type Decoder struct {
 	pp        *PPS
 	cab       cabac
 	statCoeff [4]uint8
+	palPred   palPredictor // palette predictor
+	wppPal    palPredictor
+	dsPal     palPredictor
 	wppCtx    [numCtx]uint8
 	wppStat   [4]uint8
 	dsCtx     [numCtx]uint8
@@ -130,6 +158,7 @@ type Decoder struct {
 	log2MinCuChromaQpSize      int
 
 	cu              cuState
+	tuAct           bool // tu_residual_act_flag of the current transform unit
 	staleChromaMode int
 
 	// CheckHash makes the decoder verify every picture that carries a decoded
@@ -169,6 +198,8 @@ func NewDecoder() *Decoder {
 // Reset drops all pictures and parameter state needed to restart decoding
 // at a random access point.
 func (d *Decoder) Reset() {
+	d.curLayer = 0
+	d.layers = [maxLayers]*layerState{}
 	d.dpb = nil
 	d.cur = nil
 	d.pending = nil
@@ -329,12 +360,24 @@ func (d *Decoder) handleNAL(n []byte) error {
 	typ := int(n[0]>>1) & 63
 	layer := int(n[0]&1)<<5 | int(n[1]>>3)
 	tid := int(n[1]&7) - 1
-	if layer != 0 || tid < 0 {
+	if tid < 0 {
 		return nil
 	}
+	if layer != 0 {
+		if d.outLayer == 0 || !d.layerNeeded(layer) {
+			return nil
+		}
+	}
 	switch {
+	case typ == nalVPS:
+		if d.outLayer != 0 && layer == 0 {
+			if v, err := parseVPS(unescape(n[2:])); err == nil {
+				d.vps[v.id] = v
+			}
+		}
+		return nil
 	case typ == nalSPS:
-		s, err := parseSPS(unescape(n[2:]))
+		s, err := parseSPSLayer(unescape(n[2:]), layer, d.vpsByID)
 		if err != nil {
 			return err
 		}
@@ -349,32 +392,47 @@ func (d *Decoder) handleNAL(n []byte) error {
 		return nil
 	case typ == nalEOS || typ == nalEOB:
 		d.finishPicture()
-		d.afterEOS = true
+		if layer == 0 {
+			d.afterEOS = true
+			for l, ls := range d.layers {
+				if ls != nil && l != d.curLayer {
+					ls.afterEOS = true
+				}
+			}
+		} else if layer == d.curLayer {
+			d.afterEOS = true
+		} else if ls := d.layers[layer]; ls != nil {
+			ls.afterEOS = true
+		}
 		return nil
 	case typ == nalAUD:
 		d.finishPicture()
 		return nil
 	case typ == nalSuffixSEI:
-		if d.CheckHash && d.cur != nil {
+		if d.CheckHash && d.cur != nil && layer == d.curLayer {
 			if h := parseSEIHash(unescape(n[2:])); h != nil {
 				d.curHash = h
 			}
 		}
 		return nil
 	case typ <= 9 || (typ >= 16 && typ <= 21):
-		return d.handleSlice(n, typ, tid)
+		return d.handleSlice(n, typ, tid, layer)
 	}
 	return nil
 }
 
-func (d *Decoder) handleSlice(n []byte, typ, tid int) error {
+func (d *Decoder) handleSlice(n []byte, typ, tid, layer int) error {
 	rbsp := unescape(n[2:])
 	r := &bitReader{b: rbsp}
 	// peek first_slice_segment_in_pic_flag to finish the previous picture early
 	if len(rbsp) > 0 && rbsp[0]&0x80 != 0 {
 		d.finishPicture()
 	}
-	sh, err := d.parseSliceHeader(r, typ, tid, d.lastIndep)
+	if layer != d.curLayer {
+		d.finishPicture()
+		d.switchLayer(layer)
+	}
+	sh, err := d.parseSliceHeader(r, typ, tid, d.lastIndep, layer)
 	if err != nil {
 		return err
 	}
@@ -431,9 +489,7 @@ func (d *Decoder) startPicture(sh *sliceHeader) error {
 	if err := pps.setup(sps); err != nil {
 		return err
 	}
-	if sps.chromaFormat != 0 && sps.bitDepthY != sps.bitDepthC {
-		return ErrUnsupported
-	}
+
 	if d.asps != sps {
 		if d.asps != nil && !irap {
 			return errBitstream
@@ -494,19 +550,19 @@ func (d *Decoder) startPicture(sh *sliceHeader) error {
 	if irap && d.noRaslOutput {
 		// already emptied
 	} else {
-		hi := sps.maxSubLayers - 1
+		maxDec, reorder, latPlus1 := d.dpbInfo(sps)
 		for {
 			need := 0
 			lat := false
 			for _, p := range d.dpb {
 				if p.needOutput {
 					need++
-					if sps.maxLatencyPlus1[hi] != 0 && p.latency >= sps.maxNumReorder[hi]+sps.maxLatencyPlus1[hi]-1 {
+					if latPlus1 != 0 && p.latency >= reorder+latPlus1-1 {
 						lat = true
 					}
 				}
 			}
-			if (need > sps.maxNumReorder[hi] || lat || len(d.dpb) >= sps.maxDecPicBuf[hi]) && need > 0 {
+			if (need > reorder || lat || len(d.dpb) >= maxDec) && need > 0 {
 				d.bump()
 				d.removeUnused()
 				continue
@@ -518,7 +574,8 @@ func (d *Decoder) startPicture(sh *sliceHeader) error {
 	pic.poc = poc
 	pic.seq = d.seq
 	pic.refShort = true
-	pic.needOutput = sh.picOutput && !((nt == nalRaslN || nt == nalRaslR) && d.noRaslOutput)
+	pic.layer = d.curLayer
+	pic.needOutput = sh.picOutput && d.curLayer == d.outLayer && !((nt == nalRaslN || nt == nalRaslR) && d.noRaslOutput)
 	pic.decodeIdx = d.decIdx
 	d.decIdx++
 	d.cur = pic
@@ -531,6 +588,23 @@ func (d *Decoder) startPicture(sh *sliceHeader) error {
 	d.lastIndep = nil
 	d.decodedCtbs = 0
 	return nil
+}
+
+// dpbInfo returns the DPB size, reorder and latency limits that apply to a
+// picture using sps. An SPS of an enhancement layer that takes its DPB sizes
+// from the VPS uses those of the base layer here: the output order does not
+// depend on larger values.
+func (d *Decoder) dpbInfo(sps *SPS) (maxDec, reorder, latPlus1 int) {
+	if sps.multiLayer {
+		if ls := d.layers[0]; ls != nil && ls.asps != nil && !ls.asps.multiLayer {
+			sps = ls.asps
+		}
+	}
+	hi := sps.maxSubLayers - 1
+	if sps.multiLayer {
+		return 16, 15, 0
+	}
+	return sps.maxDecPicBuf[hi], sps.maxNumReorder[hi], sps.maxLatencyPlus1[hi]
 }
 
 func (d *Decoder) removeUnused() {
@@ -724,8 +798,16 @@ func (d *Decoder) setupRefLists(sh *sliceHeader) error {
 	if sh.sliceType == sliceI {
 		return nil
 	}
+	il0, il1, err := d.interLayerRefs(sh)
+	if err != nil {
+		return err
+	}
 	nb, na, nl := len(d.stBefore), len(d.stAfter), len(d.ltCurr)
-	total := nb + na + nl
+	total := nb + na + nl + len(il0) + len(il1)
+	cur := d.apps.currPicRef
+	if cur {
+		total++
+	}
 	if total == 0 {
 		return errBitstream
 	}
@@ -741,27 +823,29 @@ func (d *Decoder) setupRefLists(sh *sliceHeader) error {
 		temp := make([]*Picture, 0, nTemp)
 		tlt := make([]bool, 0, nTemp)
 		first, second := d.stBefore, d.stAfter
+		ilFirst, ilSecond := il0, il1
 		if l == 1 {
 			first, second = d.stAfter, d.stBefore
+			ilFirst, ilSecond = il1, il0
+		}
+		add := func(ps []*Picture, lt bool) {
+			for _, p := range ps {
+				if len(temp) < nTemp {
+					temp = append(temp, p)
+					tlt = append(tlt, lt)
+				}
+			}
 		}
 		for len(temp) < nTemp {
-			for _, p := range first {
-				if len(temp) < nTemp {
-					temp = append(temp, p)
-					tlt = append(tlt, false)
-				}
-			}
-			for _, p := range second {
-				if len(temp) < nTemp {
-					temp = append(temp, p)
-					tlt = append(tlt, false)
-				}
-			}
-			for _, p := range d.ltCurr {
-				if len(temp) < nTemp {
-					temp = append(temp, p)
-					tlt = append(tlt, true)
-				}
+			// RefPicListTemp0: StCurrBefore, InterLayer0, StCurrAfter, LtCurr,
+			// InterLayer1; RefPicListTemp1 swaps the roles (F.8.3.4)
+			add(first, false)
+			add(ilFirst, true)
+			add(second, false)
+			add(d.ltCurr, true)
+			add(ilSecond, true)
+			if cur {
+				add([]*Picture{d.cur}, true)
 			}
 		}
 		for i := 0; i < n; i++ {
@@ -775,6 +859,12 @@ func (d *Decoder) setupRefLists(sh *sliceHeader) error {
 			sh.refPic[l][i] = temp[idx]
 			sh.refPoc[l][i] = int32(temp[idx].poc)
 			sh.refLT[l][i] = tlt[idx]
+			sh.refLayer[l][i] = uint8(temp[idx].layer)
+			if cur && l == 0 && !sh.listMod[0] && total > n && i == n-1 {
+				// the current picture ends a list that is shorter than the
+				// temporary one (8.3.4)
+				sh.refPic[0][i], sh.refPoc[0][i], sh.refLT[0][i], sh.refLayer[0][i] = d.cur, int32(d.cur.poc), true, uint8(d.cur.layer)
+			}
 		}
 	}
 	// NoBackwardPredFlag
@@ -816,20 +906,19 @@ func (d *Decoder) finishPicture() {
 			}
 		}
 		p.latency = 0
-		sps := p.sps
-		hi := sps.maxSubLayers - 1
+		_, reorder, latPlus1 := d.dpbInfo(p.sps)
 		for {
 			need := 0
 			lat := false
 			for _, q := range d.dpb {
 				if q.needOutput {
 					need++
-					if sps.maxLatencyPlus1[hi] != 0 && q.latency >= sps.maxNumReorder[hi]+sps.maxLatencyPlus1[hi]-1 {
+					if latPlus1 != 0 && q.latency >= reorder+latPlus1-1 {
 						lat = true
 					}
 				}
 			}
-			if need > sps.maxNumReorder[hi] || (lat && need > 0) {
+			if need > reorder || (lat && need > 0) {
 				d.bump()
 				continue
 			}
@@ -880,6 +969,27 @@ func (d *Decoder) frameOf(p *Picture) *yuv.Frame {
 		co := (sps.cropT>>sy)*p.stride[1] + sps.cropL>>sx
 		f.Planes[1], f.Planes[2] = p.planes[1][co:], p.planes[2][co:]
 		f.Stride[1], f.Stride[2] = p.stride[1], p.stride[2]
+	}
+	if sps.chromaFormat != 0 && sps.bitDepthY != sps.bitDepthC {
+		// the frame has a single bit depth: the plane with the lower depth
+		// is scaled up
+		f.Depth = max(sps.bitDepthY, sps.bitDepthC)
+		scale := func(pl []uint16, stride, w, h int, shift uint) ([]uint16, int) {
+			if shift == 0 {
+				return pl, stride
+			}
+			out := make([]uint16, w*h)
+			for y := 0; y < h; y++ {
+				for x := 0; x < w; x++ {
+					out[y*w+x] = pl[y*stride+x] << shift
+				}
+			}
+			return out, w
+		}
+		f.Planes[0], f.Stride[0] = scale(f.Planes[0], f.Stride[0], f.Width, f.Height, uint(f.Depth-sps.bitDepthY))
+		for c := 1; c < 3; c++ {
+			f.Planes[c], f.Stride[c] = scale(f.Planes[c], f.Stride[c], f.CWidth, f.CHeight, uint(f.Depth-sps.bitDepthC))
+		}
 	}
 	p.frame = f
 	return f
