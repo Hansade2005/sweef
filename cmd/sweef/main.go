@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/sweefbrowser/sweef/internal/agent"
 	"os"
 	"os/signal"
 	"strings"
@@ -57,6 +58,8 @@ func main() {
 		cmdEval(args)
 	case "call":
 		cmdCall(args)
+	case "agent":
+		os.Exit(agent.RunCLI(args, os.Stdin, os.Stdout))
 	case "gui":
 		cmdGUI(args)
 	case "version", "--version":

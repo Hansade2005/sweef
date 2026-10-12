@@ -32,25 +32,27 @@ type hEntry struct {
 	url, title string
 	hay        string // lower-case "host/path title", what queries match
 	host       string
-	mask       [2]uint64 // bigram Bloom bits of hay (pre-filter: a match needs all query bigram bits)
 	visits     int32
 	typed      int32
 	last       int64   // unix seconds
 	score      float64 // decayed visit weight as of `last`
 	key        float64 // log2(score) + last/halfLife: order-preserving under decay
+	touched    bool    // changed since the last order rebuild (omask/order are stale for it)
 }
 
 // History is the visit log with a frecency-ordered in-memory index.
 type History struct {
-	b       Backend
-	mu      sync.Mutex
-	ents    []hEntry
-	byURL   map[string]int32
-	order   []int32 // indexes by key descending (lazily rebuilt)
-	dirty   bool
-	rebuilt time.Time
-	lines   int
-	now     func() time.Time
+	b           Backend
+	mu          sync.Mutex
+	ents        []hEntry
+	byURL       map[string]int32
+	order       []int32 // indexes by key descending (lazily rebuilt)
+	omask       []sig   // omask[k] = signature of ents[order[k]].hay, contiguous for a cache-friendly scan
+	touchedList []int32 // entries changed or added since the rebuild
+	dirty       bool
+	rebuilt     time.Time
+	lines       int
+	now         func() time.Time
 }
 
 type hRec struct {
@@ -98,7 +100,7 @@ func (h *History) apply(r hRec) {
 		h.remove(r.D)
 	case r.C:
 		hay, host := hayOf(r.U, r.T)
-		e := hEntry{url: r.U, title: r.T, hay: hay, host: host, mask: charMask(hay),
+		e := hEntry{url: r.U, title: r.T, hay: hay, host: host,
 			visits: r.N, typed: r.Z, last: r.V, score: r.S}
 		if e.score <= 0 {
 			e.score = 1
@@ -115,7 +117,6 @@ func (h *History) apply(r hRec) {
 			e := &h.ents[i]
 			e.title = r.T
 			e.hay, e.host = hayOf(e.url, r.T)
-			e.mask = charMask(e.hay)
 		}
 	case r.U != "":
 		h.visit(r.U, r.T, time.Unix(r.V, 0), r.Y)
@@ -134,23 +135,33 @@ func (h *History) remove(u string) {
 	}
 	h.ents = h.ents[:last]
 	delete(h.byURL, u)
+	h.order = nil // indices moved: the order index must be rebuilt
+	h.touchedList = nil
 }
 
-// charMask returns a 128-bit Bloom signature of the byte bigrams of s. A
+// sig is a 512-bit Bloom signature of the byte bigrams of a haystack. A
 // haystack can only contain a query if its signature covers the query's, so
-// one AND per entry rejects nearly everything that cannot match, without
-// touching the string. Single-byte queries have no bigrams and always pass.
-func charMask(s string) [2]uint64 {
-	var m [2]uint64
+// one 8-word AND-compare per entry rejects nearly everything that cannot
+// match, without touching the string. Single-byte queries have no bigrams
+// and always pass (they match so many entries that the scan exits early).
+type sig [8]uint64
+
+func sigOf(s string) sig {
+	var m sig
 	for i := 0; i+1 < len(s); i++ {
 		a, b := s[i], s[i+1]
 		if a == ' ' || b == ' ' {
 			continue
 		}
-		h := (uint32(a)*0x9E3779B1 ^ uint32(b)*0x85EBCA6B) >> 25 // 7 bits
+		h := (uint32(a)*0x9E3779B1 ^ uint32(b)*0x85EBCA6B) >> 23 // 9 bits
 		m[h>>6] |= 1 << (h & 63)
 	}
 	return m
+}
+
+func (m *sig) covers(q *sig) bool {
+	return m[0]&q[0] == q[0] && m[1]&q[1] == q[1] && m[2]&q[2] == q[2] && m[3]&q[3] == q[3] &&
+		m[4]&q[4] == q[4] && m[5]&q[5] == q[5] && m[6]&q[6] == q[6] && m[7]&q[7] == q[7]
 }
 
 func hayOf(u, title string) (hay, host string) {
@@ -174,6 +185,13 @@ func keyOf(score float64, last int64) float64 {
 	return math.Log2(score) + float64(last)/halfLife.Seconds()
 }
 
+func (h *History) touch(i int32) {
+	if e := &h.ents[i]; !e.touched {
+		e.touched = true
+		h.touchedList = append(h.touchedList, i)
+	}
+}
+
 func (h *History) visit(u, title string, at time.Time, typed bool) {
 	ts := at.Unix()
 	w := 1.0
@@ -195,19 +213,20 @@ func (h *History) visit(u, title string, at time.Time, typed bool) {
 		if title != "" && title != e.title {
 			e.title = title
 			e.hay, e.host = hayOf(u, title)
-			e.mask = charMask(e.hay)
 		}
 		e.key = keyOf(e.score, e.last)
+		h.touch(i)
 		return
 	}
 	hay, host := hayOf(u, title)
-	e := hEntry{url: u, title: title, hay: hay, host: host, mask: charMask(hay), visits: 1, last: ts, score: w}
+	e := hEntry{url: u, title: title, hay: hay, host: host, visits: 1, last: ts, score: w}
 	if typed {
 		e.typed = 1
 	}
 	e.key = keyOf(e.score, e.last)
 	h.byURL[u] = int32(len(h.ents))
 	h.ents = append(h.ents, e)
+	h.touch(int32(len(h.ents) - 1))
 }
 
 // Visit records a page visit. Only http(s)/file/sweef-internal-free URLs
@@ -242,7 +261,7 @@ func (h *History) SetTitle(u, title string) {
 	e := &h.ents[i]
 	e.title = title
 	e.hay, e.host = hayOf(u, title)
-	e.mask = charMask(e.hay)
+	h.touch(i)
 	b, _ := json.Marshal(hRec{U: u, T: title, TT: true})
 	h.lines++
 	_ = h.b.Append(historyFile, b)
@@ -339,6 +358,15 @@ func (h *History) rebuildLocked() {
 	}
 	ents := h.ents
 	sort.Slice(h.order, func(a, b int) bool { return ents[h.order[a]].key > ents[h.order[b]].key })
+	if cap(h.omask) < len(h.order) {
+		h.omask = make([]sig, len(h.order), cap(h.order))
+	}
+	h.omask = h.omask[:len(h.order)]
+	for k, i := range h.order {
+		h.omask[k] = sigOf(ents[i].hay)
+		ents[i].touched = false
+	}
+	h.touchedList = h.touchedList[:0]
 	h.dirty = false
 	h.rebuilt = time.Now()
 }
@@ -392,21 +420,20 @@ func (h *History) Search(q string, limit int) []HistoryEntry {
 		return h.Top(limit)
 	}
 	terms := strings.Fields(q)
-	var qmask [2]uint64
+	var qsig sig
 	for _, t := range terms {
-		m := charMask(t)
-		qmask[0] |= m[0]
-		qmask[1] |= m[1]
+		m := sigOf(t)
+		for k := range qsig {
+			qsig[k] |= m[k]
+		}
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.dirty && (len(h.ents) < 5000 || h.order == nil || time.Since(h.rebuilt) > time.Second) {
+	// The ranked index is rebuilt lazily. Entries that changed since are kept
+	// in touchedList and scanned separately with fresh data, so a visit never
+	// forces an O(n log n) re-sort in front of a keystroke.
+	if h.order == nil || len(h.order) > len(h.ents) || len(h.touchedList) > 4096 || (len(h.ents) < 5000 && h.dirty) {
 		h.rebuildLocked()
-	}
-	order := h.order
-	if len(order) > len(h.ents) { // entries removed since the last rebuild
-		h.rebuildLocked()
-		order = h.order
 	}
 	type cand struct {
 		i    int32
@@ -415,13 +442,14 @@ func (h *History) Search(q string, limit int) []HistoryEntry {
 	want := limit * 6
 	cands := make([]cand, 0, want)
 	first := terms[0]
-	for _, i := range order {
-		if int(i) >= len(h.ents) {
+	for k := range h.omask {
+		if !h.omask[k].covers(&qsig) {
 			continue
 		}
+		i := h.order[k]
 		e := &h.ents[i]
-		if e.mask[0]&qmask[0] != qmask[0] || e.mask[1]&qmask[1] != qmask[1] {
-			continue
+		if e.touched {
+			continue // handled below with its fresh mask
 		}
 		tier, ok := matchTier(e, terms, first)
 		if !ok {
@@ -430,6 +458,12 @@ func (h *History) Search(q string, limit int) []HistoryEntry {
 		cands = append(cands, cand{i, tier})
 		if len(cands) >= want*4 {
 			break
+		}
+	}
+	for _, i := range h.touchedList {
+		e := &h.ents[i]
+		if tier, ok := matchTier(e, terms, first); ok {
+			cands = append(cands, cand{i, tier})
 		}
 	}
 	sort.SliceStable(cands, func(a, b int) bool {

@@ -42,6 +42,7 @@ type DownloadItem struct {
 	Incognito bool      `json:"-"`
 
 	cancel context.CancelFunc
+	done   chan struct{} // closed when the transfer goroutine exits
 	cookie string
 	ua     string
 }
@@ -208,12 +209,21 @@ func uniquePath(p string) string {
 func (d *Downloads) run(it *DownloadItem) {
 	ctx, cancel := context.WithCancel(context.Background())
 	d.mu.Lock()
+	prev := it.done
+	d.mu.Unlock()
+	if prev != nil {
+		<-prev // the previous transfer must have stopped writing before we continue the file
+	}
+	d.mu.Lock()
 	it.cancel = cancel
 	it.State = DLProgress
 	start := it.Received
+	done := make(chan struct{})
+	it.done = done
 	d.mu.Unlock()
 	d.notify(*it)
 	go func() {
+		defer close(done)
 		err := d.fetch(ctx, it, start)
 		d.mu.Lock()
 		switch {
@@ -265,6 +275,11 @@ func (d *Downloads) fetch(ctx context.Context, it *DownloadItem, from int64) err
 		return err
 	}
 	defer f.Close()
+	if flags&os.O_APPEND != 0 {
+		if err := f.Truncate(from); err != nil { // drop anything past what we counted
+			return err
+		}
+	}
 	d.mu.Lock()
 	it.Mime = resp.Header.Get("Content-Type")
 	it.Received = from

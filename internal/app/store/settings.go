@@ -86,6 +86,7 @@ func OpenSettings(b Backend) (*Settings, error) {
 		return s, nil // corrupt: start from defaults, do not fail start-up
 	}
 	s.loaded = d.V
+	stale := d.V != SettingsVersion
 	migrate(&d)
 	for k, v := range d.Values {
 		if sp, ok := s.specs[k]; ok {
@@ -96,7 +97,7 @@ func OpenSettings(b Backend) (*Settings, error) {
 		}
 		s.vals[k] = v
 	}
-	if d.V != SettingsVersion {
+	if stale {
 		s.saveLocked()
 	}
 	return s, nil

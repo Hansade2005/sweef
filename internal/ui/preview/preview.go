@@ -62,8 +62,15 @@ func Engine() *engine.Engine {
 	return engine.New(engine.Options{ViewportWidth: 1280, ViewportHeight: 800, ConsoleRingSize: 400, NetworkRingSize: 200, StateRingSize: 64, CacheDir: "off", SettleMs: 150})
 }
 
-// Render loads the scenario and screenshots it at the given scale.
-func Render(e *engine.Engine, base string, sc Scenario, scale float64) (*Result, error) {
+// Session is one loaded page that tests and previews can drive.
+type Session struct {
+	Tab  *engine.Tab
+	sc   Scenario
+	errs []string
+}
+
+// Open loads the scenario (init mock, navigate, deliver state) without running its Setup.
+func Open(e *engine.Engine, base string, sc Scenario, scale float64) (*Session, error) {
 	t, err := e.NewTab("")
 	if err != nil {
 		return nil, err
@@ -73,51 +80,91 @@ func Render(e *engine.Engine, base string, sc Scenario, scale float64) (*Result,
 	if err := t.Navigate(base+"/"+sc.Page+sc.Query, nil); err != nil {
 		return nil, err
 	}
-	res := &Result{}
-	run := func(js string) {
-		if _, err := t.Evaluate(js); err != nil {
-			res.Errors = append(res.Errors, "evaluate: "+err.Error())
-		}
-	}
+	s := &Session{Tab: t, sc: sc}
 	if !sc.NoState && sc.State != nil {
 		b, _ := json.Marshal(sc.State)
-		run(`__send("state", ` + string(b) + `)`)
+		s.Run(`__send("state", ` + string(b) + `)`)
 	}
-	settle := func() {
-		for i := 0; i < 4; i++ { // chained rAF callbacks need several pumps
-			t.Settle(60 * time.Millisecond)
+	s.Settle()
+	return s, nil
+}
+
+// Run evaluates JS, recording an error if it throws.
+func (s *Session) Run(js string) {
+	if _, err := s.Tab.Evaluate(js); err != nil {
+		s.errs = append(s.errs, "evaluate: "+err.Error())
+	}
+}
+
+// Eval evaluates an expression and returns its JSON-decoded value.
+func (s *Session) Eval(js string) (any, error) {
+	raw, err := s.Tab.Evaluate(js)
+	if err != nil {
+		return nil, err
+	}
+	var v any
+	_ = json.Unmarshal(raw, &v)
+	return v, nil
+}
+
+// Settle pumps the page's event loop long enough for chained rAF callbacks.
+func (s *Session) Settle() {
+	for i := 0; i < 4; i++ {
+		s.Tab.Settle(60 * time.Millisecond)
+	}
+}
+
+// Posts returns every message the page has posted to Go so far.
+func (s *Session) Posts() [][]interface{} {
+	var out [][]interface{}
+	if raw, err := s.Tab.Evaluate(`JSON.stringify(window.__posts||[])`); err == nil {
+		var str string
+		if json.Unmarshal(raw, &str) == nil {
+			_ = json.Unmarshal([]byte(str), &out)
 		}
 	}
-	settle()
-	if sc.Setup != "" {
-		run(sc.Setup)
-		settle()
-	}
-	if sc.Backdrop != "" {
-		run(`__backdrop(` + jsq(sc.Backdrop) + `)`)
-	}
-	for _, ev := range t.ConsoleLog(0) {
+	return out
+}
+
+// ClearPosts forgets recorded posts.
+func (s *Session) ClearPosts() { s.Run(`window.__posts.length = 0`) }
+
+// Errors returns console errors, warnings and uncaught exceptions seen so far.
+func (s *Session) Errors() []string {
+	out := append([]string(nil), s.errs...)
+	for _, ev := range s.Tab.ConsoleLog(0) {
 		m, _ := ev.Data.(map[string]string)
 		if m["level"] == "error" || m["level"] == "warning" || m["level"] == "warn" {
-			res.Errors = append(res.Errors, m["level"]+": "+m["text"])
+			out = append(out, m["level"]+": "+m["text"])
 		}
 	}
-	if raw, err := t.Evaluate(`JSON.stringify(window.__errs||[])`); err == nil {
+	if raw, err := s.Tab.Evaluate(`JSON.stringify(window.__errs||[])`); err == nil {
+		var str string
 		var errs []string
-		var s string
-		if json.Unmarshal(raw, &s) == nil {
-			_ = json.Unmarshal([]byte(s), &errs)
-		}
-		res.Errors = append(res.Errors, errs...)
-	}
-	if raw, err := t.Evaluate(`JSON.stringify(window.__posts||[])`); err == nil {
-		var s string
-		if json.Unmarshal(raw, &s) == nil {
-			_ = json.Unmarshal([]byte(s), &res.Posts)
+		if json.Unmarshal(raw, &str) == nil && json.Unmarshal([]byte(str), &errs) == nil {
+			out = append(out, errs...)
 		}
 	}
-	res.PNG = t.PNGScreenshot(sc.W, sc.H, scale)
-	return res, nil
+	return out
+}
+
+// PNG screenshots the page at its configured size.
+func (s *Session) PNG(scale float64) []byte { return s.Tab.PNGScreenshot(s.sc.W, s.sc.H, scale) }
+
+// Render loads the scenario, runs its Setup and screenshots it at the given scale.
+func Render(e *engine.Engine, base string, sc Scenario, scale float64) (*Result, error) {
+	s, err := Open(e, base, sc, scale)
+	if err != nil {
+		return nil, err
+	}
+	if sc.Setup != "" {
+		s.Run(sc.Setup)
+		s.Settle()
+	}
+	if sc.Backdrop != "" {
+		s.Run(`__backdrop(` + jsq(sc.Backdrop) + `)`)
+	}
+	return &Result{PNG: s.PNG(scale), Errors: s.Errors(), Posts: s.Posts()}, nil
 }
 
 func jsq(s string) string { b, _ := json.Marshal(s); return string(b) }
