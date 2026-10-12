@@ -72,7 +72,7 @@
 .skchips { display: flex; flex-wrap: wrap; gap: 6px; }
 .skchips .pagechip { max-width: 100%; overflow: hidden; cursor: default; height: 28px; padding: 0 10px 0 6px; font-weight: 500; color: var(--text); }
 .skchips .pagechip:hover { background: var(--hover); }
-.skchips .pagechip .eye { color: var(--ok); } .skchips .pagechip.off .eye { color: var(--warn); } .skchips .pagechip.off { background: var(--warn-soft); }
+.skchips .pagechip .eye { color: var(--ok); } .skchips .pagechip.off .eye { color: var(--warn); } .skchips .pagechip.ask .eye { color: var(--text-3); } .skchips .pagechip.off { background: var(--warn-soft); }
 .skchips .chip .x { width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); } .skchips .chip .x:hover { background: var(--press); color: var(--text); }
 .sklat { white-space: nowrap; display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-3); padding: 0 4px; font-variant-numeric: tabular-nums; }
 .sklat .ic { color: var(--mint); } .sklat b { color: var(--text-2); font-weight: 650; } .sklat .bar2 { flex: none; width: 64px; height: 3px; border-radius: 3px; background: var(--sunken); overflow: hidden; } .sklat .bar2 i { display: block; height: 100%; background: var(--volt-grad); }

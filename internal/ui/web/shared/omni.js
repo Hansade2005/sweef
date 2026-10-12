@@ -12,8 +12,8 @@
     this.typed = ""; this.completion = ""; this.noGhost = false; this.pasted = false; this.uid = "ob" + (++SW.omniSeq);
     var me = this, inp = this.input;
     inp.setAttribute("role", "combobox"); inp.setAttribute("aria-autocomplete", "both"); inp.setAttribute("aria-expanded", "false");
-    inp.setAttribute("aria-controls", this.uid + "l"); inp.setAttribute("autocomplete", "off"); inp.setAttribute("spellcheck", "false");
-    this.list.id = this.uid + "l"; this.list.setAttribute("role", "listbox"); this.list.setAttribute("aria-label", "Suggestions");
+    inp.setAttribute("autocomplete", "off"); inp.setAttribute("spellcheck", "false");
+    if (!this.list.id) this.list.id = this.uid + "l"; inp.setAttribute("aria-controls", this.list.id); this.list.setAttribute("role", "listbox"); this.list.setAttribute("aria-label", "Suggestions");
     inp.addEventListener("input", function (e) { me.noGhost = /^delete/.test(e.inputType || ""); me.onInput(); });
     inp.addEventListener("keydown", function (e) { me.onKey(e); });
     inp.addEventListener("paste", function (e) {

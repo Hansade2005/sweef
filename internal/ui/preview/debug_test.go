@@ -29,15 +29,16 @@ func TestDebug(t *testing.T) {
 		t.Fatal(err)
 	}
 	tab.Evaluate(`__send("state", ` + js(sc.State) + `)`)
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 8; i++ {
 		tab.Settle(60 * time.Millisecond)
 	}
 	if sc.Setup != "" {
 		tab.Evaluate(sc.Setup)
-		for i := 0; i < 4; i++ {
+		for i := 0; i < 8; i++ {
 			tab.Settle(60 * time.Millisecond)
 		}
 	}
+	tab.Evaluate(`window.__type=function(el,v){el.focus();el.value=v;try{el.setSelectionRange(v.length,v.length)}catch(e){};el.dispatchEvent(new Event("input",{bubbles:true}))};`)
 	r, err := tab.Evaluate(jsExpr)
 	t.Logf("result=%s err=%v", r, err)
 	for _, ev := range tab.ConsoleLog(0) {

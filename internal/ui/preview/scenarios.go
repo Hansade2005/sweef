@@ -80,7 +80,7 @@ const answerMD = "Sure, here is the simple version of what this article says abo
 
 func chatScript() string {
 	var b strings.Builder
-	b.WriteString(`SW.sidekick.send("Can you explain this in simple terms?");`)
+	b.WriteString(`SW.sk.send("Can you explain this in simple terms?");`)
 	b.WriteString(ev("thought", "text", "Reading the article, then I will pull out what changed and what it means for a normal paycheck.", "done", true))
 	b.WriteString(ev("action", "id", "a1", "label", "Read the page", "detail", "wsj.com", "status", "ok", "ms", 38))
 	b.WriteString(ev("text", "text", answerMD))
@@ -90,7 +90,7 @@ func chatScript() string {
 
 func agentRunScript() string {
 	var b strings.Builder
-	b.WriteString(`SW.set("agent.mode","agent");SW.sidekick.send("Heading to the beach with the kids tomorrow. Can you grab the usual beach-day stuff?");`)
+	b.WriteString(`SW.set("agent.mode","agent");SW.sk.send("Heading to the beach with the kids tomorrow. Can you grab the usual beach-day stuff?");`)
 	b.WriteString(ev("thought", "text", "I will start with sunscreen, then a towel and a hat. SPF 50 for the kids, and I will stop before checkout."))
 	b.WriteString(ev("text", "text", "On it. I am adding the well-rated **SPF 50** sunscreen, a towel and a bucket hat."))
 	b.WriteString(ev("action", "id", "a1", "label", "Searched for \"SPF 50 sunscreen\"", "status", "ok", "ms", 412))
@@ -119,7 +119,7 @@ func Scenarios() []Scenario {
 		Setup: `document.getElementById('secbtn').click();document.querySelector('.pop .mi').click();`})
 	add(Scenario{Name: "chrome-menu-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "sidebar.open", false), Backdrop: "article", Setup: `document.getElementById('menubtn').click();`})
 	add(Scenario{Name: "chrome-palette", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false), Backdrop: "article",
-		Setup: `SW.palette.open();var i=document.querySelector('#pal input');i.value='tax';i.dispatchEvent(new Event('input',{bubbles:true}));__send('omni.suggestions',{id:SW.omniSeq,items:[{"type":"history","title":"IRS: tax brackets 2026","url":"https://www.irs.gov/newsroom/2026"},{"type":"bookmark","title":"Tax Foundation","url":"https://taxfoundation.org/"}]});`})
+		Setup: `SW.palette.open();`, Then: `var i=document.querySelector('#pal input');i.value='tax';i.dispatchEvent(new Event('input',{bubbles:true}));__send('omni.suggestions',{id:SW.omniSeq,items:[{"type":"history","title":"IRS: tax brackets 2026","url":"https://www.irs.gov/newsroom/2026"},{"type":"bookmark","title":"Tax Foundation","url":"https://taxfoundation.org/"}]});`})
 	add(Scenario{Name: "chrome-find-downloads", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false), Backdrop: "article",
 		Setup: `SW.chrome.run('find.open');var f=document.querySelector('#find input');f.value='bracket';f.dispatchEvent(new Event('input',{bubbles:true}));__send('find.result',{count:7,index:2});document.getElementById('dlbtn').click();`})
 	add(Scenario{Name: "chrome-compat-darwin", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "platform", "darwin", "sidebar.open", false, "compat", M{"url": "https://www.wsj.com/personal-finance"}, "loading", true, "progress", 0.62), Backdrop: "article"})
@@ -128,7 +128,13 @@ func Scenarios() []Scenario {
 		many = append(many, tab(fmt.Sprintf("m%d", i), fmt.Sprintf("Research tab number %d about browsers", i+1), fmt.Sprintf("https://site%d.example.com/page", i)))
 	}
 	add(Scenario{Name: "chrome-windows-overflow", Page: "chrome/index.html", W: 1000, H: 640, State: with(light, "platform", "windows", "tabs", many, "active", "m9", "url", "https://site9.example.com/page", "sidebar.open", false), Backdrop: "article"})
-	add(Scenario{Name: "chrome-incognito", Page: "chrome/index.html", W: 1280, H: 800, State: with(inc, "sidebar.open", false), Backdrop: "blank"})
+	add(Scenario{Name: "newtab-light-page", Page: "newtab/index.html", W: 1280, H: 712, State: light, Skip: true})
+	add(Scenario{Name: "chrome-newtab-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false, "url", "sweef://newtab", "title", "New Tab", "active", "t4", "security", M{"level": "internal"}, "bookmarksBar", []M{{"title": "Hacker News", "url": "https://news.ycombinator.com/"}, {"title": "GitHub", "url": "https://github.com/"}, {"title": "Pro Git", "url": "https://git-scm.com/book"}, {"title": "Maps", "url": "https://maps.example.com/"}}, "settings", M{"theme": "light", "density": "comfortable", "bookmarks.bar": true, "agent.mode": "ask", "agent.latencyStrip": true}), BackdropFrom: "newtab-light-page"})
+	add(Scenario{Name: "chrome-dark-streaming", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "agent.state", "working"), Backdrop: "article",
+		Setup: `SW.sk.send("Fact-check the claim about the standard deduction");` + ev("thought", "text", "Looking up the 2026 standard deduction on irs.gov, then comparing it with the article.") + ev("action", "id", "a1", "label", "Searched the web", "detail", "2026 standard deduction irs", "status", "ok", "ms", 640) + ev("action", "id", "a2", "label", "Opened irs.gov/newsroom", "status", "running") + ev("text", "text", "The article says the **single** standard deduction is $16,100. Checking that against the IRS notice\u2026")})
+	add(Scenario{Name: "chrome-light-rate-toasts", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "agent.state", "error"), Backdrop: "article",
+		Setup: `SW.sk.send("Summarise this page");` + ev("error", "code", "rate_limit", "retryAfter", 24) + `SW.chrome.toast("Bookmarked");SW.chrome.toast("Download finished","ok",{label:"Open",type:"downloads.open",payload:{id:"d2"}});SW.chrome.toast("Sidekick can no longer see grocer.example.com","warn");`})
+	add(Scenario{Name: "chrome-incognito", Page: "chrome/index.html", W: 1280, H: 800, State: with(inc, "sidebar.open", false), BackdropFrom: "newtab-incognito-page"})
 	add(Scenario{Name: "design-system", Page: "__sheet/system.html", W: 1280, H: 1500, NoState: true})
 	add(Scenario{Name: "design-system-dark", Page: "__sheet/system.html", Query: "?theme=dark", W: 1280, H: 1500, NoState: true})
 	// ---- overlay
@@ -144,6 +150,7 @@ func Scenarios() []Scenario {
 	// ---- new tab
 	add(Scenario{Name: "newtab-light", Page: "newtab/index.html", W: 1280, H: 800, State: light})
 	add(Scenario{Name: "newtab-dark-typing", Page: "newtab/index.html", W: 1280, H: 800, State: dark, Setup: `var u=document.getElementById('q');u.focus();u.value='best ramen near me';u.setSelectionRange(18,18);u.dispatchEvent(new Event('input',{bubbles:true}));__send('omni.suggestions',{id:SW.omniSeq,items:[{"type":"search","text":"best ramen near me open now"},{"type":"search","text":"best ramen recipe"},{"type":"history","title":"Ichiran Ramen - Menu","url":"https://ichiran.example.com/menu"}]});`})
+	add(Scenario{Name: "newtab-incognito-page", Page: "newtab/index.html", Query: "?incognito=1", W: 1280, H: 712, State: inc, Skip: true})
 	add(Scenario{Name: "newtab-incognito", Page: "newtab/index.html", W: 1280, H: 800, State: inc})
 	// ---- onboarding
 	for i := 1; i <= 3; i++ {

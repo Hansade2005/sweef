@@ -19,49 +19,48 @@
   function group(title, rows) { return h("div.group", title ? h("div.gh", { text: title }) : null, rows); }
   var btn = function (t, f, cls) { return h("button.btn.sm" + (cls ? "." + cls : ""), { text: t, onclick: f }); };
 
+  var T = S.set, F = S.f;
   var P = {
     general: function () {
-      var ds = SW.state.defaultBrowser;
-      return [h("h2", S.set.nav.general), h("p.lead", "The basics."),
-        group("On startup", [row("When Sweef opens", "", select("startup.mode", [["newtab", "Open the new tab page"], ["restore", "Continue where I left off"], ["pages", "Open specific pages"]], "newtab")), row("Startup pages", "Used when you pick \"Open specific pages\". One address per line.", h("input.field.w", { value: String(val("startup.pages", "")), placeholder: "https://example.com", onchange: function (e) { SW.set("startup.pages", e.target.value); } }))]),
-        group("Default browser", [row(ds ? "Sweef is your default browser" : "Sweef is not your default browser", "Links from other apps open here.", ds ? h("span.badge.ok", "Default") : btn("Make default", function () { post("defaultBrowser.set"); }, "primary"))])];
+      var g = T.general, ds = SW.state.defaultBrowser;
+      return [h("h2", T.nav.general), h("p.lead", g.lead),
+        group(g.gStart, [row(F(g.when), "", select("startup.mode", [["newtab", g.newtab], ["restore", g.restore], ["pages", g.pages]], "newtab")), row(g.pagesT, g.pagesD, h("input.field.w", { value: String(val("startup.pages", "")), placeholder: "https://example.com", "aria-label": g.pagesT, onchange: function (e) { SW.set("startup.pages", e.target.value); } }))]),
+        group(g.gDef, [row(F(ds ? g.isDef : g.notDef), g.defD, ds ? h("span.badge.ok", g.defBadge) : btn(g.make, function () { post("defaultBrowser.set"); }, "primary"))])];
     },
     search: function () {
-      return [h("h2", S.set.nav.search), h("p.lead", "What the address bar uses when you type something that is not a web address."),
-        group("", [row("Search engine", "Used for searches from the address bar and new tab page.", select("search.engine", [["duckduckgo", "DuckDuckGo"], ["google", "Google"], ["bing", "Bing"], ["brave", "Brave Search"], ["startpage", "Startpage"], ["ecosia", "Ecosia"]], "duckduckgo")),
-          row("Show search suggestions", "Sends what you type to your search engine so it can suggest completions.", toggle("search.suggest", true)),
-          row("Show \"Ask {brand}\" in the address bar", "A row that sends your text to {agent} instead of a search engine.", toggle("omni.askRow", true))])];
+      var g = T.search_;
+      return [h("h2", T.nav.search), h("p.lead", g.lead),
+        group("", [row(g.engine, g.engineD, select("search.engine", T.engines, "duckduckgo")), row(g.suggest, g.suggestD, toggle("search.suggest", true)), row(F(g.askRow), g.askRowD, toggle("omni.askRow", true))])];
     },
     privacy: function () {
-      return [h("h2", S.set.nav.privacy), h("p.lead", "Sweef blocks known trackers and tells you plainly what it does and does not do."),
-        group("Tracking", [row("Tracker blocking", "Standard blocks known trackers. Strict also blocks more third-party content and can break some sites.", seg("privacy.trackers", [["standard", "Standard"], ["strict", "Strict"], ["off", "Off"]], "standard")),
-          row("Send Global Privacy Control", "Tells sites you do not want your data sold or shared.", toggle("privacy.gpc", true)), row("Upgrade to HTTPS when possible", "Tries the secure version of a site first.", toggle("privacy.httpsUpgrade", true))]),
-        group("Your data", [row("Clear browsing data on exit", "History, cookies and cache are removed when you quit.", toggle("privacy.clearOnExit", false)), row("Clear browsing data now", "Choose what to remove and for how long.", btn("Clear data...", function () { post("data.clear"); })), row("Site settings", "Per-site permissions and what each site stored.", btn("Open", function () { post("tab.new", { url: "sweef://settings#site" }); }))])];
+      var g = T.privacy;
+      return [h("h2", T.nav.privacy), h("p.lead", F(g.lead)),
+        group(g.gTrack, [row(g.track, g.trackD, seg("privacy.trackers", [["standard", g.std], ["strict", g.strict], ["off", g.off]], "standard")), row(g.gpc, g.gpcD, toggle("privacy.gpc", true)), row(g.https, g.httpsD, toggle("privacy.httpsUpgrade", true))]),
+        group(g.gData, [row(g.clearExit, g.clearExitD, toggle("privacy.clearOnExit", false)), row(g.clearNow, g.clearNowD, btn(g.clearBtn, function () { post("data.clear"); })), row(g.site, g.siteD, btn(g.open, function () { post("tab.new", { url: "sweef://settings#site" }); }))])];
     },
     agent: function () {
-      var ag = SW.state.agent || {}, hasKey = ag.hasKey !== false, key = h("input.field.w", { type: "password", placeholder: S.ob.keyPlaceholder, "aria-label": "API key", autocomplete: "off" });
-      var sites = (ag.sites || []).slice(0, 8);
-      return [h("h2", S.f(S.set.nav.agent)), h("p.lead", S.f("{agent} reads the page you are on, answers, and acts in the browser. You stay in control.")),
-        group("Model", [row("Model", "Chosen by {brand}. It cannot be changed here.", h("span.badge.acc", ag.model || "claude")), row("Anthropic API key", hasKey ? "A key is stored on this device (OS keychain, or a private file only you can read). It is only ever sent to Anthropic." : "No key yet. Get one at console.anthropic.com. It stays on this device.", h("div.ctl", [key, btn("Save", function () { if (/^sk-ant-/.test(key.value.trim())) { post("agent.setKey", { key: key.value.trim() }); key.value = ""; } }, "primary"), hasKey ? btn("Remove", function () { post("agent.clearKey"); }) : null]))]),
-        group("Privacy and safety", [row("Default page visibility", "Whether {agent} can see the pages you visit. You can change this per site from the address bar.", select("agent.visibilityDefault", [["ask", "Ask me per site"], ["allowed", "Always allowed"], ["blocked", "Never"]], "ask")),
-          row("Ask before sensitive actions", "{agent} stops and shows you the exact action before buying, sending or deleting anything.", toggle("agent.confirmations", true)), row("Default mode", "Ask only answers. Agent can click, type and navigate.", seg("agent.mode", [["ask", "Ask"], ["agent", "Agent"]], "ask"))]),
-        group("Display", [row("Show speed readout", "Shows how long the first word took, measured on your machine.", toggle("agent.latencyStrip", true))]),
-        sites.length ? group("Sites with a saved choice", sites.map(function (s) { return row(SW.host(s.origin), s.allowed ? "Allowed" : "Not allowed", btn("Forget", function () { post("agent.pageVisibility", { origin: s.origin, allowed: null }); })); })) : null];
+      var g = T.agent, ag = SW.state.agent || {}, hasKey = ag.hasKey !== false, key = h("input.field.w", { type: "password", placeholder: S.ob.keyPlaceholder, "aria-label": g.key, autocomplete: "off" }), sites = (ag.sites || []).slice(0, 8);
+      return [h("h2", F(T.nav.agent)), h("p.lead", F(g.lead)),
+        group(g.gModel, [row(g.model, g.modelD, h("span.badge.acc", ag.model || "claude")), row(g.key, hasKey ? g.keyOn : g.keyOff, [key, btn(g.save, function () { if (/^sk-ant-/.test(key.value.trim())) { post("agent.setKey", { key: key.value.trim() }); key.value = ""; } }, "primary"), hasKey ? btn(g.remove, function () { post("agent.clearKey"); }) : null])]),
+        group(g.gSafe, [row(g.vis, g.visD, select("agent.visibilityDefault", [["ask", g.visAsk], ["allowed", g.visAllowed], ["blocked", g.visBlocked]], "ask")), row(g.confirm, g.confirmD, toggle("agent.confirmations", true)), row(g.mode, g.modeD, seg("agent.mode", [["ask", S.agent.ask], ["agent", S.agent.agent]], "ask"))]),
+        group(g.gDisp, [row(g.latency, g.latencyD, toggle("agent.latencyStrip", true))]),
+        sites.length ? group(g.gSites, sites.map(function (s) { return row(SW.host(s.origin), s.allowed ? g.allowed : g.blocked, btn(g.forget, function () { post("agent.pageVisibility", { origin: s.origin, allowed: null }); })); })) : null];
     },
     appearance: function () {
-      return [h("h2", S.set.nav.appearance), h("p.lead", "Light, dark or match your system."),
-        group("", [row("Theme", "", seg("theme", [["light", "Light"], ["dark", "Dark"], ["system", "System"]], "system")), row("Density", "Compact makes the tab strip and toolbar slightly smaller.", seg("density", [["comfortable", "Comfortable"], ["compact", "Compact"]], "comfortable")),
-          row("{agent} width", "Drag the panel edge to resize, or pick a preset.", seg("sidebar.width", [["320", "Narrow"], ["380", "Default"], ["480", "Wide"]], 380)), row("Show bookmarks bar", "", toggle("bookmarks.bar", false))])];
+      var g = T.appearance;
+      return [h("h2", T.nav.appearance), h("p.lead", g.lead),
+        group("", [row(g.theme, "", seg("theme", [["light", g.light], ["dark", g.dark], ["system", g.system]], "system")), row(g.density, g.densityD, seg("density", [["comfortable", g.comfy], ["compact", g.compact]], "comfortable")),
+          row(F(g.width), g.widthD, seg("sidebar.width", [["320", g.narrow], ["380", g.dflt], ["480", g.wide]], 380)), row(g.bmbar, "", toggle("bookmarks.bar", false))])];
     },
     downloads: function () {
-      return [h("h2", S.set.nav.downloads), h("p.lead", "Where your files go."),
-        group("", [row("Location", String(val("downloads.dir", "~/Downloads")), btn("Change...", function () { post("downloads.chooseFolder"); })), row("Ask where to save each file", "", toggle("downloads.ask", false))])];
+      var g = T.downloads;
+      return [h("h2", T.nav.downloads), h("p.lead", g.lead), group("", [row(g.loc, String(val("downloads.dir", "~/Downloads")), btn(g.change, function () { post("downloads.chooseFolder"); })), row(g.ask, "", toggle("downloads.ask", false))])];
     },
     about: function () {
-      var s = SW.state;
-      return [h("h2", S.f(S.set.nav.about)), h("p.lead", "A fast, light browser with an agent built in."),
-        h("div.group", h("div.about", SW.logo(56, "abl"), h("div", SW.wordmark(26, "abw2"), h("div.vv", S.set.version + " " + (s.version || "dev") + " "), h("span.badge", { text: S.set.alpha })))),
-        group("", [row("Status: alpha", "Sweef is early. Some sites will not work yet, and we show a banner when we know that. If something breaks, open it in your system browser and tell us.", null), row("Report a problem", "", btn("Open issue tracker", function () { post("openExternal", { url: "https://github.com/sweefbrowser/sweef/issues" }); })), row("Engine", "Sweef draws pages and its own interface with a pure Go engine. No Chromium, no Electron.", null)])];
+      var s = SW.state, g = T.aboutP;
+      return [h("h2", F(T.nav.about)), h("p.lead", g.lead),
+        h("div.group", h("div.about", SW.logo(56, "abl"), h("div", SW.wordmark(26, "abw2"), h("div.vv", T.version + " " + (s.version || "dev") + " "), h("span.badge", { text: T.alpha })))),
+        group("", [row(g.status, F(g.statusD), null), row(g.report, "", btn(g.issues, function () { post("openExternal", { url: "https://github.com/sweefbrowser/sweef/issues" }); })), row(g.engine, F(g.engineD), null)])];
     }
   };
   var sc = SW.scroller($("main"), $("col"));

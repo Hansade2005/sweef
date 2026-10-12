@@ -45,7 +45,7 @@
     var t = activeTab(), vis = C().pageVis(), off = vis === "blocked", k = [t.id, t.title, t.url, vis, atts.map(function (a) { return a.kind + (a.tab || ""); }).join()].join("|");
     if (E.chips._k === k) return; E.chips._k = k; SW.clear(E.chips);
     var title = t.title || SW.host(t.url || "") || S.vis.thisPage, tip = vis === "allowed" ? S.f(S.vis.chipOn) : vis === "blocked" ? S.f(S.vis.chipOff) : S.f(S.vis.chipAsk);
-    var chip = h("button.chip.pagechip" + (off ? ".off" : ""), { title: tip + ". " + S.vis.chipToggle, "aria-label": tip + ". " + S.vis.chipToggle, "aria-haspopup": "dialog", onclick: function () {
+    var chip = h("button.chip.pagechip" + (off ? ".off" : vis === "ask" ? ".ask" : ""), { title: tip + ". " + S.vis.chipToggle, "aria-label": tip + ". " + S.vis.chipToggle, "aria-haspopup": "dialog", onclick: function () {
       var box = h("div", { style: { width: "280px" } }, h("div", { style: { padding: "6px 12px 4px", fontWeight: "700" }, text: S.f(S.vis.title) }), C().visChooser(function () { C().closePop(); })); C().openPop(chip, box, { align: "left" });
     } }, icon(off ? "eyeoff" : "eye", 15, "eye"), SW.favicon(t.url, t.favicon, t.title), h("span.trunc", { text: title, style: { maxWidth: "150px" } }));
     E.chips.appendChild(chip);
@@ -59,8 +59,8 @@
     C().openPop(E.plus, m, { align: "left", role: "menu" });
   });
   E.src.addEventListener("click", function () {
-    var row = function (key, def, ic, text) { var on = SW.setting(key, def); return C().mi(ic, text, { keep: true, on: function (e) { SW.set(key, !on); C().closePop(); } , sub: on ? "On" : "Off" }); };
-    var m = h("div", { style: { width: "240px" } }, row("agent.sources.page", true, "eye", S.agent.attPage), row("agent.sources.web", false, "globe", "The web")); C().openPop(E.src, m, { align: "left", role: "menu" });
+    var row = function (key, def, ic, text) { var on = SW.setting(key, def); return C().mi(ic, text, { keep: true, on: function (e) { SW.set(key, !on); C().closePop(); } , sub: on ? S.set.on : S.set.off }); };
+    var m = h("div", { style: { width: "240px" } }, row("agent.sources.page", true, "eye", S.agent.attPage), row("agent.sources.web", false, "globe", S.agent.srcWeb)); C().openPop(E.src, m, { align: "left", role: "menu" });
   });
   E.chat.addEventListener("click", function () {
     var chats = (st().agent || {}).chats || [], m = h("div", { style: { width: "280px" } }, C().mi("edit", S.agent.new, { on: newChat }), h("div.sep"));
@@ -202,10 +202,11 @@
     handle(ev);
   }
   SW.on("agent.event", onEvent);
-  SW.on("agent.chat.load", function (p) {
+  function loadChat(p) {
     chat = { id: p.id || "", title: p.title || "" }; clearMsgs(); buildStatic();
     (p.messages || []).forEach(function (m) { if (m.role === "user") addUser(m.text); else { var a = newAssistant("h" + Math.random()); onText(a, { text: m.text }); finish(a, false); } });
-  });
+  }
+  SW.on("agent.chat.load", loadChat);
 
   /* send / stop -------------------------------------------------------------- */
   function setBusy(b) { busy = b; renderComposer(); }
@@ -241,6 +242,6 @@
     if (empty && empty.parentNode) { renderEmpty(); }
     var ph = ag.hasKey === false; E.input.disabled = false;
   });
-  SW.sidekick = { focus: function () { setTimeout(function () { E.input.focus(); }, 0); }, ask: ask, newChat: newChat, send: send };
+  SW.sidekick = { focus: function () { setTimeout(function () { E.input.focus(); }, 0); }, ask: ask, newChat: newChat, send: send, onEvent: onEvent, loadChat: loadChat };
   renderEmpty(); renderComposer(); grow();
 })();

@@ -167,7 +167,7 @@ func (a *App) closeTab(id string) {
 	}
 	if next == "" {
 		if a.model.TabCount() == 0 {
-			a.Close()
+			a.requestClose()
 			return
 		}
 	}

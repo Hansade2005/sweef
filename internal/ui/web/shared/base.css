@@ -15,7 +15,7 @@ svg { display: block; flex: none; }
 .mono { font-family: var(--mono); }
 .trunc { overflow: hidden; white-space: nowrap; min-width: 0; padding-right: 14px; margin-right: -14px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); }
 :focus { outline: none; }
-:focus-visible { box-shadow: var(--focus); border-radius: var(--r-1); }
+:focus-visible { box-shadow: var(--focus); }
 input:focus-visible, textarea:focus-visible { box-shadow: none; }
 ::selection { background: var(--accent-soft); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }

@@ -64,3 +64,37 @@ Agent events are plain structs the app forwards to the chrome page as `agent.eve
   "Open in system browser" banner. First installers are labelled **alpha**.
 * Secrets: the Anthropic key is never embedded in the repo or installers. Users bring their own key
   (stored in the OS keychain where available, else a 0600 file); a hosted proxy URL can be configured.
+
+## UI additions (internal/ui)
+
+Everything below is additive. The UI tolerates missing fields, nulls and partial snapshots.
+
+**Serving.** `ui.FS` root holds `chrome/ newtab/ settings/ history/ downloads/ bookmarks/ onboarding/ error/ shared/`.
+`ui.Route(*url.URL)` maps `sweef://<page>[/file]` to a path in `ui.FS` (`sweef://newtab` -> `newtab/index.html`;
+`sweef://<any page>/shared/x.css` -> `shared/x.css`; `sweef://ui/<path>` -> `<path>`). Pages use root-relative
+`/shared/...` and page-relative assets. The chrome page is `chrome/index.html`; the agent overlay is a second transparent
+surface, `chrome/overlay.html`, same size as the window. All pages get the same `window.sweef` and post `ui.ready {page}` once loaded
+(Go answers with `state`). Pages accept `?theme=dark|light|incognito`, `?platform=darwin|windows|linux`.
+
+**Engine facts the UI relies on.** The engine has no native element scrolling: the UI scrolls with transforms and needs DOM
+`wheel` events (deltaY in px) delivered to the chrome tab. Hit-testing: a point belongs to the page tab iff
+`elementFromPoint` there is `#viewport` or one of its ancestors; anything else (popovers, dropdowns, find bar, toasts, scrims) is chrome.
+For the overlay surface, mouse events go to the overlay only inside the rects from `overlay.hit`.
+Elements with `-webkit-app-region: drag` (class `.drag`) are window-drag handles; the UI also posts `window.drag {x,y}` on mousedown there.
+
+**state fields read** (all optional): `platform, version, theme ("light"|"dark"|"system"), systemDark, incognito, window{w,h,scale,maximized}, tabs[{id,title,url,favicon,loading,audible,muted,pinned,crashed}], active, url, title, loading, progress (0..1), canBack, canForward, security{level: secure|insecure|internal|warning|none, certValid}, bookmarked, bookmarksBar[{title,url,favicon}], sidebar{open,width}, settings{...}, downloads[{id,name,url,state: progress|done|failed|paused,received,total,speed}], topSites[{title,url,favicon}], stats{memMB,tabs} (new tab card renders only if present), compat{url,message}, defaultBrowser, page{type: article|shop|form|video|any}, agent{state: idle|working|waiting|paused|error|off, hasKey, model, pageVisibility: allowed|blocked|ask (for the active origin), chats[{id,title,when}], chat{title}, sites[{origin,allowed}]}`.
+
+**settings keys** (`settings.set {key,value}`): `theme, density, sidebar.open, sidebar.width (320..560), agent.mode (ask|agent), agent.latencyStrip, agent.sources.page, agent.sources.web, agent.confirmations, agent.visibilityDefault (ask|allowed|blocked), privacy.trackers (standard|strict|off), privacy.gpc, privacy.httpsUpgrade, privacy.clearOnExit, search.engine, search.suggest, omni.askRow, startup.mode, startup.pages, downloads.dir, downloads.ask, bookmarks.bar`.
+
+**UI -> Go (new types):** `ui.ready {page}`; `omni.input` gains `{id, scope: bar|newtab|palette, limit}`; `nav.go` from the new tab has `tab:""` (= sender's tab);
+`agent.send` gains `{chat, page{url,title,tab}, attachments[{kind,tab}], sources{page,web}, source}`; `agent.confirm {runId,id,approved}`; `agent.resume`; `agent.setKey {key}`; `agent.clearKey`;
+`agent.chat.new`, `agent.chat.open {id}`; `agent.pageVisibility {origin, allowed: true|false|null(forget)}`; `tab.mute {id}`; `find.step {dir:1|-1}`, `find.close`;
+`window.drag {x,y}`, `window.fullscreen`; `downloads.cancel|retry|remove|show {id}`, `downloads.clear`, `downloads.chooseFolder`; `clipboard.write {text}`; `compat.dismiss {origin}`;
+`openExternal {url}`; `menu.open {name}` with name in `print, zoom.in, zoom.out, zoom.reset, certificate, cookies, reportSite`; `layout {viewport}` (as before); `overlay.hit {rects[{x,y,w,h}]}`;
+`data.query {kind: history|bookmarks, q, offset, limit, id}`, `data.remove {kind,id}`, `data.clear`; `import.start {source: chrome|edge|firefox|safari}`; `defaultBrowser.set`; `onboarding.done {trackers,visibility}`, `onboarding.skip`; `cert.proceed {url}`.
+
+**Go -> UI (new types):** `omni.suggestions {id, inline?, items[{type: history|bookmark|tab|search|nav, title, url, text, favicon, tab, inline}]}`;
+`agent.event` kinds: `text {text, full?}`, `thought {text, done?}`, `action {id,label,detail,status: running|ok|error|pending,ms}`, `status {state,text}`, `confirm {id,title,risk,action{...}}`, `sources {items[{title,url}]}`, `done {ttft,tps,ms,sources}`, `error {code: auth|rate_limit|network|..., message, retryAfter}`; `runId` ties events to one reply (events may arrive before UI knows it: the first one is adopted);
+`agent.chat.load {id,title,messages[{role,text}]}`; `overlay {state: off|acting|control|done|stopped, viewport{x,y,w,h}, task, step, cursor{x,y,label,pressed}}` (to the overlay surface);
+`find.result {count,index}`; `ui.command {name}` (names: `palette, find.open, focusOmnibox, sidebar.toggle, sidebar.focus, tab.new, tab.closeActive, nav.reload, bookmark.toggle, agent.chat.new, incognito.new`) so the app can forward accelerators that arrive while the page tab has focus (the chrome also handles Ctrl/Cmd+K, L, F, T, W, D and Shift+A itself when it has focus: do not also act on those);
+`data.result {kind,id,offset,total,items[{id,title,url,ts,favicon}]}`; `downloads.update` (item, array or `{items}`; merged by id); `import.progress {source,pct}`, `import.done {source,bookmarks|summary}`, `import.unavailable {source}`; `defaultBrowser.result {ok}`; `agent.keyResult {ok}`; `onboarding.step {n}`; `toast {text,kind,action{label,type,payload}}`.

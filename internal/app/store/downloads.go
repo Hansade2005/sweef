@@ -174,7 +174,10 @@ func (d *Downloads) Start(rawurl, name, dir, cookie, ua string) (DownloadItem, e
 	d.order = append(d.order, it.ID)
 	d.mu.Unlock()
 	d.run(it)
-	return *it, nil
+	d.mu.Lock()
+	cp := *it
+	d.mu.Unlock()
+	return cp, nil
 }
 
 // SafeFilename strips path separators and control characters.
@@ -220,8 +223,9 @@ func (d *Downloads) run(it *DownloadItem) {
 	start := it.Received
 	done := make(chan struct{})
 	it.done = done
+	first := *it
 	d.mu.Unlock()
-	d.notify(*it)
+	d.notify(first)
 	go func() {
 		defer close(done)
 		err := d.fetch(ctx, it, start)

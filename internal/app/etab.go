@@ -105,7 +105,7 @@ func (e *etab) route(req *http.Request) (int, string, bool) {
 // call runs f on the tab worker and waits for it (used by the Backend).
 func (e *etab) call(f func() error) error {
 	ch := make(chan error, 1)
-	if !e.w.do(func() { ch <- f() }) {
+	if !e.w.do(func() { err := f(); e.drainBindings(); ch <- err }) {
 		return errors.New("tab closed")
 	}
 	select {

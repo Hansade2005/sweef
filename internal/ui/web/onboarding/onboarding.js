@@ -65,7 +65,7 @@
   }
   function choice(group, key, o) {
     var on = pr[key] === o[0];
-    return h("button.ch", { role: "radio", "aria-checked": on ? "true" : "false", onclick: function () { pr[key] = o[0]; SW.set(group, o[0]); render(); } }, h("span.rd"), h("div", h("b", o[1], o[3] ? h("span.rec", { text: "Recommended" }) : null), h("div.d", { text: S.f(o[2]) })));
+    return h("button.ch", { role: "radio", "aria-checked": on ? "true" : "false", onclick: function () { pr[key] = o[0]; SW.set(group, o[0]); render(); } }, h("span.rd"), h("div", h("b", o[1], o[3] ? h("span.rec", { text: S.ob.recommended }) : null), h("div.d", { text: S.f(o[2]) })));
   }
   function s3() {
     return h("div", h("h1", S.f(S.ob.s3Title)), h("p.lead", { text: S.f(S.ob.s3Sub) }),

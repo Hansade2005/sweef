@@ -136,6 +136,12 @@ const helperJS = `(function(G){
     } catch(x){}
     return r;
   };
+  // the GUI draws its own overlay scrollbar: no classic 15px gutter in the layout
+  try {
+    var sty = D.createElement('style');
+    sty.textContent = 'html{scrollbar-width:none !important}';
+    (D.head || D.documentElement).appendChild(sty);
+  } catch(x){}
   // popups: window.open becomes "open a tab" (gated in Go by a recent user gesture)
   if (typeof G.__sweefOpen === 'function') {
     G.open = function(u){ try { G.__sweefOpen(String(u == null ? 'about:blank' : u)); } catch(x){} return null; };

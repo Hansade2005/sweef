@@ -5,6 +5,11 @@ window.sweef = { post: function (t, p) { window.__posts.push([t, p]); }, onMessa
 window.__send = function (t, p) { if (window.sweef.onMessage) window.sweef.onMessage(t, p); };
 window.addEventListener("error", function (e) { window.__errs.push("uncaught: " + (e && (e.message || e.error)) + " @" + (e && e.filename) + ":" + (e && e.lineno)); });
 window.addEventListener("unhandledrejection", function (e) { window.__errs.push("unhandled rejection: " + (e && e.reason)); });
+window.__backdropImg = function (src) {
+  var vp = document.getElementById("viewport"), r = vp ? vp.getBoundingClientRect() : { left: 0, top: 88, width: window.innerWidth, height: window.innerHeight - 88 };
+  var d = document.createElement("div"); d.id = "__bd"; d.style.cssText = "position:fixed;z-index:-1;overflow:hidden;left:" + r.left + "px;top:" + r.top + "px;width:" + r.width + "px;height:" + r.height + "px";
+  d.innerHTML = '<img src="' + src + '" style="width:100%;height:100%;display:block">'; document.body.appendChild(d);
+};
 window.__backdrop = function (kind) {
   var vp = document.getElementById("viewport"); var r = vp ? vp.getBoundingClientRect() : { left: 0, top: 80, width: window.innerWidth, height: window.innerHeight - 80 };
   var d = document.createElement("div");
@@ -22,6 +27,7 @@ window.__backdrop = function (kind) {
     items.forEach(function (it) { inner += '<div style="flex:1;font:13px system-ui;color:#333"><div style="height:150px;border-radius:12px;background:' + it[2] + ';opacity:.85;margin-bottom:10px"></div><b style="font-size:15px">' + it[1] + '</b><div>' + it[0] + '</div></div>'; });
     inner += "</div>";
   } else if (kind === "blank") { inner = ""; }
+  else if (kind === "incnew") { inner = '<iframe src="/newtab/index.html?incognito=1" style="border:0;width:100%;height:100%"></iframe>'; }
   else {
     inner = '<div style="max-width:640px;margin:0 auto;padding:36px 20px"><div style="font:600 12px system-ui;color:#999;letter-spacing:.08em;margin-bottom:8px">PERSONAL FINANCE</div><h1 style="font-size:34px;line-height:1.15;margin:0 0 14px">What the 2026 tax brackets mean for your paycheck</h1><p style="color:#555">Here are some of the key changes. The threshold for the top federal income-tax bracket will climb by about $17,000 for a married couple.</p><p>Your <a href="#" style="color:#1a56b0">effective tax rate</a> will be lower than your top rate. That is because the first slice of income is taxed at 10%, the next slice at 12%, and so on.</p><p>A married couple filing jointly could have $100,800 in taxable income, nearly $4,000 more than this year, and stay in the 12% bracket.</p><p>Not all tax parameters get inflation adjustments, although the new tax law added some more to the mix.</p></div>';
   }

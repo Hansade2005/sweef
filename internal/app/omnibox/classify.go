@@ -120,19 +120,25 @@ func askPrefix(s string) (string, bool) {
 	return "", false
 }
 
+// keywordSearch recognises "@google cats" and "g: cats". Bare "g cats" is
+// not a keyword: it would hijack ordinary queries such as "b is for bee".
 func keywordSearch(s string) (string, SearchEngine, bool) {
 	i := strings.IndexByte(s, ' ')
 	if i <= 0 || i == len(s)-1 {
 		return "", SearchEngine{}, false
 	}
 	k := strings.ToLower(s[:i])
-	k = strings.TrimPrefix(k, "@")
+	switch {
+	case strings.HasPrefix(k, "@"):
+		k = k[1:]
+	case strings.HasSuffix(k, ":"):
+		k = k[:len(k)-1]
+	default:
+		return "", SearchEngine{}, false
+	}
 	for _, e := range Engines {
 		if k == e.Keyword || k == e.ID {
-			if strings.HasPrefix(s, "@") || len(e.Keyword) <= 3 {
-				// bare short keywords ("g cats") only; avoid hijacking "b is for bee"
-				return strings.TrimSpace(s[i+1:]), e, true
-			}
+			return strings.TrimSpace(s[i+1:]), e, true
 		}
 	}
 	return "", SearchEngine{}, false

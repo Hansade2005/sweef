@@ -15,7 +15,6 @@
   setIcon(E.reload, "reload"); label(E.reload, S.nav.reload); setIcon(E.sb, "sidebar"); label(E.sb, S.f(S.nav.sidebar));
   setIcon($("newtab"), "plus", 16); setIcon($("tabsearch"), "search", 16); setIcon(E.menu, "menu"); label(E.menu, S.nav.menu);
   setIcon(E.dl, "download"); label(E.dl, S.nav.downloads); label(E.secbtn, S.nav.siteInfo); label(E.star, S.nav.bookmark);
-  E.url.setAttribute("placeholder", S.f(S.omni.placeholder));
   SW.clear(E.agent); E.agent.appendChild(icon("spark", 16)); E.agent.appendChild(h("span", { text: S.f(S.nav.askPill) })); E.agent.appendChild(h("i.dot.hide"));
   label(E.agent, S.f(S.nav.askPill));
   function buildWC() {
@@ -23,7 +22,7 @@
     var b = function (cls, ic, lab, act) { return h("button", { class: cls, "aria-label": lab, title: lab, onclick: function () { post("window." + act); } }, icon(ic, 14)); };
     wc.appendChild(b("", "mini", S.win.min, "minimize")); wc.appendChild(b("mx", "maxi", S.win.max, "maximize")); wc.appendChild(b("x", "close", S.win.close, "close"));
   }
-  buildWC();
+  buildWC(); $("sidebar").setAttribute("aria-label", S.f(S.agent.title));
 
   /* toasts ----------------------------------------------------------------- */
   function toast(text, kind, action) {
@@ -72,6 +71,20 @@
     return b;
   }
   SW.chrome = { toast: toast, openPop: openPop, closePop: closePop, mi: mi };
+
+  /* lazily loaded modules: the sidebar (and its markdown renderer) and the palette are only parsed when used */
+  var skq = [], skBuf = [], skState = 0;
+  function withSk(cb) {
+    if (SW.sidekick) return cb(SW.sidekick);
+    skq.push(cb); if (skState) return; skState = 1;
+    SW.lazy(["/chrome/sidebar.css", "/shared/md.js", "/chrome/sidebar.js"], function () {
+      skq.splice(0).forEach(function (f) { f(SW.sidekick); }); skBuf.splice(0).forEach(function (e) { SW.sidekick[e[0]](e[1]); }); SW.emit("render");
+    });
+  }
+  SW.sk = { focus: function () { withSk(function (s) { s.focus(); }); }, ask: function (t, src) { withSk(function (s) { s.ask(t, src); }); }, newChat: function () { withSk(function (s) { s.newChat(); }); }, send: function (t, m) { withSk(function (s) { s.send(t, m); }); } };
+  SW.on("agent.event", function (ev) { if (!SW.sidekick) { skBuf.push(["onEvent", ev]); withSk(function () {}); } });
+  SW.on("agent.chat.load", function (p) { if (!SW.sidekick) { skBuf.push(["loadChat", p]); withSk(function () {}); } });
+  SW.palette = { open: function (m) { SW.lazy(["/chrome/palette.js"], function () { SW.palette.open(m); }); } };
 
   /* tabs ------------------------------------------------------------------- */
   var tabEls = {}, MINW = 108, MAXW = 208;
@@ -176,7 +189,7 @@
     else if (k === "Enter" || k === " ") { e.preventDefault(); post("tab.activate", { id: tabs[i].id }); }
   });
   $("newtab").addEventListener("click", function () { post("tab.new", {}); });
-  $("tabsearch").addEventListener("click", function () { SW.palette && SW.palette.open("tabs"); });
+  $("tabsearch").addEventListener("click", function () { SW.palette.open("tabs"); });
   E.strip.addEventListener("mousedown", function (e) { if (e.button === 0 && (e.target === E.strip || e.target.id === "drag" || e.target.id === "inset")) post("window.drag", { x: e.screenX, y: e.screenY }); });
   E.strip.addEventListener("dblclick", function (e) { if (e.target === E.strip || e.target.id === "drag") post("window.maximize"); });
 
@@ -191,7 +204,7 @@
     var sk = level + "|" + (sec.certValid === false); if (sk !== lastSec) {
       lastSec = sk; var info = secInfo(level); SW.clear(E.secbtn); E.secbtn.className = "secbtn " + level;
       E.secbtn.appendChild(info[0] === "logo" ? SW.logo(16, "sbl") : icon(info[0], 16));
-      if (level === "insecure") E.secbtn.appendChild(h("span", { text: "Not secure" })); if (level === "warning") E.secbtn.appendChild(h("span", { text: "Warning" }));
+      if (level === "insecure") E.secbtn.appendChild(h("span", { text: S.sec.notSecure })); if (level === "warning") E.secbtn.appendChild(h("span", { text: S.sec.warnShort }));
     }
     var bm = !!field("bookmarked", false); if (E.star._k !== bm) { E.star._k = bm; setIcon(E.star, bm ? "starfill" : "star", 16); E.star.setAttribute("aria-pressed", bm ? "true" : "false"); label(E.star, bm ? S.nav.unbookmark : S.nav.bookmark); }
     var focus = E.omni.classList.contains("focus");
@@ -250,20 +263,20 @@
   E.reload.addEventListener("click", function () { post(field("loading", false) ? "nav.stop" : "nav.reload"); });
   E.star.addEventListener("click", function () { var s = st(); var v = !field("bookmarked", false); s.bookmarked = v; post("bookmark.toggle"); toast(v ? S.toast.bookmarked : S.toast.unbookmarked); renderToolbar(); });
   E.sb.addEventListener("click", function () { setSidebar(!sbOpen()); });
-  E.agent.addEventListener("click", function () { var s = st().agent || {}; if (!sbOpen()) setSidebar(true); SW.sidekick && SW.sidekick.focus(); });
+  E.agent.addEventListener("click", function () { var s = st().agent || {}; if (!sbOpen()) setSidebar(true); SW.sk.focus(); });
   E.menu.addEventListener("click", openMenu); E.dl.addEventListener("click", openDownloads); E.secbtn.addEventListener("click", openSiteInfo);
 
   /* omnibox ---------------------------------------------------------------- */
   var omni = new SW.Omni({
     input: E.url, list: $("od"), ghost: $("ghost"), scope: "bar",
     getTab: function () { return st().active || ""; },
-    onAsk: function (text) { SW.sidekick && SW.sidekick.ask(text, "omnibox"); E.url.blur(); },
+    onAsk: function (text) { SW.sk.ask(text, "omnibox"); E.url.blur(); },
     onDone: function () { E.url.blur(); },
     onEscape: function () { E.url.value = lastUrl || ""; E.url.blur(); },
     revert: function () { E.url.value = lastUrl || ""; E.url.blur(); }
   });
-  E.url.addEventListener("focus", function () { E.omni.classList.add("focus"); E.url.select(); omni.prime(); });
-  E.url.addEventListener("blur", function () { setTimeout(function () { if (document.activeElement !== E.url) { E.omni.classList.remove("focus"); omni.close(false); E.url.value = lastUrl || ""; renderToolbar(); } }, 0); });
+  E.url.addEventListener("focus", function () { E.url.setAttribute("placeholder", S.f(S.omni.placeholder)); E.omni.classList.add("focus"); E.url.select(); omni.prime(); });
+  E.url.addEventListener("blur", function () { setTimeout(function () { if (document.activeElement !== E.url) { E.omni.classList.remove("focus"); E.url.removeAttribute("placeholder"); omni.close(false); E.url.value = lastUrl || ""; renderToolbar(); } }, 0); });
   function focusOmni() { E.url.focus(); E.url.select(); }
 
   /* site info -------------------------------------------------------------- */
@@ -306,8 +319,8 @@
     var m = h("div", { style: { width: "304px" } },
       mi("plus", S.menu.newTab, { kbd: SW.mod + "+T", on: function () { post("tab.new", {}); } }), mi("hat", S.menu.newIncognito, { kbd: SW.mod + "+Shift+N", on: function () { post("incognito.new"); } }), h("div.sep"),
       mi("history", S.menu.history, { kbd: SW.mod + "+H", on: page("sweef://history") }), mi("download", S.menu.downloads, { kbd: SW.mod + "+J", on: page("sweef://downloads") }), mi("bookmark", S.menu.bookmarks, { on: page("sweef://bookmarks") }), h("div.sep"),
-      h("div.zoomrow", icon("search", 18), h("span.grow", { text: S.menu.zoom }), h("button.ibtn.sm", { "aria-label": "Zoom out", onclick: function () { zoom(-1); } }, icon("minus", 16)), zv, h("button.ibtn.sm", { "aria-label": "Zoom in", onclick: function () { zoom(1); } }, icon("plus", 16)), h("button.ibtn.sm", { "aria-label": S.menu.fullscreen, onclick: function () { post("window.fullscreen"); closePop(); } }, icon("maxi", 16))),
-      mi("search", S.menu.find, { kbd: SW.mod + "+F", on: openFind }), mi("cmd", S.menu.palette, { kbd: SW.mod + "+K", on: function () { SW.palette && SW.palette.open(); } }),
+      h("div.zoomrow", icon("search", 18), h("span.grow", { text: S.menu.zoom }), h("button.ibtn.sm", { "aria-label": S.menu.zoomOut, onclick: function () { zoom(-1); } }, icon("minus", 16)), zv, h("button.ibtn.sm", { "aria-label": S.menu.zoomIn, onclick: function () { zoom(1); } }, icon("plus", 16)), h("button.ibtn.sm", { "aria-label": S.menu.fullscreen, onclick: function () { post("window.fullscreen"); closePop(); } }, icon("maxi", 16))),
+      mi("search", S.menu.find, { kbd: SW.mod + "+F", on: openFind }), mi("cmd", S.menu.palette, { kbd: SW.mod + "+K", on: function () { SW.palette.open(); } }),
       mi("spark", sbOpen() ? S.f(S.menu.hideSidekick) : S.f(S.menu.sidekick), { kbd: SW.mod + "+Shift+A", on: function () { setSidebar(!sbOpen()); } }), h("div.sep"),
       mi("gear", S.menu.settings, { on: page("sweef://settings") }), mi("info", S.f(S.menu.about), { on: page("sweef://settings#about") }), mi("flag", S.menu.reportSite, { on: function () { post("menu.open", { name: "reportSite" }); } }));
     openPop(E.menu, m, { role: "menu" });
@@ -342,11 +355,11 @@
 
   /* sidebar state ---------------------------------------------------------- */
   function sbOpen() { return ui.sb != null ? ui.sb : !!SW.get("sidebar.open", false); }
-  function setSidebar(o) { ui.sb = o; SW.set("sidebar.open", o); SW.state.sidebar = SW.state.sidebar || {}; SW.state.sidebar.open = o; ui.sb = null; if (o) SW.sidekick && SW.sidekick.focus(); applyLayout(); }
+  function setSidebar(o) { ui.sb = o; SW.set("sidebar.open", o); SW.state.sidebar = SW.state.sidebar || {}; SW.state.sidebar.open = o; ui.sb = null; if (o) SW.sk.focus(); applyLayout(); }
   SW.chrome.setSidebar = setSidebar; SW.chrome.sbOpen = sbOpen;
   function applyLayout() {
     var sb = $("sidebar"), open = sbOpen(), w = SW.clamp(+SW.get("sidebar.width", 380) || 380, 320, 560);
-    sb.classList.toggle("hide", !open); document.documentElement.style.setProperty("--sidebar-w", w + "px");
+    sb.classList.toggle("hide", !open || !SW.sidekick); if (open && !SW.sidekick) withSk(function () {}); document.documentElement.style.setProperty("--sidebar-w", w + "px");
     E.sb.setAttribute("aria-pressed", open ? "true" : "false"); E.sb.classList.toggle("on", open);
   }
   function reportLayout() {
@@ -362,9 +375,9 @@
     switch (id) {
       case "tab.new": return post("tab.new", {}); case "incognito.new": return post("incognito.new");
       case "tab.closeActive": return post("tab.close", { id: st().active }); case "nav.reload": return post("nav.reload");
-      case "sidebar.toggle": return setSidebar(!sbOpen()); case "agent.chat.new": setSidebar(true); return SW.sidekick && SW.sidekick.newChat();
-      case "find.open": return openFind(); case "bookmark.toggle": return E.star.click(); case "palette": return SW.palette && SW.palette.open();
-      case "focusOmnibox": return focusOmni(); case "sidebar.focus": setSidebar(true); return SW.sidekick && SW.sidekick.focus();
+      case "sidebar.toggle": return setSidebar(!sbOpen()); case "agent.chat.new": setSidebar(true); return SW.sk.newChat();
+      case "find.open": return openFind(); case "bookmark.toggle": return E.star.click(); case "palette": return SW.palette.open();
+      case "focusOmnibox": return focusOmni(); case "sidebar.focus": setSidebar(true); return SW.sk.focus();
     }
   }
   SW.chrome.run = run;

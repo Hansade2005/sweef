@@ -439,6 +439,7 @@ func (m *Model) Snapshot(win int) map[string]any {
 		"incognito":  w.Incognito,
 	}
 	if act != nil {
+		out["incognito"] = w.Incognito || act.Incognito
 		out["url"] = act.URL
 		out["title"] = act.Title
 		out["loading"] = act.Loading

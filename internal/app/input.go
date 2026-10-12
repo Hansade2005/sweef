@@ -136,7 +136,9 @@ func (a *App) runMove(e *etab, tgt string, px, py, mods int, hover bool) {
 		cur := shell.CursorDefault
 		if hover {
 			var c string
-			if e.eval("__sweefCursor("+itoa(px)+","+itoa(py)+")", &c) == nil {
+			err := e.eval("__sweefCursor("+itoa(px)+","+itoa(py)+")", &c)
+			a.logf("cursor eval %d,%d -> %q %v", px, py, c, err)
+			if err == nil {
 				cur = cursorFor(c)
 			}
 		}
@@ -593,7 +595,7 @@ func (a *App) shortcut(ev shell.Event) bool {
 	case ctrl && key == "0":
 		a.zoom(0)
 	case ctrl && !shift && key == "q" && runtime.GOOS != "windows":
-		a.Close()
+		a.requestClose()
 	default:
 		return false
 	}

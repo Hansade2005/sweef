@@ -7,6 +7,7 @@ package preview
 import (
 	"embed"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -32,8 +33,12 @@ type Scenario struct {
 	W, H     int
 	State    any    // JSON-marshalled and delivered as the "state" message
 	Setup    string // JS run after the state arrives (open popovers, stream events...)
+	Then     string // JS run after Setup has settled (for steps that need lazily loaded code)
 	Backdrop string // fake web page behind the transparent viewport: article|shop|blank
-	NoState  bool
+	// BackdropFrom names another scenario whose screenshot is placed in the viewport hole (the engine does not paint iframes)
+	BackdropFrom string
+	Skip         bool // used only as a backdrop source: not written or tested on its own
+	NoState      bool
 }
 
 // Result of rendering a scenario.
@@ -109,7 +114,7 @@ func (s *Session) Eval(js string) (any, error) {
 
 // Settle pumps the page's event loop long enough for chained rAF callbacks.
 func (s *Session) Settle() {
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 8; i++ {
 		s.Tab.Settle(60 * time.Millisecond)
 	}
 }
@@ -161,6 +166,19 @@ func Render(e *engine.Engine, base string, sc Scenario, scale float64) (*Result,
 		s.Run(sc.Setup)
 		s.Settle()
 	}
+	if sc.Then != "" {
+		s.Run(sc.Then)
+		s.Settle()
+	}
+	if sc.BackdropFrom != "" {
+		for _, o := range Scenarios() {
+			if o.Name == sc.BackdropFrom {
+				if r, err := Render(e, base, o, scale); err == nil {
+					s.Run(`__backdropImg("data:image/png;base64,` + base64.StdEncoding.EncodeToString(r.PNG) + `")`)
+				}
+			}
+		}
+	}
 	if sc.Backdrop != "" {
 		s.Run(`__backdrop(` + jsq(sc.Backdrop) + `)`)
 	}
@@ -182,7 +200,7 @@ func Generate(outDir, filter string, scales []float64, log func(string)) ([]stri
 	var files []string
 	var bad []string
 	for _, sc := range Scenarios() {
-		if filter != "" && !strings.Contains(sc.Name, filter) {
+		if sc.Skip || (filter != "" && !strings.Contains(sc.Name, filter)) {
 			continue
 		}
 		for _, sf := range scales {

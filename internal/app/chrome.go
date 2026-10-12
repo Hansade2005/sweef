@@ -311,7 +311,7 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 		}
 		a.markState()
 	case "window.close":
-		a.Close()
+		a.requestClose()
 	case "window.minimize", "window.maximize":
 		a.logf("%s: shell.Window has no such call; ignored", typ)
 	case "find.query":
@@ -416,4 +416,10 @@ func (a *App) onSetting(key string, v any) {
 		}
 	}
 	a.markState()
+}
+
+func (a *App) chromeTab() *etab {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.chrome
 }

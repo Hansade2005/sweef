@@ -376,14 +376,19 @@ func (a *App) FirstFrameAfter() time.Duration {
 // Close stops the app and releases the engine and profile. It is safe to
 // call from any goroutine, more than once.
 func (a *App) Close() {
-	a.closeOnce.Do(func() {
-		a.closing.Store(true)
-		close(a.quit)
-	})
+	a.requestClose()
 	select {
 	case <-a.done:
 	case <-time.After(10 * time.Second):
 	}
+}
+
+// requestClose starts shutdown without waiting (safe from the UI loop).
+func (a *App) requestClose() {
+	a.closeOnce.Do(func() {
+		a.closing.Store(true)
+		close(a.quit)
+	})
 }
 
 func (a *App) shutdown() error {

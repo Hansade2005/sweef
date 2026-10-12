@@ -5,7 +5,7 @@
   document.documentElement.setAttribute("data-kind", kind);
   var ico = { offline: "wifioff", dns: "globe", cert: "shield", crash: "warn", timeout: "clock" }[kind] || "alert", tone = kind === "cert" ? "bad" : kind === "crash" ? "warn" : "";
   document.title = E.title;
-  var tips = { offline: ["Check that Wi-Fi or Ethernet is connected.", "Restart your router if other devices are offline too.", "A VPN or proxy can also block the connection."], dns: ["Check the address for typos.", "Try again in a minute. The site may be down.", "If other sites load, the problem is with this one."], timeout: ["The site may be busy. Try again shortly.", "Check that your connection is stable."], crash: ["Reloading usually fixes it.", "If it keeps happening, tell us what site it was."], cert: [] }[kind] || [];
+  var tips = S.err.tips[kind] || [];
   var main = document.getElementById("err");
   main.appendChild(h("div.art" + (tone ? "." + tone : ""), h("span.st"), h("span.st.b"), icon(ico, 40)));
   main.appendChild(h("h1", { text: E.title }));

@@ -102,12 +102,29 @@
       SW.state.downloads = ord.map(function (k) { return by[k]; }); SW.emit("downloads.update", p); ping();
     } else SW.emit(type, p);
   };
+  /* lazy loading of rarely-needed code (sidebar, palette): keeps the always-parsed startup set small */
+  var lz = {};
+  SW.lazy = function (files, cb) {
+    var n = files.length;
+    function one() { if (--n === 0 && cb) cb(); }
+    files.forEach(function (f) {
+      if (lz[f] === true) return one();
+      if (lz[f]) { lz[f].push(one); return; }
+      lz[f] = [one];
+      var el = document.createElement(/\.css$/.test(f) ? "link" : "script");
+      if (el.tagName === "LINK") { el.rel = "stylesheet"; el.href = f; } else el.src = f;
+      var fin = function () { var q = lz[f]; if (q === true) return; lz[f] = true; q.forEach(function (g) { g(); }); };
+      el.onload = fin; el.onerror = function () { console.error("load failed: " + f); fin(); };
+      document.head.appendChild(el);
+    });
+  };
   SW.ready = function (page) { SW.post("ui.ready", { page: page }); };
 
   /* theme ------------------------------------------------------------ */
   SW.applyTheme = function () {
     var s = SW.state, r = document.documentElement, t = s.theme || (s.settings && s.settings.theme) || "system";
-    var dark = t === "dark" || (t === "system" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+    var sys = s.systemDark != null ? !!s.systemDark : !!(window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+    var dark = t === "dark" || (t === "system" && sys);
     var name = s.incognito ? "incognito" : dark ? "dark" : "light";
     if (r.getAttribute("data-theme") !== name) r.setAttribute("data-theme", name);
     if (s.platform && r.getAttribute("data-platform") !== s.platform) r.setAttribute("data-platform", s.platform);
@@ -116,6 +133,6 @@
   };
   SW.applyTheme();
   /* a page can force a theme with ?theme=dark (used by previews and error pages) */
-  try { var q = /[?&]theme=(\w+)/.exec(location.search); if (q) document.documentElement.setAttribute("data-theme", q[1]); } catch (e) {}
+  try { var q = /[?&]theme=(\w+)/.exec(location.search); if (q) document.documentElement.setAttribute("data-theme", q[1]); var pf = /[?&]platform=(\w+)/.exec(location.search); if (pf) document.documentElement.setAttribute("data-platform", pf[1]); } catch (e) {}
   SW.query = function (k) { var m = new RegExp("[?&]" + k + "=([^&#]*)").exec(location.search); return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : ""; };
 })();

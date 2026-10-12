@@ -68,12 +68,18 @@ func Suggest(src Sources, input string, limit int) Response {
 	var items []Item
 	seen := map[string]bool{}
 	add := func(it Item) {
-		key := it.Type + "|" + canonical(it.URL) + "|" + it.Text
+		key := it.Type + "|" + it.Text
 		if it.URL != "" {
 			key = canonical(it.URL)
-			if it.Type == TypeTab {
-				key = "tab|" + it.Tab
+		}
+		if it.Type == TypeTab { // several tabs may show the same URL; each is listed once
+			if seen["tab|"+it.Tab] {
+				return
 			}
+			seen["tab|"+it.Tab] = true
+			seen[key] = true
+			items = append(items, it)
+			return
 		}
 		if seen[key] {
 			return

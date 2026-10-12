@@ -16,7 +16,7 @@
       if (q) {
         push(S.cmd.history, remote.filter(function (r) { return r.type !== "bookmark" && r.url; }).slice(0, 4).map(function (r) { return { kind: "h", ic: "clock", title: r.title || r.url, sub: SW.prettyURL(r.url), run: function () { post("nav.go", { tab: SW.state.active, input: r.url }); } }; }));
         push(S.cmd.bookmarks, remote.filter(function (r) { return r.type === "bookmark"; }).slice(0, 3).map(function (r) { return { kind: "b", ic: "starfill", title: r.title || r.url, sub: SW.prettyURL(r.url), run: function () { post("nav.go", { tab: SW.state.active, input: r.url }); } }; }));
-        out.push({ kind: "ask", ic: "spark", title: S.f(S.cmd.ask, { q: q }), sec: "", run: function () { SW.sidekick.ask(q, "palette"); } });
+        out.push({ kind: "ask", ic: "spark", title: S.f(S.cmd.ask, { q: q }), sec: "", run: function () { SW.sk.ask(q, "palette"); } });
       }
     }
     rows = out; sel = Math.min(sel, Math.max(0, rows.length - 1)); render(); sc.refresh();
@@ -42,8 +42,8 @@
     input.addEventListener("input", function () { sel = 0; var id = ++SW.omniSeq; req[id] = 1; SW.omniLast = null; post("omni.input", { text: input.value, id: id, scope: "palette", limit: 8 }); build(); });
     input.addEventListener("keydown", function (e) {
       if (e.key === "ArrowDown") { e.preventDefault(); sel = (sel + 1) % rows.length; mark(); } else if (e.key === "ArrowUp") { e.preventDefault(); sel = (sel - 1 + rows.length) % rows.length; mark(); }
-      else if (e.key === "Enter") { e.preventDefault(); var q = input.value.trim(); if (e.ctrlKey || e.metaKey) { if (q) { close(); SW.sidekick.ask(q, "palette"); } } else if (rows[sel]) exec(rows[sel]); else if (q) { close(); SW.sidekick.ask(q, "palette"); } }
-      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+      else if (e.key === "Enter") { e.preventDefault(); var q = input.value.trim(); if (e.ctrlKey || e.metaKey) { if (q) { close(); SW.sk.ask(q, "palette"); } } else if (rows[sel]) exec(rows[sel]); else if (q) { close(); SW.sk.ask(q, "palette"); } }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } else if (e.key === "Tab") e.preventDefault();
     });
     build(); input.focus();
   }
