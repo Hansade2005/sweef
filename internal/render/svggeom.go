@@ -181,7 +181,11 @@ func (c *ctx) svgText(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 		}
 	}
 	pos := LayoutSVGText(ins, lens)
+	// Chromium unions the glyph cells in the text's local space (a rotated
+	// glyph contributes the box of its rotated cell) and maps that box to the
+	// screen; the result is the box of the mapped box, not of the mapped cells
 	boxes := map[*html.Node]*bbox{}
+	var lall bbox
 	for i, p := range pos {
 		if p.Hidden {
 			continue
@@ -190,11 +194,9 @@ func (c *ctx) svgText(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 		var cell bbox
 		ix0, iy0, ix1, iy1 := math.Min(0, inks[i][0]), math.Min(-mets[i].asc, inks[i][1]), math.Max(p.Adv, inks[i][2]), math.Max(mets[i].desc, inks[i][3])
 		for _, pt := range [4][2]float64{{ix0, iy0}, {ix1, iy0}, {ix1, iy1}, {ix0, iy1}} {
-			x := p.X + pt[0]*cs - pt[1]*s
-			y := p.Y + pt[0]*s + pt[1]*cs
-			cell.add(m[0]*x+m[2]*y+m[4], m[1]*x+m[3]*y+m[5])
+			cell.add(p.X+pt[0]*cs-pt[1]*s, p.Y+pt[0]*s+pt[1]*cs)
 		}
-		all.union(cell)
+		lall.union(cell)
 		for a := chars[i].Node; a != nil && a != root; a = svgParentNode(doc, a) {
 			if a.dom == nil {
 				continue
@@ -207,9 +209,17 @@ func (c *ctx) svgText(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 			b.union(cell)
 		}
 	}
-	for o, b := range boxes {
-		c.setSVGBox(o, *b)
+	toScreen := func(b bbox) bbox {
+		var o bbox
+		if b.ok {
+			o.addRect(m, b.x0, b.y0, b.x1, b.y1)
+		}
+		return o
 	}
+	for o, b := range boxes {
+		c.setSVGBox(o, toScreen(*b))
+	}
+	all = toScreen(lall)
 	c.setSVGBox(n, all)
 	return all
 }

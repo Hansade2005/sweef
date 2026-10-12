@@ -386,7 +386,7 @@ func writePTL(w *bitW, c gcfg) {
 	if c.bd > 8 {
 		prof = 2
 	}
-	if c.chroma != 1 || c.bd > 10 || c.tsRot || c.tsCtx || c.implRdpcm || c.explRdpcm || c.cross || c.persRice || c.highPrec || c.intraSmoothOff {
+	if c.chroma != 1 || c.bd > 10 || c.tsRot || c.tsCtx || c.implRdpcm || c.explRdpcm || c.cross || c.persRice || c.highPrec || c.intraSmoothOff || c.log2MaxTs > 2 || len(c.cqpList) > 0 || c.saoScale != [2]int{} {
 		prof = 4
 	}
 	w.u(0, 2)

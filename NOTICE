@@ -24,6 +24,23 @@ the behaviour, including implementation details, of FFmpeg's libavcodec
 aacsbr / aacps decoders (LGPL-2.1-or-later), against whose output they were
 verified. See https://ffmpeg.org/legal.html.
 
+USAC / xHE-AAC decoding
+-----------------------
+internal/media/usac_*.go decode ISO/IEC 23003-3 (USAC). The decoding process of
+the frequency-domain core coder (UsacConfig parsing, arithmetic spectral
+coder, scalefactors, noise filling, TNS, M/S, window handling) follows FFmpeg
+8.1's libavcodec/aac/aacdec_usac.c and aacdec_ac.c (LGPL-2.1-or-later); the
+tables in usac_tables_gen.go were extracted by tools/usacgen/gen_usac_tables.py
+from FFmpeg's aactab.c. Complex prediction stereo follows the standard; the
+MDST filter coefficients in usac_tables_xaac_gen.go (extracted by
+tools/usacgen/gen_usac_tables_xaac.py) and details such as noise-filling state,
+pre-roll handling and loudness normalisation were taken from / verified against
+libxaac (https://github.com/ittiam-systems/libxaac, Copyright (C) 2018 The
+Android Open Source Project, originally developed by Ittiam Systems Pvt. Ltd,
+Apache License 2.0), which was also built as an independent reference decoder
+and encoder to generate test streams. The Apache-licensed table file is kept
+separate so it can be replaced.
+
 Opus decoding
 -------------
 Opus decoding uses github.com/thesyncim/gopus (BSD-3-Clause).

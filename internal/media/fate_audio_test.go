@@ -96,3 +96,87 @@ func TestFateAudioConformance(t *testing.T) {
 		})
 	}
 }
+
+// usacCase is a USAC conformance stream with its reference PCM.
+type usacCase struct {
+	stream, ref string
+	target      float64 // loudness normalisation target (0: none)
+}
+
+var usacCases = []usacCase{
+	{"Fd_1_c1_0x03.mp4", "Fd_1_c1_0x03.s16", 0},
+	{"Fd_1_c1_0x04.mp4", "Fd_1_c1_0x04.s16", 0},
+	{"Fd_2_c1_0x03.mp4", "Fd_2_c1_0x03.s16", 0},
+	{"Fd_2_c1_0x05.mp4", "Fd_2_c1_0x05.s16", 0},
+	{"Fd_2_c1_Tns_0x04.mp4", "Fd_2_c1_Tns_0x04.s16", 0},
+	{"Fd_2_c1_Ms_0x01.mp4", "Fd_2_c1_Ms_0x01.s16", 0},
+	{"Fd_2_c1_Ms_0x04.mp4", "Fd_2_c1_Ms_0x04.s16", 0},
+	{"xhe_target_level.m4a", "xhe_target_level.s16", -24},
+	{"Ext_2_c1_Ln_0x03.mp4", "Ext_2_c1_Ln_0x03__Lou-16.s16", -16},
+	{"Ext_2_c1_Ln_0x03.mp4", "Ext_2_c1_Ln_0x03__Lou-24.s16", -24},
+	{"Ext_2_c1_Ln_0x03.mp4", "Ext_2_c1_Ln_0x03__Lou-31.s16", -31},
+}
+
+func checkUSAC(t *testing.T, data, ref []byte, target float64) {
+	SetFFmpegEnabled(false)
+	defer SetFFmpegEnabled(true)
+	SetUSACTargetLoudness(target)
+	defer SetUSACTargetLoudness(0)
+	pcm, err := DecodeAudio(data)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	ch := len(pcm.Data)
+	n := len(ref) / 2 / ch
+	if n > pcm.Frames() {
+		n = pcm.Frames()
+	}
+	var sig, noise float64
+	for i := 0; i < n; i++ {
+		for k := 0; k < ch; k++ {
+			r := float64(int16(binary.LittleEndian.Uint16(ref[(i*ch+k)*2:])))
+			v := float64(pcm.Data[k][i]) * 32768
+			v = math.Max(-32768, math.Min(32767, v))
+			sig += r * r
+			noise += (v - r) * (v - r)
+		}
+	}
+	snr := 10 * math.Log10(sig/(noise+1e-9))
+	t.Logf("rate=%d ch=%d frames=%d (ref %d) SNR=%.1f dB", pcm.SampleRate, ch, pcm.Frames(), len(ref)/2/ch, snr)
+	if snr < 60 {
+		t.Errorf("SNR %.1f dB below 60", snr)
+	}
+}
+
+// TestFateUSAC decodes the USAC conformance streams of FFmpeg's FATE suite
+// (SWEEF_FATE_DIR/usac/) and compares them with the reference PCM.
+func TestFateUSAC(t *testing.T) {
+	dir := os.Getenv("SWEEF_FATE_DIR")
+	if dir == "" {
+		t.Skip("SWEEF_FATE_DIR not set")
+	}
+	for _, c := range usacCases {
+		c := c
+		t.Run(c.ref, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(dir, "usac", c.stream))
+			if err != nil {
+				t.Skip(err)
+			}
+			ref, err := os.ReadFile(filepath.Join(dir, "usac", c.ref))
+			if err != nil {
+				t.Skip(err)
+			}
+			checkUSAC(t, data, ref, c.target)
+		})
+	}
+}
+
+// TestUSACXheTargetLevel runs the small xHE-AAC stream shipped in testdata.
+func TestUSACXheTargetLevel(t *testing.T) {
+	data, err := os.ReadFile("testdata/usac/xhe_target_level.m4a")
+	if err != nil {
+		t.Skip(err)
+	}
+	ref, _ := os.ReadFile("testdata/usac/xhe_target_level.s16")
+	checkUSAC(t, data, ref, -24)
+}

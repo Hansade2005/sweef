@@ -226,3 +226,23 @@ func TestGenDebug(t *testing.T) {
 		break
 	}
 }
+
+func TestTBList(t *testing.T) {
+	p := os.Getenv("HEVC_FILE")
+	if p == "" {
+		t.Skip()
+	}
+	var x, y, r int
+	fmt.Sscan(os.Getenv("HEVC_X"), &x)
+	fmt.Sscan(os.Getenv("HEVC_Y"), &y)
+	fmt.Sscan(os.Getenv("HEVC_R"), &r)
+	data, _ := os.ReadFile(p)
+	n := 0
+	_ = n
+	dbgTB = func(d *Decoder, c, xC, yC, log2 int, ti *tbInfo, intra bool, mode int) {
+		if c == 0 && (os.Getenv("HEVC_ALL") != "" && ti.ts && d.cur.poc == 0 || xC <= x && x < xC+(1<<uint(log2)) && yC <= y && y < yC+(1<<uint(log2))) {
+			t.Logf("poc %d TB c%d (%d,%d) log2=%d ts=%v intra=%v mode=%d bypass=%v nnz=%d max=%d,%d", d.cur.poc, c, xC, yC, log2, ti.ts, intra, mode, d.cu.bypass, ti.nnz, ti.maxX, ti.maxY)
+		}
+	}
+	decodeAnnexB(t, data)
+}
