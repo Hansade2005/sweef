@@ -22,19 +22,19 @@ Same 11-step agent flow (open a landing page, snapshot, click through to a login
 
 | step | Sweef | agent-browser | ratio |
 |---|---|---|---|
-| open page (cold daemon) | 25 ms | 594 ms | 23.8x |
-| snapshot, interactive only | 9 ms | 240 ms | 26.7x |
-| click that navigates | 10 ms | 259 ms | 25.9x |
-| snapshot, full | 10 ms | 234 ms | 23.4x |
-| fill | 8 ms | 227 ms | 28.4x |
-| press Enter that submits | 9 ms | 234 ms | 26.0x |
-| get title | 8 ms | 225 ms | 28.1x |
-| open React 18 app | 26 ms | 259 ms | 10.0x |
-| click in React | 13 ms | 229 ms | 17.6x |
-| eval | 9 ms | 227 ms | 25.2x |
-| whole flow, one command at a time | 162 ms | 3013 ms | 18.6x |
-| **whole flow as one `sweef batch`** | **99 ms** | 3013 ms | **30.4x** |
-| daemon memory | 38 MB | 1155 MB | 30x less |
+| open page (cold daemon) | 24 ms | 578 ms | 24.1x |
+| snapshot, interactive only | 8 ms | 239 ms | 29.9x |
+| click that navigates | 9 ms | 261 ms | 29.0x |
+| snapshot, full | 8 ms | 226 ms | 28.2x |
+| fill | 8 ms | 223 ms | 27.9x |
+| press Enter that submits | 9 ms | 231 ms | 25.7x |
+| get title | 8 ms | 226 ms | 28.2x |
+| open React 18 app | 28 ms | 256 ms | 9.1x |
+| click in React | 12 ms | 226 ms | 18.8x |
+| eval | 7 ms | 218 ms | 31.1x |
+| whole flow, one command at a time | 149 ms | 2955 ms | 19.8x |
+| **whole flow as one `sweef batch`** | **80 ms** | 2955 ms | **36.9x** |
+| daemon memory | 39 MB | 1153 MB | 30x less |
 
 Plain steps run 23x to 28x faster. The two React steps are slower (10x to open, 18x to click) because opening the app executes 140 KB of React in a pure-Go JavaScript engine (about 10 ms) and every CLI call pays a process spawn of about 6 ms. Command by command the whole flow is about 18 to 20x, and as one batch about 30 to 37x (run to run variation on this machine). Snapshots are equal or smaller (466 vs 480 bytes on the landing page, 68 vs 137 on the React app).
 
@@ -191,11 +191,11 @@ A 1280x800 text page paints in about 21 ms. A 100k-triangle WebGL frame at 512x5
 
 What is still different, honestly:
 
-- **Text.** Glyph edges match Chromium to within 12/255 at 9 to 32 px, including rotated, skewed and scaled text and glyphs with cubic outlines (CFF fonts such as Inter: 0.34% of pixels differ by more than 8/255). SVG text under skew, matrix and non-uniform scale transforms, per-glyph `rotate`, `textPath` and vertical writing mode match to within 0.3% to 2.6%. Not matched: dashed text strokes, rotated stroked text and rotated text decorations, `rotate=` in vertical SVG text, and Arabic diacritics, Hebrew points and Indic scripts.
+- **Text.** Glyph edges match Chromium to within 12/255 at 9 to 32 px, including rotated, skewed and scaled text and glyphs with cubic outlines (CFF fonts such as Inter: 0.34% of pixels differ by more than 8/255). SVG text under skew, matrix and non-uniform scale transforms, per-glyph `rotate`, `textPath`, vertical writing mode, dashed text strokes (Skia's dash effect, stroker and analytic scan converter are ported) and SVG text decorations match to within 0.3% to 2.6%. Not matched: rotated HTML overlines over real text (about 19/255 off partway along the bar at 5 degrees), dotted, dashed, double and wavy decorations on rotated text, `rotate=` in vertical SVG text, `pathLength` on `textPath`, and Arabic diacritics, Hebrew points and Indic scripts.
 - **3D transforms.** Layers are rasterized in their own plane and drawn through the projective map with bilinear sampling; the raster scale rule for perspective layers (1x, or the next whole number once the projection grows a layer by more than about 1.27x) was fitted to Chromium measurements, not derived from its source. Where two layers are exactly coplanar (a `preserve-3d` box and its flipped back face) the hit-test winner can differ from Chromium's. `overflow: hidden` on a preserve-3d child with 3D-transformed content shows a clipped sliver in Chromium that Sweef does not reproduce. SVG elements do not take part in 3D contexts, and `getClientRects` returns the projected fragments.
 - **CSS not done:** `content-visibility: auto` reopening on scroll, find-in-page and anchors (a static load skips and opens exactly like Chromium), `@container style()` queries, subgrid line names, `mask-border`, `clip-path` and `mask` on plain inline elements, `box-decoration-break: clone` on wrapped inlines, vertical text with RTL or nested orthogonal flows.
 - **SVG not done:** CSS `mask` image layers on SVG elements, `kernelUnitLength`, and a few filter inputs (BackgroundImage, FillPaint).
-- **Codecs.** Everything below decodes in pure Go, with no ffmpeg. Audio: MP3, Vorbis, FLAC, PCM, Opus (SILK, CELT, hybrid; Ogg, WebM, MP4), AAC-LC and HE-AAC v1/v2 (SBR and PS; checked against real MPEG conformance streams at 72 to 78 dB) in ADTS and MP4, and USAC / xHE-AAC in MP4 (frequency-domain and LPD cores, eSBR with the harmonic transposer, PVC and inter-TES, MPEG Surround 2-1-2 upmix; checked against the real conformance streams at 61 to 89 dB and against libxaac). Video: VP8, VP9 (profiles 0 to 3, 8 to 12 bit, 4:2:0/4:2:2/4:4:0/4:4:4, intra-only and scaled references), H.264 (Baseline, Main, High, High 10, 4:2:2, 4:4:4, 9 to 14 bit, interlaced PAFF and MBAFF, FMO, data partitioning, long-term references, lossless), HEVC (Main, Main 10, Main Still Picture and the range extensions in 4:0:0 to 4:4:4 at 8 to 12 bit, tiles, wavefront, SAO) and AV1 (8, 10 and 12 bit, all common tools, film grain, superres, Annex B, layers and operating points, large-scale tile), bit-exact with ffmpeg, libdav1d and libaom on the test corpus, at 20 to 250 fps at 640x360 on one core. Frames are decoded on demand from the nearest preceding sync sample, so seeking and `drawImage(video)` work without ffmpeg (`SWEEF_NO_FFMPEG=1` proves it). Not decoded natively, so they use ffmpeg when installed: H.264 SP/SI slices and CABAC data partitioning, HEVC `extended_precision`, SCC and multilayer streams, AV1 non-uniform tile spacing in large-scale-tile mode, and USAC streams using time-warped MDCT, MPS212 residual coding, phase coding, temporal shaping or transient steering. USAC and HE-AAC multichannel layouts beyond 5.1 are unverified.
+- **Codecs.** Everything below decodes in pure Go, with no ffmpeg. Audio: MP3, Vorbis, FLAC, PCM, Opus (SILK, CELT, hybrid; Ogg, WebM, MP4), AAC-LC and HE-AAC v1/v2 (SBR and PS; checked against real MPEG conformance streams at 72 to 78 dB) in ADTS and MP4, and USAC / xHE-AAC in MP4 (frequency-domain and LPD cores, eSBR with the harmonic transposer, PVC and inter-TES, MPEG Surround 2-1-2 upmix; checked against the real conformance streams at 61 to 89 dB and against libxaac). Video: VP8, VP9 (profiles 0 to 3, 8 to 12 bit, 4:2:0/4:2:2/4:4:0/4:4:4, intra-only and scaled references), H.264 (Baseline, Main, Extended with data partitioning and SP/SI slices, High, High 10, 4:2:2, 4:4:4, 9 to 14 bit, interlaced PAFF and MBAFF, FMO, long-term references, lossless), HEVC (Main, Main 10, Main Still Picture, the whole range-extension set including extended precision and 16-bit, tiles, wavefront, SAO, MV-HEVC with every layer decodable, and screen content coding with palette, intra block copy, adaptive colour transform and adaptive MV resolution) and AV1 (8, 10 and 12 bit, all common tools, film grain, superres, Annex B, layers and operating points, large-scale tile), bit-exact with ffmpeg, libdav1d, libaom, the JVT and JCT-VC conformance streams and the HM and SCM reference decoders on the test corpus. Frames are decoded on demand from the nearest preceding sync sample, so seeking and `drawImage(video)` work without ffmpeg (`SWEEF_NO_FFMPEG=1` proves it). Not decoded natively, so they use ffmpeg when installed: HEVC SHVC and 3D-HEVC, MV-HEVC POC reset and inferred scaling lists, USAC streams using time-warped MDCT, MPS212 residual coding, phase coding, temporal shaping or transient steering, and H.264 or HEVC separate colour planes in some profiles. The player outputs the base view of multilayer HEVC. H.264 SI slices and the switching form of SP slices have no real conformance stream, so they are checked only against a model derived from the JM reference decoder and synthetic streams. USAC and HE-AAC multichannel layouts beyond 5.1 are unverified. CABAC with data partitioning cannot occur in a valid stream (the Extended profile requires CAVLC).
 - **WebGL.** No compressed textures, `EXT_sRGB` or multi-draw; lines are 1 px; `sin` differs from SwiftShader in the last digit.
 - **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.4 s, because QuickJS cannot share typed arrays with Go. `MediaRecorder`, EME and picture-in-picture reject.
 - **Exact pixel identity with Chromium is not a goal.** Screenshots are not byte-identical.
