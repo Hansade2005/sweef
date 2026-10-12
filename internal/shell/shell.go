@@ -1,0 +1,91 @@
+// Package shell is the thin native-window layer under the Sweef GUI. Each OS
+// has one pure-Go implementation (no CGO) in a sub-package that exposes
+// `Open(Config) (Window, error)`; the app layer only ever sees this interface.
+// A shell does three things: show an RGBA surface (with damage rects), deliver
+// input events, and expose a few OS integrations (title, cursor, clipboard,
+// file dialogs, opening URLs). It never renders anything itself.
+package shell
+
+import "image"
+
+type Config struct {
+	Title         string
+	Width, Height int  // logical pixels
+	Dark          bool // hint for native title bar
+	Incognito     bool
+}
+
+type Kind int
+
+const (
+	EvResize Kind = iota
+	EvMouseMove
+	EvMouseDown
+	EvMouseUp
+	EvWheel
+	EvKeyDown
+	EvKeyUp
+	EvText // committed text input (UTF-8, IME aware where the OS allows)
+	EvFocus
+	EvClose
+	EvScale // DPI changed
+	EvDropFiles
+)
+
+type Mods uint8
+
+const (
+	ModShift Mods = 1 << iota
+	ModCtrl      // Cmd on macOS is reported as ModMeta, Ctrl as ModCtrl
+	ModAlt
+	ModMeta
+)
+
+type Event struct {
+	Kind   Kind
+	X, Y   float64 // logical pixels, window-relative
+	DX, DY float64 // wheel delta in logical pixels (positive = content moves up)
+	Button int     // 0 left, 1 middle, 2 right
+	Key    string  // DOM KeyboardEvent.key style name ("a", "Enter", "ArrowLeft", ...)
+	Code   string  // DOM KeyboardEvent.code style ("KeyA", ...)
+	Text   string
+	Mods   Mods
+	W, H   int     // EvResize: logical size
+	Scale  float64 // EvResize/EvScale: device pixel ratio
+	Focus  bool
+	Files  []string
+}
+
+type Cursor int
+
+const (
+	CursorDefault Cursor = iota
+	CursorPointer
+	CursorText
+	CursorWait
+	CursorCrosshair
+	CursorResizeEW
+	CursorResizeNS
+	CursorNotAllowed
+	CursorGrab
+)
+
+// Window is implemented once per OS. All methods are safe to call from any
+// goroutine; events are delivered in order on Events().
+type Window interface {
+	// Present copies the damaged region of frame (device pixels, premultiplied
+	// RGBA, stride = frame.Stride) to the screen. A nil/empty damage means the
+	// whole frame. It must not retain frame after returning.
+	Present(frame *image.RGBA, damage image.Rectangle)
+	Events() <-chan Event
+	Size() (w, h int, scale float64) // logical size and device pixel ratio
+	SetTitle(string)
+	SetCursor(Cursor)
+	SetClipboard(string)
+	Clipboard() string
+	SetFullscreen(bool)
+	// OpenURL asks the OS to open url in the default handler (used for
+	// "open in system browser" and external protocols).
+	OpenURL(url string) error
+	Close()
+}
