@@ -112,3 +112,10 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Vendored libraries
+------------------
+third_party/gopus is github.com/thesyncim/gopus v0.1.2 (BSD-3-Clause) with its CELT
+table built lazily. third_party/go-mp3 is github.com/hajimehoshi/go-mp3 (Apache-2.0)
+with its decoding tables built lazily. Both changes only move work from process
+start-up to first use; licence files are kept in each directory.
