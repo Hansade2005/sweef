@@ -127,7 +127,8 @@ func TestStreamAssemblesMessage(t *testing.T) {
 	if msg.StopReason != "tool_use" || !msg.Complete || msg.Usage.OutputTokens != 77 || msg.Usage.CacheCreationTokens != 7000 {
 		t.Fatalf("msg %+v", msg)
 	}
-	if m.FirstByte <= 0 || m.FirstToken <= 0 || m.FirstToolCall < m.FirstToken || m.Status != 200 || m.RequestID == "" {
+	// Windows timers can be coarse enough to read 0 for a fast loopback request, so only ordering is asserted.
+	if m.FirstByte < 0 || m.FirstToken < m.FirstByte || m.FirstToolCall < m.FirstToken || m.Status != 200 || m.RequestID == "" {
 		t.Fatalf("metrics %+v", m)
 	}
 	h := f.headers[0]
