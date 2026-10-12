@@ -1,13 +1,9 @@
 package raster
 
 import (
-	"fmt"
 	"math"
-	"os"
 	"strings"
 )
-
-var svgTextDebug = os.Getenv("SVGTEXT_DEBUG") != ""
 
 // Painting of SVG text in Blink's scaled space (see svg_textlayout.go): the
 // canvas matrix is the screen matrix times 1/k and glyph origins are the
@@ -54,7 +50,7 @@ type fragXf struct {
 
 // frag builds the matrix of a fragment whose origin is (x, y) in scaled
 // space and that is painted rotated by angle and scaled by sx.
-func (t svgTextXf) frag(x, y, angle, sx, pivX float64) fragXf {
+func (t svgTextXf) frag(x, y, angle, sx, pivX, pivY float64) fragXf {
 	a, b, c, d := t.a, t.b, t.c, t.d
 	tx0, ty0 := float32(t.m[4]), float32(t.m[5])
 	// the fragment origin is a LayoutUnit: floored to 1/64
@@ -65,7 +61,11 @@ func (t svgTextXf) frag(x, y, angle, sx, pivX float64) fragXf {
 		// Blink keeps the angle as a float in degrees
 		rad := float64(float32(angle*180/math.Pi)) * math.Pi / 180
 		s, cs := math.Sincos(rad)
-		Px, Py := float64(float32(pivX)), float64(float32(y))
+		if q := math.Round(float64(float32(angle*180/math.Pi)) / 90); math.Abs(float64(float32(angle*180/math.Pi))-q*90) < 1e-9 {
+			// quarter turns are exact
+			s, cs = [4]float64{0, 1, 0, -1}[int(q)&3], [4]float64{1, 0, -1, 0}[int(q)&3]
+		}
+		Px, Py := float64(float32(pivX)), float64(float32(pivY))
 		ra, rb, rc, rd := cs*sx, s*sx, -s, cs
 		e := Px - (ra*Px + rc*Py)
 		f := Py - (rb*Px + rd*Py)
@@ -102,9 +102,6 @@ func (f fragXf) glyph(g Glyph, gx, gy float32) svgPG {
 	}
 	if f.axis != 1 {
 		pg.suy = int(math.Floor(float64(int32((float64(y)-fy)*65536)) / 16384))
-	}
-	if svgTextDebug {
-		fmt.Fprintf(os.Stderr, "G %.6f %.6f -> %.6f %.6f cell %d %d %d %d axis %d\n", gx, gy, x, y, pg.ix, pg.iy, pg.sux, pg.suy, f.axis)
 	}
 	return pg
 }
@@ -211,8 +208,9 @@ func fragmentsOf(placed []textGlyph) []fragment {
 		if k := len(frs) - 1; k >= 0 {
 			f := &frs[k]
 			pv := &f.gl[len(f.gl)-1]
-			if !p.fragStart && pv.node == p.node && pv.st == p.st && pv.plain() && p.plain() && pv.y == p.y && pv.size == p.size &&
-				math.Abs(pv.x+pv.w-p.x) < 1e-6 && math.Abs(pv.w-pv.nat) < 1e-6 && math.Abs(p.w-p.nat) < 1e-6 {
+			sn, cs := math.Sincos(pv.angle)
+			if !p.fragStart && pv.node == p.node && pv.st == p.st && pv.angle == p.angle && pv.sx == p.sx && pv.size == p.size &&
+				math.Abs(pv.x+pv.w*cs-p.x) < 1e-6 && math.Abs(pv.y+pv.w*sn-p.y) < 1e-6 && math.Abs(pv.w-pv.nat) < 1e-6 && math.Abs(p.w-p.nat) < 1e-6 {
 				f.gl = append(f.gl, p)
 				continue
 			}
@@ -227,6 +225,9 @@ func (r *svgR) drawText(n *svgNode, st sStyle, m Matrix) {
 		return
 	}
 	k := svgScreenScale(m)
+	if st.geomPrec {
+		k = 1
+	}
 	placed := r.layoutText(n, &st, k)
 	if len(placed) == 0 {
 		return
@@ -258,15 +259,28 @@ func (r *svgR) drawText(n *svgNode, st sStyle, m Matrix) {
 
 func fragmentPGs(fr fragment, xf svgTextXf) []svgPG {
 	out := make([]svgPG, 0, len(fr.gl))
+	if bd := fr.gl[0].bidi; bd != nil {
+		// right-to-left text: shape the fragment as a whole
+		var rs []rune
+		for _, g := range fr.gl {
+			rs = append(rs, g.r)
+		}
+		p := &fr.gl[0]
+		fx := xf.frag(p.x, p.y, p.angle, p.sx, p.pivX, p.pivY)
+		sh := ShapeDir(bd.spec, normalizeText(string(rs)), bd.ls, bd.ws, true, false)
+		for _, g := range sh.Glyphs {
+			if g.R != ' ' {
+				out = append(out, fx.glyph(Glyph{R: g.R, Face: g.Face, GID: g.GID}, float32(g.X), 0))
+			}
+		}
+		return out
+	}
 	var fx fragXf
 	var off float64 // exact pen offset from the fragment start
 	for i := range fr.gl {
 		p := &fr.gl[i]
-		if i == 0 || !p.plain() {
-			fx = xf.frag(p.x, p.y, p.angle, p.sx, p.pivX)
-			if svgTextDebug {
-				fmt.Fprintf(os.Stderr, "F %q x=%.5f y=%.5f ang=%.4f piv=%.5f\n", p.r, p.x, p.y, p.angle, p.pivX)
-			}
+		if i == 0 {
+			fx = xf.frag(p.x, p.y, p.angle, p.sx, p.pivX, p.pivY)
 			off = 0
 		}
 		if !(p.skip || strings.TrimSpace(string(p.r)) == "") {
@@ -371,25 +385,35 @@ func (r *svgR) decorateFragment(c *Context, fr fragment, k float64) {
 	for _, g := range fr.gl {
 		w += g.w
 	}
-	fs := p0.st.fontSize * k
-	th := math.Max(1, fs/16)
+	// geometry of the decoration lines, as measured from Chromium for the
+	// (scaled) font: thickness floor(size/10) with a minimum of 1, the
+	// underline top below the baseline by max(ceil(size/20), ceil(th/2)), the
+	// overline on top of the ascent, the line-through by a size table
+	size := p0.size
+	th := math.Max(1, size/10)
 	col := p0.st.fill.col
 	col.A *= p0.st.fillOp
-	deco := func(dy float64) {
+	deco := func(top float64) {
 		pa := NewPath()
-		pa.Rect(0, dy, w, th)
+		pa.Rect(0, top, w, th)
 		s, cs := math.Sincos(p0.angle)
-		pa = pa.Transform(Matrix{cs, s, -s, cs, p0.x, p0.y}).Transform(Scale(1/k, 1/k))
-		c.FillPathShader(pa, NonZero, Solid(col))
+		// the line is drawn from the (floored) fragment origin, rotated about the real one
+		qx, qy := float64(lu64(p0.x)), float64(lu64(p0.y))
+		ox, oy := p0.pivX+cs*(qx-p0.pivX)-s*(qy-p0.pivY), p0.pivY+s*(qx-p0.pivX)+cs*(qy-p0.pivY)
+		pa = pa.Transform(Matrix{cs, s, -s, cs, ox, oy}).Transform(Scale(1/k, 1/k))
+		// Skia fills the rotated line with its analytic scan converter
+		if mk := fxFillPath(pa.Transform(c.st.ctm), c.drawBounds()); mk != nil {
+			c.draw(mk, Solid(col))
+		}
 	}
 	if strings.Contains(p0.st.decoration, "underline") {
-		deco(fs * 0.1)
+		deco(math.Max(math.Ceil(size/20), math.Ceil(th/2)))
 	}
 	if strings.Contains(p0.st.decoration, "line-through") {
-		deco(-fs * 0.3)
+		deco(-lineThroughCenter(size, th) - th/2)
 	}
 	if strings.Contains(p0.st.decoration, "overline") {
-		deco(-p0.asc)
+		deco(-p0.asc - th)
 	}
 }
 

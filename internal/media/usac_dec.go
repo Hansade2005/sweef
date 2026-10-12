@@ -51,6 +51,7 @@ type usacDec struct {
 	gain       float64
 	stats      usacStats
 	haveOutput bool
+	err        error
 }
 
 type usacStats struct{ short, start, stop, ms, pred, cpred, tns, noise, lpd, acelp, tcx, sbr, mps, fac int }
@@ -161,9 +162,6 @@ func (d *usacDec) coreElement(r *aacBits, el *usacElem, indep bool) error {
 		if !lfe {
 			c.coreMode = r.bits(1)
 		}
-		if c.coreMode != 0 {
-			return fmt.Errorf("%w: usac LPD core", ErrUnsupported)
-		}
 	}
 	if nch > 1 && ec.stereoCfg == 1 {
 		coreCh = 1
@@ -176,6 +174,15 @@ func (d *usacDec) coreElement(r *aacBits, el *usacElem, indep bool) error {
 	for i := 0; i < coreCh; i++ {
 		c := &el.ch[i]
 		ics := &c.ics
+		if c.coreMode != 0 {
+			if err := d.lpdChannel(r, el, i, indep); err != nil {
+				return err
+			}
+			continue
+		}
+		if c.tdPrev && c.lpd != nil {
+			d.lpdUpdate(c)
+		}
 		if !lfe && (coreCh == 1 || el.ch[0].coreMode != el.ch[1].coreMode) {
 			c.tnsData = r.bit()
 		}
@@ -223,8 +230,14 @@ func (d *usacDec) coreElement(r *aacBits, el *usacElem, indep bool) error {
 				return fmt.Errorf("media: usac bad spectral data")
 			}
 		}
-		if r.bit() { // fac_data_present
-			return fmt.Errorf("%w: usac FAC data", ErrUnsupported)
+		c.facPresent = r.bit()
+		if c.facPresent {
+			facLen := d.cfg.coreLen / 8
+			if ics.seq == usacEightShort {
+				facLen = d.cfg.coreLen / 16
+			}
+			c.facData[0] = r.bits(7)
+			lpdFacDecode(facLen, c.facData[1:], r)
 		}
 		if r.err {
 			return fmt.Errorf("media: usac truncated frame")
@@ -232,12 +245,46 @@ func (d *usacDec) coreElement(r *aacBits, el *usacElem, indep bool) error {
 	}
 	// the dequantisation does not depend on the stereo mode
 	for i := 0; i < coreCh; i++ {
-		d.dequantize(&el.ch[i])
+		if el.ch[i].coreMode == 0 {
+			d.dequantize(&el.ch[i])
+		}
 	}
 	if el.cfg.hasSBR {
 		return fmt.Errorf("%w: usac eSBR", ErrUnsupported)
 	}
 	d.spectrumDecode(el, coreCh, indep)
+	for i := 0; i < coreCh; i++ {
+		el.ch[i].tdPrev = el.ch[i].coreMode != 0
+	}
+	return nil
+}
+
+// lpdChannel parses and decodes the LPD channel stream of channel i.
+func (d *usacDec) lpdChannel(r *aacBits, el *usacElem, i int, indep bool) error {
+	c := &el.ch[i]
+	if c.lpd == nil {
+		c.lpd = newLPDState(d.cfg.coreRate)
+	}
+	d.stats.lpd++
+	if !c.tdPrev {
+		d.lpdResetFromFD(c)
+	}
+	f := &c.lpdF
+	if err := d.lpdParse(r, c, f, indep); err != nil {
+		return err
+	}
+	n := d.cfg.coreLen
+	out := make([]float64, n+lpdSuper)
+	if err := d.lpdDecode(c, f, !f.coreModeLast, out); err != nil {
+		return err
+	}
+	d.lpdTDFrame(c, f.mod[0], out)
+	fo := d.frameOut[el.first+i]
+	for k := 0; k < n; k++ {
+		fo[k] = float32(out[k])
+	}
+	c.ics.seq, c.ics.seqEff = usacEightShort, usacEightShort
+	c.ics.kb = 0
 	return nil
 }
 
@@ -411,7 +458,8 @@ func (d *usacDec) spectrumDecode(el *usacElem, coreCh int, indep bool) {
 			d.stats.stop++
 		}
 	}
-	if coreCh == 2 {
+	bothFD := coreCh == 2 && el.ch[0].coreMode == 0 && el.ch[1].coreMode == 0
+	if bothFD {
 		beforeStereo := st.commonWindow && !st.tnsOnLR
 		if beforeStereo {
 			for i := 0; i < 2; i++ {
@@ -450,6 +498,9 @@ func (d *usacDec) spectrumDecode(el *usacElem, coreCh int, indep bool) {
 	}
 	n := d.cfg.coreLen
 	for i := 0; i < coreCh; i++ {
+		if el.ch[i].coreMode != 0 {
+			continue
+		}
 		out := d.frameOut[el.first+i]
 		var tmp [1024]float64
 		d.synth(&el.ch[i], tmp[:n])
@@ -525,6 +576,11 @@ func (d *usacDec) decodeAU(data []byte) (err error) {
 		if r.err {
 			return fmt.Errorf("media: usac truncated access unit")
 		}
+	}
+	if d.err != nil {
+		e := d.err
+		d.err = nil
+		return e
 	}
 	if !audio || d.discard {
 		return nil

@@ -149,19 +149,15 @@ func (d *Decoder) saoCtbFF(pic *Picture, rx, ry int) {
 				continue
 			}
 			nctb := ny*s.wCtb + nx
-			sn := d.sliceOfCtb(nctb)
-			if sn == nil {
+			if d.sliceOfCtb(nctb) == nil {
 				continue
 			}
 			allowed := true
-			if d.ctbSliceAddr[nctb] != d.ctbSliceAddr[ctbAddr] {
-				later := cur
-				if pp.rsToTs[nctb] > pp.rsToTs[ctbAddr] {
-					later = sn
-				}
-				if !later.loopFilterAcross {
-					allowed = false
-				}
+			// The specification uses the flag of the slice that comes later
+			// in decoding order; ffmpeg always uses the flag of the slice of
+			// the CTB being filtered, which is what is done here.
+			if d.ctbSliceAddr[nctb] != d.ctbSliceAddr[ctbAddr] && !cur.loopFilterAcross {
+				allowed = false
 			}
 			if pp.tileRs[nctb] != pp.tileRs[ctbAddr] && !pp.loopFilterAcrossTiles {
 				allowed = false
@@ -203,7 +199,14 @@ func (d *Decoder) saoComp(pic *Picture, ci, rx, ry int, sp *saoParams, ok *[3][3
 	maxV := int32(1)<<uint(bd) - 1
 	off := &sp.offset[ci]
 	l2m := uint(s.log2MinCb)
+	// Samples of pcm / transquant bypass blocks keep their unfiltered value.
+	// ffmpeg compares the luma based block grid with the component sized
+	// CTB, so in subsampled planes only the top left part of a CTB is
+	// covered; that is reproduced here.
 	noFilter := func(x, y int) bool {
+		if (x-x0)<<sx >= w || (y-y0)<<sy >= h {
+			return false
+		}
 		lx, ly := x<<sx, y<<sy
 		return d.cuTab[(ly>>l2m)*s.wMinCb+lx>>l2m].flags&cuNoFilter != 0
 	}

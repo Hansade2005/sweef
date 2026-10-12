@@ -394,6 +394,26 @@ func LayoutSVGText(in []SVGTextIn, lens []SVGTextLen) []SVGGlyphPos {
 	return out
 }
 
+// LayoutSVGTextVertical lays out text whose inline axis is y (writing-mode
+// tb, vertical-rl, vertical-lr): the characters' x and y roles are swapped
+// for the horizontal algorithm. Adv is the advance along y and YOff the
+// offset across (added to x). The positions returned are x across and y along
+// the line.
+func LayoutSVGTextVertical(in []SVGTextIn, lens []SVGTextLen) []SVGGlyphPos {
+	sw := make([]SVGTextIn, len(in))
+	for i, c := range in {
+		c.HasX, c.HasY = c.HasY, c.HasX
+		c.X, c.Y = c.Y, c.X
+		c.DX, c.DY = c.DY, c.DX
+		sw[i] = c
+	}
+	pos := LayoutSVGText(sw, lens)
+	for i := range pos {
+		pos[i].X, pos[i].Y = pos[i].Y, pos[i].X
+	}
+	return pos
+}
+
 // SVGParsePct resolves a startOffset-style number or percentage of total.
 func SVGParsePct(s string, total float64) float64 {
 	s = strings.TrimSpace(s)

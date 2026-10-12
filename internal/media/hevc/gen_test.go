@@ -17,7 +17,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -163,7 +165,7 @@ func (g *genSource) prob(ctx int) int {
 	case ctx == ctxCuQpDelta:
 		return 25
 	case ctx == ctxCuQpDelta+1:
-		return 30
+		return 12
 	case ctx == ctxTqBypass:
 		return 25
 	case ctx >= ctxMvdGt0 && ctx <= ctxMvdGt1:
@@ -575,7 +577,7 @@ func genStream(t testing.TB, c gcfg, seed int64) ([]byte, map[string]int) {
 	feed := func(nal []byte) {
 		out.Write(nal)
 		if err := d.handleNAL(nal[4:]); err != nil {
-			t.Fatalf("parameter set: %v", err)
+			genFatal("parameter set: %v", err)
 		}
 	}
 	ctb := 1 << uint(c.log2Ctb)
@@ -768,7 +770,7 @@ func genStream(t testing.TB, c gcfg, seed int64) ([]byte, map[string]int) {
 	sps := d.sps[0]
 	pps := d.pps[0]
 	if err := pps.setup(sps); err != nil {
-		t.Fatal(err)
+		genFatal("%v", err)
 	}
 	stats := map[string]int{}
 
@@ -1052,32 +1054,32 @@ func genStream(t testing.TB, c gcfg, seed int64) ([]byte, map[string]int) {
 			r := &bitReader{b: rbsp}
 			sh, err := d.parseSliceHeader(r, ps.nalType, 0, d.lastIndep)
 			if err != nil {
-				t.Fatalf("pic %d seg %d: slice header: %v", pi, si, err)
+				genFatal("pic %d seg %d: slice header: %v", pi, si, err)
 			}
 			if sh.dataOffset != len(hdr) {
-				t.Fatalf("pic %d seg %d: header length %d parsed %d", pi, si, len(hdr), sh.dataOffset)
+				genFatal("pic %d seg %d: header length %d parsed %d", pi, si, len(hdr), sh.dataOffset)
 			}
 			if sh.firstSlice {
 				d.finishPicture()
 				if err := d.startPicture(sh); err != nil {
-					t.Fatalf("pic %d: startPicture: %v", pi, err)
+					genFatal("pic %d: startPicture: %v", pi, err)
 				}
 			}
 			if !sh.dependent {
 				d.lastIndep = sh
 				if err := d.setupRefLists(sh); err != nil {
-					t.Fatalf("pic %d: ref lists: %v", pi, err)
+					genFatal("pic %d: ref lists: %v", pi, err)
 				}
 			}
 			sh.idx = len(d.slices)
 			d.slices = append(d.slices, sh)
 			g.start()
 			if err := d.decodeSliceData(sh, rbsp); err != nil {
-				t.Fatalf("pic %d seg %d: generate: %v", pi, si, err)
+				genFatal("pic %d seg %d: generate: %v", pi, si, err)
 			}
 			d.cab.gen = nil
 			if g.ctbsLeft != 0 {
-				t.Fatalf("pic %d seg %d: %d CTBs left", pi, si, g.ctbsLeft)
+				genFatal("pic %d seg %d: %d CTBs left", pi, si, g.ctbsLeft)
 			}
 			stats["pcm"] += g.pcmUsed
 			data := g.w.b
@@ -1092,7 +1094,7 @@ func genStream(t testing.TB, c gcfg, seed int64) ([]byte, map[string]int) {
 				}
 				hdr = hw.b
 			} else if entryPos >= 0 {
-				t.Fatalf("pic %d seg %d: %d substreams, expected %d", pi, si, len(g.ends), sg.entries+1)
+				genFatal("pic %d seg %d: %d substreams, expected %d", pi, si, len(g.ends), sg.entries+1)
 			}
 			feedNAL := nalWrap(ps.nalType, 0, append(append([]byte(nil), hdr...), data...))
 			out.Write(feedNAL)
@@ -1107,6 +1109,10 @@ func genStream(t testing.TB, c gcfg, seed int64) ([]byte, map[string]int) {
 	d.finishPicture()
 	return out.Bytes(), stats
 }
+
+type genPanic string
+
+func genFatal(f string, a ...any) { panic(genPanic(fmt.Sprintf(f, a...))) }
 
 func putBits(b []byte, pos, n int, v uint64) {
 	for i := 0; i < n; i++ {
@@ -1138,7 +1144,7 @@ func randomCfg(rng *rand.Rand) gcfg {
 	}
 	c.amp = rng.Intn(2) == 0
 	c.sao = rng.Intn(3) != 0
-	c.pcm = rng.Intn(3) == 0
+	c.pcm = rng.Intn(3) == 0 && c.chroma != 0 // ffmpeg miscounts the PCM size of monochrome streams
 	if c.pcm {
 		c.pcmBd = [2]int{1 + rng.Intn(c.bd), 1 + rng.Intn(c.bd)}
 		lo := min(c.log2MinCb, 5)
@@ -1159,6 +1165,9 @@ func randomCfg(rng *rand.Rand) gcfg {
 		c.explRdpcm = rng.Intn(2) == 0
 		c.intraSmoothOff = rng.Intn(3) == 0
 		c.highPrec = rng.Intn(2) == 0
+		if c.highPrec {
+			c.wp, c.wbi = false, false
+		}
 		c.persRice = rng.Intn(2) == 0
 	}
 	wCtb := (c.w + (1 << uint(c.log2Ctb)) - 1) >> uint(c.log2Ctb)
@@ -1170,12 +1179,12 @@ func randomCfg(rng *rand.Rand) gcfg {
 	}
 	c.tilesUniform = rng.Intn(2) == 0
 	c.loopAcrossTiles = rng.Intn(2) == 0
-	c.wpp = rng.Intn(3) == 0
+	c.wpp = rng.Intn(3) == 0 && c.tilesC == 1 && c.tilesR == 1 // ffmpeg does not support tiles together with wavefronts
 	c.depSlices = rng.Intn(2) == 0
 	c.signHide = rng.Intn(2) == 0
 	c.cabacInitPresent = rng.Intn(2) == 0
 	c.initQp = 20 + rng.Intn(20) - 6*(c.bd-8)/2
-	c.constrained = rng.Intn(4) == 0
+	c.constrained = rng.Intn(4) == 0 && c.log2MinCb == 3 // ffmpeg reads outside its motion field with larger blocks
 	c.tskip = rng.Intn(2) == 0
 	c.log2MaxTs = 2
 	if c.tskip && rng.Intn(2) == 0 {
@@ -1187,8 +1196,10 @@ func randomCfg(rng *rand.Rand) gcfg {
 	}
 	c.cbOff, c.crOff = rng.Intn(9)-4, rng.Intn(9)-4
 	c.sliceChromaOff = rng.Intn(2) == 0
-	c.wp = rng.Intn(3) == 0
-	c.wbi = rng.Intn(3) == 0
+	if !c.highPrec {
+		c.wp = rng.Intn(3) == 0
+		c.wbi = rng.Intn(3) == 0
+	}
 	c.tqBypass = rng.Intn(3) == 0
 	c.loopAcrossSlices = rng.Intn(2) == 0
 	c.dbControl = rng.Intn(2) == 0
@@ -1203,7 +1214,7 @@ func randomCfg(rng *rand.Rand) gcfg {
 		c.cross = rng.Intn(2) == 0
 	}
 	if c.chroma != 0 && rng.Intn(2) == 0 {
-		n := 1 + rng.Intn(4)
+		n := 6
 		for i := 0; i < n; i++ {
 			c.cqpList = append(c.cqpList, [2]int{rng.Intn(13) - 6, rng.Intn(13) - 6})
 		}
@@ -1236,8 +1247,16 @@ func ffmpegRaw1(t testing.TB, path, pixFmt string) ([]byte, error) {
 	var so, se bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &so, &se
 	err := cmd.Run()
-	if se.Len() > 0 {
-		return so.Bytes(), fmt.Errorf("ffmpeg: %s", bytes.TrimSpace(se.Bytes()))
+	var bad []string
+	for _, l := range bytes.Split(se.Bytes(), []byte("\n")) {
+		ls := string(bytes.TrimSpace(l))
+		if ls == "" || strings.Contains(ls, "not yet tested") || strings.Contains(ls, "not tested yet") || strings.Contains(ls, "Last message repeated") {
+			continue
+		}
+		bad = append(bad, ls)
+	}
+	if len(bad) > 0 {
+		return so.Bytes(), fmt.Errorf("ffmpeg: %s", strings.Join(bad, "; "))
 	}
 	return so.Bytes(), err
 }
@@ -1245,6 +1264,14 @@ func ffmpegRaw1(t testing.TB, path, pixFmt string) ([]byte, error) {
 // checkGenerated decodes the stream with ffmpeg and with this package.
 func checkGenerated(t *testing.T, c gcfg, seed int64) {
 	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			if g, ok := r.(genPanic); ok {
+				t.Fatalf("generator: %s", string(g))
+			}
+			panic(r)
+		}
+	}()
 	data, stats := genStream(t, c, seed)
 	path := writeAnnexB(t, "gen.hevc", data)
 	ref, ferr := ffmpegRaw1(t, path, c.pixFmt())
@@ -1339,6 +1366,32 @@ func TestGenFeatures(t *testing.T) {
 		{"tqbypass", func(c *gcfg) { c.tqBypass = true }},
 		{"deblock-ctl", func(c *gcfg) { c.dbControl = true; c.dbOverride = true; c.dbBeta = 2; c.dbTc = -2 }},
 		{"loop-slices", func(c *gcfg) { c.loopAcrossSlices = true; c.sliceMode = 1 }},
+		{"cqp-422-dep", func(c *gcfg) { c.chroma = 2; c.bd = 12; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.sliceMode = 2; c.depSlices = true; c.frames = 6 }},
+		{"cqp-422-i-delta-nodb", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.frames = 1; c.dbControl = true; c.dbDis = true }},
+		{"cqp-422-d1", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}}; c.cuQpDelta = true; c.frames = 1 }},
+		{"cqp-420-d6", func(c *gcfg) { c.chroma = 1; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.frames = 1 }},
+		{"cqp-444-d6", func(c *gcfg) { c.chroma = 3; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.frames = 1 }},
+		{"d-422", func(c *gcfg) { c.chroma = 2; c.cuQpDelta = true; c.frames = 1 }},
+		{"m27", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.temporalMvp = false; c.depSlices = true; c.initQp = 40; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.frames = 6; c.sliceMode = 2 }},
+		{"m27-nocqp", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.temporalMvp = false; c.depSlices = true; c.initQp = 40; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.frames = 6; c.sliceMode = 2 }},
+		{"m27-nodb", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.temporalMvp = false; c.depSlices = true; c.initQp = 40; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.frames = 6; c.sliceMode = 2 }},
+		{"v27a", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.frames = 1; }},
+		{"v27b", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.frames = 1; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; }},
+		{"v27c", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.frames = 1; c.depSlices = true; c.sliceMode = 2; }},
+		{"v27d", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.frames = 1; c.initQp = 40; }},
+		{"v27e", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.frames = 1; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.sliceMode = 1 }},
+		{"w1", func(c *gcfg) { c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.sliceMode = 1; c.frames = 1; }},
+		{"w2", func(c *gcfg) { c.log2Ctb = 6; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.sliceMode = 1; c.frames = 1; }},
+		{"w3", func(c *gcfg) { c.log2Ctb = 6; c.log2MaxTb=3; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.sliceMode = 1; c.frames = 1; }},
+		{"w4", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb=5; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.sliceMode = 1; c.frames = 1; }},
+		{"cqp-422-nodelta", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.frames = 1 }},
+		{"cqp-422-1", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}}; c.frames = 1 }},
+		{"cqp-422-i-delta", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.frames = 1 }},
+		{"cqp-422-p-nodelta", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.frames = 4 }},
+		{"cqp-422", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true }},
+		{"cqp-dep", func(c *gcfg) { c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.sliceMode = 2; c.depSlices = true; c.frames = 6 }},
+		{"slices-sao", func(c *gcfg) { c.sao = true; c.loopAcrossSlices = true; c.sliceMode = 1 }},
+		{"slices-sao-noloop", func(c *gcfg) { c.sao = true; c.sliceMode = 1 }},
 		{"slices", func(c *gcfg) { c.sliceMode = 1 }},
 		{"dep-slices", func(c *gcfg) { c.sliceMode = 2; c.depSlices = true }},
 		{"wpp", func(c *gcfg) { c.wpp = true }},
@@ -1347,7 +1400,6 @@ func TestGenFeatures(t *testing.T) {
 		{"tiles-nonuni", func(c *gcfg) { c.tilesC = 3; c.tilesR = 2; c.tilesUniform = false }},
 		{"tiles-noloop", func(c *gcfg) { c.tilesC = 2; c.tilesR = 2; c.loopAcrossTiles = false; c.sao = true }},
 		{"tiles-slices", func(c *gcfg) { c.tilesC = 2; c.tilesR = 2; c.sliceMode = 2; c.depSlices = true }},
-		{"tiles-wpp", func(c *gcfg) { c.tilesC = 2; c.tilesR = 2; c.wpp = true }},
 		{"pcm", func(c *gcfg) { c.pcm = true; c.pcmBd = [2]int{7, 6}; c.pcmMin = 3; c.pcmMax = 5; c.pPCM = 30 }},
 		{"pcm-lf", func(c *gcfg) {
 			c.pcm = true
@@ -1372,10 +1424,13 @@ func TestGenFeatures(t *testing.T) {
 		{"implrdpcm", func(c *gcfg) { c.implRdpcm = true; c.tskip = true; c.tqBypass = true }},
 		{"explrdpcm", func(c *gcfg) { c.explRdpcm = true; c.tskip = true; c.tqBypass = true }},
 		{"intrasmoothoff", func(c *gcfg) { c.intraSmoothOff = true }},
-		{"highprec", func(c *gcfg) { c.highPrec = true; c.wp = true; c.wbi = true; c.bd = 10 }},
+		{"highprec", func(c *gcfg) { c.highPrec = true; c.bd = 10 }}, // ffmpeg ignores high_precision_offsets, so no weighted prediction here
 		{"persrice", func(c *gcfg) { c.persRice = true }},
 		{"cross", func(c *gcfg) { c.chroma = 3; c.cross = true }},
-		{"cqplist", func(c *gcfg) { c.cqpList = [][2]int{{2, -3}, {-4, 5}, {1, 1}}; c.cuQpDelta = true }},
+		{"cqplist", func(c *gcfg) {
+			c.cqpList = [][2]int{{2, -3}, {-4, 5}, {1, 1}, {0, 2}, {-1, 3}, {6, -6}}
+			c.cuQpDelta = true
+		}}, // ffmpeg reads cu_chroma_qp_offset_idx with cMax 5, hence six entries
 		{"saoscale", func(c *gcfg) { c.bd = 12; c.sao = true; c.saoScale = [2]int{1, 2} }},
 	}
 	only := os.Getenv("HEVC_FEATURE")
@@ -1391,5 +1446,138 @@ func TestGenFeatures(t *testing.T) {
 				checkGenerated(t, c, seed)
 			}
 		})
+	}
+}
+
+// genFails reports whether the stream of cfg differs between ffmpeg and the decoder.
+func genFails(t *testing.T, c gcfg, seed int64) (fail bool) {
+	defer func() {
+		if recover() != nil {
+			fail = true
+		}
+	}()
+	data, _ := genStream(t, c, seed)
+	path := writeAnnexB(t, "gen.hevc", data)
+	ref, _ := ffmpegRaw1(t, path, c.pixFmt())
+	frames, _ := decodeAnnexB(t, data)
+	var got []byte
+	for _, f := range frames {
+		got = append(got, frameBytes(f)...)
+	}
+	return !bytes.Equal(ref, got)
+}
+
+// TestGenMin shrinks the configuration of HEVC_SEED to the features that matter.
+func TestGenMin(t *testing.T) {
+	v := os.Getenv("HEVC_MIN")
+	if v == "" {
+		t.Skip()
+	}
+	var seed int64
+	fmt.Sscan(v, &seed)
+	c := randomCfg(rand.New(rand.NewSource(seed)))
+	b := baseCfg()
+	muts := []func(c *gcfg){
+		func(c *gcfg) { c.chroma, c.bd = 1, 8 },
+		func(c *gcfg) { c.bd = 8 },
+		func(c *gcfg) { c.chroma = 1 },
+		func(c *gcfg) { c.amp, c.sao = false, false },
+		func(c *gcfg) { c.sao = false },
+		func(c *gcfg) { c.pcm, c.pPCM = false, 0 },
+		func(c *gcfg) { c.scaling = 0 },
+		func(c *gcfg) { c.temporalMvp = false },
+		func(c *gcfg) { c.ltPresent = false },
+		func(c *gcfg) { c.tsRot, c.tsCtx, c.implRdpcm, c.explRdpcm = false, false, false, false },
+		func(c *gcfg) { c.intraSmoothOff, c.highPrec, c.persRice = false, false, false },
+		func(c *gcfg) { c.tilesC, c.tilesR = 1, 1 },
+		func(c *gcfg) { c.wpp = false },
+		func(c *gcfg) { c.depSlices, c.sliceMode = false, 0 },
+		func(c *gcfg) { c.sliceMode = 0 },
+		func(c *gcfg) { c.signHide = false },
+		func(c *gcfg) { c.cabacInitPresent = false },
+		func(c *gcfg) { c.constrained = false },
+		func(c *gcfg) { c.tskip, c.log2MaxTs = false, 2 },
+		func(c *gcfg) { c.log2MaxTs = 2 },
+		func(c *gcfg) { c.cuQpDelta = false },
+		func(c *gcfg) { c.cbOff, c.crOff, c.sliceChromaOff = 0, 0, false },
+		func(c *gcfg) { c.wp, c.wbi = false, false },
+		func(c *gcfg) { c.tqBypass = false },
+		func(c *gcfg) { c.loopAcrossSlices = false },
+		func(c *gcfg) { c.dbControl, c.dbOverride, c.dbDis = false, false, false },
+		func(c *gcfg) { c.listsMod = false },
+		func(c *gcfg) { c.parMrg = 2 },
+		func(c *gcfg) { c.cross = false },
+		func(c *gcfg) { c.cqpList = nil },
+		func(c *gcfg) { c.saoScale = [2]int{} },
+		func(c *gcfg) { c.outputFlag = false },
+		func(c *gcfg) { c.extraBits, c.sliceHdrExt = 0, false },
+		func(c *gcfg) { c.frames = 1 },
+		func(c *gcfg) { c.frames = 2 },
+		func(c *gcfg) { c.strong = false },
+		func(c *gcfg) { c.loopAcrossTiles = true },
+		func(c *gcfg) { c.initQp = 30 },
+		func(c *gcfg) { c.initQp = 40 },
+		func(c *gcfg) { c.strong = true },
+		func(c *gcfg) { c.depthInter, c.depthIntra = 1, 1 },
+		func(c *gcfg) { c.depthInter = 1 },
+		func(c *gcfg) { c.w, c.h = 64, 64 },
+		func(c *gcfg) { c.w, c.h = 128, 96 },
+		func(c *gcfg) { c.log2MinTb = 2 },
+		func(c *gcfg) { c.log2MaxTb, c.log2MinTb = min(c.log2MaxTb, 4), 2 },
+	}
+	_ = b
+	if !genFails(t, c, seed) {
+		t.Fatal("seed does not fail")
+	}
+	for round := 0; round < 2; round++ {
+		for _, m := range muts {
+			c2 := c
+			m(&c2)
+			if c2.pcm == false {
+				c2.pPCM = 0
+			}
+			if c2.bd < 11 {
+				c2.saoScale = [2]int{}
+			}
+			if c2.chroma == 0 {
+				c2.cqpList = nil
+				c2.cross = false
+			}
+			if c2.chroma != 3 {
+				c2.cross = false
+			}
+			if c2.pcm && (c2.pcmBd[0] > c2.bd || c2.pcmBd[1] > c2.bd) {
+				continue
+			}
+			if genFails(t, c2, seed) {
+				c = c2
+			}
+		}
+	}
+	bv, cv := reflect.ValueOf(b), reflect.ValueOf(c)
+	var diff []string
+	for i := 0; i < bv.NumField(); i++ {
+		if fmt.Sprint(bv.Field(i)) != fmt.Sprint(cv.Field(i)) {
+			diff = append(diff, fmt.Sprintf("%s=%v", bv.Type().Field(i).Name, cv.Field(i)))
+		}
+	}
+	t.Logf("minimal cfg differs from base in: %v", diff)
+}
+
+func TestGenOne(t *testing.T) {
+	v := os.Getenv("HEVC_ONE")
+	if v == "" {
+		t.Skip()
+	}
+	c := baseCfg()
+	fmt.Sscanf(v, "%d,%d,%d,%d,%d", &c.log2Ctb, &c.log2MinCb, &c.log2MinTb, &c.log2MaxTb, &c.frames)
+	c.depthInter, c.depthIntra = 1, 1
+	c.constrained = os.Getenv("HEVC_CIP") != ""
+	c.temporalMvp = os.Getenv("HEVC_NOTMVP") == ""
+	if q := os.Getenv("HEVC_QP"); q != "" {
+		fmt.Sscan(q, &c.initQp)
+	}
+	for s := int64(1); s <= 6; s++ {
+		checkGenerated(t, c, s)
 	}
 }

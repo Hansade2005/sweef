@@ -31,12 +31,23 @@ func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMo
 		}
 	case cu.bypass:
 		copy(res, coef)
-		if !intra && cIdx > 0 && s.implicitRdpcm && (d.staleChromaMode == 10 || d.staleChromaMode == 26) {
-			// ffmpeg reuses the chroma mode of the previous intra CU here
-			// (it is not reset for inter CUs); reproduced for exactness.
-			d.rdpcmDir(res, n, boolInt(d.staleChromaMode == 26))
-		} else {
-			d.rdpcm(res, n, ti, intra, predMode)
+		// ffmpeg's selection of the RDPCM direction for transquant bypass
+		// blocks: the intra mode is the one of the last intra block (1 for
+		// luma of inter CUs, the previous chroma mode for chroma) and the
+		// explicit direction is ignored when implicit RDPCM is enabled.
+		pm := predMode
+		if !intra {
+			pm = 1
+			if cIdx > 0 {
+				pm = d.staleChromaMode
+			}
+		}
+		if ti.explicit || (s.implicitRdpcm && (pm == 10 || pm == 26)) {
+			dir := ti.dir
+			if s.implicitRdpcm {
+				dir = boolInt(pm == 26)
+			}
+			d.rdpcmDir(res, n, dir)
 		}
 	case ti.ts:
 		rot := s.tsRotation && n == 4 && intra

@@ -59,6 +59,15 @@ type usacCh struct {
 	arith       usacArithState
 	ov          [1024]float64 // overlap-add state
 	facPresent  bool
+	facData     [lpdFacLength + 1]int
+
+	// LPD core state and the hand-over data between the FD and LPD cores
+	lpd     *lpdState
+	tdPrev  bool // the previous frame of this channel was an LPD frame
+	olap    [1024 + 64]float64
+	lpcPrev [lpdOrder + 1]float64
+	acelpIn [1 + 2*lpdFacLength + 16]float64
+	lpdF    lpdFrame
 }
 
 // usacStereo holds the stereo prediction state of a channel pair.
@@ -468,7 +477,23 @@ func (d *usacDec) synth(c *usacCh, out []float64) {
 	}
 	prevShape, curShape := ics.kbPrev, ics.kb
 	sc := 1.0 / float64(n) / 32768
-	if ics.seq != usacEightShort {
+	special := c.tdPrev && c.lpd != nil
+	short := ics.seq == usacEightShort
+	lfac := n / 8
+	if short {
+		lfac = n / 16
+	}
+	longSpecial := special && !short && (ics.seqEff == usacLongStop || ics.seqEff == usacStopStart)
+	if special && !short && !longSpecial {
+		special = false
+	}
+	facOn := special && c.facPresent
+	var rawTail [128]float64
+	var old []float64
+	if special {
+		old = append([]float64(nil), c.olap[:n]...)
+	}
+	if !short {
 		d.mdctLong.run(c.coef[:n], d.tmp[:2*n])
 		lr := usacSlope(prevShape, n, false)
 		cr := usacSlope(curShape, n, false)
@@ -476,11 +501,27 @@ func (d *usacDec) synth(c *usacCh, out []float64) {
 		sr := usacSlope(curShape, m, true)
 		leftLong := (ics.seqPrevEff == usacOnlyLong || ics.seqPrevEff == usacLongStop) &&
 			(ics.seqEff == usacOnlyLong || ics.seqEff == usacLongStart)
+		var lsl []float64
+		if longSpecial {
+			lsl = lpdSine(2 * lfac)
+		}
 		for i := 0; i < n; i++ {
 			var w float64
-			if leftLong {
+			switch {
+			case longSpecial:
+				switch {
+				case facOn && i < n/2:
+					w = 0
+				case i < n/2-lfac:
+					w = 0
+				case i < n/2+lfac:
+					w = lsl[i-(n/2-lfac)]
+				default:
+					w = 1
+				}
+			case leftLong:
 				w = lr[i]
-			} else {
+			default:
 				switch {
 				case i < a:
 					w = 0
@@ -508,9 +549,15 @@ func (d *usacDec) synth(c *usacCh, out []float64) {
 			}
 			buf[i] = d.tmp[i] * w
 		}
+		for j := 0; j < n; j++ {
+			c.olap[j] = d.tmp[n+j] * sc
+		}
 	} else {
 		cur := usacSlope(curShape, m, true)
 		prv := usacSlope(prevShape, m, true)
+		if special {
+			prv = lpdSine(m)
+		}
 		for j := 0; j < 8; j++ {
 			d.mdctShort.run(c.coef[j*m:(j+1)*m], d.tmp[:2*m])
 			lw := cur
@@ -519,15 +566,80 @@ func (d *usacDec) synth(c *usacCh, out []float64) {
 			}
 			base := a + m*j
 			for i := 0; i < m; i++ {
+				if j == 0 && facOn && i < lfac {
+					continue
+				}
 				buf[base+i] += 8 * d.tmp[i] * lw[i]
 			}
 			for i := m; i < 2*m; i++ {
 				buf[base+i] += 8 * d.tmp[i] * cur[2*m-1-i]
 			}
+			if j == 7 {
+				for i := 0; i < m; i++ {
+					rawTail[i] = 8 * d.tmp[m+i]
+				}
+			}
+		}
+		for j := 0; j < n; j++ {
+			c.olap[j] = buf[n+j] * sc
+		}
+		for i := 0; i < m; i++ {
+			c.olap[a+8*m-n+i] = rawTail[i] * sc
+		}
+	}
+	if !special {
+		for i := 0; i < n; i++ {
+			out[i] = (buf[i] + c.ov[i]) * sc
+			c.ov[i] = buf[n+i]
+		}
+		return
+	}
+	// FD frame after an LPD frame
+	var fac [2 * lpdFacLength]float64
+	if facOn {
+		d.lpdCalFac(c, lfac, fac[:2*lfac])
+	}
+	for i := 0; i < n; i++ {
+		out[i] = buf[i] * sc
+	}
+	if !short {
+		if facOn {
+			for i := 0; i < n/2; i++ {
+				out[i] = old[i]
+			}
+			for i := 0; i < 2*lfac; i++ {
+				out[n/2+i] += fac[i]
+			}
+		} else {
+			lsl := lpdSine(2 * lfac)
+			for i := 0; i < n/2-lfac; i++ {
+				out[i] = old[i]
+			}
+			for t := 0; t < 2*lfac; t++ {
+				out[n/2-lfac+t] += old[n/2-lfac+t] * lsl[2*lfac-1-t]
+			}
+		}
+	} else {
+		if facOn {
+			for i := 0; i < a+lfac; i++ {
+				out[i] = old[i]
+			}
+			for i := 0; i < 2*lfac; i++ {
+				out[a+lfac+i] += fac[i]
+			}
+		} else {
+			for i := 0; i < a; i++ {
+				out[i] = old[i]
+			}
+			for t := 0; t < m; t++ {
+				out[a+t] += old[a+t] * lpdSine(m)[m-1-t]
+			}
 		}
 	}
 	for i := 0; i < n; i++ {
-		out[i] = (buf[i] + c.ov[i]) * sc
 		c.ov[i] = buf[n+i]
+	}
+	if err := d.lpdBpfFix(c, short, out); err != nil {
+		d.err = err
 	}
 }

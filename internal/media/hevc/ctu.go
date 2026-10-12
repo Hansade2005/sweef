@@ -835,6 +835,9 @@ func (d *Decoder) transformUnit(x0, y0, xBase, yBase, log2, depth, blkIdx int, c
 			if v != 0 && c.bypass() != 0 {
 				v = -v
 			}
+			if v < -(26+s.qpBdOffY/2) || v > 25+s.qpBdOffY/2 {
+				return errBitstream
+			}
 			d.isCuQpDeltaCoded = true
 			d.cuQpDeltaVal = v
 			d.setQp()

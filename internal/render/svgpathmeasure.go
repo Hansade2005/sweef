@@ -22,6 +22,9 @@ const (
 
 const skMaxT = 0x3FFFFFFF
 
+// skMaxSegs bounds the subdivision of absurdly large curves.
+const skMaxSegs = 1 << 18
+
 type skSeg struct {
 	dist  float64
 	pt    int // index of the first point of the curve in the contour's points
@@ -72,7 +75,7 @@ func cubicTooCurvy(p [4][2]float64, tol float64) bool {
 }
 
 func (b *skBuilder) quad(p [3][2]float64, mint, maxt, pt int) {
-	if (maxt-mint)>>10 != 0 && quadTooCurvy(p, b.tol) {
+	if (maxt-mint)>>10 != 0 && len(b.segs) < skMaxSegs && quadTooCurvy(p, b.tol) {
 		half := (mint + maxt) >> 1
 		ab, bc := lerp2(p[0], p[1], .5), lerp2(p[1], p[2], .5)
 		m := lerp2(ab, bc, .5)
@@ -99,7 +102,7 @@ func (b *skBuilder) conic(p [3][2]float64, w float64, mint int, minPt [2]float64
 	half := (mint + maxt) >> 1
 	halfPt := conicEval(p, w, float64(half)/skMaxT)
 	mid := [2]float64{(minPt[0] + maxPt[0]) / 2, (minPt[1] + maxPt[1]) / 2}
-	if (maxt-mint)>>10 != 0 && math.Max(math.Abs(halfPt[0]-mid[0]), math.Abs(halfPt[1]-mid[1])) > b.tol {
+	if (maxt-mint)>>10 != 0 && len(b.segs) < skMaxSegs && math.Max(math.Abs(halfPt[0]-mid[0]), math.Abs(halfPt[1]-mid[1])) > b.tol {
 		b.conic(p, w, mint, minPt, half, halfPt, pt)
 		b.conic(p, w, half, halfPt, maxt, maxPt, pt)
 		return
@@ -113,7 +116,7 @@ func (b *skBuilder) conic(p [3][2]float64, w float64, mint int, minPt [2]float64
 }
 
 func (b *skBuilder) cubic(p [4][2]float64, mint, maxt, pt int) {
-	if (maxt-mint)>>10 != 0 && cubicTooCurvy(p, b.tol) {
+	if (maxt-mint)>>10 != 0 && len(b.segs) < skMaxSegs && cubicTooCurvy(p, b.tol) {
 		half := (mint + maxt) >> 1
 		ab, bc, cd := lerp2(p[0], p[1], .5), lerp2(p[1], p[2], .5), lerp2(p[2], p[3], .5)
 		abc, bcd := lerp2(ab, bc, .5), lerp2(bc, cd, .5)

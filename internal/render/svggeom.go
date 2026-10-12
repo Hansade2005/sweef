@@ -119,9 +119,13 @@ func (c *ctx) svgText(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 		sp.Start = SVGParsePct(ch.Path.A["startoffset"], sp.Length())
 		paths[ch.Path] = sp
 	}
+	wmode := strings.ToLower(svgInh(doc, root.dom, "writing-mode"))
+	vert := strings.HasPrefix(wmode, "tb") || strings.HasPrefix(wmode, "vertical")
+	upright := strings.EqualFold(svgInh(doc, root.dom, "text-orientation"), "upright")
 	ins := make([]SVGTextIn, len(chars))
 	type metric struct{ asc, desc float64 }
 	mets := make([]metric, len(chars))
+	hadv := make([]float64, len(chars))
 	inks := make([][4]float64, len(chars))
 	for i, ch := range chars {
 		el := ch.Node.dom
@@ -175,12 +179,26 @@ func (c *ctx) svgText(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 		case "end":
 			anchor = 2
 		}
+		if vert {
+			// the inline axis is y; glyphs are centered on the line
+			hadv[i] = adv
+			if upright {
+				adv, off = fs.asc+fs.desc, -adv/2
+			} else {
+				off = -(fs.asc - fs.desc) / 2
+			}
+		}
 		ins[i] = SVGTextIn{SVGTextChar: ch, Adv: adv, YOff: off, Anchor: anchor, Space: ch.R == ' '}
 		if ch.Path != nil {
 			ins[i].PathM = paths[ch.Path]
 		}
 	}
-	pos := LayoutSVGText(ins, lens)
+	var pos []SVGGlyphPos
+	if vert {
+		pos = LayoutSVGTextVertical(ins, lens)
+	} else {
+		pos = LayoutSVGText(ins, lens)
+	}
 	// Chromium unions the glyph cells in the text's local space (a rotated
 	// glyph contributes the box of its rotated cell) and maps that box to the
 	// screen; the result is the box of the mapped box, not of the mapped cells
@@ -190,11 +208,27 @@ func (c *ctx) svgText(n *html.Node, m m6, vw, vh float64, doc *SVGDoc) bbox {
 		if p.Hidden {
 			continue
 		}
-		s, cs := math.Sincos(p.Angle)
 		var cell bbox
-		ix0, iy0, ix1, iy1 := math.Min(0, inks[i][0]), math.Min(-mets[i].asc, inks[i][1]), math.Max(p.Adv, inks[i][2]), math.Max(mets[i].desc, inks[i][3])
-		for _, pt := range [4][2]float64{{ix0, iy0}, {ix1, iy0}, {ix1, iy1}, {ix0, iy1}} {
-			cell.add(p.X+pt[0]*cs-pt[1]*s, p.Y+pt[0]*s+pt[1]*cs)
+		if vert {
+			// the cell of a vertical glyph is its advance along the line by the
+			// ascent plus descent across, ink does not extend it
+			a, d := mets[i].asc, mets[i].desc
+			if upright {
+				xc := p.X + hadv[i]/2
+				cell.add(xc-(a+d)/2, p.Y)
+				cell.add(xc+(a+d)/2, p.Y+p.Adv)
+			} else {
+				s, cs := math.Sincos(p.Angle + math.Pi/2)
+				for _, pt := range [4][2]float64{{0, -a}, {p.Adv, -a}, {p.Adv, d}, {0, d}} {
+					cell.add(p.X+pt[0]*cs-pt[1]*s, p.Y+pt[0]*s+pt[1]*cs)
+				}
+			}
+		} else {
+			s, cs := math.Sincos(p.Angle)
+			ix0, iy0, ix1, iy1 := math.Min(0, inks[i][0]), math.Min(-mets[i].asc, inks[i][1]), math.Max(p.Adv, inks[i][2]), math.Max(mets[i].desc, inks[i][3])
+			for _, pt := range [4][2]float64{{ix0, iy0}, {ix1, iy0}, {ix1, iy1}, {ix0, iy1}} {
+				cell.add(p.X+pt[0]*cs-pt[1]*s, p.Y+pt[0]*s+pt[1]*cs)
+			}
 		}
 		lall.union(cell)
 		for a := chars[i].Node; a != nil && a != root; a = svgParentNode(doc, a) {

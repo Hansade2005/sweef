@@ -246,3 +246,42 @@ func TestTBList(t *testing.T) {
 	}
 	decodeAnnexB(t, data)
 }
+
+func TestPlaneDiffs(t *testing.T) {
+	p := os.Getenv("HEVC_FILE")
+	pf := os.Getenv("HEVC_PIXFMT")
+	if p == "" {
+		t.Skip()
+	}
+	data, _ := os.ReadFile(p)
+	ref, _ := ffmpegRaw1(t, p, pf)
+	frames, _ := decodeAnnexB(t, data)
+	f := frames[0]
+	fb := frameBytes(f)
+	r := ref[:len(fb)]
+	bps := 1
+	if f.Depth > 8 {
+		bps = 2
+	}
+	off := 0
+	for pl := 0; pl < 3; pl++ {
+		w, h := f.Width, f.Height
+		if pl > 0 {
+			w, h = f.CWidth, f.CHeight
+		}
+		cnt := 0
+		first := -1
+		for i := 0; i < w*h*bps; i++ {
+			if fb[off+i] != r[off+i] {
+				if first < 0 {
+					first = i / bps
+				}
+				cnt++
+			}
+		}
+		if cnt > 0 {
+			t.Logf("plane %d: %d differing bytes, first at (%d,%d)", pl, cnt, first%w, first/w)
+		}
+		off += w * h * bps
+	}
+}

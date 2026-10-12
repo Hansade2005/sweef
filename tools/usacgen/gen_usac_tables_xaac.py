@@ -57,6 +57,32 @@ def main():
         dims, vals = find_array(ext, 'ixheaacd_mdst_fcoeff_' + cn)
         assert len(vals) == 7, cn
         emit(out, 'usacMdstQ15_' + gn, 'int16', dims, vals, 'MDST filter coefficients %s, Q15, filter[j] multiplies line k-3+j' % cn, 7)
+    # LPD tables
+    rom = read('decoder/ixheaacd_rom.c')
+    avq = read('decoder/ixheaacd_avq_rom.c')
+    avq = avq.replace('LEN_ABS_LEADER', '37').replace('LEN_SIGN_LEADER', '226').replace('LEN_I3', '9').replace('LEN_I4', '28').replace('INTER_LP_FIL_LEN', '65').replace('1 + FILTER_DELAY', '13')
+    rom = rom.replace('16 * 256', '4096')
+    avq = avq.replace('16 * 256', '4096')
+    lpd = [
+        (rom, 'ixheaacd_dico_lsf_abs_8b_flt', 'usacLsfAbs8b', 'float32', 'first-stage absolute LSF codebook [256][16]', 8),
+        (avq, 'ixheaacd_weight_table_avq', 'usacLsfWeightAVQ', 'float32', 'LSF AVQ weights [256][16]', 8),
+        (rom, 'ixheaacd_int_leave_gain_table', 'usacAcelpGain', 'float32', 'ACELP interleaved pitch/code gain table [128][2]', 8),
+        (avq, 'ixheaacd_interpol_filt', 'usacInterpolFilt', 'float32', 'ACELP pitch interpolation filter (4x, 65 taps)', 8),
+        (avq, 'ixheaacd_fir_lp_filt', 'usacBpfFir', 'float32', 'bass postfilter low-pass FIR (13 taps)', 8),
+        (avq, 'ixheaacd_cardinality_offset_table_i3', 'usacCardOffI3', 'uint32', 'AVQ cardinality offsets I3', 8),
+        (avq, 'ixheaacd_cardinality_offset_tab_i4', 'usacCardOffI4', 'uint32', 'AVQ cardinality offsets I4', 8),
+        (avq, 'ixheaacd_pos_abs_leaders_a3', 'usacPosAbsLeadersA3', 'int32', 'AVQ absolute leader positions A3', 8),
+        (avq, 'ixheaacd_pos_abs_leaders_a4', 'usacPosAbsLeadersA4', 'int32', 'AVQ absolute leader positions A4', 8),
+        (avq, 'ixheaacd_absolute_leader_tab_da', 'usacAbsLeaderDa', 'uint8', 'AVQ absolute leaders [37][8]', 8),
+        (avq, 'ixheaacd_iso_code_index_table', 'usacIsoCodeIndex', 'int32', 'AVQ iso code index', 8),
+        (avq, 'ixheaacd_iso_code_num_table', 'usacIsoCodeNum', 'int32', 'AVQ iso code num', 8),
+        (avq, 'ixheaacd_iso_code_data_table', 'usacIsoCodeData', 'uint8', 'AVQ iso code data', 8),
+        (avq, 'ixheaacd_signed_leader_is', 'usacSignedLeaderIs', 'uint32', 'AVQ signed leader offsets', 8),
+    ]
+    out.write('\n// ---- LPD (ACELP / TCX / AVQ) tables from decoder/ixheaacd_rom.c, ixheaacd_avq_rom.c ----\n')
+    for src, cn, gn, gt, doc, pl in lpd:
+        dims, vals = find_array(src, cn)
+        emit(out, gn, gt, dims, vals, doc, pl)
     out.close()
 
 

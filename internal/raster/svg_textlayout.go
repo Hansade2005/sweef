@@ -20,7 +20,15 @@ import (
 // a canvas scale of 1/k. Everything below is in that scaled space; k = 1
 // reproduces unscaled text.
 
+// bidiInfo marks text with right-to-left characters: it is shaped as a whole
+// (reordering, joining) when painted, the per-character advances only place it.
+type bidiInfo struct {
+	spec   FontSpec
+	ls, ws float64
+}
+
 type textGlyph struct {
+	bidi      *bidiInfo
 	r         rune
 	g         Glyph // face and, for a ligature head, the ligature glyph
 	skip      bool  // tail of a ligature: not drawn
@@ -37,8 +45,10 @@ type textGlyph struct {
 	fake      bool    // synthetic bold
 	skew      bool    // synthetic italic
 	nom       int     // index of the addressable character
-	pivX      float64 // rotation pivot (x)
-	fragStart bool    // starts a new painted fragment
+	pivX      float64 // rotation pivot
+	pivY      float64
+	vert      bool // laid out along y
+	fragStart bool // starts a new painted fragment
 }
 
 func (g *textGlyph) plain() bool { return g.angle == 0 && g.sx == 1 }
@@ -55,12 +65,13 @@ func svgScreenScale(m Matrix) float64 {
 	return k
 }
 
-// svgScaledSize is the pixel size of the font Blink instantiates: the
-// product of font size and scaling factor, truncated to 1/100 (the platform
-// font cache precision) in single precision.
+// svgScaledSize is the pixel size of the font Blink instantiates: the font
+// size times the (single precision) scaling factor, truncated to 1/100 (the
+// platform font cache precision; a product that lands a float32 rounding
+// error below a hundredth, such as 18 * 1.37, counts as on it).
 func svgScaledSize(fs, k float64) float64 {
-	s := float32(fs) * float32(k)
-	return float64(float32(math.Floor(float64(s)*100+1e-6)) / 100)
+	s := float64(float32(fs) * float32(k))
+	return math.Floor(s*100+1e-3) / 100
 }
 
 // baselineOffset is the downward shift of the glyph origin that puts the
@@ -92,6 +103,7 @@ type svgRun struct {
 	asc, desc  float64
 	size       float64
 	fake, skew bool
+	bidi       *bidiInfo
 }
 
 // shapeSVGRun shapes rs with the font spec at its (already scaled) size the
@@ -255,9 +267,16 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 			rs[q-i] = chars[q].R
 		}
 		sr := shapeSVGRun(spec, rs, key.ls, key.ws)
+		var bd *bidiInfo
+		for _, ru := range rs {
+			if font.IsRTLRune(ru) {
+				bd = &bidiInfo{spec: spec, ls: key.ls, ws: key.ws}
+				break
+			}
+		}
 		for q := i; q < j; q++ {
 			shaped[q] = svgRun{adv: sr.adv[q-i : q-i+1], ex: sr.ex[q-i : q-i+1], glyph: sr.glyph[q-i : q-i+1], skip: sr.skip[q-i : q-i+1],
-				asc: sr.asc, desc: sr.desc, size: sr.size, fake: sr.fake, skew: sr.skew}
+				asc: sr.asc, desc: sr.desc, size: sr.size, fake: sr.fake, skew: sr.skew, bidi: bd}
 			runOf[q] = i
 		}
 		i = j
@@ -283,6 +302,7 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 		advs[b-1] += math.Ceil(sum*64-1e-9)/64 - sum
 		a = b
 	}
+	vert := st.vertical
 	ins := make([]render.SVGTextIn, len(chars))
 	nats := make([]float64, len(chars))
 	for i, ch := range chars {
@@ -322,12 +342,29 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 		case "end":
 			anchor = 2
 		}
+		if vert {
+			// the inline axis is y: sideways glyphs advance by their
+			// horizontal advance, upright ones by ascent plus descent, and
+			// either is centered on the line (central baseline)
+			if sty.upright {
+				adv = sr.asc + sr.desc
+				off = -sr.ex[0] / 2
+				fragStart[i] = true
+			} else {
+				off = -(sr.asc - sr.desc) / 2
+			}
+		}
 		ins[i] = render.SVGTextIn{SVGTextChar: ch, Adv: adv, YOff: off, Anchor: anchor, Space: ch.R == ' '}
 		if ch.Path != nil {
 			ins[i].PathM = paths[ch.Path]
 		}
 	}
-	pos := render.LayoutSVGText(ins, lens)
+	var pos []render.SVGGlyphPos
+	if vert {
+		pos = render.LayoutSVGTextVertical(ins, lens)
+	} else {
+		pos = render.LayoutSVGText(ins, lens)
+	}
 	out := make([]textGlyph, 0, len(pos))
 	for i, p := range pos {
 		if p.Hidden {
@@ -338,7 +375,14 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 			sty = st
 		}
 		sr := &shaped[i]
-		out = append(out, textGlyph{r: chars[i].R, g: sr.glyph[0], skip: sr.skip[0], st: sty, node: chars[i].Node,
+		if vert {
+			if sty.upright {
+				p.Y += sr.asc
+			} else {
+				p.Angle += math.Pi / 2
+			}
+		}
+		out = append(out, textGlyph{r: chars[i].R, vert: vert, bidi: sr.bidi, g: sr.glyph[0], skip: sr.skip[0], st: sty, node: chars[i].Node,
 			x: p.X, y: p.Y, angle: p.Angle, sx: p.ScaleX, w: p.Adv, nat: nats[i], ex: sr.ex[0], fragStart: fragStart[i], asc: sr.asc, desc: sr.desc,
 			size: sr.size, fake: sr.fake, skew: sr.skew, nom: i})
 	}
@@ -348,11 +392,15 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 	}
 	for i := range out {
 		g := &out[i]
-		g.pivX = g.x
+		g.pivX, g.pivY = g.x, g.y
 		// the pivot is the character position Blink reports: the run start
 		// plus the floored offset
 		if st0 := byNom[runOf[g.nom]]; st0 != nil {
-			g.pivX = st0.x + float64(lu64(g.x)-lu64(st0.x))
+			if g.vert {
+				g.pivY = st0.y + float64(lu64(g.y)-lu64(st0.y))
+			} else {
+				g.pivX = st0.x + float64(lu64(g.x)-lu64(st0.x))
+			}
 		}
 	}
 	return out
