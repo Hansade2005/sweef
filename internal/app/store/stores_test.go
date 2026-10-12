@@ -444,6 +444,7 @@ func TestSessionDebounce(t *testing.T) {
 func TestDownloadProgressPauseResumeCancel(t *testing.T) {
 	payload := []byte(strings.Repeat("0123456789abcdef", 1<<14)) // 256 KiB
 	slow := make(chan struct{}, 1)
+	slow3 := make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := 0
 		if rg := r.Header.Get("Range"); rg != "" {
@@ -457,9 +458,9 @@ func TestDownloadProgressPauseResumeCancel(t *testing.T) {
 		fl := w.(http.Flusher)
 		for off := start; off < len(payload); off += 32 << 10 {
 			end := min(off+32<<10, len(payload))
-			if r.URL.Path == "/slow" {
+			if gate := map[string]chan struct{}{"/slow": slow, "/slow3": slow3}[r.URL.Path]; gate != nil {
 				select {
-				case <-slow:
+				case <-gate:
 				case <-r.Context().Done():
 					return
 				}
@@ -521,8 +522,8 @@ func TestDownloadProgressPauseResumeCancel(t *testing.T) {
 	}
 
 	// cancel deletes the partial file
-	it3, _ := d.Start(srv.URL+"/slow", "cancel.bin", dir, "", "")
-	slow <- struct{}{}
+	it3, _ := d.Start(srv.URL+"/slow3", "cancel.bin", dir, "", "")
+	slow3 <- struct{}{}
 	waitFor(t, func() bool { x, _ := d.Get(it3.ID); return x.Received > 0 })
 	if !d.Cancel(it3.ID) {
 		t.Fatal("cancel refused")
