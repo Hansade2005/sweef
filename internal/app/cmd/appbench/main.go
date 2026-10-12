@@ -86,6 +86,10 @@ func main() {
 		coldStart(r, bin, site.URL, runs)
 		memory(r, bin, site.URL)
 		inProcess(r, chromeFS, site.URL, samples)
+		chromeAt2x(r, chromeFS, site.URL, samples)
+		engineSection(r, samples)
+		chromeRepaintSection(r)
+		suggestBench(r)
 		micro(r)
 	}
 	if !*noChrome {
@@ -318,6 +322,7 @@ func coldStart(r *report, bin, site string, runs int) {
 	}{{"empty profile (no bytecode cache)", cold}, {"second launch (bytecode cache warm)", warm}} {
 		m, mx := sum(row.rs, func(x runResult) time.Duration { return x.firstFrame })
 		w, _ := sum(row.rs, func(x runResult) time.Duration { return x.wall })
+		measured[row.name] = msf(m)
 		r.f("| %s | %s | %s | %s |\n", row.name, ms(m), ms(mx), ms(w))
 	}
 	r.f("\n")
@@ -349,6 +354,7 @@ func memory(r *report, bin, site string) {
 			rss = append(rss, res.rssFirst)
 			last = res
 		}
+		measured[fmt.Sprintf("rss%d", n)] = medianF(rssIdle)
 		r.f("| %d | %.1f MiB | %.1f MiB | %.1f MiB | %d |\n", n, medianF(rss), medianF(rssIdle), last.heapMiB, last.goroutines)
 	}
 	r.f("\n(median of 3 runs; each tab is a ~100 KB article page of 40 sections.)\n\n")
@@ -361,8 +367,8 @@ type inproc struct {
 	win *headless.Window
 }
 
-func startApp(chromeFS fs.FS, urls []string) *inproc {
-	win := headless.New(1280, 800, 1)
+func startApp(chromeFS fs.FS, urls []string, scale float64) *inproc {
+	win := headless.New(1280, 800, scale)
 	cfg := app.Config{Shell: win, ChromeFS: chromeFS, Profile: store.OpenIncognito(), NoRestore: true, InitialURLs: urls, DownloadsDir: os.TempDir()}
 	if chromeFS == nil {
 		cfg.ChromeFS = app.PlaceholderFS()
@@ -387,7 +393,7 @@ func (p *inproc) key(chord string) {
 
 func inProcess(r *report, chromeFS fs.FS, site string, n int) {
 	fmt.Println("in-process latency ...")
-	p := startApp(chromeFS, []string{site + "/red", site + "/green", site + "/a/1", site + "/link"})
+	p := startApp(chromeFS, []string{site + "/red", site + "/green", site + "/a/1", site + "/link"}, 1)
 	defer p.stop()
 	p.idle()
 	time.Sleep(300 * time.Millisecond)
@@ -414,7 +420,11 @@ func inProcess(r *report, chromeFS fs.FS, site string, n int) {
 		}
 		p.idle()
 	}
-	row("keystroke in the omnibox", "chrome page runs its handlers, strip repainted, composed", typing)
+	row("keystroke in the omnibox (letter / Backspace)", "chrome page runs its handlers, strip repainted, composed; the dropdown opens and closes on every other key", typing)
+	chromeKeys["alt1x"] = typing
+	typed := typingSamples(p, n)
+	row("typing in the omnibox (dropdown open)", "letters typed one after the other: only the text and the suggestion rows change", typed)
+	chromeKeys["typing1x"] = typed
 
 	// 2. wheel scroll: compositor only
 	p.key("ctrl+1")
@@ -435,6 +445,7 @@ func inProcess(r *report, chromeFS fs.FS, site string, n int) {
 		p.idle()
 	}
 	row("wheel notch over a page", "easing tick + blit from the page texture (engine not involved)", wheel)
+	chromeKeys["wheel1x"] = wheel
 
 	// 3. tab switch until the new page's pixels are visible
 	var sw []time.Duration
@@ -453,6 +464,7 @@ func inProcess(r *report, chromeFS fs.FS, site string, n int) {
 		p.idle()
 	}
 	row("switch tab (ctrl+N)", "page repainted by the engine into the texture, until its pixels show", sw)
+	chromeKeys["switch1x"] = sw
 
 	// 4. cursor shape: hover a link, then leave it (page JS hit test in the tab worker)
 	p.key("ctrl+4")
@@ -483,6 +495,11 @@ func inProcess(r *report, chromeFS fs.FS, site string, n int) {
 	r.f("## Frame timing (`sweef gui --stats` numbers from the run above)\n\n")
 	r.f("| stage | p50 | p99 | max | samples |\n|---|---|---|---|---|\n")
 	r.f("| compose (chrome + page + overlay blend into the frame) | %s | %s | %s | %d |\n", ms(st.Compositor.Compose.P50), ms(st.Compositor.Compose.P99), ms(st.Compositor.Compose.Max), st.Compositor.Compose.N)
+	for _, k := range []string{"chrome: style + layout", "chrome: raster", "chrome: input handler (JS)"} {
+		if pp, ok := st.Compositor.Paint[k]; ok {
+			measured[k+" p50"], measured[k+" p99"] = msf(pp.P50), msf(pp.P99)
+		}
+	}
 	var kinds []string
 	for k := range st.Compositor.Paint {
 		kinds = append(kinds, k)
@@ -494,9 +511,6 @@ func inProcess(r *report, chromeFS fs.FS, site string, n int) {
 	}
 	r.f("| input event to Present (all inputs above) | %s | %s | %s | %d |\n", ms(st.InputLatency.P50), ms(st.InputLatency.P99), ms(st.InputLatency.Max), st.InputLatency.N)
 	r.f("\nAverage damage per presented frame: %d px of %d (%.1f%%).\n\n", st.DamageAvgPx, 1280*800, 100*float64(st.DamageAvgPx)/float64(1280*800))
-	r.f("### Chrome-only repaint\n\n")
-	r.f("The target in `docs/gui-contract.md` is < 8 ms for a chrome-only repaint at 1x. **This target is missed with the real chrome UI**: the `engine paint: chrome` row above is the engine's own cost of repainting the chrome page (every chrome mutation repaints the whole transparent window-sized chrome, because dropdowns, toasts and the find bar can overlap the viewport hole, so the repaint cannot be limited to the tab strip), and the keystroke row is the end-to-end figure (event -> chrome JS -> chrome paint -> compose -> Present). The cost is dominated by the engine's raster of the chrome's display list (gradients, shadows, rounded rects, text) rather than by this package; the placeholder chrome, which is a plain few-element page, repainted in under 4 ms (run with `-placeholder`). A region-limited, display-list-diffing engine paint is the fix and is not done.\n\n")
-
 	// sidebar open: full-height chrome paint
 	p.key("ctrl+shift+a")
 	p.idle()
@@ -516,8 +530,94 @@ func inProcess(r *report, chromeFS fs.FS, site string, n int) {
 	}
 	r.f("With the sidebar open (chrome painted at full window height): keystroke latency p50 %s, p99 %s.\n\n", ms(percentile(side, 0.5)), ms(percentile(side, 0.99)))
 
-	// suggestions
-	suggestBench(r)
+}
+
+// chromeKeys collects the chrome latency samples the before/after table needs.
+var chromeKeys = map[string][]time.Duration{}
+
+// typingSamples types letters one after the other into the omnibox (after a
+// first one that opens the dropdown), clearing the field now and then.
+func typingSamples(p *inproc, n int) []time.Duration {
+	p.key("ctrl+a")
+	p.win.Push(headless.KeyEvents("Backspace")[0])
+	p.idle()
+	for _, e := range headless.TypeEvents("sw") {
+		p.win.Push(e)
+	}
+	p.idle()
+	var out []time.Duration
+	for i := 0; i < n; i++ {
+		if i%16 == 15 {
+			p.key("ctrl+a")
+			for _, e := range headless.TypeEvents("sw") {
+				p.win.Push(e)
+			}
+			p.idle()
+		}
+		if d, ok := p.win.PushAndMeasure(shell.Event{Kind: shell.EvText, Text: string(rune('a' + i%26))}, 3*time.Second); ok {
+			out = append(out, d)
+		}
+		p.idle()
+	}
+	return out
+}
+
+// chromeAt2x measures the chrome interactions on a 2x (HiDPI) window.
+func chromeAt2x(r *report, chromeFS fs.FS, site string, n int) {
+	fmt.Println("in-process latency at 2x ...")
+	p := startApp(chromeFS, []string{site + "/red", site + "/green", site + "/a/1", site + "/link"}, 2)
+	defer p.stop()
+	p.idle()
+	time.Sleep(300 * time.Millisecond)
+	r.f("## Chrome latency on a 2x (HiDPI) window\n\n")
+	r.f("The same omnibox interactions on a 2560x1600 device-pixel window (scale 2). %d samples each.\n\n", n)
+	r.f("| action | p50 | p99 | max |\n|---|---|---|---|\n")
+	p.key("ctrl+l")
+	p.idle()
+	var alt []time.Duration
+	for i := 0; i < n; i++ {
+		ev := shell.Event{Kind: shell.EvText, Text: "a"}
+		if i%2 == 1 {
+			ev = headless.KeyEvents("Backspace")[0]
+		}
+		if d, ok := p.win.PushAndMeasure(ev, 3*time.Second); ok {
+			alt = append(alt, d)
+		}
+		p.idle()
+	}
+	chromeKeys["alt2x"] = alt
+	typed := typingSamples(p, n)
+	chromeKeys["typing2x"] = typed
+	var sw []time.Duration
+	for i := 0; i < n; i++ {
+		target, keyc := "#d33a3a", "ctrl+1"
+		if i%2 == 1 {
+			target, keyc = "#2f9e44", "ctrl+2"
+		}
+		want, _ := app.ParseColor(target)
+		t0 := time.Now()
+		p.key(keyc)
+		if d, ok := p.win.WaitPixel(t0, 80, 280, func(c color.RGBA) bool { return near(c, want) }, 5*time.Second); ok {
+			sw = append(sw, d)
+		}
+		p.idle()
+	}
+	chromeKeys["switch2x"] = sw
+	row := func(name string, ds []time.Duration) {
+		r.f("| %s | %s | %s | %s |\n", name, ms(percentile(ds, 0.5)), ms(percentile(ds, 0.99)), ms(percentile(ds, 1)))
+	}
+	row("keystroke in the omnibox (letter / Backspace)", alt)
+	row("typing in the omnibox (dropdown open)", typed)
+	row("switch tab (ctrl+N)", sw)
+	r.f("\n")
+	st := p.a.Stats()
+	r.f("Where a chrome repaint goes on the 2x window (engine side, from `sweef gui --stats`): ")
+	for _, k := range []string{"chrome: style + layout", "chrome: raster"} {
+		if pp, ok := st.Compositor.Paint[k]; ok {
+			r.f("%s p50 %s / p99 %s; ", k, ms(pp.P50), ms(pp.P99))
+		}
+	}
+	r.f("\n\n")
 }
 
 func near(c, w color.RGBA) bool {

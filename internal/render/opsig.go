@@ -1,6 +1,7 @@
 package render
 
 import (
+	"encoding/binary"
 	"image"
 	"math"
 	"reflect"
@@ -152,7 +153,7 @@ func OpSig(op Op) (sig uint64, ok bool) {
 						off := m.PixOffset(b.Min.X, y)
 						row := m.Pix[off : off+4*b.Dx()]
 						for i := 0; i+8 <= len(row); i += 8 {
-							h.u(*(*uint64)(unsafe.Pointer(&row[i])))
+							h.u(binary.LittleEndian.Uint64(row[i:]))
 						}
 						for i := len(row) &^ 7; i < len(row); i++ {
 							h.u(uint64(row[i]))

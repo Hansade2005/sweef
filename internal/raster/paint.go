@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"image"
 	"math"
-	"sort"
 	"sync"
-	"time"
 
 	"golang.org/x/net/html"
 
@@ -71,9 +69,7 @@ func (p *Painter) Surface() *Surface { return p.c.Surface() }
 // Run executes ops.
 func (p *Painter) Run(list []render.Op) {
 	for _, op := range list {
-		t0 := time.Now()
 		p.op(op)
-		OpStatAdd(op, time.Since(t0))
 	}
 	for p.c.LayerDepth() > 0 {
 		p.c.EndLayer(1, SourceOver)
@@ -1163,42 +1159,3 @@ func cachedGradientTile(def GradientDef, m Matrix, tw, th int) *Surface {
 	tileCache.Unlock()
 	return s
 }
-
-var opStatMu sync.Mutex
-var opStat = map[string][2]int64{}
-
-func OpStatAdd(op render.Op, d time.Duration) {
-	k := fmt.Sprintf("%T", op)
-	if _, ok := op.(render.BoxShadow); ok {
-		if op.(render.BoxShadow).Inset {
-			k += "/inset"
-		}
-	}
-	if g, ok := op.(render.Gradient); ok {
-		k += "/" + g.Kind
-		if g.Tile != nil {
-			k += "/tile"
-		}
-	}
-	opStatMu.Lock()
-	v := opStat[k]
-	v[0]++
-	v[1] += int64(d)
-	opStat[k] = v
-	opStatMu.Unlock()
-}
-func OpStatDump() string {
-	opStatMu.Lock()
-	defer opStatMu.Unlock()
-	var ks []string
-	for k := range opStat {
-		ks = append(ks, k)
-	}
-	sort.Slice(ks, func(i, j int) bool { return opStat[ks[i]][1] > opStat[ks[j]][1] })
-	s := ""
-	for _, k := range ks {
-		s += fmt.Sprintf("%-34s n=%6d total=%8.1fms\n", k, opStat[k][0], float64(opStat[k][1])/1e6)
-	}
-	return s
-}
-func OpStatReset() { opStatMu.Lock(); opStat = map[string][2]int64{}; opStatMu.Unlock() }

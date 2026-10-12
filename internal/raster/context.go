@@ -291,6 +291,22 @@ func composite(dst *Surface, m *Mask, sh Shader, op CompositeOp, cl *clipState) 
 	unb := op.unbounded()
 	w := r.W()
 	allCov := m == nil && cl.M == nil // full coverage everywhere: no coverage row at all
+	if isSolid && m != nil && cl.M == nil && op == SourceOver {
+		// the common shape fill / shadow: a solid colour through a coverage mask
+		x0, x1 := max(r.X0, m.B.X0), min(r.X1, m.B.X1)
+		if x1 <= x0 {
+			return
+		}
+		parallelFor(r.H(), max(1, 16384/(x1-x0)), func(lo, hi int) {
+			for y := r.Y0 + lo; y < r.Y0+hi; y++ {
+				if y < m.B.Y0 || y >= m.B.Y1 {
+					continue
+				}
+				blendSolidCov(dst.Row(y, x0, x1), m.Row(y)[x0-m.B.X0:x1-m.B.X0], ss.c)
+			}
+		})
+		return
+	}
 	parallelFor(r.H(), max(1, 16384/w), func(lo, hi int) {
 		src := make([]uint8, w*4)
 		cov := make([]uint8, w)

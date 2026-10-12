@@ -49,6 +49,11 @@ In the chrome page, `window.sweef` exists:
 4. Input: shell events -> hit test (chrome vs viewport) -> `Tab.Mouse*`, `Tab.Keyboard`, wheel, text.
    Cursor from CSS `cursor` of the hit element.
 5. Frame budget: target <8 ms for a chrome-only repaint at 1x; report in `sweef gui --stats`.
+   The chrome repaints incrementally (`engine.PaintOptions.Incremental`): the engine diffs the new
+   display list against the previous one and repaints only the rows the difference can reach, with
+   the same pixels as a full paint (`internal/engine/paint_golden_test.go`). A forced paint (resize,
+   scale change) is always a full one. `SWEEF_INCR_CHECK=1` compares every incremental paint with a
+   full paint and repairs a difference (development aid).
 
 ## Agent <-> app
 

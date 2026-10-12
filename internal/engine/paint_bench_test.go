@@ -8,10 +8,6 @@ import (
 	"github.com/sweefbrowser/sweef/internal/ui/preview"
 )
 
-// set by optrace_test.go (build tag optrace) to print a per-op-type time breakdown
-var traceDump func() string
-var traceReset func()
-
 // chromeSession opens the real chrome page with the omnibox dropdown showing.
 func chromeSession(b *testing.B, scale float64) (*preview.Session, func()) {
 	srv := preview.Server()
@@ -40,14 +36,8 @@ func BenchmarkChromePaintFull(b *testing.B) {
 			o := engine.PaintOptions{Width: 1280, Height: 800, DSF: scale, Transparent: true}
 			s.Tab.PaintRGBAOpts(o)
 			b.ResetTimer()
-			if traceReset != nil {
-				traceReset()
-			}
 			for i := 0; i < b.N; i++ {
 				s.Tab.PaintRGBAOpts(o)
-			}
-			if traceDump != nil {
-				b.Log("\n" + traceDump())
 			}
 		})
 	}

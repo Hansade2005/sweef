@@ -3,6 +3,7 @@ package engine
 import (
 	"image"
 	"math"
+	"time"
 
 	"github.com/sweefbrowser/sweef/internal/raster"
 	"github.com/sweefbrowser/sweef/internal/render"
@@ -60,7 +61,9 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 	if o.DSF <= 0 {
 		o.DSF = 1
 	}
+	t0 := time.Now()
 	l := doc.Layout(o.Width)
+	tLayout := time.Since(t0)
 	ext, _ := l.Ext.(*renderExt)
 	if ext == nil {
 		return nil, false
@@ -100,11 +103,26 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 	if !o.Transparent {
 		env.Background = raster.Color{R: 1, G: 1, B: 1, A: 1}
 	}
+	t1 := time.Now()
+	var img *image.RGBA
 	if o.Incremental {
-		return t.paintIncremental(list, o.Width, height, o.DSF, env), true
+		img = t.paintIncremental(list, o.Width, height, o.DSF, env)
+	} else {
+		img = raster.Paint(list, o.Width, height, o.DSF, env)
 	}
-	return raster.Paint(list, o.Width, height, o.DSF, env), true
+	t.lastPaint.Store(&PaintInfo{Layout: tLayout, Raster: time.Since(t1), Incremental: o.Incremental, Rect: img.Rect})
+	return img, true
 }
+
+// PaintInfo describes the last PaintRGBAOpts of a tab.
+type PaintInfo struct {
+	Layout, Raster time.Duration // style + layout + display list, then rasterisation
+	Incremental    bool
+	Rect           image.Rectangle // the part of the surface the returned image covers
+}
+
+// LastPaintInfo reports how the last PaintRGBAOpts went (nil before the first).
+func (t *Tab) LastPaintInfo() *PaintInfo { return t.lastPaint.Load() }
 
 func isRootScrollbar(op render.Op, vp render.Rect) bool {
 	switch o := op.(type) {

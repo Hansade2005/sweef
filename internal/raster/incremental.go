@@ -1,14 +1,13 @@
 package raster
 
 import (
-	"fmt"
 	"image"
 	"math"
-	"os"
 	"sort"
+	"sync"
 	"sync/atomic"
-	"time"
 
+	"github.com/sweefbrowser/sweef/internal/font"
 	"github.com/sweefbrowser/sweef/internal/render"
 )
 
@@ -53,6 +52,33 @@ type groupRec struct {
 	reach  int    // filter reach in device px (wide layers)
 	ctx    uint64 // context outside the group
 	ctm    Matrix // transform outside the group
+	inner  IRect  // lower bound of the clip outside the group (see innerDev)
+}
+
+// innerDev is a rectangle guaranteed to lie inside the device image of r under
+// m (empty when m is not axis aligned, where the image is not a rectangle).
+func innerDev(m Matrix, r render.Rect, surf IRect, layer bool) IRect {
+	if m[1] != 0 || m[2] != 0 {
+		return IRect{}
+	}
+	x0, y0 := m.Apply(r.X, r.Y)
+	x1, y1 := m.Apply(r.X+r.W, r.Y+r.H)
+	if x0 > x1 {
+		x0, x1 = x1, x0
+	}
+	if y0 > y1 {
+		y0, y1 = y1, y0
+	}
+	const lim = 1e7
+	if x0 != x0 || y0 != y0 || x1 != x1 || y1 != y1 || x0 < -lim || y0 < -lim || x1 > lim || y1 > lim {
+		return IRect{}
+	}
+	if layer {
+		// layers use their bounds as they are, rounded outwards (no snapping)
+		return IRect{int(math.Floor(x0)), int(math.Floor(y0)), int(math.Ceil(x1)), int(math.Ceil(y1))}.Intersect(surf)
+	}
+	// clips are snapped to the pixel grid first: stay one pixel inside
+	return IRect{int(math.Ceil(x0)) + 1, int(math.Ceil(y0)) + 1, int(math.Floor(x1)) - 1, int(math.Floor(y1)) - 1}.Intersect(surf)
 }
 
 const damagePad = 2 // device px: snapping and antialiasing slack around every op
@@ -117,14 +143,29 @@ func filterReach(fs []render.Filter) (px float64, ok bool) {
 	return px, true
 }
 
-// textBounds is a generous box around everything a text run can paint.
+// textBounds is a generous box around everything a text run can paint: the
+// advance box, taller than the fonts' ascent and descent by a quarter em (tall
+// glyphs, accents, decorations), and wider by an em either side (italic skew,
+// bearings).
 func textBounds(o render.TextRun) render.Rect {
-	pad := o.Size
-	for _, s := range o.Shadows {
-		pad = math.Max(pad, o.Size+math.Abs(s.DX)+math.Abs(s.DY)+1.5*s.Blur+2)
+	asc, desc := o.Size*0.95, o.Size*0.3
+	var last *font.Face
+	for _, g := range o.Glyphs {
+		if g.Face == nil || g.Face == last {
+			continue
+		}
+		last = g.Face
+		m := g.Face.Metrics(o.Size)
+		asc, desc = math.Max(asc, m.Ascent), math.Max(desc, m.Descent)
 	}
-	pad += o.Stroke + math.Abs(o.UnderOffset)
-	return render.Rect{X: o.X - pad, Y: o.Y - 2*o.Size - pad, W: o.Width + 2*pad, H: 3.4*o.Size + 2*pad}
+	padY := 0.3*o.Size + 2 + o.Stroke
+	padX := o.Size + o.Stroke
+	for _, s := range o.Shadows {
+		e := math.Abs(s.DX) + math.Abs(s.DY) + 1.5*s.Blur + 2
+		padX, padY = math.Max(padX, o.Size+e), math.Max(padY, 0.3*o.Size+2+e)
+	}
+	top, bot := o.Y-asc-padY, o.Y+desc+padY+math.Abs(o.UnderOffset)
+	return render.Rect{X: o.X - padX, Y: top, W: o.Width + 2*padX, H: bot - top}
 }
 
 func shadowBounds(o render.BoxShadow) render.Rect {
@@ -149,8 +190,22 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 			stack[k-1].acc = stack[k-1].acc.union(b)
 		}
 	}
-	push := func(i int, sig uint64, limit render.Rect, lim bool, wide bool, outsetPx float64) {
-		g := groupRec{idx: i, wide: wide, ctx: ctx, ctm: ctm}
+	inner := in.Surf
+	// push opens a group. layer groups (opacity, filters, masks) allocate an
+	// offscreen surface; when their bounds miss the clip, the painter makes a
+	// 1x1 one at the parent's origin, which leaks what is drawn into it. That
+	// pixel depends on the parent's extent, which a partial repaint changes, so
+	// such lists are not repainted incrementally.
+	push := func(i int, sig uint64, limit render.Rect, lim bool, wide bool, outsetPx float64, isLayer bool) bool {
+		g := groupRec{idx: i, wide: wide, ctx: ctx, ctm: ctm, inner: inner}
+		if lim && hasRect(limit) {
+			inner = inner.Intersect(innerDev(ctm, limit, in.Surf, isLayer))
+		} else if !isLayer {
+			inner = IRect{}
+		}
+		if isLayer && inner.Empty() {
+			return false
+		}
 		if wide {
 			g.reach = int(math.Ceil(outsetPx * ctm.MaxScale()))
 		}
@@ -161,6 +216,7 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 		in.Key[i] = mix(sig, ctx)
 		ctx = mix(ctx, sig)
 		stack = append(stack, g)
+		return true
 	}
 	for i, op := range list {
 		in.Pair[i] = -1
@@ -195,20 +251,27 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 		case render.SVGDraw:
 			leaf(o.Dst, true)
 		case render.PushClip:
-			push(i, sig, o.Rect, true, false, 0)
+			push(i, sig, o.Rect, true, false, 0, false)
 		case render.PushLayer:
 			px, fok := filterReach(o.Filter)
 			if !fok {
 				return &ListInfo{OK: false}
 			}
-			push(i, sig, o.Bounds, true, len(o.Filter) > 0, px)
+			if !push(i, sig, o.Bounds, true, len(o.Filter) > 0, px, true) {
+				return &ListInfo{OK: false}
+			}
 		case render.PushMask:
-			push(i, sig, o.Bounds, true, false, 0)
+			if !push(i, sig, o.Bounds, true, false, 0, true) {
+				return &ListInfo{OK: false}
+			}
 		case render.PushTransform:
-			g := groupRec{idx: i, ctx: ctx, ctm: ctm}
+			g := groupRec{idx: i, ctx: ctx, ctm: ctm, inner: inner}
 			in.Key[i] = mix(sig, ctx)
 			ctx = mix(ctx, sig)
 			ctm = ctm.Mul(Matrix(o.M))
+			if ctm[1] != 0 || ctm[2] != 0 {
+				inner = IRect{} // rotated or skewed: the clip is no rectangle any more
+			}
 			stack = append(stack, g)
 		case render.PopClip, render.PopLayer, render.PopMask, render.PopTransform:
 			k := len(stack)
@@ -218,7 +281,7 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 			g := stack[k-1]
 			stack = stack[:k-1]
 			in.Key[i] = mix(sig, ctx)
-			ctx, ctm = g.ctx, g.ctm
+			ctx, ctm, inner = g.ctx, g.ctm, g.inner
 			b := g.acc
 			if g.wide {
 				b = b.outset(g.reach)
@@ -443,6 +506,27 @@ type Canvas struct {
 	snapN   int
 	snapPre uint64
 	lcps    []int // common-prefix lengths of the last incremental updates
+
+	// a snapshot is rendered in the background after an update has returned, so
+	// it never delays a frame; the next Update waits for it
+	building sync.WaitGroup
+	built    *snapBuilt
+}
+
+type snapBuilt struct {
+	surf *Surface
+	n    int
+	pre  uint64
+}
+
+// settle waits for a background snapshot and adopts it.
+func (cv *Canvas) settle() {
+	cv.building.Wait()
+	if b := cv.built; b != nil {
+		cv.snap, cv.snapN, cv.snapPre = b.surf, b.n, b.pre
+		cv.built = nil
+		SnapBuilt.Add(1)
+	}
 }
 
 // NewCanvas allocates a transparent w x h device-pixel canvas.
@@ -457,11 +541,16 @@ func (cv *Canvas) Matches(w, h int, dpr float64, env PaintEnv) bool {
 
 // Paint repaints the whole canvas from list.
 func (cv *Canvas) Paint(list []render.Op) {
+	cv.paint(list, Analyze(list, cv.Surf.W(), cv.Surf.H(), cv.DPR))
+}
+
+func (cv *Canvas) paint(list []render.Op, info *ListInfo) {
+	cv.settle()
 	cv.Surf.Clear()
 	cv.snap, cv.lcps = nil, nil
 	p := newPainterOn(cv.Surf, cv.DPR, cv.Env, cv.Surf.R)
 	p.Run(list)
-	cv.Info = Analyze(list, cv.Surf.W(), cv.Surf.H(), cv.DPR)
+	cv.Info = info
 }
 
 // SnapBuilt and SnapUsed count surface snapshots made and repaints that
@@ -471,13 +560,14 @@ var SnapBuilt, SnapUsed atomic.Int64
 // Snapshot tuning (variables so tests can force the snapshot path).
 var (
 	SnapMinOps   = 120 // lists shorter than this are cheap enough to repaint
-	SnapStable   = 3   // consecutive updates that must share the prefix
+	SnapStable   = 2   // consecutive updates that must share the prefix
 	SnapMinShare = 4   // the prefix must be at least 1/SnapMinShare of the list
 )
 
 // Update brings the canvas to list. It returns the rows that were repainted
 // (nil when nothing changed) and whether that was the whole canvas.
 func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
+	cv.settle()
 	info := Analyze(list, cv.Surf.W(), cv.Surf.H(), cv.DPR)
 	old := cv.Info
 	bands, ok := Damage(old, info)
@@ -486,7 +576,7 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 		rows += b.Y1 - b.Y0
 	}
 	if !ok || rows*10 > cv.Surf.H()*6 {
-		cv.Paint(list)
+		cv.paint(list, info)
 		return []Band{{cv.Surf.R.Y0, cv.Surf.R.Y1}}, true
 	}
 	cv.Info = info
@@ -626,46 +716,25 @@ func (p *Painter) RunRegion(list []render.Op, info *ListInfo, region IRect) {
 	p.runRegion(list, info, region, 0)
 }
 
-var dbgBands = os.Getenv("DBGBANDS") != ""
-
 func (p *Painter) runRegion(list []render.Op, info *ListInfo, region IRect, start int) {
-	times := map[string][2]int64{}
-	run := func(op render.Op) {
-		if !dbgBands {
-			p.op(op)
-			return
-		}
-		t0 := time.Now()
-		p.op(op)
-		k := fmt.Sprintf("%T", op)
-		v := times[k]
-		v[0]++
-		v[1] += int64(time.Since(t0))
-		times[k] = v
-	}
 	for i := start; i < len(list); i++ {
 		switch list[i].(type) {
 		case render.PopClip, render.PopLayer, render.PopMask, render.PopTransform:
-			run(list[i])
+			p.op(list[i])
 		case render.PushClip, render.PushLayer, render.PushMask, render.PushTransform:
 			if info.Bounds[i].Intersect(region).Empty() {
 				i = int(info.Pair[i]) // skip the group
 				continue
 			}
-			run(list[i])
+			p.op(list[i])
 		default:
 			if info.Bounds[i].Intersect(region).Empty() {
 				continue
 			}
-			run(list[i])
+			p.op(list[i])
 		}
 	}
 	for p.c.LayerDepth() > 0 {
 		p.c.EndLayer(1, SourceOver)
-	}
-	if dbgBands {
-		for k, v := range times {
-			println("   ", k, v[0], v[1]/1000, "us")
-		}
 	}
 }

@@ -278,6 +278,11 @@ func (e *etab) paint(force bool) {
 			return
 		}
 		dt := time.Since(t0)
+		if pi := e.t.LastPaintInfo(); pi != nil && e.kind == "chrome" {
+			// where a chrome repaint goes: style+layout, then the raster of the damage
+			e.a.comp.RecordPaint("chrome: style + layout", pi.Layout)
+			e.a.comp.RecordPaint("chrome: raster", pi.Raster)
+		}
 		e.paintedAt.gen, e.paintedAt.w, e.paintedAt.h, e.paintedAt.scale = gen, vw, vh, scale
 		kind := e.kind
 		e.a.post(func() { e.a.onChromePainted(kind, img, dt) })

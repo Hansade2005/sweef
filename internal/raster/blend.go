@@ -314,6 +314,38 @@ func blendRow(dst, src []uint8, cov []uint8, op CompositeOp, n int) {
 	}
 }
 
+// blendSolidCov is blendRow(SourceOver) for a solid premultiplied colour: dst
+// gets col through the coverage row cov. It must stay in step with blendRow.
+func blendSolidCov(dst, cov []uint8, col [4]uint8) {
+	cr, cg, cb, ca := uint32(col[0]), uint32(col[1]), uint32(col[2]), uint32(col[3])
+	if ca == 0 {
+		return
+	}
+	for i, cv := range cov {
+		if cv == 0 {
+			continue
+		}
+		sr, sg, sb, sa := cr, cg, cb, ca
+		if cv != 255 {
+			c := uint32(cv)
+			sr, sg, sb, sa = mul255(sr, c), mul255(sg, c), mul255(sb, c), mul255(sa, c)
+		}
+		if sa == 0 {
+			continue
+		}
+		d := dst[i*4 : i*4+4 : i*4+4]
+		if sa == 255 {
+			d[0], d[1], d[2], d[3] = uint8(sr), uint8(sg), uint8(sb), 255
+			continue
+		}
+		ia := 255 - sa
+		d[0] = uint8(min(255, sr+mul255(uint32(d[0]), ia)))
+		d[1] = uint8(min(255, sg+mul255(uint32(d[1]), ia)))
+		d[2] = uint8(min(255, sb+mul255(uint32(d[2]), ia)))
+		d[3] = uint8(min(255, sa+mul255(uint32(d[3]), ia)))
+	}
+}
+
 func f2u8(v float32) uint8 {
 	if v <= 0 {
 		return 0

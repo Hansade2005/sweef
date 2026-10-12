@@ -490,7 +490,12 @@ func (a *App) onText(text string) {
 	e.w.do(func() {
 		for _, r := range text {
 			if r < 0x10000 {
+				t0 := time.Now()
 				_, _ = e.t.Evaluate("__sweefKey(" + jsString(string(r)) + ",0)")
+				if e.kind == "chrome" {
+					// the chrome page's own JavaScript handler, for the stats breakdown
+					a.comp.RecordPaint("chrome: input handler (JS)", time.Since(t0))
+				}
 			} else {
 				_, _ = e.t.Evaluate("__sweefInsert(" + jsString(string(r)) + ")")
 			}

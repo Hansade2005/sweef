@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -97,4 +98,48 @@ func pctF(v []float64, p float64) float64 {
 		}
 	}
 	return c[int(p*float64(len(c)-1))]
+}
+
+// The chrome repaints incrementally and the compositor receives partial images:
+// after a series of interactions the window must show exactly what a forced full
+// repaint of the chrome shows.
+func TestChromeIncrementalMatchesForcedRepaint(t *testing.T) {
+	srv := pageServer(t)
+	h := realUI(t, Config{InitialURLs: []string{srv.URL + "/two"}})
+	h.waitTitle("Page Two")
+	h.waitUIReady()
+	same := func(what string) {
+		t.Helper()
+		h.idle()
+		got := h.win.Screen()
+		c := h.app.chromeTab()
+		c.call(func() error { c.paint(true); return nil })
+		h.idle()
+		want := h.win.Screen()
+		if !bytes.Equal(got.Pix, want.Pix) {
+			n := 0
+			for i := 0; i < len(got.Pix); i += 4 {
+				if !bytes.Equal(got.Pix[i:i+4], want.Pix[i:i+4]) {
+					n++
+				}
+			}
+			t.Fatalf("%s: the incrementally painted window differs from a full repaint in %d pixels", what, n)
+		}
+	}
+	same("initial")
+	h.key("ctrl+l")
+	same("omnibox focus")
+	for _, s := range []string{"g", "i", "t", " ", "r"} {
+		h.typeText(s)
+		same("typed " + s)
+	}
+	h.key("Backspace")
+	h.key("Backspace")
+	same("backspace")
+	h.key("Escape")
+	same("escape")
+	h.key("ctrl+shift+a") // sidebar: the viewport hole moves
+	same("sidebar open")
+	h.key("ctrl+shift+a")
+	same("sidebar closed")
 }

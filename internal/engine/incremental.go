@@ -1,8 +1,11 @@
 package engine
 
 import (
+	"bytes"
+	"fmt"
 	"image"
 	"math"
+	"os"
 
 	"github.com/sweefbrowser/sweef/internal/raster"
 	"github.com/sweefbrowser/sweef/internal/render"
@@ -31,6 +34,9 @@ func (t *Tab) paintIncremental(list []render.Op, w, h int, dpr float64, env rast
 		return copyRGBA(cv.Image(), cv.Image().Rect)
 	}
 	bands, full := cv.Update(list)
+	if incrCheck {
+		checkIncremental(cv, list, w, h, dpr, env)
+	}
 	if full {
 		return copyRGBA(cv.Image(), cv.Image().Rect)
 	}
@@ -39,6 +45,20 @@ func (t *Tab) paintIncremental(list []render.Op, w, h int, dpr float64, env rast
 	}
 	// the caller installs one rectangle: the hull of the repainted bands
 	return copyRGBA(cv.Image(), image.Rect(cv.Surf.R.X0, bands[0].Y0, cv.Surf.R.X1, bands[len(bands)-1].Y1))
+}
+
+// SWEEF_INCR_CHECK=1 compares every incremental paint with a full paint of the
+// same display list (a development aid: it costs a full paint per frame) and
+// reports and repairs a difference.
+var incrCheck = os.Getenv("SWEEF_INCR_CHECK") != ""
+
+func checkIncremental(cv *raster.Canvas, list []render.Op, w, h int, dpr float64, env raster.PaintEnv) {
+	want := raster.Paint(list, w, h, dpr, env)
+	if bytes.Equal(want.Pix, cv.Image().Pix) {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "sweef: incremental paint differs from a full paint (%dx%d at %gx); repainting fully\n", w, h, dpr)
+	cv.Paint(list)
 }
 
 // copyRGBA copies the pixels of r (absolute coordinates) of src.

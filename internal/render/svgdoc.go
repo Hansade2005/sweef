@@ -127,6 +127,7 @@ type svgCascade struct {
 	custom map[string]string
 	idx    *style.EntryIndex
 	rank   map[*style.Rule]int // position of each rule in rules
+	memo   map[*html.Node][]style.Decl
 }
 
 func newSVGCascade(sheets []Sheet, env *style.Env, extra []string) *svgCascade {
@@ -163,6 +164,22 @@ type svgDecl struct {
 
 // declsFor returns the cascaded declarations for n, lowest priority first.
 func (sc *svgCascade) declsFor(n *html.Node) []style.Decl {
+	// a scene build asks for the same ancestors again and again (the inherited
+	// properties of every svg element walk up the whole tree); the DOM does not
+	// change during one layout, so the answer is kept for this cascade's life.
+	// Callers only read the result.
+	if d, ok := sc.memo[n]; ok {
+		return d
+	}
+	d := sc.declsForUncached(n)
+	if sc.memo == nil {
+		sc.memo = map[*html.Node][]style.Decl{}
+	}
+	sc.memo[n] = d
+	return d
+}
+
+func (sc *svgCascade) declsForUncached(n *html.Node) []style.Decl {
 	var ds []svgDecl
 	// the rules whose selectors can match n, each with its best matching
 	// specificity, then walked in sheet order (the order the full scan used)

@@ -41,15 +41,16 @@ type Compositor struct {
 	scale float64
 	frame *image.RGBA
 
-	chrome *image.RGBA
-	ink    image.Rectangle // bounding box of non-transparent chrome pixels inside the viewport
-	inkOK  bool            // ink is up to date
-	page   *image.RGBA
-	pageH  int // valid rows in page (texture may be taller than needed)
-	vp     image.Rectangle
-	scroll int   // device px offset of the visible window into page
-	docH   int   // full document height in device px (>= pageH); sets the scroll range
-	sbA    uint8 // overlay scrollbar opacity (0 = hidden)
+	chrome     *image.RGBA
+	ink        image.Rectangle // bounding box of non-transparent chrome pixels inside the viewport
+	inkOK      bool            // ink is valid (a superset of the exact box between rescans)
+	inkChanges int
+	page       *image.RGBA
+	pageH      int // valid rows in page (texture may be taller than needed)
+	vp         image.Rectangle
+	scroll     int   // device px offset of the visible window into page
+	docH       int   // full document height in device px (>= pageH); sets the scroll range
+	sbA        uint8 // overlay scrollbar opacity (0 = hidden)
 
 	ovl      *image.RGBA
 	ovlAt    image.Point
@@ -166,9 +167,42 @@ func (c *Compositor) noteChromeChange(d image.Rectangle) {
 		return
 	}
 	c.damage = c.damage.Union(d)
-	if !d.Intersect(c.vp).Empty() {
-		c.inkOK = false
+	if h := d.Intersect(c.vp); !h.Empty() {
+		// Keep the ink box as a superset instead of rescanning the whole viewport
+		// for every chrome change: extra transparent area only costs blending
+		// work that is limited to the damage anyway. An exact rescan happens
+		// after a number of changes (and for large ones).
+		c.inkChanges++
+		if c.inkOK && c.inkChanges%64 != 0 && h.Dx()*h.Dy()*4 < c.vp.Dx()*c.vp.Dy() {
+			c.ink = c.ink.Union(c.inkIn(h))
+		} else {
+			c.inkOK = false
+		}
 	}
+}
+
+// inkIn is the bounding box of the non-transparent chrome pixels inside r.
+func (c *Compositor) inkIn(r image.Rectangle) image.Rectangle {
+	r = r.Intersect(c.chrome.Bounds())
+	var out image.Rectangle
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		o := c.chrome.PixOffset(r.Min.X, y)
+		row := c.chrome.Pix[o : o+4*r.Dx()]
+		first, last := -1, -1
+		for x := 3; x < len(row); x += 4 {
+			if row[x] != 0 {
+				if first < 0 {
+					first = x
+				}
+				last = x
+			}
+		}
+		if first < 0 {
+			continue
+		}
+		out = out.Union(image.Rect(r.Min.X+first/4, y, r.Min.X+last/4+1, y+1))
+	}
+	return out
 }
 
 // scanInk finds the bounding box of chrome pixels inside the viewport that
