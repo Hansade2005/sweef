@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset=utf-8><title>probe</title>
+<style>
+:root{--a:#5B5BFF;--r:14px;--gap:8px}
+@media (prefers-color-scheme: dark){:root{--bg:#111}}
+body{margin:0;font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;background:linear-gradient(180deg,#dfe8ff,#f6f8ff);height:720px}
+.bar{display:flex;align-items:center;gap:var(--gap);padding:8px 12px;background:rgba(255,255,255,.6);backdrop-filter:blur(20px);border-bottom:1px solid rgba(0,0,0,.08)}
+.pill{flex:1;height:34px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08),0 8px 24px -8px rgba(40,40,120,.25);display:flex;align-items:center;padding:0 14px;border:1px solid rgba(0,0,0,.06)}
+.g{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:20px}
+.c{height:80px;border-radius:var(--r);background:linear-gradient(135deg,var(--a),#3DF5C4);color:#fff;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.btn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;transition:background .15s}
+.btn:hover{background:rgba(0,0,0,.06)}
+.pop{position:absolute;top:60px;right:20px;width:260px;padding:10px;border-radius:14px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.06),0 20px 50px -12px rgba(0,0,0,.3)}
+.t{width:100px;height:30px;border-radius:10px 10px 0 0;background:#fff;mask:none}
+.s{position:fixed;left:0;top:0;right:0;height:3px;background:linear-gradient(90deg,var(--a),#3DF5C4);transform-origin:left;transform:scaleX(.4)}
+input{border:0;outline:0;background:transparent;flex:1;font:inherit}
+.w{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;width:120px}
+.sel::selection{background:red}
+.abs{position:absolute;inset:200px 20px auto auto;width:200px;height:50px;border-radius:999px;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px #5B5BFF,0 0 24px 4px rgba(91,91,255,.6)}
+</style></head><body>
+<div class=s></div>
+<div class=bar><div class=btn><svg width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M15 18l-6-6 6-6"/></svg></div><div class=btn>&#8594;</div><div class=pill><input placeholder="Ask or type URL" value="sweef.dev"> <span class=w>very long text that must be truncated here</span></div></div>
+<div class=g><div class=c>38 MB</div><div class=c>12</div><div class=c>3</div><div class=c>4</div></div>
+<div class=pop>Popover <b>bold</b> <kbd>Ctrl</kbd></div>
+<div class=abs>Fulfilling…</div>
+<script>
+document.title='ok'; var el=document.createElement('div'); el.textContent='js '+(window.matchMedia?matchMedia('(prefers-color-scheme: dark)').matches:'nomm')+' '+(typeof requestAnimationFrame)+' '+getComputedStyle(document.documentElement).getPropertyValue('--a'); document.body.appendChild(el);
+console.log('hello');
+</script></body></html>
