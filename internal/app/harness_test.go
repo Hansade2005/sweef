@@ -20,7 +20,7 @@ import (
 )
 
 type harness struct {
-	t    *testing.T
+	t    testing.TB
 	app  *App
 	win  *headless.Window
 	done chan error
@@ -35,7 +35,7 @@ type hopts struct {
 }
 
 // newHarness runs a full app on a headless window with the placeholder chrome.
-func newHarness(t *testing.T, o hopts) *harness {
+func newHarness(t testing.TB, o hopts) *harness {
 	t.Helper()
 	if o.w == 0 {
 		o.w, o.h = 1000, 700
@@ -101,7 +101,7 @@ func (h *harness) shot(name string) string {
 	return p
 }
 
-func pageServer(t *testing.T) *httptest.Server {
+func pageServer(t testing.TB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<!doctype html><html><head><title>Home Page</title></head><body style="margin:0;background:#fff">

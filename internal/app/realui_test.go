@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 // the placeholder: the handshake, state shape, internal pages and the
 // hit-testing rules of docs/gui-contract.md.
 
-func realUI(t *testing.T, cfg Config) *harness {
+func realUI(t testing.TB, cfg Config) *harness {
 	cfg.ChromeFS = ui.FS
 	if cfg.Profile == nil && cfg.ProfileDir == "" {
 		cfg.Profile = store.OpenIncognito()
@@ -282,3 +283,5 @@ func TestRealUIAgentOverlayAndSidebar(t *testing.T) {
 	})
 	_ = shell.CursorDefault
 }
+
+func realUIFS() fs.FS { return ui.FS }
