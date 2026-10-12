@@ -168,7 +168,7 @@ func hayOf(u, title string) (hay, host string) {
 	pu, err := url.Parse(u)
 	if err == nil && pu.Host != "" {
 		host = strings.TrimPrefix(strings.ToLower(pu.Hostname()), "www.")
-		hay = host + strings.ToLower(pu.EscapedPath())
+		hay = strings.TrimPrefix(strings.ToLower(pu.Host), "www.") + strings.ToLower(pu.EscapedPath()) // host:port/path
 		if pu.RawQuery != "" {
 			hay += "?" + strings.ToLower(pu.RawQuery)
 		}
@@ -413,6 +413,8 @@ const (
 // of the host or URL, a prefix of a word in URL/title, or any substring.
 func (h *History) Search(q string, limit int) []HistoryEntry {
 	q = strings.ToLower(strings.TrimSpace(q))
+	// history is matched on host+path, so a typed scheme or "www." must not defeat the search
+	q = strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(q, "https://"), "http://"), "www.")
 	if limit <= 0 {
 		limit = 8
 	}

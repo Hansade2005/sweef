@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sweefbrowser/sweef/internal/shell"
 )
@@ -65,18 +66,17 @@ func TestThreeTabsOmniboxAndPixels(t *testing.T) {
 	// type in the omnibox and navigate
 	h.key("ctrl+l")
 	h.typeText(srv.URL + "/two")
-	// the suggestion popover (overlay) appears over the page
-	h.waitFor("popover", func() bool { return h.app.ovl.visible })
+	// the chrome draws its suggestion list over the viewport: the page shows around it
+	h.waitFor("dropdown ink", func() bool { return h.app.comp.ChromeAlphaAt(130, 90) == 255 })
 	h.idle()
-	h.wantPx(130, 100, "#3b4258") // selected first row of the popover
+	h.wantPx(130, 90, "#232840")
+	h.wantPx(700, 90, "#2255cc") // beside the dropdown the page (the Tall tab is active here) is still visible
 	h.key("Enter")
 	h.waitTitle("Page Two")
 	if got := h.tab().URL; got != srv.URL+"/two" {
 		t.Fatalf("url %q", got)
 	}
-	if h.app.ovl.visible {
-		t.Fatal("popover must close after navigation")
-	}
+	h.waitFor("dropdown closed", func() bool { return h.app.comp.ChromeAlphaAt(130, 90) == 0 })
 	h.wantPx(40, vpTop+50, "#2f9e44")
 	// the visit is in history, typed
 	e, ok := h.app.prof.History.Get(srv.URL + "/two")
@@ -164,7 +164,8 @@ func TestNewTabTargetBlankAndPopupGate(t *testing.T) {
 	if h.tab().Title != "Home Page" {
 		t.Fatalf("ctrl+click stole focus: %q", h.tab().Title)
 	}
-	// window.open without a user gesture is blocked
+	// window.open without a user gesture is blocked (a gesture counts for 2 s)
+	time.Sleep(2200 * time.Millisecond)
 	e := h.app.activePage()
 	e.call(func() error { _, err := e.t.Evaluate(`window.open('/two')`); return err })
 	h.idle()
@@ -180,14 +181,11 @@ func TestNewTabTargetBlankAndPopupGate(t *testing.T) {
 
 func TestErrorPage(t *testing.T) {
 	h := newHarness(t, hopts{cfg: Config{InitialURLs: []string{"http://127.0.0.1:1/"}}})
-	h.waitFor("error page", func() bool { return h.tab().Security.Level == "error" })
+	h.waitFor("error page", func() bool { return strings.Contains(h.tab().Title, "can't be loaded") && !h.tab().Loading })
 	h.idle()
 	tb := h.tab()
-	if tb.URL != "http://127.0.0.1:1/" || tb.Loading {
+	if tb.URL != "http://127.0.0.1:1/" || tb.Security.Level != "none" {
 		t.Fatalf("error tab: %+v", tb)
-	}
-	if !strings.Contains(tb.Title, "can't be reached") && !strings.Contains(tb.Title, "refused") {
-		t.Fatalf("title %q", tb.Title)
 	}
 	// the error page is rendered (not blank white): it has dark text pixels
 	dark := 0
@@ -291,7 +289,7 @@ func TestWebPagesCannotUseTheChromeBridge(t *testing.T) {
 		fmt.Fprint(w, `<!doctype html><title>Evil</title><script>
 window.__t = typeof window.sweef;
 try { __sweefPost('tab.new', {url:'https://evil.test/'}); } catch (e) {}
-try { __sweefPost('settings.set', {key:'blockTrackers', value:false}); } catch (e) {}
+try { __sweefPost('settings.set', {key:'privacy.trackers', value:'off'}); } catch (e) {}
 </script>`)
 	})
 	srv := httptest.NewServer(mux)
@@ -309,7 +307,7 @@ try { __sweefPost('settings.set', {key:'blockTrackers', value:false}); } catch (
 	if len(h.tabIDs()) != 1 {
 		t.Fatal("web page opened a tab through the privileged bridge")
 	}
-	if !h.app.prof.Settings.Bool("blockTrackers") {
+	if h.app.prof.Settings.Str("privacy.trackers") != "standard" {
 		t.Fatal("web page changed a setting through the privileged bridge")
 	}
 }

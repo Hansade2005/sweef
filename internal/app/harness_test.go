@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ type harness struct {
 	win  *headless.Window
 	done chan error
 	dir  string
+	once sync.Once
 }
 
 type hopts struct {
@@ -67,12 +69,14 @@ func newHarness(t *testing.T, o hopts) *harness {
 }
 
 func (h *harness) close() {
-	h.app.Close()
-	select {
-	case <-h.done:
-	case <-time.After(15 * time.Second):
-		h.t.Error("app did not stop")
-	}
+	h.once.Do(func() {
+		h.app.Close()
+		select {
+		case <-h.done:
+		case <-time.After(15 * time.Second):
+			h.t.Error("app did not stop")
+		}
+	})
 }
 
 func (h *harness) idle() {
@@ -212,4 +216,41 @@ func (h *harness) uiPost(typ string, payload any) {
 	h.t.Helper()
 	h.chromeEval("sweef.post("+jsString(typ)+","+jsJSON(payload)+"); 1", nil)
 	h.idle()
+}
+
+// loop runs f on the app's UI loop and waits, so tests can read loop-owned state without racing.
+func (h *harness) loop(f func()) {
+	h.t.Helper()
+	done := make(chan struct{})
+	h.app.post(func() { f(); close(done) })
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		h.t.Fatal("UI loop did not run the callback")
+	}
+}
+
+func (h *harness) focusName() (s string) { h.loop(func() { s = h.app.focus }); return }
+func (h *harness) vp() (r rect)          { h.loop(func() { r = h.app.vpLog }); return }
+func (h *harness) ovlVisible() (b bool)  { h.loop(func() { b = h.app.ovl.visible() }); return }
+func (h *harness) logicalW() (n int)     { h.loop(func() { n = h.app.wLog }); return }
+func (h *harness) scaleV() (f float64)   { h.loop(func() { f = h.app.scale }); return }
+func (h *harness) hasIncog() (b bool)    { h.loop(func() { b = h.app.incog != nil }); return }
+func (h *harness) sidebarOpen() (b bool) { h.loop(func() { b = h.app.model.Sidebar.Open }); return }
+func (h *harness) findOpen() (b bool)    { h.loop(func() { b = h.app.model.Find.Open }); return }
+func (h *harness) animating() (b bool) {
+	h.loop(func() { b = h.app.animOn.Load() || h.app.animT != nil })
+	return
+}
+func (h *harness) state(k string) (v any) { h.loop(func() { v = h.app.lastState[k] }); return }
+func (h *harness) pagePaints() int64      { return h.app.stats.pagePaints.Load() }
+func (h *harness) stateTabs() (tabs []any) {
+	h.loop(func() { tabs, _ = h.app.lastState["tabs"].([]any) })
+	return
+}
+
+// targetAt reports where the router would send a pointer at logical (x,y).
+func (h *harness) targetAt(x, y float64) (s string) {
+	h.loop(func() { s = h.app.target(x, y) })
+	return
 }

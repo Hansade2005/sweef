@@ -14,6 +14,18 @@ func solid(w, h int, c color.RGBA) *image.RGBA {
 	return m
 }
 
+// holeChrome is a chrome buffer: colour c everywhere except the viewport hole,
+// which is transparent (the chrome draws nothing there).
+func holeChrome(w, h int, hole image.Rectangle, c color.RGBA) *image.RGBA {
+	m := solid(w, h, c)
+	for y := hole.Min.Y; y < hole.Max.Y; y++ {
+		for x := hole.Min.X; x < hole.Max.X; x++ {
+			m.SetRGBA(x, y, color.RGBA{})
+		}
+	}
+	return m
+}
+
 func stripes(w, h int) *image.RGBA { // page whose row y has colour (y%251, 0, 0)
 	m := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {
@@ -36,8 +48,9 @@ func at(c *Compositor, x, y int) color.RGBA { return c.Frame().RGBAAt(x, y) }
 
 func TestChromeHolePage(t *testing.T) {
 	c := New(200, 100, 1)
-	c.SetViewport(image.Rect(0, 30, 200, 100))
-	c.SetChrome(solid(200, 100, blue))
+	vp := image.Rect(0, 30, 200, 100)
+	c.SetViewport(vp)
+	c.SetChrome(holeChrome(200, 100, vp, blue))
 	c.SetPage(solid(200, 70, green))
 	_, d := c.Compose()
 	if d != image.Rect(0, 0, 200, 100) {
@@ -57,12 +70,13 @@ func TestChromeHolePage(t *testing.T) {
 
 func TestChromeDamageIsTight(t *testing.T) {
 	c := New(200, 100, 1)
-	c.SetViewport(image.Rect(0, 30, 200, 100))
-	c.SetChrome(solid(200, 100, blue))
+	vp := image.Rect(0, 30, 200, 100)
+	c.SetViewport(vp)
+	c.SetChrome(holeChrome(200, 100, vp, blue))
 	c.SetPage(solid(200, 70, green))
 	c.Compose()
 	// change a 10x6 patch of the chrome strip
-	n := solid(200, 100, blue)
+	n := holeChrome(200, 100, vp, blue)
 	for y := 5; y < 11; y++ {
 		for x := 20; x < 30; x++ {
 			n.SetRGBA(x, y, red)
@@ -76,20 +90,43 @@ func TestChromeDamageIsTight(t *testing.T) {
 	if at(c, 25, 8) != red || at(c, 19, 8) != blue {
 		t.Fatal("patch not composed")
 	}
-	// a chrome change hidden entirely behind the hole costs nothing
-	n2 := solid(200, 100, blue)
+	// the chrome drawing over the hole (a dropdown, a toast) shows on top of the page
+	n2 := holeChrome(200, 100, vp, blue)
 	copy(n2.Pix, n.Pix)
-	n2.SetRGBA(50, 60, red)
+	for y := 50; y < 60; y++ {
+		for x := 60; x < 80; x++ {
+			n2.SetRGBA(x, y, red)
+		}
+	}
 	c.SetChrome(n2)
-	if c.Dirty() {
-		t.Fatal("change inside the viewport hole must not damage")
+	_, d = c.Compose()
+	if d != image.Rect(60, 50, 80, 60) {
+		t.Fatalf("hole ink damage %v", d)
+	}
+	if at(c, 70, 55) != red || at(c, 59, 55) != green {
+		t.Fatalf("chrome over the page: %v / %v", at(c, 70, 55), at(c, 59, 55))
+	}
+	// translucent chrome over the page blends (premultiplied 50% blue over green)
+	n3 := holeChrome(200, 100, vp, blue)
+	copy(n3.Pix, n2.Pix)
+	n3.SetRGBA(100, 70, color.RGBA{0, 0, 128, 128})
+	c.SetChrome(n3)
+	c.Compose()
+	if g := at(c, 100, 70); g.B < 126 || g.B > 130 || g.G < 98 || g.G > 102 {
+		t.Fatalf("translucent chrome blend = %v", g)
+	}
+	// removing it restores the page
+	c.SetChrome(holeChrome(200, 100, vp, blue))
+	c.Compose()
+	if at(c, 70, 55) != green || at(c, 100, 70) != green {
+		t.Fatal("chrome ink removed but the page did not return")
 	}
 }
 
 func TestPageScrollWindow(t *testing.T) {
 	c := New(100, 100, 1)
 	c.SetViewport(image.Rect(0, 20, 100, 100)) // 80px window
-	c.SetChrome(solid(100, 100, blue))
+	c.SetChrome(holeChrome(100, 100, image.Rect(0, 20, 100, 100), blue))
 	c.SetPage(stripes(100, 400))
 	c.SetDocHeight(400)
 	c.Compose()
@@ -132,7 +169,7 @@ func TestPageScrollWindow(t *testing.T) {
 func TestPageUpdateDamageOnlyVisible(t *testing.T) {
 	c := New(100, 100, 1)
 	c.SetViewport(image.Rect(0, 0, 100, 50))
-	c.SetChrome(solid(100, 100, blue))
+	c.SetChrome(holeChrome(100, 100, image.Rect(0, 0, 100, 50), blue))
 	p := stripes(100, 300)
 	c.SetPage(p)
 	c.SetDocHeight(300)
@@ -161,7 +198,7 @@ func TestPageUpdateDamageOnlyVisible(t *testing.T) {
 func TestOverlayBlend(t *testing.T) {
 	c := New(100, 100, 1)
 	c.SetViewport(image.Rect(0, 0, 100, 100))
-	c.SetChrome(solid(100, 100, blue))
+	c.SetChrome(holeChrome(100, 100, image.Rect(0, 0, 100, 100), blue))
 	c.SetPage(solid(100, 100, white))
 	c.Compose()
 	// premultiplied half-transparent red 20x20 popover at (10,10)
@@ -216,7 +253,7 @@ func TestOverlayBlend(t *testing.T) {
 func TestResizeAndPartialChrome(t *testing.T) {
 	c := New(100, 100, 1)
 	c.SetViewport(image.Rect(0, 40, 100, 100))
-	c.SetChrome(solid(100, 100, blue))
+	c.SetChrome(holeChrome(100, 100, image.Rect(0, 40, 100, 100), blue))
 	c.Compose()
 	c.Resize(200, 120, 2)
 	w, h, s := c.Size()
@@ -226,10 +263,11 @@ func TestResizeAndPartialChrome(t *testing.T) {
 	if !c.Dirty() {
 		t.Fatal("resize must damage everything")
 	}
-	// a partial chrome paint (only the strip above the hole) updates just that strip
-	c.SetViewport(image.Rect(0, 80, 200, 120))
-	c.SetChrome(solid(200, 120, blue))
+	vp := image.Rect(0, 80, 200, 120)
+	c.SetViewport(vp)
+	c.SetChrome(holeChrome(200, 120, vp, blue))
 	c.Compose()
+	// a partial chrome paint (only the strip above the hole) updates just that strip
 	c.SetChrome(solid(200, 80, red))
 	_, d := c.Compose()
 	if d != image.Rect(0, 0, 200, 80) {
@@ -238,8 +276,8 @@ func TestResizeAndPartialChrome(t *testing.T) {
 	if at(c, 10, 10) != red {
 		t.Fatal("strip not updated")
 	}
-	// the hole region keeps the previous chrome pixels (not zeroed)
-	if got := c.chrome.RGBAAt(10, 100); got != blue {
+	// the rest of the chrome buffer is kept (not zeroed)
+	if got := c.chrome.RGBAAt(10, 100); got != (color.RGBA{}) {
 		t.Fatalf("partial paint clobbered the rest of the chrome buffer: %v", got)
 	}
 }
@@ -247,7 +285,7 @@ func TestResizeAndPartialChrome(t *testing.T) {
 func TestScrollbarOverlay(t *testing.T) {
 	c := New(100, 100, 1)
 	c.SetViewport(image.Rect(0, 0, 100, 100))
-	c.SetChrome(solid(100, 100, blue))
+	c.SetChrome(holeChrome(100, 100, image.Rect(0, 0, 100, 100), blue))
 	c.SetPage(solid(100, 100, white))
 	c.SetDocHeight(400)
 	c.Compose()
@@ -322,11 +360,12 @@ func TestScroller(t *testing.T) {
 // Steady-state composition must not allocate.
 func TestComposeAllocatesNothing(t *testing.T) {
 	c := New(1280, 800, 1)
-	c.SetViewport(image.Rect(0, 80, 1280, 800))
-	chromeA, chromeB := solid(1280, 800, blue), solid(1280, 800, blue)
+	vp := image.Rect(0, 80, 1280, 800)
+	c.SetViewport(vp)
+	chromeA, chromeB := holeChrome(1280, 800, vp, blue), holeChrome(1280, 800, vp, blue)
 	chromeB.SetRGBA(100, 40, red)
 	page := stripes(1280, 4000)
-	c.SetChrome(solid(1280, 800, blue))
+	c.SetChrome(holeChrome(1280, 800, vp, blue))
 	c.SetPage(page)
 	c.SetDocHeight(4000)
 	ov := solid(300, 200, color.RGBA{30, 30, 30, 200})
@@ -353,9 +392,11 @@ func TestComposeAllocatesNothing(t *testing.T) {
 
 func TestSetChromeDiffAllocatesNothing(t *testing.T) {
 	c := New(1280, 800, 1)
-	a, b := solid(1280, 800, blue), solid(1280, 800, blue)
+	vp := image.Rect(0, 80, 1280, 800)
+	c.SetViewport(vp)
+	a, b := holeChrome(1280, 800, vp, blue), holeChrome(1280, 800, vp, blue)
 	b.SetRGBA(640, 40, red)
-	c.SetChrome(solid(1280, 800, blue))
+	c.SetChrome(holeChrome(1280, 800, vp, blue))
 	c.Compose()
 	cur := a
 	allocs := testing.AllocsPerRun(50, func() {
@@ -375,8 +416,9 @@ func TestSetChromeDiffAllocatesNothing(t *testing.T) {
 
 func BenchmarkComposeScroll(b *testing.B) {
 	c := New(1280, 800, 1)
-	c.SetViewport(image.Rect(0, 80, 1280, 800))
-	c.SetChrome(solid(1280, 800, blue))
+	vp := image.Rect(0, 80, 1280, 800)
+	c.SetViewport(vp)
+	c.SetChrome(holeChrome(1280, 800, vp, blue))
 	c.SetPage(stripes(1280, 4000))
 	c.SetDocHeight(4000)
 	c.Compose()
@@ -390,10 +432,11 @@ func BenchmarkComposeScroll(b *testing.B) {
 
 func BenchmarkComposeChromeStrip(b *testing.B) {
 	c := New(1280, 800, 1)
-	c.SetViewport(image.Rect(0, 80, 1280, 800))
-	a, d := solid(1280, 800, blue), solid(1280, 800, blue)
+	vp := image.Rect(0, 80, 1280, 800)
+	c.SetViewport(vp)
+	a, d := holeChrome(1280, 800, vp, blue), holeChrome(1280, 800, vp, blue)
 	d.SetRGBA(300, 40, red)
-	c.SetChrome(solid(1280, 800, blue))
+	c.SetChrome(holeChrome(1280, 800, vp, blue))
 	c.SetPage(stripes(1280, 800))
 	c.Compose()
 	b.ReportAllocs()

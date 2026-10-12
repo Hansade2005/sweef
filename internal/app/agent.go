@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -10,14 +11,69 @@ import (
 )
 
 // AgentEvent is one streamed item from the agent. Kind is one of
-// "text", "thought", "action", "status", "done", "error", "confirm".
-// The app forwards it verbatim to the chrome page as `agent.event`.
+// "text", "thought", "action", "status", "done", "error", "confirm" (and
+// "sources"). The app forwards it to the chrome page as `agent.event` with Data
+// merged into the top level, which is the shape the sidebar reads:
+//
+//	text {text, full?}  thought {text, done?}  action {id,label,detail,status,ms}
+//	status {state,text}  confirm {id,title,risk,action}  sources {items}
+//	done {ttft,tps,ms,sources}  error {code,message,retryAfter}
 type AgentEvent struct {
 	RunID string         `json:"runId"`
 	Kind  string         `json:"kind"`
 	Text  string         `json:"text,omitempty"`
 	Data  map[string]any `json:"data,omitempty"`
 }
+
+// MarshalJSON flattens Data into the event object. Data cannot overwrite
+// runId or kind.
+func (e AgentEvent) MarshalJSON() ([]byte, error) {
+	m := make(map[string]any, len(e.Data)+3)
+	for k, v := range e.Data {
+		m[k] = v
+	}
+	m["runId"], m["kind"] = e.RunID, e.Kind
+	if e.Text != "" {
+		m["text"] = e.Text
+	}
+	return json.Marshal(m)
+}
+
+// AgentInfo is what the settings page and sidebar show about the agent.
+type AgentInfo struct {
+	HasKey bool        `json:"hasKey"`
+	Model  string      `json:"model,omitempty"`
+	Chats  []AgentChat `json:"chats,omitempty"`
+	Title  string      `json:"title,omitempty"` // current chat
+}
+
+// AgentChat is one entry of the chat list.
+type AgentChat struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	When  string `json:"when,omitempty"`
+}
+
+// Optional capabilities a host may implement on top of AgentHost. The app
+// checks for each with a type assertion, so a minimal host keeps working.
+type (
+	// AgentInfoer reports key/model/chat state for the UI.
+	AgentInfoer interface{ Info() AgentInfo }
+	// AgentResumer continues after the user handed control back.
+	AgentResumer interface{ Resume() }
+	// AgentConfirmer answers a `confirm` event.
+	AgentConfirmer interface {
+		Confirm(runID, id string, approved bool)
+	}
+	// AgentKeyClearer forgets the stored API key.
+	AgentKeyClearer interface{ ClearKey() }
+	// AgentChats manages conversations.
+	AgentChats interface {
+		NewChat()
+		// OpenChat returns the chat's title and messages ({role, text}).
+		OpenChat(id string) (title string, messages []map[string]any, ok bool)
+	}
+)
 
 // PageContext is what the agent may know about the page the user is on.
 // When Blocked is true every other field is empty: the agent is never handed
@@ -139,6 +195,8 @@ func (f *FakeAgent) Send(text, mode string, pc PageContext) <-chan AgentEvent {
 	return ch
 }
 
+func (f *FakeAgent) Info() AgentInfo { return AgentInfo{HasKey: true, Model: "fake-model"} }
+
 func (f *FakeAgent) Stop()        { f.mu.Lock(); f.Stops++; f.mu.Unlock() }
 func (f *FakeAgent) TakeControl() { f.mu.Lock(); f.Takes++; f.mu.Unlock() }
 func (f *FakeAgent) SetKey(k string) {
@@ -245,4 +303,11 @@ func (b Backend) Fill(tabID, selector, value string) error {
 		return err
 	}
 	return pt.call(func() error { return pt.t.Fill(selector, value) })
+}
+
+func (f *FakeAgent) callCount() int { f.mu.Lock(); defer f.mu.Unlock(); return len(f.Calls) }
+func (f *FakeAgent) counters() (stops, takes int, key string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Stops, f.Takes, f.Key
 }

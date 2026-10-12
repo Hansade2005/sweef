@@ -3,7 +3,6 @@ package app
 import (
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/app/omnibox"
@@ -93,7 +92,6 @@ func (a *App) openTab(o openOpts) string {
 	if len(o.History) > 0 {
 		mode = modeReplace
 	}
-	e.scrollCSS.Store(int32(o.Scroll))
 	a.loadURL(id, url, mode, false)
 	if o.Scroll > 0 {
 		e.restoreScroll.Store(int32(o.Scroll))
@@ -127,7 +125,8 @@ func (a *App) makeEtab(id string, incog bool) *etab {
 	e := a.newEtab("page", id, t, incog)
 	e.vpW.Store(int32(a.vpLogW()))
 	e.vpH.Store(int32(a.vpLogH()))
-	t.SetViewport(a.pageCSS(a.vpLogW()), a.pageCSS(a.vpLogH()), a.pageDSF(), false, false)
+	e.vpApplied.w, e.vpApplied.h, e.vpApplied.dsf = a.pageCSS(a.vpLogW()), a.pageCSS(a.vpLogH()), a.pageDSF()
+	t.SetViewport(e.vpApplied.w, e.vpApplied.h, e.vpApplied.dsf, false, false)
 	e.lastActive.Store(time.Now().UnixNano())
 	a.mu.Lock()
 	a.pages[id] = e
@@ -232,14 +231,13 @@ func (a *App) activateTab(id string) {
 	e.vpW.Store(int32(a.vpLogW()))
 	e.vpH.Store(int32(a.vpLogH()))
 	e.w.do(func() {
-		e.t.SetViewport(a.pageCSS(int(e.vpW.Load())), a.pageCSS(int(e.vpH.Load())), a.pageDSF(), false, false)
+		e.setViewport(a.pageCSS(int(e.vpW.Load())), a.pageCSS(int(e.vpH.Load())), a.pageDSF())
 		e.paint(true)
 		e.armPump()
 	})
 	if st, ok := a.model.Tab(id); ok && (st.URL == newTabURL || st.URL == "") {
 		a.setFocus("chrome")
-		a.sendChrome("omnibox.focus", map[string]any{"select": true})
-		a.focusOmnibox()
+		a.focusOmniAfterState = true // after the state patch, so the bar shows the new tab's URL
 	} else {
 		a.setFocus("page")
 	}
@@ -276,11 +274,29 @@ func (a *App) reopenClosed() {
 // discardIdle drops the engine tabs of background tabs unused for the
 // configured time. The model keeps them (greyed out); activating reloads.
 func (a *App) discardIdle() {
-	mins := a.prof.Settings.Int("tabDiscardMinutes")
+	mins := a.prof.Settings.Int("tabs.discardMinutes")
 	if mins <= 0 {
 		return
 	}
-	cutoff := time.Now().Add(-time.Duration(mins) * time.Minute).UnixNano()
+	a.discardOlderThan(time.Duration(mins) * time.Minute)
+}
+
+// armDiscard runs the memory saver once a minute, only while there is more
+// than one tab (so a single-tab browser has no timer wakeups at all).
+func (a *App) armDiscard() {
+	time.AfterFunc(time.Minute, func() {
+		if a.closing.Load() {
+			return
+		}
+		a.post(func() {
+			a.discardIdle()
+			a.armDiscard()
+		})
+	})
+}
+
+func (a *App) discardOlderThan(d time.Duration) {
+	cutoff := time.Now().Add(-d).UnixNano()
 	active := a.model.Active(a.winID)
 	for _, id := range a.model.Order(a.winID) {
 		st, _ := a.model.Tab(id)
@@ -327,34 +343,13 @@ func (a *App) toggleBookmark(id string) {
 	a.markState()
 }
 
+// setSidebar opens or closes the agent sidebar (the setting is the source of
+// truth; the chrome page reacts to it and reports the new viewport).
 func (a *App) setSidebar(open bool) {
-	if a.model.Sidebar.Open == open {
-		return
-	}
-	a.model.Sidebar.Open = open
-	a.sendChrome("sidebar", map[string]any{"open": open, "width": a.model.Sidebar.Width})
-	a.markState()
-	a.layoutFallback()
+	_ = a.prof.Settings.Set("sidebar.open", open)
 }
 
-// omniInput answers omni.input with ranked suggestions.
-func (a *App) omniInput(p struct {
-	ID   any    `json:"id"`
-	Text string `json:"text"`
-}) {
-	t0 := time.Now()
-	resp := a.suggest(p.Text)
-	if p.ID != nil {
-		resp.ID = p.ID
-	} else {
-		a.omniSeq++
-		resp.ID = a.omniSeq
-	}
-	a.stats.noteSuggest(time.Since(t0))
-	a.sendChrome(mOmniSuggest, resp)
-}
-
-func (a *App) suggest(text string) omnibox.Response {
+func (a *App) suggest(text string, limit int) omnibox.Response {
 	src := omnibox.Sources{
 		Engine: a.engineSearch,
 		History: func(q string, n int) []omnibox.HistoryHit {
@@ -381,27 +376,5 @@ func (a *App) suggest(text string) omnibox.Response {
 			return out
 		},
 	}
-	return omnibox.Suggest(src, text, 8)
+	return omnibox.Suggest(src, text, limit)
 }
-
-// openMenu answers menu.open with the data the menu shows.
-func (a *App) openMenu(p struct {
-	Name string  `json:"name"`
-	X    float64 `json:"x"`
-	Y    float64 `json:"y"`
-}) {
-	out := map[string]any{"name": p.Name, "x": p.X, "y": p.Y}
-	switch p.Name {
-	case "downloads":
-		out["items"] = a.prof.Downloads.List()
-	case "bookmarks":
-		out["items"] = a.prof.Bookmarks.Children("bar")
-	case "history":
-		out["items"] = a.prof.History.Recent(30)
-	case "main":
-		out["usage"] = a.prof.Stats.Snapshot(a.model.TabCount())
-	}
-	a.sendChrome("menu.open", out)
-}
-
-var _ atomic.Int32

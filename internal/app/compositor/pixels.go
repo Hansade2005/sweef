@@ -150,3 +150,32 @@ func blendRect(dst *image.RGBA, r image.Rectangle, col color.RGBA, a uint8) {
 		}
 	}
 }
+
+// blendOver composites the premultiplied src over dst inside r (same
+// coordinates, both starting at 0,0): opaque pixels are copied, transparent
+// ones skipped, the rest blended.
+func blendOver(dst, src *image.RGBA, r image.Rectangle) {
+	r = r.Intersect(dst.Bounds()).Intersect(src.Bounds())
+	if r.Empty() {
+		return
+	}
+	n := 4 * r.Dx()
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		so, do := src.PixOffset(r.Min.X, y), dst.PixOffset(r.Min.X, y)
+		s, d := src.Pix[so:so+n], dst.Pix[do:do+n]
+		for i := 0; i+4 <= n; i += 4 {
+			a := uint32(s[i+3])
+			switch a {
+			case 0:
+			case 255:
+				d[i], d[i+1], d[i+2], d[i+3] = s[i], s[i+1], s[i+2], 255
+			default:
+				inv := 255 - a
+				d[i] = uint8(uint32(s[i]) + mul255(uint32(d[i]), inv))
+				d[i+1] = uint8(uint32(s[i+1]) + mul255(uint32(d[i+1]), inv))
+				d[i+2] = uint8(uint32(s[i+2]) + mul255(uint32(d[i+2]), inv))
+				d[i+3] = uint8(a + mul255(uint32(d[i+3]), inv))
+			}
+		}
+	}
+}

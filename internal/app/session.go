@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/sweefbrowser/sweef/internal/app/store"
 )
 
@@ -62,7 +64,11 @@ func (a *App) saveSession(clean bool) {
 func (a *App) restoreOrOpen() bool {
 	defer func() {
 		if a.model.TabCount() == 0 {
-			a.openTab(openOpts{URL: newTabURL, Activate: true})
+			first := newTabURL
+			if !a.prof.Settings.Bool("onboarding.done") && !a.prof.Incognito && !a.cfg.Incognito {
+				first = "sweef://onboarding" // first run
+			}
+			a.openTab(openOpts{URL: first, Activate: true})
 		}
 	}()
 	if len(a.cfg.InitialURLs) > 0 {
@@ -74,16 +80,21 @@ func (a *App) restoreOrOpen() bool {
 	if a.cfg.NoRestore || a.cfg.Incognito || a.prof.Incognito {
 		return false
 	}
-	mode := a.prof.Settings.Str("restoreSession")
-	if mode == "never" {
-		return false
+	mode := a.prof.Settings.Str("startup.mode")
+	if mode == "pages" {
+		if urls := splitURLs(a.prof.Settings.Str("startup.pages")); len(urls) > 0 {
+			for i, u := range urls {
+				a.openTab(openOpts{URL: u, Activate: i == 0})
+			}
+			return true
+		}
 	}
 	ss, ok := a.prof.Session.Load()
 	if !ok || len(ss.Windows) == 0 || len(ss.Windows[0].Tabs) == 0 {
 		return false
 	}
-	if mode == "ask" && ss.CleanExit {
-		return false // a normal exit starts fresh; a crash restores
+	if mode != "restore" && ss.CleanExit {
+		return false // "new tab" startup: a normal exit starts fresh; a crash is restored
 	}
 	w := ss.Windows[0]
 	if w.Active < 0 || w.Active >= len(w.Tabs) {
@@ -96,4 +107,15 @@ func (a *App) restoreOrOpen() bool {
 			Activate: i == w.Active, Lazy: i != w.Active})
 	}
 	return true
+}
+
+// splitURLs splits a startup-pages setting (comma, space or newline separated).
+func splitURLs(s string) []string {
+	var out []string
+	for _, f := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' }) {
+		if f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
 }

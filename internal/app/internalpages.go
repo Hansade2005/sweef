@@ -9,27 +9,51 @@ import (
 	"github.com/sweefbrowser/sweef/internal/app/store"
 )
 
+// uiRoute maps a sweef:// URL to a path inside the UI asset tree, the same way
+// ui.Route does (internal/app does not import internal/ui):
+//
+//	sweef://newtab                  -> newtab/index.html
+//	sweef://settings/settings.js    -> settings/settings.js
+//	sweef://<any page>/shared/x.css -> shared/x.css
+//	sweef://ui/<path>               -> <path>
+func uiRoute(u *url.URL) (string, bool) {
+	host := strings.ToLower(u.Host)
+	p := path.Clean("/" + u.Path)
+	switch {
+	case host == "":
+		return "", false
+	case host == "ui":
+		p = strings.TrimPrefix(p, "/")
+		return p, p != ""
+	case p == "/":
+		return host + "/index.html", true
+	case strings.HasPrefix(p, "/shared/"):
+		return p[1:], true
+	case strings.HasPrefix(p, "/"+host+"/"):
+		// A root-relative "/chrome/x.js" requested from sweef://chrome/...
+		// names the page's own directory.
+		return p[1:], true
+	}
+	return host + p, true
+}
+
 // serveInternal answers sweef:// requests from the UI assets, falling back to
 // small built-in pages so every internal URL works even without internal/ui.
 func (a *App) serveInternal(e *etab, u *url.URL) (int, string, bool) {
-	host := u.Host
-	p := u.Path
-	rel := host + p
-	if p == "" || strings.HasSuffix(p, "/") {
-		rel = path.Join(host, p, "index.html")
-	}
-	rel = path.Clean(rel)
-	if strings.Contains(rel, "..") {
+	rel, ok := uiRoute(u)
+	if !ok || strings.Contains(rel, "..") {
 		return 400, "bad path", true
 	}
 	if b, err := a.asset(rel); err == nil {
 		return 200, string(b), true
 	}
-	if b, err := a.asset(path.Join(rel, "index.html")); err == nil && path.Ext(rel) == "" {
-		return 200, string(b), true
+	if path.Ext(rel) == "" {
+		if b, err := a.asset(path.Join(rel, "index.html")); err == nil {
+			return 200, string(b), true
+		}
 	}
 	if path.Ext(rel) == "" || strings.HasSuffix(rel, "index.html") {
-		if html, ok := builtinPage(host, u); ok {
+		if html, ok := builtinPage(strings.ToLower(u.Host), u); ok {
 			return 200, html, true
 		}
 	}
@@ -40,7 +64,7 @@ func builtinPage(host string, u *url.URL) (string, bool) {
 	switch host {
 	case "error":
 		q := u.Query()
-		return builtinErrorHTML(q.Get("code"), q.Get("title"), q.Get("url"), q.Get("msg")), true
+		return builtinErrorHTML(q.Get("code"), q.Get("kind"), q.Get("url"), q.Get("detail")), true
 	case "newtab":
 		return `<!doctype html><html><head><meta charset="utf-8"><title>New Tab</title><style>
 body{margin:0;font:16px sans-serif;background:#f4f6fb;color:#233}h1{margin:60px 0 0;text-align:center;font-size:40px;color:#3b4a8a}

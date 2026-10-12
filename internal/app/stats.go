@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/app/compositor"
@@ -15,17 +16,13 @@ import (
 // runStats collects the numbers `sweef gui --stats` prints. Input latency is
 // the time from an input event reaching the UI loop to the next Present.
 type runStats struct {
-	mu           sync.Mutex
-	inputAt      time.Time // oldest input not yet presented
-	latencies    []time.Duration
-	suggest      []time.Duration
-	presents     int
-	damagePx     int64
-	statePushes  int
-	uiMessages   int
-	chromePaints int
-	pagePaints   int
-	animStops    int
+	mu                                                           sync.Mutex
+	inputAt                                                      time.Time // oldest input not yet presented
+	latencies                                                    []time.Duration
+	suggest                                                      []time.Duration
+	presents                                                     int
+	damagePx                                                     int64
+	statePushes, uiMessages, chromePaints, pagePaints, animStops atomic.Int64
 }
 
 func (s *runStats) markInput() {
@@ -88,7 +85,7 @@ func pct(ds []time.Duration) compositor.Percentiles {
 func (a *App) Stats() Stats {
 	s := &a.stats
 	s.mu.Lock()
-	st := Stats{InputLatency: pct(s.latencies), Suggest: pct(s.suggest), Presents: s.presents, StatePushes: s.statePushes}
+	st := Stats{InputLatency: pct(s.latencies), Suggest: pct(s.suggest), Presents: s.presents, StatePushes: int(s.statePushes.Load())}
 	if s.presents > 0 {
 		st.DamageAvgPx = s.damagePx / int64(s.presents)
 	}

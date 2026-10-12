@@ -28,7 +28,7 @@ func (a *App) navigateInput(tabID, input string) {
 		return
 	case omnibox.KindAsk:
 		a.setSidebar(true)
-		a.agentSend(res.Query, "ask")
+		a.agentSend(agentRequest{Text: res.Query, Mode: "ask", Source: "omnibox"})
 		return
 	}
 	if tabID == "" {
@@ -116,6 +116,7 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 			shown = orig
 		}
 		isErr := false
+		e.certError.Store(false)
 		if err != nil {
 			a.renderErrorPage(e, shown, err)
 			isErr = true
@@ -139,9 +140,12 @@ type pageMeta struct {
 	DocH             int
 	Audio            bool
 	Err              bool
+	PageType         string
+	ConsoleErrors    int
 }
 
 func (a *App) collectMeta(e *etab, isErr bool) pageMeta {
+	e.sweepThirdPartyCookies()
 	m := pageMeta{URL: e.t.URL(), Title: e.t.Title(), Err: isErr}
 	var meta struct {
 		Icon  string `json:"icon"`
@@ -153,14 +157,26 @@ func (a *App) collectMeta(e *etab, isErr bool) pageMeta {
 			m.Title = meta.Title
 		}
 	}
+	var loc string
+	if e.eval(`location.href`, &loc) == nil && loc != "" && !isErr {
+		m.URL = loc // history.replaceState/pushState during load changes location, not the engine's URL
+	}
 	_ = e.eval(`__sweefDocH()`, &m.DocH)
 	_ = e.eval(`__sweefMedia()`, &m.Audio)
+	if !isErr {
+		_ = e.eval(`__sweefPageType()`, &m.PageType)
+		for _, ev := range e.t.ConsoleLog(0) {
+			if d, ok := ev.Data.(map[string]string); ok && d["level"] == "error" {
+				m.ConsoleErrors++
+			}
+		}
+	}
 	return m
 }
 
 func securityFor(raw string, errPage bool) state.Security {
 	if errPage {
-		return state.Security{Level: "error"}
+		return state.Security{Level: "none"}
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -203,8 +219,16 @@ func (a *App) onLoaded(e *etab, seq int64, shown string, mode int32, typed bool,
 	a.model.Update(e.id, func(t *state.Tab) {
 		t.Loading, t.Progress, t.Title, t.Audio = false, 1, title, m.Audio
 		t.Security = securityFor(final, m.Err)
+		if m.Err && e.certError.Load() {
+			t.Security = state.Security{Level: "warning"}
+		}
 		t.Blocked = int(e.blocked.Load())
 	})
+	if !strings.HasPrefix(final, "sweef://") {
+		delete(a.uiPages, e) // no longer an internal page: stop sending it UI state
+	}
+	a.pageTypes.set(e.id, m.PageType)
+	a.compatErrs[e.id] = m.ConsoleErrors
 	e.loadMode.Store(modeNone)
 	if m.Err {
 		a.markState()
@@ -220,6 +244,7 @@ func (a *App) onLoaded(e *etab, seq int64, shown string, mode int32, typed bool,
 	}
 	if a.model.Active(a.winID) == e.id {
 		a.onPageMetrics(e.id, m.DocH)
+		a.applyRestoreScroll(e)
 	}
 	if m.Icon != "" || strings.HasPrefix(final, "http") {
 		icon := m.Icon
@@ -328,42 +353,55 @@ func (a *App) stopLoading(tabID string) {
 // ---- error pages and view-source ------------------------------------------------------------
 
 func (a *App) renderErrorPage(e *etab, raw string, err error) {
-	code, title := classifyError(err)
-	q := url.Values{"code": {code}, "url": {raw}, "msg": {err.Error()}, "title": {title}}
+	code, kind := classifyError(err)
+	q := url.Values{"kind": {kind}, "url": {raw}, "code": {code}, "detail": {err.Error()}}
 	pageURL := "sweef://error?" + q.Encode()
 	body, aerr := a.asset("error/index.html")
 	htmlSrc := string(body)
 	if aerr != nil {
-		htmlSrc = builtinErrorHTML(code, title, raw, err.Error())
+		htmlSrc = builtinErrorHTML(code, kind, raw, err.Error())
 	}
 	a.prepareInternal(e, pageURL)
 	e.t.SetDocument(htmlSrc, pageURL)
+	if kind == "cert" {
+		e.certError.Store(true)
+	}
 }
 
-func classifyError(err error) (code, title string) {
+// classifyError maps a load failure to the error page's code and kind
+// (offline | dns | cert | timeout).
+func classifyError(err error) (code, kind string) {
 	s := strings.ToLower(err.Error())
 	switch {
 	case strings.Contains(s, "no such host"):
-		return "ERR_NAME_NOT_RESOLVED", "This site can't be reached"
-	case strings.Contains(s, "connection refused"):
-		return "ERR_CONNECTION_REFUSED", "Connection refused"
+		return "ERR_NAME_NOT_RESOLVED", "dns"
 	case strings.Contains(s, "x509") || strings.Contains(s, "certificate"):
-		return "ERR_CERT_INVALID", "Your connection is not private"
+		return "ERR_CERT_INVALID", "cert"
 	case strings.Contains(s, "timeout") || strings.Contains(s, "deadline"):
-		return "ERR_TIMED_OUT", "The page took too long to respond"
+		return "ERR_TIMED_OUT", "timeout"
+	case strings.Contains(s, "connection refused"):
+		return "ERR_CONNECTION_REFUSED", "offline"
 	case strings.Contains(s, "offline"):
-		return "ERR_INTERNET_DISCONNECTED", "You are offline"
+		return "ERR_INTERNET_DISCONNECTED", "offline"
 	case strings.Contains(s, "aborted by route"):
-		return "ERR_BLOCKED", "Blocked"
+		return "ERR_BLOCKED", "offline"
 	}
-	return "ERR_FAILED", "This page can't be loaded"
+	return "ERR_FAILED", "offline"
 }
 
-func builtinErrorHTML(code, title, raw, msg string) string {
+func builtinErrorHTML(code, kind, raw, msg string) string {
+	title := "This page can't be loaded"
+	switch kind {
+	case "dns":
+		title = "This site can't be reached"
+	case "cert":
+		title = "Your connection is not private"
+	case "timeout":
+		title = "The page took too long to respond"
+	}
 	return fmt.Sprintf(`<!doctype html><html><head><meta charset="utf-8"><title>%s</title>
 <style>body{font:16px system-ui,sans-serif;margin:0;padding:12vh 8vw;color:#222;background:#fafafa}
-h1{font-size:28px;margin:0 0 12px}code{background:#eee;padding:2px 6px;border-radius:4px}.c{color:#777;font-size:13px}
-button{margin-top:18px;font:inherit;padding:8px 16px}</style></head>
+h1{font-size:28px;margin:0 0 12px}code{background:#eee;padding:2px 6px;border-radius:4px}.c{color:#777;font-size:13px}</style></head>
 <body><h1>%s</h1><p>%s</p><p class="c">%s</p></body></html>`,
 		html.EscapeString(title), html.EscapeString(title), html.EscapeString(raw), html.EscapeString(code+": "+msg))
 }
@@ -422,4 +460,45 @@ func (a *App) onEngineDownload(e *etab, d engine.Download) {
 	}
 	it := a.profileFor(e.incog).Downloads.Record(d.URL, d.SuggestedFilename, d.Path, d.Size, d.MimeType)
 	a.sendChrome(mToast, map[string]any{"text": "Downloaded " + it.Name, "kind": "info"})
+}
+
+// startDownload saves a URL ("save link as") with progress/pause/cancel,
+// sending the requesting tab's cookies and user agent.
+func (a *App) startDownload(raw, name string) {
+	act := a.activePage()
+	cookie, ua := "", userAgent(a.cfg.UserAgent)
+	incog := false
+	if act != nil {
+		cookie = act.t.Context().JarRef().ForURL(raw)
+		ua = act.t.UserAgent()
+		incog = act.incog
+	}
+	if _, err := a.profileFor(incog).Downloads.Start(raw, name, a.downloadsDir(), cookie, ua); err != nil {
+		a.sendChrome(mToast, map[string]any{"text": "Could not download: " + err.Error(), "kind": "error"})
+	}
+}
+
+// onTitle applies a title the page changed after load.
+func (a *App) onTitle(id, title string) {
+	st, ok := a.model.Tab(id)
+	if !ok || st.Loading || st.Title == title {
+		return
+	}
+	a.model.Update(id, func(t *state.Tab) { t.Title = title })
+	if p := a.profileFor(st.Incognito); p != nil && strings.HasPrefix(st.URL, "http") {
+		p.History.SetTitle(st.URL, title)
+	}
+	a.markState()
+}
+
+// onInPageURL records a same-document URL change (history.pushState, hash
+// navigation): a new history entry, no reload.
+func (a *App) onInPageURL(e *etab, raw string) {
+	st, ok := a.model.Tab(e.id)
+	if !ok || st.Loading || st.URL == raw || e.closed.Load() {
+		return
+	}
+	e.topURL.Store(raw)
+	a.model.Navigated(e.id, raw, false)
+	a.markState()
 }

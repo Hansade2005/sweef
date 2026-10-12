@@ -53,7 +53,6 @@ func (a *App) resize(w, h int, scale float64) {
 			e.paint(true)
 		})
 	}
-	a.updateChromePaintH()
 	a.layoutFallback()
 	a.markState()
 }
@@ -81,12 +80,21 @@ func (a *App) setViewport(r rect) {
 	a.applyViewport(r)
 }
 
+// vpSnapshot is the viewport rectangle for other goroutines (the chrome probe).
+func (a *App) vpSnapshot() rect {
+	a.vpMu.Lock()
+	defer a.vpMu.Unlock()
+	return a.vpShadow
+}
+
 func (a *App) applyViewport(r rect) {
 	if r == a.vpLog {
 		return
 	}
 	a.vpLog = r
-	a.updateChromePaintH()
+	a.vpMu.Lock()
+	a.vpShadow = r
+	a.vpMu.Unlock()
 	vp := a.vpDevice()
 	a.comp.SetViewport(vp)
 	w, h := a.vpLogW(), a.vpLogH()
@@ -98,7 +106,7 @@ func (a *App) applyViewport(r rect) {
 	a.mu.Unlock()
 	if e := a.activePage(); e != nil {
 		e.w.do(func() {
-			e.t.SetViewport(a.pageCSS(w), a.pageCSS(h), a.pageDSF(), false, false)
+			e.setViewport(a.pageCSS(w), a.pageCSS(h), a.pageDSF())
 			e.paint(true)
 		})
 	}
@@ -118,34 +126,7 @@ func (a *App) onChromePainted(kind string, img *image.RGBA, dt time.Duration) {
 	}
 	a.comp.RecordPaint(kind, dt)
 	a.comp.SetChrome(img)
-	a.stats.chromePaints++
-}
-
-// chromePaintH is how many logical rows of the chrome page need painting:
-// everything when something sits right of or below the viewport hole
-// (sidebar, find bar), else only the strip above it.
-func (a *App) chromePaintH() int {
-	vp := a.vpLog
-	if !a.haveLayout || vp.empty() {
-		return 0
-	}
-	if vp.X > 1 || float64(a.wLog)-(vp.X+vp.W) > 1 || float64(a.hLog)-(vp.Y+vp.H) > 1 {
-		return 0
-	}
-	return int(math.Ceil(vp.Y)) + 1
-}
-
-func (a *App) updateChromePaintH() {
-	a.mu.Lock()
-	c := a.chrome
-	a.mu.Unlock()
-	if c == nil {
-		return
-	}
-	h := int32(a.chromePaintH())
-	if c.paintH.Swap(h) != h {
-		c.requestPaint(true)
-	}
+	a.stats.chromePaints.Add(1)
 }
 
 // onPagePainted installs the page texture of the active tab.
@@ -157,13 +138,21 @@ func (a *App) onPagePainted(id string, img *image.RGBA, docCSS int, dt time.Dura
 	a.comp.SetPage(img)
 	a.setActiveShown(id)
 	a.onPageMetrics(id, docCSS)
-	a.stats.pagePaints++
-	if e := a.page(id); e != nil {
-		if r := e.restoreScroll.Swap(0); r > 0 {
-			a.scroll.ScrollTo(float64(r)*a.pageDSF(), true)
-			a.comp.ScrollTo(int(a.scroll.Pos))
-		}
+	a.stats.pagePaints.Add(1)
+}
+
+// applyRestoreScroll jumps to the scroll offset saved with a restored tab, once
+// the document has loaded (so its height is known).
+func (a *App) applyRestoreScroll(e *etab) {
+	r := e.restoreScroll.Swap(0)
+	if r <= 0 || a.model.Active(a.winID) != e.id {
+		return
 	}
+	a.scroll.SetMax(a.scrollMax())
+	a.scroll.ScrollTo(float64(r)*a.pageDSF(), true)
+	pos := int(a.scroll.Pos)
+	a.comp.ScrollTo(pos)
+	a.noteScrolled(pos)
 }
 
 // onPageMetrics records the document height (scroll range).
@@ -191,22 +180,27 @@ const frameInterval = 16 * time.Millisecond
 // startAnim arms the ~60 Hz tick. It stops by itself when nothing animates,
 // so an idle browser has no timer at all.
 func (a *App) startAnim() {
-	if a.animOn {
+	if a.animOn.Load() {
 		return
 	}
-	a.animOn = true
+	a.animOn.Store(true)
 	a.lastTick = time.Now()
 	a.animT = time.NewTimer(frameInterval)
+}
+
+// stepScroll advances the easing by dt seconds and moves the view.
+func (a *App) stepScroll(dt float64) {
+	pos := a.scroll.Tick(dt)
+	if a.comp.ScrollTo(pos) {
+		a.noteScrolled(pos)
+	}
 }
 
 func (a *App) tick() {
 	now := time.Now()
 	dt := now.Sub(a.lastTick).Seconds()
 	a.lastTick = now
-	pos := a.scroll.Tick(dt)
-	if a.comp.ScrollTo(pos) {
-		a.noteScrolled(pos)
-	}
+	a.stepScroll(dt)
 	// overlay scrollbar: solid for 900 ms after activity, then a 250 ms fade
 	since := now.Sub(a.scrollbarT)
 	var alpha uint8
@@ -225,8 +219,8 @@ func (a *App) tick() {
 	}
 	a.animT.Stop()
 	a.animT = nil
-	a.animOn = false
-	a.stats.animStops++
+	a.animOn.Store(false)
+	a.stats.animStops.Add(1)
 }
 
 // noteScrolled tells the active page about its new scroll offset (debounced)
@@ -250,7 +244,7 @@ func (a *App) noteScrolled(posDev int) {
 		time.AfterFunc(120*time.Millisecond, func() {
 			e.scrollNotify.Store(false)
 			y := int(e.scrollCSS.Load())
-			e.w.do(func() {
+			e.w.tryDo(func() {
 				_, _ = e.t.Evaluate("__sweefScrollTo(" + itoa(y) + ")")
 				e.drainBindings()
 			})
@@ -261,7 +255,7 @@ func (a *App) noteScrolled(posDev int) {
 // zoom changes page zoom by delta percent (0 resets). Zoom is implemented by
 // scaling the page's device pixel ratio.
 func (a *App) zoom(delta int) {
-	cur := a.prof.Settings.Int("defaultZoom")
+	cur := a.prof.Settings.Int("zoom.default")
 	if delta == 0 {
 		cur = 100
 	} else {
@@ -273,12 +267,14 @@ func (a *App) zoom(delta int) {
 	if cur > 500 {
 		cur = 500
 	}
-	_ = a.prof.Settings.Set("defaultZoom", cur)
+	_ = a.prof.Settings.Set("zoom.default", cur)
 	a.applyZoom()
 	a.sendChrome(mToast, map[string]any{"text": "Zoom " + itoa(cur) + "%", "kind": "info"})
 }
 
-// find searches the active page and scrolls to the n-th match.
+// find searches the active page, scrolls to the n-th match and reports
+// find.result {count,index} to the chrome. dir 0 starts a new search, +1/-1
+// steps to the next/previous match.
 func (a *App) find(q string, dir int) {
 	e := a.activePage()
 	if e == nil {
@@ -289,21 +285,27 @@ func (a *App) find(q string, dir int) {
 	if q == "" {
 		f.Matches, f.Index = 0, 0
 		a.model.Find = f
+		a.sendChrome("find.result", map[string]any{"count": 0, "index": 0})
 		a.markState()
 		return
 	}
 	idx := f.Index
-	if dir > 0 && f.Query == q && f.Matches > 0 {
-		idx = f.Index % f.Matches
-		if idx = idx + 1; idx > f.Matches {
+	switch {
+	case dir == 0:
+		idx = 1
+	case dir > 0:
+		idx++
+		if f.Matches > 0 && idx > f.Matches {
 			idx = 1
 		}
-	} else if dir < 0 && f.Matches > 0 {
-		if idx = idx - 1; idx < 1 {
+	default:
+		idx--
+		if idx < 1 {
 			idx = f.Matches
+			if idx < 1 {
+				idx = 1
+			}
 		}
-	} else if idx < 1 {
-		idx = 1
 	}
 	e.w.do(func() {
 		var r struct {
@@ -323,6 +325,7 @@ func (a *App) find(q string, dir int) {
 				ff.Index = 1
 			}
 			a.model.Find = ff
+			a.sendChrome("find.result", map[string]any{"count": ff.Matches, "index": ff.Index})
 			if r.Top >= 0 {
 				vh := float64(a.vpDevice().Dy())
 				a.scroll.ScrollTo(float64(r.Top)*a.pageDSF()-vh/3, false)
@@ -336,11 +339,11 @@ func (a *App) find(q string, dir int) {
 
 // applyZoom re-lays-out the active page at the stored zoom.
 func (a *App) applyZoom() {
-	a.zoomBitsV.Store(math.Float64bits(float64(a.prof.Settings.Int("defaultZoom")) / 100))
+	a.zoomBitsV.Store(math.Float64bits(float64(a.prof.Settings.Int("zoom.default")) / 100))
 	w, h := a.vpLogW(), a.vpLogH()
 	if e := a.activePage(); e != nil {
 		e.w.do(func() {
-			e.t.SetViewport(a.pageCSS(w), a.pageCSS(h), a.pageDSF(), false, false)
+			e.setViewport(a.pageCSS(w), a.pageCSS(h), a.pageDSF())
 			e.paint(true)
 		})
 	}

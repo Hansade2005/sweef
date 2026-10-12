@@ -339,6 +339,13 @@ func (e *Engine) Close() error {
 	}
 	e.cancel()
 	e.vms.close()
+	// keep-alive connections would otherwise outlive the engine (their reader
+	// goroutines wait for IdleConnTimeout)
+	e.mu.Lock()
+	if e.httpClient != nil {
+		e.httpClient.CloseIdleConnections()
+	}
+	e.mu.Unlock()
 	return nil
 }
 

@@ -70,6 +70,16 @@ func (w *worker) do(f func()) bool {
 	}
 }
 
+// tryDo queues f unless the queue is already half full; it is for work that
+// may be dropped (wheel notifications, speculative repaints) so a tab stuck in
+// a slow load can never back up into the UI loop.
+func (w *worker) tryDo(f func()) bool {
+	if len(w.ops) > cap(w.ops)/2 {
+		return false
+	}
+	return w.do(f)
+}
+
 // stop ends the goroutine and waits for the operation in flight.
 func (w *worker) stop() {
 	w.once.Do(func() { close(w.quit) })

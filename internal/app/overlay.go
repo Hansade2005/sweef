@@ -6,68 +6,79 @@ import (
 	"time"
 )
 
-// The overlay is a second privileged chrome tab (chrome/overlay.html) used for
-// popovers, menus and the omnibox dropdown, which must draw over the page
-// viewport. It is painted with a transparent canvas and alpha-blended above
-// the page by the compositor. The overlay page tells Go what it occupies:
+// The overlay is a second privileged page (chrome/overlay.html): the agent's
+// "acting" surface. It is as large as the window, painted with a transparent
+// canvas and blended above everything. Go drives it with
 //
-//	sweef.post("overlay", {rect:{x,y,w,h}, visible:true, alpha:1})
+//	overlay {state: off|acting|control|done|stopped, viewport:{x,y,w,h}, task, step, cursor}
 //
-// Pointer events inside that rect go to the overlay; a press outside it sends
-// `overlay.dismiss` to the overlay and chrome pages.
+// and the page answers with `overlay.hit {rects}`, the only places where the
+// overlay takes mouse events: everywhere else clicks pass through to the
+// chrome and the page. While the state is "off" nothing is painted or blended.
 
 type overlayState struct {
-	rect    rect
-	visible bool
-	alpha   float64
+	state string
+	rects []rect // overlay.hit
 }
+
+func (o overlayState) visible() bool { return o.state != "" && o.state != "off" }
 
 func (a *App) overlayHit(x, y float64) bool {
-	o := a.ovl
-	return o.visible && x >= o.rect.X && x < o.rect.X+o.rect.W && y >= o.rect.Y && y < o.rect.Y+o.rect.H
+	if !a.ovl.visible() {
+		return false
+	}
+	for _, r := range a.ovl.rects {
+		if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
+			return true
+		}
+	}
+	return false
 }
 
-// onOverlayMsg handles the overlay page's `overlay` message.
-func (a *App) onOverlayMsg(r rect, visible bool, alpha float64) {
-	if alpha <= 0 || alpha > 1 {
-		alpha = 1
-	}
-	if r.empty() {
-		visible = false
-	}
-	a.ovl = overlayState{rect: r, visible: visible, alpha: alpha}
-	a.mu.Lock()
-	e := a.overlay
-	a.mu.Unlock()
+// setOverlay sends a new overlay state to the overlay page (UI loop).
+func (a *App) setOverlay(state, task, step string) {
+	e := a.overlayTab()
 	if e == nil {
 		return
 	}
-	if !visible {
-		a.comp.SetOverlay(nil, image.Point{}, 0)
-		e.paintW.Store(0)
-		if a.focus == "overlay" {
-			a.setFocus("chrome")
-		}
+	was := a.ovl.visible()
+	a.ovl.state = state
+	if state == "" || state == "off" {
+		a.ovl.state = "off"
+		a.ovl.rects = nil
+	}
+	vp := a.vpLog
+	a.sendTo(e, "overlay", map[string]any{
+		"state": state, "task": task, "step": step,
+		"viewport": map[string]any{"x": math.Round(vp.X), "y": math.Round(vp.Y), "w": math.Round(vp.W), "h": math.Round(vp.H)},
+	})
+	if a.ovl.visible() {
+		e.paintW.Store(int32(a.wLog))
+		e.paintH.Store(int32(a.hLog))
+		e.requestPaint(true)
 		return
 	}
-	e.paintW.Store(int32(math.Ceil(r.X + r.W)))
-	e.paintH.Store(int32(math.Ceil(r.Y + r.H)))
-	e.requestPaint(true)
+	e.paintW.Store(0)
+	if was {
+		a.comp.SetOverlay(nil, image.Point{}, 0)
+	}
 }
 
-// onOverlayPainted crops the painted overlay to its rect and hands it to the
-// compositor.
+// onOverlayHit stores the rectangles where the overlay wants the mouse.
+func (a *App) onOverlayHit(rs []rect) {
+	a.ovl.rects = rs
+	if !a.ovl.visible() && a.focus == "overlay" {
+		a.setFocus("page")
+	}
+}
+
+// onOverlayPainted hands the painted overlay to the compositor.
 func (a *App) onOverlayPainted(img *image.RGBA, dt time.Duration) {
 	a.comp.RecordPaint("overlay", dt)
-	if !a.ovl.visible {
+	if !a.ovl.visible() {
 		return
 	}
-	r := image.Rect(a.l2d(a.ovl.rect.X), a.l2d(a.ovl.rect.Y), a.l2d(a.ovl.rect.X+a.ovl.rect.W), a.l2d(a.ovl.rect.Y+a.ovl.rect.H)).Intersect(img.Bounds())
-	if r.Empty() {
-		return
-	}
-	sub, _ := img.SubImage(r).(*image.RGBA)
-	a.comp.SetOverlay(sub, r.Min, uint8(a.ovl.alpha*255+0.5))
+	a.comp.SetOverlay(img, image.Point{}, 255)
 }
 
 // startOverlay creates the overlay tab when the UI ships an overlay page.

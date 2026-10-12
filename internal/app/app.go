@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -61,6 +62,8 @@ type Config struct {
 	UserAgent string
 	// DownloadsDir overrides the downloads location.
 	DownloadsDir string
+	// Version is shown on the About page (state.version).
+	Version string
 	// NoSmoothScroll turns off wheel easing.
 	NoSmoothScroll bool
 	// Logf receives diagnostics (default: discard).
@@ -74,14 +77,15 @@ type App struct {
 	eng  *engine.Engine
 	ownE bool
 
-	prof   *store.Profile
-	incog  *store.Profile // lazily created in-memory profile for incognito tabs
-	model  *state.Model
-	winID  int
-	comp   *compositor.Compositor
-	scroll *compositor.Scroller
-	priv   *privacy.Engine
-	agent  AgentHost
+	prof     *store.Profile
+	incog    *store.Profile // lazily created in-memory profile for incognito tabs
+	model    *state.Model
+	winID    int
+	comp     *compositor.Compositor
+	scroll   *compositor.Scroller
+	priv     *privacy.Engine
+	agent    AgentHost // the gated host used for Send
+	agentRaw AgentHost // the host as given: optional capabilities live there
 
 	inbox   chan func()
 	quit    chan struct{}
@@ -96,43 +100,54 @@ type App struct {
 	incogCtx *engine.BrowserContext
 
 	// ---- UI-loop-only state ----
-	scale        float64
-	wLog, hLog   int
-	vpLog        rect // viewport hole in logical px as reported by the chrome page
-	haveLayout   bool
-	focus        string // "chrome" | "page"
-	lastState    map[string]any
-	stateDirty   bool
-	animT        *time.Timer
-	animOn       bool
-	lastTick     time.Time
-	scrollbarT   time.Time // last scroll activity, for the fading scrollbar
-	sbAlpha      uint8
-	mouse        mouseState
-	cursorShown  shell.Cursor
-	cursorBusy   atomic.Bool
-	chromeLoaded bool
-	startedAt    time.Time
-	firstFrame   atomic.Int64 // unix nanos of the first Present
-	lastLayoutAt time.Time
-	pendingAsk   map[string]pendingAgent
-	favicons     *faviconCache
-	runSeq       int
-	dlSeen       map[string]int
-	closing      atomic.Bool
-	closeOnce    sync.Once
-	runErr       error
-	stats        runStats
-	pageTabHint  string // tab id whose texture is in the compositor
-	paintedDocH  int
-	ovlOpen      bool
-	shownTab     atomic.Value // id of the tab whose texture is on screen
-	scaleBitsV   atomic.Uint64
-	zoomBitsV    atomic.Uint64
-	omniSeq      int
-	tabSeq       int
-	fullscreen   bool
-	ovl          overlayState
+	scale               float64
+	wLog, hLog          int
+	vpLog               rect // viewport hole in logical px as reported by the chrome page
+	vpMu                sync.Mutex
+	vpShadow            rect // copy of vpLog readable from workers
+	haveLayout          bool
+	focus               string // "chrome" | "page"
+	lastState           map[string]any
+	stateDirty          bool
+	focusOmniAfterState bool
+	animT               *time.Timer
+	animOn              atomic.Bool
+	lastTick            time.Time
+	scrollbarT          time.Time // last scroll activity, for the fading scrollbar
+	sbAlpha             uint8
+	mouse               mouseState
+	cursorShown         shell.Cursor
+	cursorBusy          atomic.Bool
+	holeBusy            atomic.Bool // the chrome has a scrim/modal over the viewport (set by the chrome worker)
+	chromeLoaded        atomic.Bool
+	startedAt           time.Time
+	firstFrame          atomic.Int64 // unix nanos of the first Present
+	lastLayoutAt        time.Time
+	pendingAsk          map[string]pendingAgent
+	favicons            *faviconCache
+	runSeq              int
+	dlSeen              map[string]int
+	closing             atomic.Bool
+	closeOnce           sync.Once
+	runErr              error
+	stats               runStats
+	pageTabHint         string // tab id whose texture is in the compositor
+	paintedDocH         int
+	ovlOpen             bool
+	shownTab            atomic.Value // id of the tab whose texture is on screen
+	scaleBitsV          atomic.Uint64
+	zoomBitsV           atomic.Uint64
+	omniSeq             int
+	uiPages             map[*etab]bool // page tabs showing sweef:// pages that said ui.ready
+	compatDismissed     map[string]bool
+	compatErrs          map[string]int
+	pageTypes           pageTypeCache
+	agentRun            agentRunState
+	lastActivity        atomic.Int64
+	trimArmed           atomic.Bool
+	tabSeq              int
+	fullscreen          bool
+	ovl                 overlayState
 }
 
 type rect struct{ X, Y, W, H float64 }
@@ -140,8 +155,9 @@ type rect struct{ X, Y, W, H float64 }
 func (r rect) empty() bool { return r.W <= 0 || r.H <= 0 }
 
 type pendingAgent struct {
-	text, mode string
-	tab        string
+	req  agentRequest
+	mode string
+	tab  string
 }
 
 const defaultChromeEntry = "chrome/index.html"
@@ -161,7 +177,7 @@ func New(cfg Config) (*App, error) {
 	}
 	a := &App{cfg: cfg, win: cfg.Shell, startedAt: time.Now(),
 		inbox: make(chan func(), 4096), quit: make(chan struct{}), done: make(chan struct{}),
-		pages: map[string]*etab{}, pendingAsk: map[string]pendingAgent{}, focus: "page", dlSeen: map[string]int{}}
+		pages: map[string]*etab{}, uiPages: map[*etab]bool{}, compatDismissed: map[string]bool{}, compatErrs: map[string]int{}, pendingAsk: map[string]pendingAgent{}, focus: "page", dlSeen: map[string]int{}}
 
 	// profile
 	switch {
@@ -180,8 +196,9 @@ func New(cfg Config) (*App, error) {
 		a.prof.Downloads.Dir = cfg.DownloadsDir
 	}
 	a.prof.Downloads.OnUpdate = func(it store.DownloadItem) {
-		a.post(func() { a.sendChrome(mDownloadsUpd, map[string]any{"item": it}) })
+		a.post(func() { a.broadcast(mDownloadsUpd, dlJSON(it)) })
 	}
+	a.prof.Sites.Default = store.Visibility(a.prof.Settings.Str("agent.visibilityDefault"))
 
 	// window geometry
 	lw, lh, sc := a.win.Size()
@@ -190,7 +207,7 @@ func New(cfg Config) (*App, error) {
 	}
 	a.scale, a.wLog, a.hLog = sc, lw, lh
 	a.scaleBitsV.Store(math.Float64bits(sc))
-	a.zoomBitsV.Store(math.Float64bits(float64(a.prof.Settings.Int("defaultZoom")) / 100))
+	a.zoomBitsV.Store(math.Float64bits(float64(a.prof.Settings.Int("zoom.default")) / 100))
 	a.model = state.New()
 	a.winID = a.model.AddWindow(lw, lh, sc, cfg.Incognito)
 	a.model.Bookmarked = a.prof.Bookmarks.IsBookmarked
@@ -203,6 +220,7 @@ func New(cfg Config) (*App, error) {
 	a.prof.Settings.OnChange(func(k string, v any) { a.post(func() { a.onSetting(k, v) }) })
 	a.favicons = newFaviconCache(a.prof)
 	if cfg.Agent != nil {
+		a.agentRaw = cfg.Agent
 		a.agent = &Gate{Inner: cfg.Agent, Vis: func(o string) store.Visibility { return a.prof.Sites.Agent(o) }}
 	}
 
@@ -272,7 +290,7 @@ func (a *App) post(f func()) {
 
 // Idle reports whether nothing is queued, loading or animating.
 func (a *App) Idle() bool {
-	if a.pending.Load() != 0 || a.animOn {
+	if a.pending.Load() != 0 || a.animOn.Load() {
 		return false
 	}
 	for _, id := range a.model.Order(a.winID) {
@@ -280,7 +298,7 @@ func (a *App) Idle() bool {
 			return false
 		}
 	}
-	return a.chromeLoaded
+	return a.chromeLoaded.Load()
 }
 
 // WaitIdle blocks until the app has been Idle continuously for quiet, or
@@ -308,17 +326,20 @@ func (a *App) WaitIdle(quiet, timeout time.Duration) bool {
 func (a *App) Run(ctx context.Context) error {
 	defer close(a.done)
 	a.post(a.start)
+	a.armDiscard()
 	for {
 		select {
 		case ev, ok := <-a.win.Events():
 			if !ok {
 				return a.shutdown()
 			}
-			if a.handleEvent(ev) {
+			quit := false
+			a.safely(func() { quit = a.handleEvent(ev) })
+			if quit {
 				return a.shutdown()
 			}
 		case f := <-a.inbox:
-			f()
+			a.safely(f)
 			a.pending.Add(-1)
 		case <-a.animC():
 			a.tick()
@@ -329,6 +350,19 @@ func (a *App) Run(ctx context.Context) error {
 		}
 		a.flush()
 	}
+}
+
+// safely runs a posted function; a panic in one handler is reported, not fatal.
+func (a *App) safely(f func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			a.logf("panic in UI loop: %v", r)
+			if PanicHook != nil {
+				PanicHook(r)
+			}
+		}
+	}()
+	f()
 }
 
 func (a *App) animC() <-chan time.Time {
@@ -345,6 +379,36 @@ func (a *App) flush() {
 		a.pushState()
 	}
 	a.present()
+	a.armTrim()
+}
+
+// armTrim returns freed memory to the OS once the browser has been quiet for a
+// moment: painting allocates large short-lived surfaces, and without this the
+// resident size stays at the busy peak. One timer, re-armed by activity, no
+// periodic wakeups.
+func (a *App) armTrim() {
+	a.lastActivity.Store(time.Now().UnixNano())
+	if !a.trimArmed.CompareAndSwap(false, true) {
+		return
+	}
+	time.AfterFunc(trimDelay, a.trimIfQuiet)
+}
+
+const trimDelay = time.Second
+
+func (a *App) trimIfQuiet() {
+	a.trimArmed.Store(false)
+	if a.closing.Load() {
+		return
+	}
+	if idle := time.Since(time.Unix(0, a.lastActivity.Load())); idle < trimDelay-50*time.Millisecond {
+		a.trimArmed.Store(true)
+		time.AfterFunc(trimDelay-idle, a.trimIfQuiet)
+		return
+	}
+	if a.pending.Load() == 0 && !a.animOn.Load() {
+		debug.FreeOSMemory() // runs a GC, then scavenges
+	}
 }
 
 func (a *App) present() {
@@ -357,7 +421,7 @@ func (a *App) present() {
 	}
 	a.win.Present(frame, dmg)
 	a.stats.notePresent(dmg)
-	if a.firstFrame.Load() == 0 && a.stats.chromePaints > 0 {
+	if a.firstFrame.Load() == 0 && a.stats.chromePaints.Load() > 0 {
 		// the first frame that actually contains the chrome, not the blank initial one
 		a.firstFrame.Store(time.Now().UnixNano())
 	}
@@ -393,8 +457,8 @@ func (a *App) requestClose() {
 
 func (a *App) shutdown() error {
 	a.closing.Store(true)
+	a.prof.Session.Stop() // flush the debounced save first, then mark the exit clean
 	a.saveSession(true)
-	a.prof.Session.Stop()
 	if a.animT != nil {
 		a.animT.Stop()
 	}
@@ -456,6 +520,8 @@ func (a *App) profileFor(incognito bool) *store.Profile {
 	}
 	if a.incog == nil {
 		a.incog = store.OpenIncognito()
+		a.incog.Downloads.Dir = a.prof.Downloads.Dir
+		a.incog.Downloads.OnUpdate = a.prof.Downloads.OnUpdate
 	}
 	return a.incog
 }
@@ -483,7 +549,7 @@ func (a *App) loadCookies() {
 }
 
 func (a *App) engineSearch() omnibox.SearchEngine {
-	return omnibox.EngineByID(a.prof.Settings.Str("searchEngine"))
+	return omnibox.EngineByID(a.prof.Settings.Str("search.engine"))
 }
 
 // logicalToDevice converts logical coordinates to device pixels.

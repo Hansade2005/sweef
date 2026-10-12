@@ -305,7 +305,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 		t.emit(EvRequest, rec)
 		t.touchNet()
-		if res, err = t.eng.client().Do(req); err != nil {
+		if res, err = t.eng.clientFor(t.Context()).Do(req); err != nil {
 			return nil, err
 		}
 	}
@@ -661,7 +661,7 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	rec := fnet.RequestRecord{Method: "POST", URL: rawurl, Headers: flattenHeaders(req.Header)}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 	start := time.Now()
-	res, err := t.eng.client().Do(req)
+	res, err := t.eng.clientFor(t.Context()).Do(req)
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": rawurl, "error": err.Error()}})
 		return err

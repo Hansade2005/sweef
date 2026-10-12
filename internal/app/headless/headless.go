@@ -10,6 +10,7 @@ package headless
 
 import (
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"strings"
@@ -160,6 +161,32 @@ func (w *Window) Screen() *image.RGBA {
 	out := image.NewRGBA(w.screen.Bounds())
 	copy(out.Pix, w.screen.Pix)
 	return out
+}
+
+// At returns one pixel of the current screen (cheap; no copy of the frame).
+func (w *Window) At(x, y int) color.RGBA {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.screen.RGBAAt(x, y)
+}
+
+// WaitPixel blocks until the screen pixel at (x,y) satisfies ok, polling after
+// every Present, and returns the time from start until it did.
+func (w *Window) WaitPixel(start time.Time, x, y int, ok func(color.RGBA) bool, timeout time.Duration) (time.Duration, bool) {
+	deadline := time.Now().Add(timeout)
+	t := time.AfterFunc(timeout, func() { w.mu.Lock(); w.cond.Broadcast(); w.mu.Unlock() })
+	defer t.Stop()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for {
+		if w.screen.Bounds().In(w.screen.Bounds()) && ok(w.screen.RGBAAt(x, y)) {
+			return w.lastPres.Sub(start), true
+		}
+		if time.Now().After(deadline) || w.closed {
+			return 0, false
+		}
+		w.cond.Wait()
+	}
 }
 
 // Damages returns the damage rectangle of each presented frame.

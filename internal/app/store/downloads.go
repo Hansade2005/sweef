@@ -40,6 +40,7 @@ type DownloadItem struct {
 	Error     string    `json:"error,omitempty"`
 	Started   time.Time `json:"started"`
 	Incognito bool      `json:"-"`
+	Speed     int64     `json:"-"` // bytes per second over the last progress interval
 
 	cancel context.CancelFunc
 	done   chan struct{} // closed when the transfer goroutine exits
@@ -293,6 +294,7 @@ func (d *Downloads) fetch(ctx context.Context, it *DownloadItem, from int64) err
 	d.mu.Unlock()
 	buf := make([]byte, 32<<10)
 	last := time.Now()
+	lastRecv := it.Received
 	for {
 		n, rerr := resp.Body.Read(buf)
 		if n > 0 {
@@ -304,6 +306,9 @@ func (d *Downloads) fetch(ctx context.Context, it *DownloadItem, from int64) err
 			var cp DownloadItem
 			tick := time.Since(last) > 100*time.Millisecond
 			if tick {
+				dt := time.Since(last).Seconds()
+				it.Speed = int64(float64(it.Received-lastRecv) / dt)
+				lastRecv = it.Received
 				cp, last = *it, time.Now()
 			}
 			d.mu.Unlock()
@@ -392,4 +397,20 @@ func (d *Downloads) Remove(id string) {
 	it := DownloadItem{ID: id, State: "removed"}
 	b, _ := json.Marshal(it)
 	_ = d.b.Append(downloadsFile, b)
+}
+
+// ClearFinished drops every download that is done, failed or canceled.
+func (d *Downloads) ClearFinished() {
+	d.mu.Lock()
+	var ids []string
+	for _, id := range d.order {
+		switch d.items[id].State {
+		case DLDone, DLError, DLCanceled:
+			ids = append(ids, id)
+		}
+	}
+	d.mu.Unlock()
+	for _, id := range ids {
+		d.Remove(id)
+	}
 }

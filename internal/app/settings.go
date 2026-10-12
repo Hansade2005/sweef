@@ -8,14 +8,14 @@ import (
 func (a *App) privacySettings() privacy.Settings {
 	s := a.prof.Settings
 	return privacy.Settings{
-		BlockTrackers:          s.Bool("blockTrackers"),
-		HTTPSUpgrade:           s.Bool("httpsUpgrade"),
-		BlockThirdPartyCookies: s.Bool("blockThirdPartyCookies"),
-		SendGPC:                s.Bool("sendGPC"),
-		TrimReferrer:           s.Bool("trimReferrer"),
+		BlockTrackers:          s.Str("privacy.trackers") != "off",
+		HTTPSUpgrade:           s.Bool("privacy.httpsUpgrade") || s.Str("privacy.trackers") == "strict",
+		BlockThirdPartyCookies: s.Str("privacy.trackers") != "off" && s.Bool("privacy.thirdPartyCookies"),
+		SendGPC:                s.Bool("privacy.gpc"),
+		TrimReferrer:           s.Bool("privacy.trimReferrer"),
 	}
 }
 
 func (a *App) defaultVisibility() store.Visibility {
-	return store.Visibility(a.prof.Settings.Str("agentDefaultVisibility"))
+	return store.Visibility(a.prof.Settings.Str("agent.visibilityDefault"))
 }

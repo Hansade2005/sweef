@@ -185,25 +185,31 @@ func TestBookmarks(t *testing.T) {
 func TestSettingsTypedDefaultsMigration(t *testing.T) {
 	m := NewMemBackend()
 	s, _ := OpenSettings(m)
-	if s.Str("searchEngine") != "duckduckgo" || !s.Bool("blockTrackers") || s.Int("sidebarWidth") != 360 {
+	if s.Str("search.engine") != "duckduckgo" || s.Str("privacy.trackers") != "standard" || !s.Bool("privacy.gpc") || s.Int("sidebar.width") != 380 {
 		t.Fatalf("defaults wrong: %v", s.All())
 	}
-	if err := s.Set("sidebarWidth", 5000); err == nil {
+	if err := s.Set("sidebar.width", 5000); err == nil {
 		t.Fatal("range not enforced")
+	}
+	if err := s.Set("sidebar.width", 100); err == nil {
+		t.Fatal("lower bound not enforced (the UI clamps to 320..560)")
 	}
 	if err := s.Set("theme", "neon"); err == nil {
 		t.Fatal("enum not enforced")
 	}
-	if err := s.Set("blockTrackers", "yes"); err == nil {
+	if err := s.Set("privacy.trackers", "paranoid"); err == nil {
+		t.Fatal("enum not enforced")
+	}
+	if err := s.Set("privacy.gpc", "yes"); err == nil {
 		t.Fatal("type not enforced")
 	}
 	if err := s.Set("nope", 1); err == nil {
 		t.Fatal("unknown key accepted")
 	}
-	if err := s.Set("sidebarWidth", float64(400)); err != nil { // JSON numbers are float64
+	if err := s.Set("sidebar.width", float64(480)); err != nil { // JSON numbers are float64
 		t.Fatal(err)
 	}
-	if err := s.Set("sidebarWidth", 400.5); err == nil {
+	if err := s.Set("sidebar.width", 400.5); err == nil {
 		t.Fatal("fractional int accepted")
 	}
 	var fired atomic.Int32
@@ -214,14 +220,14 @@ func TestSettingsTypedDefaultsMigration(t *testing.T) {
 		t.Fatalf("callbacks %d", fired.Load())
 	}
 	s2, _ := OpenSettings(m)
-	if s2.Str("theme") != "dark" || s2.Int("sidebarWidth") != 400 {
+	if s2.Str("theme") != "dark" || s2.Int("sidebar.width") != 480 {
 		t.Fatal("not persisted")
 	}
-	// v1 file migrates
+	// v2 (camelCase) file migrates to the UI's dotted keys
 	m2 := NewMemBackend()
-	m2.WriteAtomic(settingsFile, []byte(`{"v":1,"values":{"adblock":false,"doNotTrack":false,"theme":"light","bogus":3}}`))
+	m2.WriteAtomic(settingsFile, []byte(`{"v":2,"values":{"blockTrackers":false,"sendGPC":false,"searchEngine":"kagi","restoreSession":"always","sidebarWidth":240,"theme":"light","bogus":3}}`))
 	s3, _ := OpenSettings(m2)
-	if s3.Bool("blockTrackers") || s3.Bool("sendGPC") || s3.Str("theme") != "light" {
+	if s3.Str("privacy.trackers") != "off" || s3.Bool("privacy.gpc") || s3.Str("search.engine") != "kagi" || s3.Str("startup.mode") != "restore" || s3.Int("sidebar.width") != 320 || s3.Str("theme") != "light" {
 		t.Fatalf("migration failed: %v", s3.All())
 	}
 	raw, _ := m2.ReadFile(settingsFile)
@@ -229,6 +235,16 @@ func TestSettingsTypedDefaultsMigration(t *testing.T) {
 	json.Unmarshal(raw, &doc)
 	if doc.V != SettingsVersion {
 		t.Fatalf("version not upgraded: %d", doc.V)
+	}
+	if _, old := doc.Values["sendGPC"]; old {
+		t.Fatal("old key kept after migration")
+	}
+	// v1 -> v3
+	m1 := NewMemBackend()
+	m1.WriteAtomic(settingsFile, []byte(`{"v":1,"values":{"adblock":true,"doNotTrack":false}}`))
+	s1, _ := OpenSettings(m1)
+	if s1.Str("privacy.trackers") != "standard" || s1.Bool("privacy.gpc") {
+		t.Fatalf("v1 migration: %v", s1.All())
 	}
 	// corrupt file never blocks start-up
 	m3 := NewMemBackend()
@@ -239,9 +255,9 @@ func TestSettingsTypedDefaultsMigration(t *testing.T) {
 	}
 	// invalid stored values fall back to defaults
 	m4 := NewMemBackend()
-	m4.WriteAtomic(settingsFile, []byte(`{"v":2,"values":{"theme":"neon","sidebarWidth":1}}`))
+	m4.WriteAtomic(settingsFile, []byte(`{"v":3,"values":{"theme":"neon","sidebar.width":1}}`))
 	s5, _ := OpenSettings(m4)
-	if s5.Str("theme") != "system" || s5.Int("sidebarWidth") != 360 {
+	if s5.Str("theme") != "system" || s5.Int("sidebar.width") != 380 {
 		t.Fatal("invalid stored values must not load")
 	}
 }

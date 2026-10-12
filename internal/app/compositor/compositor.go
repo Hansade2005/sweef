@@ -3,13 +3,18 @@
 //
 // Layers (bottom to top):
 //
-//  1. chrome: window-sized RGBA painted from the chrome page tab. Its
-//     viewport rectangle is a hole: only the pixels outside it are shown.
-//  2. page: a tall RGBA texture (the whole document, or a capped prefix)
-//     painted once per page change. Scrolling just moves a window over it,
-//     so scrolling never calls the engine and costs one memcpy.
-//  3. overlay: a small premultiplied-alpha surface (menus, popovers) blended
-//     over the result with a global opacity for fades.
+//  1. page: a tall RGBA texture (the whole document, or a capped prefix)
+//     painted once per page change, shown in the viewport rectangle. Scrolling
+//     just moves a window over it, so scrolling never calls the engine and
+//     costs one memcpy. Outside the viewport (and below a short page) the
+//     background colour shows.
+//  2. chrome: window-sized premultiplied RGBA painted from the chrome page
+//     with a transparent canvas. Where the chrome draws nothing (the
+//     `#viewport` hole) the page shows through; anything the chrome draws
+//     over the hole (omnibox dropdown, find bar, toasts, popovers) is
+//     alpha-blended on top of the page.
+//  3. overlay: a premultiplied-alpha surface (the agent overlay) blended over
+//     the result with a global opacity for fades.
 //
 // Damage tracking is exact: SetChrome/SetPage diff the new pixels against
 // the old ones and only the bounding box of real changes is recomposed and
@@ -37,6 +42,8 @@ type Compositor struct {
 	frame *image.RGBA
 
 	chrome *image.RGBA
+	ink    image.Rectangle // bounding box of non-transparent chrome pixels inside the viewport
+	inkOK  bool            // ink is up to date
 	page   *image.RGBA
 	pageH  int // valid rows in page (texture may be taller than needed)
 	vp     image.Rectangle
@@ -107,6 +114,7 @@ func (c *Compositor) SetViewport(r image.Rectangle) {
 	}
 	c.damage = c.damage.Union(c.vp).Union(r)
 	c.vp = r
+	c.inkOK = false
 	c.clampScroll()
 }
 
@@ -125,10 +133,10 @@ func (c *Compositor) SetBackground(col color.RGBA) {
 	c.mu.Unlock()
 }
 
-// SetChrome installs new chrome pixels. src must have the window's size.
-// The compositor takes ownership of src and returns its previous buffer for
-// reuse (nil on the first call or a size change). Damage becomes the
-// bounding box of the pixels that actually changed (outside the hole).
+// SetChrome installs new chrome pixels (premultiplied RGBA, transparent
+// where the chrome draws nothing). The compositor takes ownership of src and
+// returns its previous buffer for reuse (nil on the first call or a size
+// change). Damage becomes the bounding box of the pixels that actually changed.
 func (c *Compositor) SetChrome(src *image.RGBA) (spare *image.RGBA) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -139,32 +147,69 @@ func (c *Compositor) SetChrome(src *image.RGBA) (spare *image.RGBA) {
 	if sb.Dx() == c.w && sb.Dy() == c.h {
 		d := diff(c.chrome, src, c.chrome.Bounds())
 		spare, c.chrome = c.chrome, src
-		if !d.Empty() {
-			c.damage = c.damage.Union(c.outsideHole(d))
-		}
+		c.noteChromeChange(d)
 		return spare
 	}
-	// Partial paint (only the strip of the window the chrome occupies) or a
-	// size that no longer matches (resize in flight): diff and copy what fits
-	// into the chrome buffer, keeping the rest; the buffer stays ours.
+	// A size that no longer matches (resize in flight) or a partial paint: diff
+	// and copy what fits into the chrome buffer, keeping the rest.
 	r := sb.Intersect(c.chrome.Bounds())
 	d := diff(c.chrome, src, r)
 	if !d.Empty() {
 		copyRect(c.chrome, src, d)
-		c.damage = c.damage.Union(c.outsideHole(d))
+		c.noteChromeChange(d)
 	}
 	return src
 }
 
-// outsideHole shrinks d when it lies entirely inside the viewport hole.
-func (c *Compositor) outsideHole(d image.Rectangle) image.Rectangle {
-	if c.vp.Empty() {
-		return d
+func (c *Compositor) noteChromeChange(d image.Rectangle) {
+	if d.Empty() {
+		return
 	}
-	if d.In(c.vp) {
-		return image.Rectangle{}
+	c.damage = c.damage.Union(d)
+	if !d.Intersect(c.vp).Empty() {
+		c.inkOK = false
 	}
-	return d
+}
+
+// scanInk finds the bounding box of chrome pixels inside the viewport that
+// are not fully transparent. Blending only needs to look there.
+func (c *Compositor) scanInk() {
+	c.inkOK = true
+	c.ink = image.Rectangle{}
+	vp := c.vp.Intersect(c.chrome.Bounds())
+	if vp.Empty() {
+		return
+	}
+	minX, minY, maxX, maxY := vp.Max.X, vp.Max.Y, vp.Min.X, vp.Min.Y
+	for y := vp.Min.Y; y < vp.Max.Y; y++ {
+		o := c.chrome.PixOffset(vp.Min.X, y)
+		row := c.chrome.Pix[o : o+4*vp.Dx()]
+		first, last := -1, -1
+		for x := 0; x < len(row); x += 4 {
+			if row[x+3] != 0 {
+				if first < 0 {
+					first = x
+				}
+				last = x
+			}
+		}
+		if first < 0 {
+			continue
+		}
+		if y < minY {
+			minY = y
+		}
+		maxY = y + 1
+		if px := vp.Min.X + first/4; px < minX {
+			minX = px
+		}
+		if px := vp.Min.X + last/4 + 1; px > maxX {
+			maxX = px
+		}
+	}
+	if maxX > minX && maxY > minY {
+		c.ink = image.Rect(minX, minY, maxX, maxY)
+	}
 }
 
 // SetPage installs new page pixels (the whole document or a prefix). The
@@ -331,6 +376,17 @@ func (c *Compositor) Invalidate(r image.Rectangle) {
 	c.damage = c.damage.Union(r.Intersect(image.Rect(0, 0, c.w, c.h)))
 }
 
+// ChromeAlphaAt returns the chrome layer's opacity at a device pixel (0 where
+// the chrome draws nothing, so the page is visible and gets the pointer).
+func (c *Compositor) ChromeAlphaAt(x, y int) uint8 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !image.Pt(x, y).In(c.chrome.Bounds()) {
+		return 0
+	}
+	return c.chrome.Pix[c.chrome.PixOffset(x, y)+3]
+}
+
 // Dirty reports whether Compose has work to do.
 func (c *Compositor) Dirty() bool {
 	c.mu.Lock()
@@ -351,30 +407,35 @@ func (c *Compositor) Compose() (*image.RGBA, image.Rectangle) {
 	if d.Empty() {
 		return c.frame, d
 	}
-	// 1. chrome everywhere except the hole
 	vp := c.vp
 	hole := d.Intersect(vp)
-	if hole.Empty() {
-		copyRect(c.frame, c.chrome, d)
-	} else {
-		if top := image.Rect(d.Min.X, d.Min.Y, d.Max.X, hole.Min.Y); !top.Empty() {
-			copyRect(c.frame, c.chrome, top)
+	around := splitAround(d, vp) // the parts of the damage outside the viewport
+	// 1. base: the page inside the hole, the background everywhere else
+	for _, r := range around {
+		if !r.Empty() {
+			fillRect(c.frame, r, c.bg)
 		}
-		if bot := image.Rect(d.Min.X, hole.Max.Y, d.Max.X, d.Max.Y); !bot.Empty() {
-			copyRect(c.frame, c.chrome, bot)
-		}
-		if l := image.Rect(d.Min.X, hole.Min.Y, hole.Min.X, hole.Max.Y); !l.Empty() {
-			copyRect(c.frame, c.chrome, l)
-		}
-		if r := image.Rect(hole.Max.X, hole.Min.Y, d.Max.X, hole.Max.Y); !r.Empty() {
-			copyRect(c.frame, c.chrome, r)
-		}
+	}
+	if !hole.Empty() {
 		c.blitPage(hole)
 		if c.sbA > 0 {
 			if th := c.sbThumb(); !th.Intersect(hole).Empty() {
 				blendRect(c.frame, th.Intersect(hole), color.RGBA{60, 60, 60, 255}, c.sbA)
 			}
 		}
+	}
+	// 2. chrome over it: everywhere outside the hole (where it is essentially
+	// opaque), and inside the hole only where it has ink
+	if !c.inkOK {
+		c.scanInk()
+	}
+	for _, r := range around {
+		if !r.Empty() {
+			blendOver(c.frame, c.chrome, r)
+		}
+	}
+	if r := hole.Intersect(c.ink); !r.Empty() {
+		blendOver(c.frame, c.chrome, r)
 	}
 	// 3. overlay
 	if c.ovl != nil && c.ovlAlpha > 0 {
@@ -497,4 +558,19 @@ func (c *Compositor) Stats() Stats {
 		s.Paint[k] = percentiles(r.snapshot())
 	}
 	return s
+}
+
+// splitAround returns d minus hole as up to four rectangles (top, bottom,
+// left, right). With an empty hole it returns d itself.
+func splitAround(d, hole image.Rectangle) [4]image.Rectangle {
+	h := d.Intersect(hole)
+	if h.Empty() {
+		return [4]image.Rectangle{d}
+	}
+	return [4]image.Rectangle{
+		image.Rect(d.Min.X, d.Min.Y, d.Max.X, h.Min.Y),
+		image.Rect(d.Min.X, h.Max.Y, d.Max.X, d.Max.Y),
+		image.Rect(d.Min.X, h.Min.Y, h.Min.X, h.Max.Y),
+		image.Rect(h.Max.X, h.Min.Y, d.Max.X, h.Max.Y),
+	}
 }

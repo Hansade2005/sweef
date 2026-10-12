@@ -26,16 +26,44 @@ type faviconCache struct {
 	dir  string
 	cli  *http.Client
 	fail map[string]time.Time
+	host map[string]string // host -> data URL, for the omnibox and top sites
 }
 
 const maxFaviconBytes = 128 << 10
 
 func newFaviconCache(p *store.Profile) *faviconCache {
-	c := &faviconCache{mem: map[string]string{}, fail: map[string]time.Time{}, cli: &http.Client{Timeout: 6 * time.Second}}
+	c := &faviconCache{mem: map[string]string{}, host: map[string]string{}, fail: map[string]time.Time{}, cli: &http.Client{Timeout: 6 * time.Second}}
 	if !p.Incognito && p.Dir != "" {
 		c.dir = filepath.Join(p.Dir, "favicons")
 	}
 	return c
+}
+
+// byHost returns the most recent icon loaded for a host ("" if none).
+func (c *faviconCache) byHost(host string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.host[strings.TrimPrefix(strings.ToLower(host), "www.")]
+}
+
+func (c *faviconCache) setHost(host, dataURL string) {
+	c.mu.Lock()
+	if len(c.host) > 512 {
+		c.host = map[string]string{}
+	}
+	c.host[strings.TrimPrefix(strings.ToLower(host), "www.")] = dataURL
+	c.mu.Unlock()
+}
+
+// clear forgets every cached icon (memory and disk).
+func (c *faviconCache) clear() {
+	c.mu.Lock()
+	c.mem, c.host, c.fail = map[string]string{}, map[string]string{}, map[string]time.Time{}
+	dir := c.dir
+	c.mu.Unlock()
+	if dir != "" {
+		_ = os.RemoveAll(dir)
+	}
 }
 
 func (c *faviconCache) get(iconURL string) (string, bool) {
@@ -113,6 +141,9 @@ func (a *App) fetchFavicon(e *etab, pageURL, href string) {
 }
 
 func (a *App) setFavicon(id, pageURL, data string) {
+	if u, err := url.Parse(pageURL); err == nil && data != "" {
+		a.favicons.setHost(u.Hostname(), data)
+	}
 	st, ok := a.model.Tab(id)
 	if !ok || (st.URL != pageURL && !strings.HasPrefix(st.URL, strings.TrimSuffix(pageURL, "/"))) {
 		return

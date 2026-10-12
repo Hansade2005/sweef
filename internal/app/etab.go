@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/engine"
+	fnet "github.com/sweefbrowser/sweef/internal/net"
 )
 
 // etab wraps one engine tab with its worker and per-tab app state.
@@ -32,7 +33,15 @@ type etab struct {
 		scroll int
 		scale  float64
 	}
-	dlSeen     int
+	dlSeen    int
+	netSID    int64 // last network-log entry examined by the cookie sweep
+	lastTitle string
+	certError atomic.Bool
+	vpApplied struct {
+		w, h int
+		dsf  float64
+	} // viewport last given to the engine (worker only): setting it again would drop the layout cache
+	lastURL    string
 	dataScript string
 
 	// cross-goroutine
@@ -51,7 +60,7 @@ type etab struct {
 	pumpArmed     atomic.Bool
 	scrollNotify  atomic.Bool
 	paintW        atomic.Int32 // overlay: painted extent (CSS px)
-	paintH        atomic.Int32 // chrome/overlay: painted height (CSS px); 0 = full
+	paintH        atomic.Int32 // overlay: painted height (CSS px)
 	lastActive    atomic.Int64
 	restoreScroll atomic.Int32
 }
@@ -100,12 +109,30 @@ func (e *etab) route(req *http.Request) (int, string, bool) {
 	return 0, "", false
 }
 
+// setViewport gives the engine tab a viewport, but only when it changed
+// (worker only): the call invalidates layout, which is expensive on big pages.
+func (e *etab) setViewport(w, h int, dsf float64) {
+	if e.vpApplied.w == w && e.vpApplied.h == h && e.vpApplied.dsf == dsf {
+		return
+	}
+	e.vpApplied.w, e.vpApplied.h, e.vpApplied.dsf = w, h, dsf
+	e.t.SetViewport(w, h, dsf, false, false)
+}
+
 // ---- worker helpers ------------------------------------------------------------
 
 // call runs f on the tab worker and waits for it (used by the Backend).
 func (e *etab) call(f func() error) error {
 	ch := make(chan error, 1)
-	if !e.w.do(func() { err := f(); e.drainBindings(); ch <- err }) {
+	if !e.w.do(func() {
+		err := f()
+		if e.kind == "page" {
+			e.drainBindings()
+		} else {
+			e.afterOp() // chrome/overlay: also repaint and re-probe what covers the viewport
+		}
+		ch <- err
+	}) {
 		return errors.New("tab closed")
 	}
 	select {
@@ -203,10 +230,15 @@ func (e *etab) requestPaint(force bool) {
 	if force {
 		e.paintQueued.Store(true)
 	}
-	e.w.do(func() {
+	run := func() {
 		e.paintQueued.Store(false)
 		e.paint(force)
-	})
+	}
+	if force {
+		e.w.do(run)
+	} else if !e.w.tryDo(run) {
+		e.paintQueued.Store(false)
+	}
 }
 
 // paint rasterises the tab and posts the pixels to the UI loop. Worker only.
@@ -223,15 +255,14 @@ func (e *etab) paint(force bool) {
 	}
 	switch e.kind {
 	case "chrome", "overlay":
-		opts := engine.PaintOptions{DSF: scale}
+		// the chrome and the overlay are painted on a transparent canvas: where they
+		// draw nothing the page (or the chrome below the overlay) shows through
+		opts := engine.PaintOptions{DSF: scale, Transparent: true}
 		if e.kind == "overlay" {
 			vw, vh = int(e.paintW.Load()), int(e.paintH.Load())
 			if vw <= 0 || vh <= 0 {
 				return
 			}
-			opts.Transparent = true
-		} else if ph := int(e.paintH.Load()); ph > 0 && ph < vh {
-			vh = ph // only the strip the chrome occupies outside the viewport hole
 		}
 		if !force && gen == e.paintedAt.gen && vw == e.paintedAt.w && vh == e.paintedAt.h && scale == e.paintedAt.scale {
 			return
@@ -247,6 +278,7 @@ func (e *etab) paint(force bool) {
 		kind := e.kind
 		e.a.post(func() { e.a.onChromePainted(kind, img, dt) })
 	default:
+		e.checkMeta()
 		scale = a.pageDSF()
 		vw, vh = a.pageCSS(vw), a.pageCSS(vh)
 		var doc int
@@ -293,6 +325,84 @@ func (e *etab) close() {
 			_ = e.a.eng.CloseTab(e.t.ID)
 		}
 	}()
+}
+
+// checkMeta notices title changes made by page scripts and URL changes made by
+// history.pushState (worker only; called whenever the tab is repainted).
+func (e *etab) checkMeta() {
+	title, cur := e.t.Title(), e.t.URL()
+	var loc string
+	if e.eval(`location.href`, &loc) == nil && loc != "" {
+		cur = loc // history.pushState changes location, not the engine's tab URL
+	}
+	if title != e.lastTitle {
+		e.lastTitle = title
+		if title != "" {
+			id := e.id
+			e.a.post(func() { e.a.onTitle(id, title) })
+		}
+	}
+	if cur != e.lastURL {
+		if e.lastURL != "" && e.loadMode.Load() == modeNone && cur != "about:blank" {
+			e.a.post(func() { e.a.onInPageURL(e, cur) })
+		}
+		e.lastURL = cur
+	}
+}
+
+// sweepThirdPartyCookies deletes cookies that third-party responses set while
+// this tab was on its current site (worker only). The engine has no per-request
+// cookie hook, so this runs after loads and inputs: such a cookie never
+// persists and is never sent on a later request.
+func (e *etab) sweepThirdPartyCookies() {
+	log := e.t.NetworkLog(e.netSID)
+	if len(log) == 0 {
+		return
+	}
+	e.netSID = log[len(log)-1].SID
+	if e.kind != "page" || !e.a.priv.Settings().BlockThirdPartyCookies {
+		return
+	}
+	top, _ := e.topURL.Load().(string)
+	tu, err := url.Parse(top)
+	if err != nil || tu.Hostname() == "" {
+		return
+	}
+	bad := map[string]bool{}
+	for _, ev := range log {
+		rec, ok := ev.Data.(fnet.RequestRecord)
+		if !ok || ev.Kind != engine.EvResponse || rec.ResponseHeaders["Set-Cookie"] == "" {
+			continue
+		}
+		ru, err := url.Parse(rec.URL)
+		if err != nil || ru.Hostname() == "" || !e.a.priv.Active(tu.Hostname(), ru.Hostname()) {
+			continue
+		}
+		bad[strings.ToLower(ru.Hostname())] = true
+	}
+	if len(bad) == 0 {
+		return
+	}
+	jar := e.t.Context().JarRef()
+	var keep []*engine.Cookie
+	dropped := 0
+	for _, c := range jar.All("") {
+		dom := strings.ToLower(strings.TrimPrefix(c.Domain, "."))
+		hit := false
+		for h := range bad {
+			if h == dom || strings.HasSuffix(h, "."+dom) {
+				hit = true
+			}
+		}
+		if hit {
+			dropped++
+		} else {
+			keep = append(keep, c)
+		}
+	}
+	if dropped > 0 {
+		jar.Replace(keep)
+	}
 }
 
 // ---- engine event bus ---------------------------------------------------------------

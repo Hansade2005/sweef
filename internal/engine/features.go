@@ -459,7 +459,7 @@ func (t *Tab) DownloadURL(rawurl, name string) (Download, error) {
 			req.Header.Set("Cookie", ck)
 		}
 		t.touchNet()
-		if resp, err = t.eng.client().Do(req); err != nil {
+		if resp, err = t.eng.clientFor(t.Context()).Do(req); err != nil {
 			return Download{}, err
 		}
 	}

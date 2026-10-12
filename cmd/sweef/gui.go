@@ -11,6 +11,7 @@ import (
 
 	"github.com/sweefbrowser/sweef/internal/app"
 	"github.com/sweefbrowser/sweef/internal/app/headless"
+	"github.com/sweefbrowser/sweef/internal/app/store"
 	"github.com/sweefbrowser/sweef/internal/shell"
 )
 
@@ -23,6 +24,8 @@ import (
 var (
 	guiAssets fs.FS
 	guiAgent  func() app.AgentHost
+	// guiRun runs the real-window path; gui_shell.go sets it to mainthread.Run.
+	guiRun = func(f func()) { f() }
 )
 
 // cmdGUI is `sweef gui`: the browser window, or a headless run that writes
@@ -59,30 +62,32 @@ func cmdGUI(args []string) {
 	defer cancel()
 
 	if !*headlessF {
-		win, err := app.OpenShell(shell.Config{Title: "Sweef", Width: w, Height: h, Incognito: *incognito})
-		if err != nil {
-			fail(err)
-		}
-		cfg.Shell = win
-		a, err := app.New(cfg)
-		if err != nil {
-			fail(err)
-		}
-		runErr := a.Run(ctx)
-		if *stats {
-			fmt.Print(a.Stats().Format())
-		}
-		if runErr != nil {
-			fail(runErr)
-		}
+		guiRun(func() {
+			win, err := app.OpenShell(shell.Config{Title: "Sweef", Width: w, Height: h, Incognito: *incognito})
+			if err != nil {
+				fail(err)
+			}
+			cfg.Shell = win
+			a, err := app.New(cfg)
+			if err != nil {
+				fail(err)
+			}
+			runErr := a.Run(ctx)
+			if *stats {
+				fmt.Print(a.Stats().Format())
+			}
+			if runErr != nil {
+				fail(runErr)
+			}
+		})
 		return
 	}
 
 	// headless
 	win := headless.New(w, h, *scale)
 	cfg.Shell = win
-	if *profile == "" {
-		cfg.Incognito = true // in-memory: a headless run must not touch the user's profile
+	if *profile == "" && !*incognito {
+		cfg.Profile = store.OpenIncognito() // in memory: a headless run must not touch the user's profile
 	}
 	if *out != "" {
 		if err := os.MkdirAll(*out, 0o755); err != nil {

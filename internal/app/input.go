@@ -75,6 +75,15 @@ func (a *App) target(x, y float64) string {
 		return "overlay"
 	}
 	if a.inViewport(x, y) && a.activePage() != nil {
+		// The hole belongs to the page unless the chrome has something there: a
+		// scrim or modal covering it (probed in the chrome with elementFromPoint,
+		// the contract's rule), or visible chrome pixels (dropdown, find bar, toast).
+		if a.holeBusy.Load() {
+			return "chrome"
+		}
+		if a.comp.ChromeAlphaAt(a.l2d(x), a.l2d(y)) != 0 {
+			return "chrome"
+		}
 		return "page"
 	}
 	return "chrome"
@@ -223,7 +232,7 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 	tgt := a.target(ev.X, ev.Y)
 	if down {
 		a.mouse.captured, a.mouse.downX, a.mouse.downY, a.mouse.downBtn = tgt, ev.X, ev.Y, ev.Button
-		if tgt != "overlay" && a.ovl.visible {
+		if tgt != "overlay" && a.ovl.visible() {
 			a.sendChrome("overlay.dismiss", map[string]any{})
 		}
 		a.setFocus(tgt)
@@ -281,6 +290,7 @@ func (a *App) afterPageInput(e *etab) {
 		return
 	}
 	e.w.do(func() {
+		e.sweepThirdPartyCookies()
 		if cur := e.t.URL(); cur != "" {
 			a.post(func() { a.onEngineNavigated(e, cur) })
 		}
@@ -331,12 +341,18 @@ func (a *App) onWheel(ev shell.Event) {
 		return
 	}
 	e.lastInput.Store(time.Now().UnixNano())
-	a.scroll.Wheel(ev.DY * a.scale)
+	if ev.Precise { // trackpad: pixel-accurate deltas already feel smooth, do not add easing
+		a.scroll.ScrollTo(a.scroll.Target+ev.DY*a.scale, true)
+		a.stepScroll(0)
+	} else {
+		a.scroll.Wheel(ev.DY * a.scale)
+	}
 	a.scrollbarT = time.Now()
+	a.stepScroll(float64(frameInterval) / float64(time.Second)) // first frame now, not 16 ms from now
 	a.startAnim()
 	x, y := a.pageCoords(ev.X, ev.Y)
 	dx, dy := int(ev.DX), int(ev.DY)
-	e.w.do(func() { // let page script see the wheel (lazy loaders listen to it)
+	e.w.tryDo(func() { // let page script see the wheel (lazy loaders listen to it)
 		_, _ = e.t.Evaluate("__swWheel(" + itoa(dx) + "," + itoa(dy) + "," + itoa(x) + "," + itoa(y) + ")")
 		e.drainBindings()
 	})
@@ -357,7 +373,7 @@ func (a *App) onKeyDown(ev shell.Event) {
 	}
 	key := ev.Key
 	ctrl := a.ctrlMod(ev.Mods)
-	if ctrl && len(key) == 1 {
+	if ctrl && ev.Mods&(shell.ModShift|shell.ModAlt) == 0 && len(key) == 1 {
 		switch strings.ToLower(key) {
 		case "c":
 			a.clipboardOp("copy")
@@ -533,7 +549,14 @@ if(o){o.focus();try{o.setSelectionRange(0,(o.value||'').length)}catch(e){}}})()`
 	})
 }
 
-// shortcut handles global shortcuts. It reports whether the key was consumed.
+// shortcut handles global accelerators and reports whether the key was consumed.
+//
+// Accelerators the chrome page implements itself (Ctrl+K, L, F, T, W, D,
+// Ctrl+Shift+A, F6, Alt+D) are not acted on here: with the chrome focused the
+// key is forwarded to it as an ordinary key event, with the page focused it is
+// turned into a `ui.command` so the chrome does the work. Everything else
+// (tab cycling, reload, history navigation, zoom, ...) is handled here
+// whichever surface has focus.
 func (a *App) shortcut(ev shell.Event) bool {
 	ctrl := a.ctrlMod(ev.Mods)
 	shift := ev.Mods&shell.ModShift != 0
@@ -543,25 +566,39 @@ func (a *App) shortcut(ev shell.Event) bool {
 		key = strings.ToLower(key)
 	}
 	act := a.model.Active(a.winID)
+	uiCmd := ""
 	switch {
+	case ctrl && !shift && !alt && key == "k":
+		uiCmd = "palette"
+	case ctrl && !shift && key == "l", key == "F6", alt && !ctrl && key == "d":
+		uiCmd = "focusOmnibox"
+	case ctrl && !shift && key == "f":
+		uiCmd = "find.open"
+	case ctrl && shift && key == "a":
+		uiCmd = "sidebar.toggle"
 	case ctrl && !shift && !alt && key == "t":
-		a.newTab("", false, true)
+		uiCmd = "tab.new"
+	case ctrl && !shift && !alt && key == "w":
+		uiCmd = "tab.closeActive"
+	case ctrl && !shift && !alt && key == "d":
+		uiCmd = "bookmark.toggle"
+	}
+	if uiCmd != "" {
+		if a.focus == "chrome" {
+			return false // the chrome page sees the key and runs the command itself
+		}
+		a.runUICommand(uiCmd)
+		return true
+	}
+	switch {
 	case ctrl && shift && key == "t":
 		a.reopenClosed()
-	case ctrl && !shift && key == "w", ctrl && key == "f4":
+	case ctrl && key == "f4":
 		a.closeTab(act)
-	case ctrl && !shift && (key == "l" || key == "k") || key == "F6" || alt && key == "d":
-		a.setFocus("chrome")
-		a.sendChrome("omnibox.focus", map[string]any{"select": true, "mode": map[bool]string{true: "search", false: "url"}[key == "k"]})
-		a.focusOmnibox()
 	case ctrl && !shift && key == "r", key == "F5":
 		a.reload(act, false)
 	case ctrl && shift && key == "r":
 		a.reload(act, true)
-	case ctrl && !shift && key == "f":
-		a.model.Find.Open = true
-		a.sendChrome("find.open", map[string]any{})
-		a.markState()
 	case ctrl && key == "Tab" && !shift, ctrl && key == "PageDown":
 		a.cycleTab(+1)
 	case ctrl && key == "Tab" && shift, ctrl && key == "PageUp":
@@ -584,10 +621,6 @@ func (a *App) shortcut(ev shell.Event) bool {
 		a.win.SetFullscreen(a.fullscreen)
 	case ctrl && shift && key == "n":
 		a.newTab("", true, true)
-	case ctrl && shift && key == "a":
-		a.setSidebar(!a.model.Sidebar.Open)
-	case ctrl && !shift && key == "d":
-		a.toggleBookmark(act)
 	case ctrl && !shift && key == "u":
 		if st, ok := a.model.Tab(act); ok && strings.HasPrefix(st.URL, "http") {
 			a.newTab("view-source:"+st.URL, st.Incognito, true)
@@ -608,6 +641,15 @@ func (a *App) shortcut(ev shell.Event) bool {
 		return false
 	}
 	return true
+}
+
+// runUICommand asks the chrome page to run one of its commands (ui.command).
+func (a *App) runUICommand(name string) {
+	switch name {
+	case "palette", "focusOmnibox", "find.open", "sidebar.toggle", "sidebar.focus", "agent.chat.new":
+		a.setFocus("chrome") // these put the keyboard focus into the chrome page
+	}
+	a.sendChrome("ui.command", map[string]any{"name": name})
 }
 
 func (a *App) cycleTab(d int) {

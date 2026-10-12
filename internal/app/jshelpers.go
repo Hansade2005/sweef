@@ -121,6 +121,17 @@ const helperJS = `(function(G){
     var de = D.documentElement, b = D.body;
     return Math.max(de ? de.scrollHeight|0 : 0, b ? b.scrollHeight|0 : 0);
   };
+  // coarse page kind for the sidebar's suggestion chips
+  G.__sweefPageType = function(){
+    try {
+      var og = D.querySelector('meta[property="og:type"]'), t = og ? (og.getAttribute('content')||'').toLowerCase() : '';
+      if (D.querySelector('video') || t.indexOf('video') >= 0) return 'video';
+      if (D.querySelector('input[type=password]') || D.querySelectorAll('form input[type=text],form input[type=email]').length >= 3) return 'form';
+      if (t.indexOf('product') >= 0 || D.querySelector('[itemtype*="Product"]')) return 'shop';
+      if (D.querySelector('article') || t === 'article') return 'article';
+    } catch(x){}
+    return 'any';
+  };
   G.__sweefMedia = function(){
     try { var m = D.querySelectorAll('audio,video'); for (var i=0;i<m.length;i++) if (!m[i].paused && !m[i].muted) return true; } catch(x){}
     return false;
@@ -139,7 +150,7 @@ const helperJS = `(function(G){
   // the GUI draws its own overlay scrollbar: no classic 15px gutter in the layout
   try {
     var sty = D.createElement('style');
-    sty.textContent = 'html{scrollbar-width:none !important}';
+    sty.textContent = 'html{overflow-y:hidden !important}';
     (D.head || D.documentElement).appendChild(sty);
   } catch(x){}
   // popups: window.open becomes "open a tab" (gated in Go by a recent user gesture)
@@ -175,7 +186,24 @@ const helperJS2 = `(function(G){
   G.__sweefKey = function(key, m){
     m = m|0;
     var ae = D.activeElement, id = (ae && ae !== D.body && ae !== D.documentElement) ? G.__swIdOf(ae) : 0;
-    return G.__swDispatchKey(id, key, {shiftKey:!!(m&1),ctrlKey:!!(m&2),altKey:!!(m&4),metaKey:!!(m&8)});
+    var mods = {shiftKey:!!(m&1),ctrlKey:!!(m&2),altKey:!!(m&4),metaKey:!!(m&8)};
+    if ((m & 14) && key.length === 1) {
+      // a chord (Ctrl+T, ...): the page sees keydown/keyup, but nothing is typed
+      var code = /[a-z]/i.test(key) ? 'Key' + key.toUpperCase() : /[0-9]/.test(key) ? 'Digit' + key : '';
+      var init = {key: key, code: code, bubbles: true, cancelable: true, shiftKey: mods.shiftKey, ctrlKey: mods.ctrlKey, altKey: mods.altKey, metaKey: mods.metaKey};
+      var ok = G.__swDispatch(id, 'keydown', init);
+      G.__swDispatch(id, 'keyup', Object.assign({}, init, {cancelable: false}));
+      return ok;
+    }
+    return G.__swDispatchKey(id, key, mods);
+  };
+  // true when something other than the viewport placeholder (or an ancestor of it) is at (x,y):
+  // a scrim, modal or popover that must receive pointer events instead of the page
+  G.__sweefHoleBusy = function(x, y){
+    var v = D.getElementById('viewport');
+    if (!v) return false;
+    var e = D.elementFromPoint(x, y);
+    return !!e && !(e === v || e.contains(v));
   };
   // find: returns {count, top} where top is the page Y of match number idx (0-based) or -1
   G.__sweefFind = function(q, idx){

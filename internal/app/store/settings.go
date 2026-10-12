@@ -9,7 +9,7 @@ import (
 
 const (
 	settingsFile    = "settings.json"
-	SettingsVersion = 2
+	SettingsVersion = 3
 )
 
 // Kind is a setting's value type.
@@ -34,24 +34,36 @@ type Spec struct {
 }
 
 // Schema is the full list of known settings (also sent to the settings page).
+// The keys are the ones the chrome UI reads and writes with `settings.set`
+// (docs/gui-contract.md, "settings keys"), plus a few the app owns.
 var Schema = []Spec{
 	{Key: "theme", Kind: KEnum, Default: "system", Enum: []string{"system", "light", "dark"}, Group: "appearance"},
-	{Key: "searchEngine", Kind: KString, Default: "duckduckgo", Group: "search"},
-	{Key: "homepage", Kind: KString, Default: "sweef://newtab", Group: "general"},
-	{Key: "restoreSession", Kind: KEnum, Default: "ask", Enum: []string{"always", "ask", "never"}, Group: "general"},
-	{Key: "blockTrackers", Kind: KBool, Default: true, Group: "privacy"},
-	{Key: "httpsUpgrade", Kind: KBool, Default: true, Group: "privacy"},
-	{Key: "blockThirdPartyCookies", Kind: KBool, Default: true, Group: "privacy"},
-	{Key: "sendGPC", Kind: KBool, Default: true, Group: "privacy"},
-	{Key: "trimReferrer", Kind: KBool, Default: true, Group: "privacy"},
-	{Key: "agentDefaultVisibility", Kind: KEnum, Default: "ask", Enum: []string{"allowed", "blocked", "ask"}, Group: "agent"},
-	{Key: "sidebarOpen", Kind: KBool, Default: false, Group: "agent"},
-	{Key: "sidebarWidth", Kind: KInt, Default: 360, Min: 240, Max: 720, Group: "agent"},
-	{Key: "showBookmarksBar", Kind: KBool, Default: true, Group: "appearance"},
-	{Key: "askDownloadLocation", Kind: KBool, Default: false, Group: "downloads"},
-	{Key: "downloadsDir", Kind: KString, Default: "", Group: "downloads"},
-	{Key: "defaultZoom", Kind: KInt, Default: 100, Min: 25, Max: 500, Group: "appearance"},
-	{Key: "tabDiscardMinutes", Kind: KInt, Default: 30, Min: 0, Max: 1440, Group: "performance"},
+	{Key: "density", Kind: KEnum, Default: "comfortable", Enum: []string{"comfortable", "compact"}, Group: "appearance"},
+	{Key: "bookmarks.bar", Kind: KBool, Default: false, Group: "appearance"},
+	{Key: "sidebar.open", Kind: KBool, Default: false, Group: "agent"},
+	{Key: "sidebar.width", Kind: KInt, Default: 380, Min: 320, Max: 560, Group: "agent"},
+	{Key: "agent.mode", Kind: KEnum, Default: "ask", Enum: []string{"ask", "agent"}, Group: "agent"},
+	{Key: "agent.latencyStrip", Kind: KBool, Default: true, Group: "agent"},
+	{Key: "agent.sources.page", Kind: KBool, Default: true, Group: "agent"},
+	{Key: "agent.sources.web", Kind: KBool, Default: false, Group: "agent"},
+	{Key: "agent.confirmations", Kind: KBool, Default: true, Group: "agent"},
+	{Key: "agent.visibilityDefault", Kind: KEnum, Default: "ask", Enum: []string{"allowed", "blocked", "ask"}, Group: "agent"},
+	{Key: "privacy.trackers", Kind: KEnum, Default: "standard", Enum: []string{"standard", "strict", "off"}, Group: "privacy"},
+	{Key: "privacy.gpc", Kind: KBool, Default: true, Group: "privacy"},
+	{Key: "privacy.httpsUpgrade", Kind: KBool, Default: true, Group: "privacy"},
+	{Key: "privacy.clearOnExit", Kind: KBool, Default: false, Group: "privacy"},
+	{Key: "privacy.thirdPartyCookies", Kind: KBool, Default: true, Group: "privacy"}, // block third-party cookies
+	{Key: "privacy.trimReferrer", Kind: KBool, Default: true, Group: "privacy"},
+	{Key: "search.engine", Kind: KString, Default: "duckduckgo", Group: "search"},
+	{Key: "search.suggest", Kind: KBool, Default: true, Group: "search"},
+	{Key: "omni.askRow", Kind: KBool, Default: true, Group: "search"},
+	{Key: "startup.mode", Kind: KEnum, Default: "newtab", Enum: []string{"newtab", "restore", "pages"}, Group: "general"},
+	{Key: "startup.pages", Kind: KString, Default: "", Group: "general"},
+	{Key: "downloads.dir", Kind: KString, Default: "", Group: "downloads"}, // "" = ~/Downloads
+	{Key: "downloads.ask", Kind: KBool, Default: false, Group: "downloads"},
+	{Key: "zoom.default", Kind: KInt, Default: 100, Min: 25, Max: 500, Group: "appearance"},
+	{Key: "tabs.discardMinutes", Kind: KInt, Default: 30, Min: 0, Max: 1440, Group: "performance"},
+	{Key: "onboarding.done", Kind: KBool, Default: false, Group: "general"},
 }
 
 // Settings holds typed values with defaults and schema versioning.
@@ -118,6 +130,43 @@ func migrate(d *settingsDoc) {
 			delete(d.Values, "doNotTrack")
 		}
 		d.V = 2
+	}
+	if d.V < 3 { // v2 used camelCase keys; v3 uses the UI's dotted keys
+		rename := map[string]string{
+			"searchEngine": "search.engine", "httpsUpgrade": "privacy.httpsUpgrade",
+			"blockThirdPartyCookies": "privacy.thirdPartyCookies", "sendGPC": "privacy.gpc",
+			"trimReferrer": "privacy.trimReferrer", "agentDefaultVisibility": "agent.visibilityDefault",
+			"sidebarOpen": "sidebar.open", "sidebarWidth": "sidebar.width", "showBookmarksBar": "bookmarks.bar",
+			"askDownloadLocation": "downloads.ask", "downloadsDir": "downloads.dir", "defaultZoom": "zoom.default",
+			"tabDiscardMinutes": "tabs.discardMinutes",
+		}
+		for old, nw := range rename {
+			if v, ok := d.Values[old]; ok {
+				d.Values[nw] = v
+				delete(d.Values, old)
+			}
+		}
+		if v, ok := d.Values["blockTrackers"]; ok { // bool -> standard|off
+			if b, _ := v.(bool); b {
+				d.Values["privacy.trackers"] = "standard"
+			} else {
+				d.Values["privacy.trackers"] = "off"
+			}
+			delete(d.Values, "blockTrackers")
+		}
+		if v, ok := d.Values["restoreSession"]; ok { // always|ask|never -> restore|newtab
+			if v == "always" {
+				d.Values["startup.mode"] = "restore"
+			} else {
+				d.Values["startup.mode"] = "newtab"
+			}
+			delete(d.Values, "restoreSession")
+		}
+		if w, ok := d.Values["sidebar.width"].(float64); ok && w < 320 {
+			d.Values["sidebar.width"] = float64(320)
+		}
+		delete(d.Values, "homepage")
+		d.V = 3
 	}
 }
 

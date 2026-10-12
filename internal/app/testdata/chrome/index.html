@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <title>Sweef placeholder chrome</title>
 <style>
-  html, body { margin: 0; height: 100%; font: 13px sans-serif; background: #1c2030; color: #e8eaf2; overflow: hidden; }
+  /* the canvas is transparent: whatever the chrome does not draw shows the page */
+  html, body { margin: 0; height: 100%; font: 13px sans-serif; background: transparent; color: #e8eaf2; overflow: hidden; }
   #tabs { position: absolute; left: 0; top: 0; right: 0; height: 36px; background: #1c2030; display: flex; align-items: flex-end; }
   .tab { height: 28px; width: 180px; margin-left: 4px; padding: 0 10px; background: #2a3045; border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: space-between; color: #aab; overflow: hidden; }
   .tab.active { background: #3b4258; color: #fff; }
@@ -18,8 +19,12 @@
   #lock { width: 10px; height: 10px; border-radius: 5px; background: #666; margin-left: 8px; }
   #lock.secure { background: #3ecf7a; } #lock.insecure { background: #e5534b; } #lock.internal { background: #6f8cff; }
   #viewport { position: absolute; left: 0; top: 80px; bottom: 0; right: 0; }
+  /* drawn over the viewport hole: the page must show around it */
+  #sugg { position: absolute; left: 120px; top: 78px; width: 520px; background: #232840; display: none; z-index: 5; }
+  .row { height: 24px; padding: 0 10px; color: #cfd3e6; }
   #side { position: absolute; top: 80px; bottom: 0; right: 0; width: 0; background: #20263a; display: none; color: #cfd3e6; padding: 8px; }
   #sidelog { font-size: 12px; }
+  #toast { position: absolute; left: 20px; bottom: 20px; padding: 8px 12px; background: #0b7285; color: #fff; border-radius: 6px; display: none; }
 </style>
 </head>
 <body>
@@ -30,8 +35,10 @@
   <input id="omnibox" type="text" value="">
   <div class="btn" id="star">*</div>
 </div>
+<div id="sugg"></div>
 <div id="viewport"></div>
 <div id="side"><div>Agent</div><div id="sidelog"></div></div>
+<div id="toast"></div>
 <script>
 var S = {}, lastLayout = '';
 function merge(t, p) {
@@ -43,6 +50,7 @@ function merge(t, p) {
   }
 }
 function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function setting(k, d) { var s = S.settings || {}; return s[k] != null ? s[k] : d; }
 function render() {
   var tabs = document.getElementById('tabs');
   tabs.textContent = '';
@@ -62,7 +70,7 @@ function render() {
   document.getElementById('back').className = 'btn' + (S.canBack ? '' : ' off');
   document.getElementById('fwd').className = 'btn' + (S.canForward ? '' : ' off');
   var side = document.getElementById('side');
-  var open = S.sidebar && S.sidebar.open, w = (S.sidebar && S.sidebar.width) || 360;
+  var open = !!setting('sidebar.open', false), w = +setting('sidebar.width', 360) || 360;
   side.style.display = open ? 'block' : 'none';
   side.style.width = open ? (w - 16) + 'px' : '0px';
   document.getElementById('viewport').style.right = open ? w + 'px' : '0px';
@@ -73,22 +81,49 @@ function reportLayout() {
   var key = [r.left, r.top, r.width, r.height].join(',');
   if (key !== lastLayout) { lastLayout = key; sweef.post('layout', { viewport: { x: r.left, y: r.top, w: r.width, h: r.height } }); }
 }
+function focusOmni() { var o = document.getElementById('omnibox'); o.focus(); o.setSelectionRange(0, (o.value || '').length); }
+function run(name) {
+  if (name === 'tab.new') sweef.post('tab.new', {});
+  else if (name === 'tab.closeActive') sweef.post('tab.close', { id: S.active });
+  else if (name === 'focusOmnibox') focusOmni();
+  else if (name === 'bookmark.toggle') sweef.post('bookmark.toggle', {});
+  else if (name === 'sidebar.toggle') sweef.post('settings.set', { key: 'sidebar.open', value: !setting('sidebar.open', false) });
+  else if (name === 'find.open') { /* the placeholder has no find bar */ }
+  else if (name === 'palette') { /* nor a palette */ }
+}
 sweef.onMessage = function (type, p) {
   if (type === 'state') { S = p; render(); }
   else if (type === 'state.patch') { merge(S, p); render(); }
+  else if (type === 'omni.suggestions') {
+    var box = document.getElementById('sugg'); box.textContent = '';
+    (p.items || []).forEach(function (it) { box.appendChild(el('div', 'row', it.title)); });
+    box.style.display = (p.items && p.items.length) ? 'block' : 'none';
+  }
   else if (type === 'agent.event') { var l = document.getElementById('sidelog'); l.appendChild(el('div', '', (p.kind || '') + ': ' + (p.text || ''))); }
-  else if (type === 'omnibox.focus') { var o = document.getElementById('omnibox'); o.focus(); }
+  else if (type === 'ui.command') { run(p.name); }
+  else if (type === 'toast') { var t = document.getElementById('toast'); t.textContent = p.text; t.style.display = 'block'; }
+  else if (type === 'focus' && p.target === 'page') { document.getElementById('sugg').style.display = 'none'; }
 };
 var ob = document.getElementById('omnibox');
-ob.addEventListener('input', function () { sweef.post('omni.input', { text: ob.value }); });
+ob.addEventListener('input', function () { sweef.post('omni.input', { text: ob.value, scope: 'bar', limit: 8 }); });
 ob.addEventListener('keydown', function (e) {
-  if (e.key === 'Enter') { sweef.post('nav.go', { input: ob.value }); }
+  if (e.key === 'Enter') { document.getElementById('sugg').style.display = 'none'; sweef.post('nav.go', { tab: '', input: ob.value }); }
+});
+// the accelerators the real chrome page handles itself while it has focus
+document.addEventListener('keydown', function (e) {
+  var m = e.ctrlKey || e.metaKey, k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (m && k === 'l' || k === 'F6') { e.preventDefault(); run('focusOmnibox'); }
+  else if (m && e.shiftKey && k === 'a') { e.preventDefault(); run('sidebar.toggle'); }
+  else if (m && k === 't' && !e.shiftKey) { e.preventDefault(); run('tab.new'); }
+  else if (m && k === 'w') { e.preventDefault(); run('tab.closeActive'); }
+  else if (m && k === 'd') { e.preventDefault(); run('bookmark.toggle'); }
 });
 document.getElementById('back').addEventListener('click', function () { sweef.post('nav.back', {}); });
 document.getElementById('fwd').addEventListener('click', function () { sweef.post('nav.forward', {}); });
 document.getElementById('reload').addEventListener('click', function () { sweef.post('nav.reload', {}); });
 document.getElementById('star').addEventListener('click', function () { sweef.post('bookmark.toggle', {}); });
 reportLayout();
+sweef.post('ui.ready', { page: 'chrome' });
 </script>
 </body>
 </html>

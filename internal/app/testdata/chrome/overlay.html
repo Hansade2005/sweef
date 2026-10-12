@@ -5,33 +5,31 @@
 <title>Sweef placeholder overlay</title>
 <style>
   html, body { margin: 0; background: transparent; }
-  #pop { position: absolute; left: 120px; top: 78px; width: 520px; background: #232840; border-radius: 8px; display: none; padding: 4px 0; }
-  .row { height: 26px; padding: 0 12px; color: #dfe3f5; font: 13px sans-serif; display: flex; align-items: center; }
-  .row.sel { background: #3b4258; }
+  #glow { position: absolute; border: 4px solid #ff2d95; box-sizing: border-box; display: none; }
+  #pill { position: absolute; padding: 8px 14px; background: #ff2d95; color: #fff; border-radius: 16px; font: 13px sans-serif; display: none; }
 </style>
 </head>
 <body>
-<div id="pop"></div>
+<div id="glow"></div><div id="pill"></div>
 <script>
-var pop = document.getElementById('pop');
-function report(vis) {
-  var r = pop.getBoundingClientRect();
-  sweef.post('overlay', { rect: { x: r.left, y: r.top, w: r.width, h: r.height }, visible: vis });
+var glow = document.getElementById('glow'), pill = document.getElementById('pill');
+function hit(show) {
+  var rects = [];
+  if (show) { var r = pill.getBoundingClientRect(); rects.push({ x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }); }
+  sweef.post('overlay.hit', { rects: rects });
 }
-function hide() { pop.style.display = 'none'; report(false); }
 sweef.onMessage = function (type, p) {
-  if (type === 'omni.suggestions') {
-    pop.textContent = '';
-    (p.items || []).forEach(function (it, i) {
-      var d = document.createElement('div');
-      d.className = 'row' + (i === 0 ? ' sel' : '');
-      d.textContent = it.title;
-      d.addEventListener('click', function () { hide(); sweef.post('nav.go', { input: it.text }); });
-      pop.appendChild(d);
-    });
-    if (p.items && p.items.length) { pop.style.display = 'block'; report(true); } else hide();
-  } else if (type === 'overlay.dismiss' || (type === 'focus' && p.target === 'page')) { hide(); }
+  if (type !== 'overlay') return;
+  var on = p.state && p.state !== 'off', v = p.viewport || { x: 0, y: 0, w: 100, h: 100 };
+  glow.style.display = on ? 'block' : 'none'; pill.style.display = on ? 'block' : 'none';
+  if (on) {
+    glow.style.left = v.x + 'px'; glow.style.top = v.y + 'px'; glow.style.width = v.w + 'px'; glow.style.height = v.h + 'px';
+    pill.textContent = p.state + ': ' + (p.task || '') + ' ' + (p.step || '');
+    pill.style.left = (v.x + 40) + 'px'; pill.style.top = (v.y + v.h - 60) + 'px';
+  }
+  hit(on);
 };
+sweef.post('ui.ready', { page: 'overlay' });
 </script>
 </body>
 </html>

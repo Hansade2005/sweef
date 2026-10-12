@@ -48,7 +48,8 @@ type Tab struct {
 	CanBack    bool     `json:"canBack"`
 	CanForward bool     `json:"canForward"`
 	Security   Security `json:"security"`
-	Audio      bool     `json:"audio"`
+	Audio      bool     `json:"audio"`   // legacy name of Audible
+	Crashed    bool     `json:"crashed"` // the tab's engine worker panicked
 	Pinned     bool     `json:"pinned"`
 	Muted      bool     `json:"muted"`
 	Incognito  bool     `json:"incognito"`
@@ -428,7 +429,7 @@ func (m *Model) Snapshot(win int) map[string]any {
 		}
 	}
 	out := map[string]any{
-		"window":     map[string]any{"id": w.ID, "w": w.W, "h": w.H, "scale": w.Scale, "incognito": w.Incognito, "focused": w.Focused},
+		"window":     map[string]any{"id": w.ID, "w": w.W, "h": w.H, "scale": w.Scale, "incognito": w.Incognito, "focused": w.Focused, "maximized": false},
 		"tabs":       tabs,
 		"active":     w.Active,
 		"theme":      m.Theme,
@@ -443,6 +444,7 @@ func (m *Model) Snapshot(win int) map[string]any {
 		out["url"] = act.URL
 		out["title"] = act.Title
 		out["loading"] = act.Loading
+		out["progress"] = act.Progress
 		out["canBack"] = act.CanBack
 		out["canForward"] = act.CanForward
 		out["security"] = secMap(act.Security)
@@ -453,6 +455,7 @@ func (m *Model) Snapshot(win int) map[string]any {
 		out["bookmarked"] = bm
 	} else {
 		out["url"], out["title"] = "", ""
+		out["progress"] = 0.0
 		out["loading"], out["canBack"], out["canForward"], out["bookmarked"] = false, false, false, false
 		out["security"] = secMap(Security{Level: "none"})
 	}
@@ -471,7 +474,7 @@ func tabMap(t *Tab) map[string]any {
 	m := map[string]any{
 		"id": t.ID, "url": t.URL, "title": t.Title, "loading": t.Loading, "progress": t.Progress,
 		"canBack": t.CanBack, "canForward": t.CanForward, "security": secMap(t.Security),
-		"audio": t.Audio, "pinned": t.Pinned, "muted": t.Muted, "incognito": t.Incognito,
+		"audio": t.Audio, "audible": t.Audio, "crashed": t.Crashed, "pinned": t.Pinned, "muted": t.Muted, "incognito": t.Incognito,
 		"discarded": t.Discarded, "blocked": t.Blocked,
 	}
 	if t.Favicon != "" {

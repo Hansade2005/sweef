@@ -245,7 +245,11 @@ func TestSuggestFast(t *testing.T) {
 			worst = d
 		}
 	}
-	if worst > 5*time.Millisecond {
+	limit := 5 * time.Millisecond
+	if raceEnabled {
+		limit *= 10
+	}
+	if worst > limit {
 		t.Fatalf("omnibox merge took %v", worst)
 	}
 	t.Logf("worst merge of 100 history hits: %v", worst)

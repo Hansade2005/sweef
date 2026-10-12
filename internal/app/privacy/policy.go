@@ -194,3 +194,9 @@ func (e *Engine) CookieOK(topHost, cookieHost string) bool {
 	cookieHost = strings.TrimPrefix(cookieHost, ".")
 	return SameSite(topHost, cookieHost)
 }
+
+// Active reports whether third-party cookie blocking applies to a response
+// from cookieHost while the top-level page is on topHost.
+func (e *Engine) Active(topHost, cookieHost string) bool {
+	return !e.CookieOK(topHost, cookieHost)
+}
