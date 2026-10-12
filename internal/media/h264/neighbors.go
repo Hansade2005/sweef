@@ -126,16 +126,21 @@ func (d *Decoder) fillCaches(mbType uint32) {
 			if d.hdr.pps.ConstrainedIntra {
 				typeMask = 7
 			}
-			// intra4x4 prediction mode cache
+			// intra4x4 prediction mode cache; with constrained intra
+			// prediction the modes of SI neighbours are not used by other
+			// macroblocks (8.3.1.1)
 			if mbType&mbIntra4x4 != 0 {
 				ipm := &d.ipmCache
-				if topType&mbIntra4x4 != 0 {
+				siBlocked := func(t uint32) bool {
+					return d.hdr.pps.ConstrainedIntra && t&mbSI != 0 && mbType&mbSI == 0
+				}
+				if topType&mbIntra4x4 != 0 && !siBlocked(topType) {
 					for x := 0; x < 4; x++ {
 						ipm[4+x] = d.ipm[nb.topXY*16+12+x]
 					}
 				} else {
 					v := int8(2)
-					if topType&typeMask == 0 {
+					if topType&typeMask == 0 || siBlocked(topType) {
 						v = -1
 					}
 					ipm[4], ipm[5], ipm[6], ipm[7] = v, v, v, v
@@ -145,11 +150,11 @@ func (d *Decoder) fillCaches(mbType uint32) {
 					for r := 0; r < 2; r++ {
 						row := 2*i + r
 						ci := 3 + 8*(1+row)
-						if lt&mbIntra4x4 != 0 {
+						if lt&mbIntra4x4 != 0 && !siBlocked(lt) {
 							ipm[ci] = d.ipm[nb.leftXY[i]*16+int(nb.leftRow[row])*4+3]
 						} else {
 							v := int8(2)
-							if lt&typeMask == 0 {
+							if lt&typeMask == 0 || siBlocked(lt) {
 								v = -1
 							}
 							ipm[ci] = v

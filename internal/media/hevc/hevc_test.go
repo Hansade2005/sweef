@@ -47,6 +47,8 @@ func frameBytes(f *yuv.Frame) []byte {
 
 func decodeAnnexB(t testing.TB, data []byte) ([]*yuv.Frame, error) {
 	d := NewDecoder()
+	// the reference output comes from ffmpeg
+	d.compatFFmpeg = true
 	var out []*yuv.Frame
 	fr, err := d.Push(data)
 	out = append(out, fr...)

@@ -8,22 +8,23 @@ const (
 
 // NAL unit types.
 const (
-	nalTrailN   = 0
-	nalRaslN    = 8
-	nalRaslR    = 9
-	nalRadlN    = 6
-	nalRadlR    = 7
-	nalBlaWLP   = 16
-	nalBlaNLP   = 18
-	nalIdrWRadl = 19
-	nalIdrNLP   = 20
-	nalCra      = 21
-	nalVPS      = 32
-	nalSPS      = 33
-	nalPPS      = 34
-	nalAUD      = 35
-	nalEOS      = 36
-	nalEOB      = 37
+	nalTrailN    = 0
+	nalRaslN     = 8
+	nalRaslR     = 9
+	nalRadlN     = 6
+	nalRadlR     = 7
+	nalBlaWLP    = 16
+	nalBlaNLP    = 18
+	nalIdrWRadl  = 19
+	nalIdrNLP    = 20
+	nalCra       = 21
+	nalVPS       = 32
+	nalSPS       = 33
+	nalPPS       = 34
+	nalAUD       = 35
+	nalEOS       = 36
+	nalEOB       = 37
+	nalSuffixSEI = 40
 )
 
 type predWeights struct {
@@ -76,11 +77,25 @@ type sliceHeader struct {
 	numPicTotalCurr         int
 	entry                   []int
 
+	// screen content coding
+	useIntegerMv             bool
+	currPicRef               bool   // pps_curr_pic_ref_enabled_flag
+	actDelta                 [3]int // slice_act_{y,cb,cr}_qp_offset
+	nStBefore, nStAfter, nLt int    // pictures of the RPS used by the current picture
+
+	// multilayer
+	layer           int
+	numActiveRefLay int
+	refLayerIdc     [maxLayers]int // inter_layer_pred_layer_idc
+	numIL0, numIL1  int
+	pocResetIdc     int
+
 	// derived per picture
 	sliceAddrRs int // first CTB address (raster) of the slice containing this segment
 	refPoc      [2][16]int32
 	refLT       [2][16]bool
 	refPic      [2][16]*Picture
+	refLayer    [2][16]uint8
 	nalType     int
 	temporalID  int
 	noBackward  bool // NoBackwardPredFlag
@@ -89,8 +104,8 @@ type sliceHeader struct {
 
 // parseSliceHeader parses the slice segment header. prev is the previous
 // independent slice header of the same picture (for dependent segments).
-func (d *Decoder) parseSliceHeader(r *bitReader, nalType, tid int, prev *sliceHeader) (*sliceHeader, error) {
-	sh := &sliceHeader{nalType: nalType, temporalID: tid}
+func (d *Decoder) parseSliceHeader(r *bitReader, nalType, tid int, prev *sliceHeader, layer int) (*sliceHeader, error) {
+	sh := &sliceHeader{nalType: nalType, temporalID: tid, layer: layer}
 	sh.firstSlice = r.flag()
 	if nalType >= nalBlaWLP && nalType <= 23 {
 		sh.noOutputPrior = r.flag()
@@ -136,8 +151,20 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, tid int, prev *sliceHe
 		if pps.outputFlagPresent {
 			sh.picOutput = r.flag()
 		}
-		if nalType != nalIdrWRadl && nalType != nalIdrNLP {
+		idr := nalType == nalIdrWRadl || nalType == nalIdrNLP
+		var vps *VPS
+		li := 0
+		if layer > 0 {
+			vps = d.vps[sps.vpsID]
+			if vps == nil || !vps.hasExt || vps.layerIdx[layer] < 0 {
+				return nil, ErrUnsupported
+			}
+			li = vps.layerIdx[layer]
+		}
+		if !idr || (layer > 0 && !vps.pocLsbNotPres[li]) {
 			sh.pocLsb = int(r.u(sps.log2MaxPocLsb))
+		}
+		if !idr {
 			if !r.flag() { // short_term_ref_pic_set_sps_flag
 				if err := parseStRPS(r, sps.stRPS, len(sps.stRPS), len(sps.stRPS), &sh.rps); err != nil {
 					return nil, err
@@ -196,6 +223,11 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, tid int, prev *sliceHe
 				sh.temporalMvp = r.flag()
 			}
 		}
+		if layer > 0 {
+			if err := d.parseInterLayer(r, sh, vps, li); err != nil {
+				return nil, err
+			}
+		}
 		if sps.sao {
 			sh.saoLuma = r.flag()
 			if sps.chromaArrayType != 0 {
@@ -203,20 +235,26 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, tid int, prev *sliceHe
 			}
 		}
 		// NumPicTotalCurr
+		sh.numPicTotalCurr = sh.numActiveRefLay
 		for i := 0; i < sh.rps.numNeg; i++ {
 			if sh.rps.used[0][i] {
-				sh.numPicTotalCurr++
+				sh.nStBefore++
 			}
 		}
 		for i := 0; i < sh.rps.numPos; i++ {
 			if sh.rps.used[1][i] {
-				sh.numPicTotalCurr++
+				sh.nStAfter++
 			}
 		}
 		for i := 0; i < sh.numLT; i++ {
 			if sh.ltUsed[i] {
-				sh.numPicTotalCurr++
+				sh.nLt++
 			}
+		}
+		sh.numPicTotalCurr += sh.nStBefore + sh.nStAfter + sh.nLt
+		if pps.currPicRef {
+			sh.currPicRef = true
+			sh.numPicTotalCurr++
 		}
 		if sh.sliceType != sliceI {
 			sh.numRefIdx[0] = pps.numRefIdxDefault[0]
@@ -273,6 +311,12 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, tid int, prev *sliceHe
 			if sh.maxMergeCand < 1 || sh.maxMergeCand > 5 {
 				return nil, errBitstream
 			}
+			switch sps.mvResControl {
+			case 1:
+				sh.useIntegerMv = true
+			case 2:
+				sh.useIntegerMv = r.flag()
+			}
 		}
 		sh.qpDelta = int(r.se())
 		sh.sliceQp = pps.initQp + sh.qpDelta
@@ -282,6 +326,11 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, tid int, prev *sliceHe
 		if pps.sliceChromaQpOffsets {
 			sh.cbQpOffset = int(r.se())
 			sh.crQpOffset = int(r.se())
+		}
+		if pps.sliceActOffsets {
+			for k := 0; k < 3; k++ {
+				sh.actDelta[k] = int(r.se())
+			}
 		}
 		if pps.chromaQpOffsetList {
 			sh.cuChromaQpOffsetEnabled = r.flag()
@@ -367,11 +416,15 @@ func parsePredWeights(r *bitReader, sh *sliceHeader, sps *SPS) error {
 		n := sh.numRefIdx[l]
 		var lf, cf [16]bool
 		for i := 0; i < n; i++ {
-			lf[i] = r.flag()
+			if !sh.currPicEntry(l, i) {
+				lf[i] = r.flag()
+			}
 		}
 		if sps.chromaArrayType != 0 {
 			for i := 0; i < n; i++ {
-				cf[i] = r.flag()
+				if !sh.currPicEntry(l, i) {
+					cf[i] = r.flag()
+				}
 			}
 		}
 		for i := 0; i < n; i++ {
@@ -400,4 +453,96 @@ func parsePredWeights(r *bitReader, sh *sliceHeader, sps *SPS) error {
 	}
 	sh.pw = pw
 	return nil
+}
+
+// parseInterLayer parses the inter-layer prediction syntax of the slice
+// header of an enhancement layer picture (F.7.3.6.1) and derives the active
+// reference layers.
+func (d *Decoder) parseInterLayer(r *bitReader, sh *sliceHeader, vps *VPS, li int) error {
+	nd := vps.numDirectRef[li]
+	// RefLayerPicFlag / RefLayerPicIdc
+	var refIdc [maxLayers]int
+	numRef := 0
+	for i := 0; i < nd; i++ {
+		rl := vps.directRefIdx[li][i]
+		tid := sh.temporalID
+		if vps.subLayersMax[rl] >= tid && (tid == 0 || vps.maxTidIlRef[rl][li] > tid) {
+			refIdc[numRef] = i
+			numRef++
+		}
+	}
+	interLayerPred := false
+	numMinus1 := 0
+	explicit := false
+	if !vps.allRefActive && nd > 0 {
+		interLayerPred = r.flag()
+		if interLayerPred && nd > 1 {
+			if !vps.maxOneActive {
+				numMinus1 = int(r.u(ceilLog2u(nd)))
+			}
+			active := numActive(vps, numRef, interLayerPred, nd, numMinus1)
+			if active != nd {
+				explicit = true
+				for i := 0; i < active; i++ {
+					sh.refLayerIdc[i] = int(r.u(ceilLog2u(nd)))
+					if sh.refLayerIdc[i] >= nd {
+						return errBitstream
+					}
+				}
+			}
+		}
+	}
+	sh.numActiveRefLay = numActive(vps, numRef, interLayerPred, nd, numMinus1)
+	if sh.numActiveRefLay > maxLayers {
+		return errBitstream
+	}
+	if !explicit {
+		for i := 0; i < sh.numActiveRefLay; i++ {
+			sh.refLayerIdc[i] = refIdc[i]
+		}
+	}
+	// split into the two inter-layer sets by view order
+	cur := vps.viewID[li]
+	zero := vps.viewID[0]
+	for i := 0; i < sh.numActiveRefLay; i++ {
+		ref := vps.viewID[vps.directRefIdx[li][sh.refLayerIdc[i]]]
+		if (cur <= zero && cur <= ref) || (cur >= zero && cur >= ref) {
+			sh.numIL0++
+		} else {
+			sh.numIL1++
+		}
+	}
+	return nil
+}
+
+func numActive(vps *VPS, numRef int, enabled bool, nd, numMinus1 int) int {
+	switch {
+	case numRef == 0:
+		return 0
+	case vps.allRefActive:
+		return numRef
+	case !enabled:
+		return 0
+	case vps.maxOneActive || nd == 1:
+		return 1
+	}
+	return numMinus1 + 1
+}
+
+// currPicEntry reports whether entry i of reference picture list l is the
+// current picture (pps_curr_pic_ref_enabled_flag): the current picture ends
+// each repetition of the temporary lists, and RefPicList0 ends with it when
+// the list is not modified and the temporary list is longer (8.3.4).
+func (sh *sliceHeader) currPicEntry(l, i int) bool {
+	total := sh.numPicTotalCurr
+	if !sh.currPicRef || total == 0 {
+		return false
+	}
+	if sh.listMod[l] {
+		return sh.listEntry[l][i]%total == total-1
+	}
+	if l == 0 && total > sh.numRefIdx[0] && i == sh.numRefIdx[0]-1 {
+		return true
+	}
+	return i%total == total-1
 }

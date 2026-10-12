@@ -70,6 +70,7 @@ func (d *Decoder) availZ(xC, yC, xN, yN int) bool {
 }
 
 func (d *Decoder) initContexts() {
+	d.initPalPred()
 	sh := d.sh
 	initType := 0
 	switch sh.sliceType {
@@ -136,6 +137,7 @@ func (d *Decoder) decodeSliceData(sh *sliceHeader, data []byte) error {
 			if d.availZ(x0, y0, x0+sp.ctbSize, y0-sp.ctbSize) {
 				d.cab.st = d.wppCtx
 				d.statCoeff = d.wppStat
+				d.palPred = d.wppPal
 			} else {
 				d.initContexts()
 			}
@@ -143,6 +145,7 @@ func (d *Decoder) decodeSliceData(sh *sliceHeader, data []byte) error {
 			if sh.dependent {
 				d.cab.st = d.dsCtx
 				d.statCoeff = d.dsStat
+				d.palPred = d.dsPal
 			} else {
 				d.initContexts()
 			}
@@ -161,6 +164,7 @@ func (d *Decoder) decodeSliceData(sh *sliceHeader, data []byte) error {
 		if pp.wpp && ctbX == colStart+1 {
 			d.wppCtx = d.cab.st
 			d.wppStat = d.statCoeff
+			d.wppPal = d.palPred
 		}
 		ctbAddrTs++
 		if end {
@@ -193,6 +197,7 @@ func (d *Decoder) decodeSliceData(sh *sliceHeader, data []byte) error {
 	if pp.dependentSlices {
 		d.dsCtx = d.cab.st
 		d.dsStat = d.statCoeff
+		d.dsPal = d.palPred
 	}
 	return nil
 }
@@ -467,51 +472,63 @@ func (d *Decoder) codingUnit(x0, y0, log2Cb, depth int) error {
 		}
 		info.qp = int8(d.qpY)
 		d.fillCU(x0, y0, log2Cb, info)
-		if !intra || log2Cb == s.log2MinCb {
-			cu.partMode = d.parsePartMode(intra, log2Cb)
-		}
-		cu.intraSplit = intra && cu.partMode == partNxN
-		if intra {
-			if cu.partMode == part2Nx2N && s.pcm && log2Cb >= s.log2MinPcm && log2Cb <= s.log2MaxPcm {
-				c.term = termPCM
-				cu.pcm = c.terminate() != 0
-			}
-			if cu.pcm {
-				d.fillIPM(x0, y0, nCbS, 1)
-				d.decodePCM(x0, y0, log2Cb)
-				if s.pcmLoopFilterOff {
-					info.flags |= cuNoFilter
-				}
-				info.flags |= cuPcm
-				d.fillCU(x0, y0, log2Cb, info)
-			} else {
-				d.parseIntraModes(x0, y0, log2Cb)
-			}
-		} else {
+		palette := false
+		if s.paletteMode && intra && log2Cb <= s.log2MaxTb && c.bin(ctxPaletteMode) != 0 {
+			palette = true
+			info.flags |= cuPalette
+			d.fillCU(x0, y0, log2Cb, info)
 			d.fillIPM(x0, y0, nCbS, 1)
-			if err := d.interPUs(x0, y0, nCbS); err != nil {
+			if err := d.paletteCU(x0, y0, log2Cb); err != nil {
 				return err
 			}
 		}
-		if !cu.pcm {
-			rqt := true
-			if !intra {
-				if !(cu.partMode == part2Nx2N && d.lastMerge) {
-					rqt = c.bin(ctxNoResidual) != 0
+		if !palette && (!intra || log2Cb == s.log2MinCb) {
+			cu.partMode = d.parsePartMode(intra, log2Cb)
+		}
+		if !palette {
+			cu.intraSplit = intra && cu.partMode == partNxN
+			if intra {
+				if cu.partMode == part2Nx2N && s.pcm && log2Cb >= s.log2MinPcm && log2Cb <= s.log2MaxPcm {
+					c.term = termPCM
+					cu.pcm = c.terminate() != 0
+				}
+				if cu.pcm {
+					d.fillIPM(x0, y0, nCbS, 1)
+					d.decodePCM(x0, y0, log2Cb)
+					if s.pcmLoopFilterOff {
+						info.flags |= cuNoFilter
+					}
+					info.flags |= cuPcm
+					d.fillCU(x0, y0, log2Cb, info)
+				} else {
+					d.parseIntraModes(x0, y0, log2Cb)
+				}
+			} else {
+				d.fillIPM(x0, y0, nCbS, 1)
+				if err := d.interPUs(x0, y0, nCbS); err != nil {
+					return err
 				}
 			}
-			cu.rqtRoot = rqt
-			if rqt {
-				if intra {
-					cu.maxTrafoDepth = s.maxTHDepthIntra
-					if cu.intraSplit {
-						cu.maxTrafoDepth++
+			if !cu.pcm {
+				rqt := true
+				if !intra {
+					if !(cu.partMode == part2Nx2N && d.lastMerge) {
+						rqt = c.bin(ctxNoResidual) != 0
 					}
-				} else {
-					cu.maxTrafoDepth = s.maxTHDepthInter
 				}
-				if err := d.transformTree(x0, y0, x0, y0, log2Cb, 0, 0, [2]bool{}, [2]bool{}); err != nil {
-					return err
+				cu.rqtRoot = rqt
+				if rqt {
+					if intra {
+						cu.maxTrafoDepth = s.maxTHDepthIntra
+						if cu.intraSplit {
+							cu.maxTrafoDepth++
+						}
+					} else {
+						cu.maxTrafoDepth = s.maxTHDepthInter
+					}
+					if err := d.transformTree(x0, y0, x0, y0, log2Cb, 0, 0, [2]bool{}, [2]bool{}); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -808,55 +825,18 @@ func (d *Decoder) transformUnit(x0, y0, xBase, yBase, log2, depth, blkIdx int, c
 		}
 	}
 	cbfChroma := cat != 0 && (cb[0] || cb[1] || cr[0] || cr[1])
+	d.tuAct = false
+	if p.act && (cbfL || cbfChroma) && d.actAssociated() {
+		d.tuAct = c.bin(ctxActFlag) != 0
+	}
 	if cbfL || cbfChroma {
 		if p.cuQpDelta && !d.isCuQpDeltaCoded {
-			// cu_qp_delta_abs
-			v := 0
-			if c.bin(ctxCuQpDelta) != 0 {
-				v = 1
-				for v < 5 && c.bin(ctxCuQpDelta+1) != 0 {
-					v++
-				}
-				if v == 5 {
-					// EG0 suffix
-					k := 0
-					for c.bypass() != 0 {
-						v += 1 << uint(k)
-						k++
-						if k > 30 {
-							return errBitstream
-						}
-					}
-					if k > 0 {
-						v += c.bypassBits(k)
-					}
-				}
+			if err := d.parseCuQpDelta(); err != nil {
+				return err
 			}
-			if v != 0 && c.bypass() != 0 {
-				v = -v
-			}
-			if v < -(26+s.qpBdOffY/2) || v > 25+s.qpBdOffY/2 {
-				return errBitstream
-			}
-			d.isCuQpDeltaCoded = true
-			d.cuQpDeltaVal = v
-			d.setQp()
 		}
 		if sh.cuChromaQpOffsetEnabled && cbfChroma && !cu.bypass && !d.isCuChromaQpOffsetCoded {
-			f := c.bin(ctxCuChromaQpFlag) != 0
-			if f {
-				idx := 0
-				if p.chromaQpOffsetListLen > 1 {
-					for idx < p.chromaQpOffsetListLen-1 && c.bin(ctxCuChromaQpIdx) != 0 {
-						idx++
-					}
-				}
-				d.cuQpOffsetCb = p.cbQpOffsetList[idx]
-				d.cuQpOffsetCr = p.crQpOffsetList[idx]
-			} else {
-				d.cuQpOffsetCb, d.cuQpOffsetCr = 0, 0
-			}
-			d.isCuChromaQpOffsetCoded = true
+			d.parseCuChromaQpOffset()
 		}
 	}
 	if dbgTU != nil {
@@ -879,10 +859,17 @@ func (d *Decoder) transformUnit(x0, y0, xBase, yBase, log2, depth, blkIdx int, c
 		lumaMode = int(d.ipm[(y0>>2)*s.wTb4+x0>>2])
 		d.intraPredict(0, x0, y0, log2, lumaMode)
 	}
+	var outs [3][]int32
+	if d.tuAct {
+		for i := range outs {
+			outs[i] = d.scratch.act[i][:size*size]
+			clear(outs[i])
+		}
+	}
 	haveResY := false
 	if cbfL {
 		ti := d.residualCoding(log2, 0, cu.intra, lumaMode)
-		d.reconTB(0, x0, y0, log2, &ti, cu.intra, lumaMode, 0)
+		d.reconTB(0, x0, y0, log2, &ti, cu.intra, lumaMode, 0, outs[0])
 		haveResY = true
 	}
 	if cat == 0 {
@@ -934,15 +921,39 @@ func (d *Decoder) transformUnit(x0, y0, xBase, yBase, log2, depth, blkIdx int, c
 			}
 			if cbf[t] {
 				ti := d.residualCoding(log2c, ci, cu.intra, chromaMode)
-				d.reconTB(ci, xC, yC, log2c, &ti, cu.intra, chromaMode, resScale)
+				d.reconTB(ci, xC, yC, log2c, &ti, cu.intra, chromaMode, resScale, outs[ci])
 			} else if resScale != 0 {
 				var ti tbInfo
 				ti.zero = true
-				d.reconTB(ci, xC, yC, log2c, &ti, cu.intra, chromaMode, resScale)
+				d.reconTB(ci, xC, yC, log2c, &ti, cu.intra, chromaMode, resScale, outs[ci])
 			}
 		}
 	}
+	if d.tuAct {
+		d.actInverse(outs[0], outs[1], outs[2])
+		for ci := 0; ci < 3; ci++ {
+			d.addResidual(ci, x0, y0, size, outs[ci])
+		}
+	}
 	return nil
+}
+
+// actAssociated reports whether the current CU carries tu_residual_act_flag
+// (inter CUs, and intra CUs whose chroma mode is always derived from luma).
+func (d *Decoder) actAssociated() bool {
+	cu := &d.cu
+	if !cu.intra {
+		return true
+	}
+	if cu.partMode == part2Nx2N {
+		return cu.chromaModeSyn[0] == 4
+	}
+	for i := 0; i < 4; i++ {
+		if cu.chromaModeSyn[i] != 4 {
+			return false
+		}
+	}
+	return true
 }
 
 var dbgTU func(d *Decoder, x0, y0, log2, blkIdx int, cbfL bool, cb, cr [2]bool)
@@ -952,4 +963,58 @@ func boolInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// parseCuQpDelta parses cu_qp_delta_abs and cu_qp_delta_sign_flag.
+func (d *Decoder) parseCuQpDelta() error {
+	s, c := d.sp, &d.cab
+	v := 0
+	if c.bin(ctxCuQpDelta) != 0 {
+		v = 1
+		for v < 5 && c.bin(ctxCuQpDelta+1) != 0 {
+			v++
+		}
+		if v == 5 {
+			// EG0 suffix
+			k := 0
+			for c.bypass() != 0 {
+				v += 1 << uint(k)
+				k++
+				if k > 30 {
+					return errBitstream
+				}
+			}
+			if k > 0 {
+				v += c.bypassBits(k)
+			}
+		}
+	}
+	if v != 0 && c.bypass() != 0 {
+		v = -v
+	}
+	if v < -(26+s.qpBdOffY/2) || v > 25+s.qpBdOffY/2 {
+		return errBitstream
+	}
+	d.isCuQpDeltaCoded = true
+	d.cuQpDeltaVal = v
+	d.setQp()
+	return nil
+}
+
+// parseCuChromaQpOffset parses cu_chroma_qp_offset_flag and _idx.
+func (d *Decoder) parseCuChromaQpOffset() {
+	p, c := d.pp, &d.cab
+	if c.bin(ctxCuChromaQpFlag) != 0 {
+		idx := 0
+		if p.chromaQpOffsetListLen > 1 {
+			for idx < p.chromaQpOffsetListLen-1 && c.bin(ctxCuChromaQpIdx) != 0 {
+				idx++
+			}
+		}
+		d.cuQpOffsetCb = p.cbQpOffsetList[idx]
+		d.cuQpOffsetCr = p.crQpOffsetList[idx]
+	} else {
+		d.cuQpOffsetCb, d.cuQpOffsetCr = 0, 0
+	}
+	d.isCuChromaQpOffsetCoded = true
 }

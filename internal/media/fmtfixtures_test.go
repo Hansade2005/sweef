@@ -68,8 +68,9 @@ func TestCanPlayNativeVideoProfiles(t *testing.T) {
 		`video/webm; codecs="vp09.03.10.12"`:   "probably",
 		`video/mp4; codecs="hvc1.1.6.L93.B0"`:  "probably",
 		`video/mp4; codecs="hvc1.2.4.L93.B0"`:  "probably", // Main 10
-		`video/mp4; codecs="hev1.4.10.L93.B0"`: "maybe",    // Range Extensions
-		`video/mp4; codecs="hvc1.9.20.L93.B0"`: "",         // Screen content
+		`video/mp4; codecs="hev1.4.10.L93.B0"`: "probably", // Range Extensions
+		`video/mp4; codecs="hvc1.9.20.L93.B0"`: "probably", // Screen content
+		`video/mp4; codecs="hvc1.6.1.L93.B0"`:  "maybe",    // Multiview Main (base view only)
 	} {
 		if got := CanPlayType(mime); got != want {
 			t.Errorf("CanPlayType(%s) = %q, want %q", mime, got, want)

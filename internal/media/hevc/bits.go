@@ -1,7 +1,14 @@
 // Package hevc is a pure-Go HEVC / H.265 video decoder (ITU-T H.265):
-// Main, Main 10, Main Still Picture and the range extensions (4:0:0, 4:2:2,
-// 4:4:4, up to 16 bit samples) without extended precision processing, SCC or
-// multilayer tools.
+// Main, Main 10, Main Still Picture, the range extensions (4:0:0 to 4:4:4,
+// 8 to 16 bit samples, extended precision processing, CABAC bypass
+// alignment), the screen content coding extensions (palette mode, current
+// picture referencing, adaptive colour transform, adaptive motion vector
+// resolution) and multilayer streams with inter-layer prediction (MV-HEVC:
+// any layer can be selected with SetOutputLayer, the base layer by default).
+//
+// Not covered: 3D-HEVC tools, spatial and quality scalability (inter-layer
+// resampling), separate colour planes and streams whose luma and chroma bit
+// depths differ.
 package hevc
 
 import "errors"

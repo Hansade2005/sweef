@@ -393,6 +393,10 @@ func (d *Decoder) addChromaResidual(dpcm int) {
 
 // addInterResidual adds the residual of an inter macroblock.
 func (d *Decoder) addInterResidual(cbp int, t8 bool) {
+	if d.spMB {
+		d.spInter()
+		return
+	}
 	if cbp&15 != 0 {
 		d.addPlaneResidual(0, t8)
 		if d.f.cat == 3 {
@@ -409,7 +413,8 @@ func (d *Decoder) intraAvail(t uint32) bool {
 	if t == 0 {
 		return false
 	}
-	if d.hdr.pps.ConstrainedIntra && !isIntraT(t) {
+	if d.hdr.pps.ConstrainedIntra && (!isIntraT(t) || t&mbSI != 0 && !d.curSI) {
+		// inter neighbours and, for non-SI macroblocks, SI neighbours (8.3.1.2)
 		return false
 	}
 	return true
@@ -547,7 +552,9 @@ func (d *Decoder) reconIntra(mbt uint32, i16Mode, chromaMode, cbp int, t8 bool) 
 					off := d.blockOff(p, bx, by)
 					mode := int(d.ipm[idx*16+by*4+bx])
 					pred4x4(pl, off, stride, mode, left, top, tl, tr, bd)
-					if d.bypassMB {
+					if d.curSI {
+						d.spLumaBlock(pl, stride, blk, d.qp, d.hdr.qs, true)
+					} else if d.bypassMB {
 						bypassAdd(pl[off:], stride, d.coef[base+blk*16:base+blk*16+16], 4, 4, 4, maxv, mode == imH, mode == imV)
 					} else if d.blkNZ[p*16+blk] {
 						idct4Add(pl[off:], stride, d.coef[base+blk*16:base+blk*16+16], maxv)
@@ -564,6 +571,10 @@ func (d *Decoder) reconIntra(mbt uint32, i16Mode, chromaMode, cbp int, t8 bool) 
 		for c := 1; c <= 2; c++ {
 			pl, _ := d.planeOf(c)
 			predChroma(pl, d.blockOff(c, 0, 0), d.mbStr[c], chromaMode, cLeft, aB, d.f.bdC, 8, d.f.mbHC)
+		}
+		if d.curSI {
+			d.spChroma(true)
+			return
 		}
 		dpcm := 0
 		if chromaMode == 1 {

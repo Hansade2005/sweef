@@ -2,8 +2,8 @@
 // video: Baseline, Main and High profiles with CAVLC or CABAC, I/P/B slices,
 // multiple reference frames, weighted prediction, 8x8 transform and the
 // in-loop deblocking filter. Interlaced coding (field pictures, MBAFF),
-// slice groups (FMO) and extended-profile data partitioning are supported;
-// SP/SI slices report ErrUnsupported.
+// slice groups (FMO) and the Extended profile tools (data partitioning and
+// SP/SI slices, clause 8.6) are supported.
 package h264
 
 import (

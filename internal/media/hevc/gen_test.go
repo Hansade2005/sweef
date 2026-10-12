@@ -1052,7 +1052,7 @@ func genStream(t testing.TB, c gcfg, seed int64) ([]byte, map[string]int) {
 			d.cab.gen = g
 			rbsp := append(append([]byte(nil), hdr...), make([]byte, 16)...)
 			r := &bitReader{b: rbsp}
-			sh, err := d.parseSliceHeader(r, ps.nalType, 0, d.lastIndep)
+			sh, err := d.parseSliceHeader(r, ps.nalType, 0, d.lastIndep, 0)
 			if err != nil {
 				genFatal("pic %d seg %d: slice header: %v", pi, si, err)
 			}

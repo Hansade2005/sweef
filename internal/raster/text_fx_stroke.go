@@ -242,13 +242,10 @@ func (k *fxStroker) joiner(outer, inner *spath, beforeUnit, pivot, afterUnit Pt,
 }
 
 func (k *fxStroker) bevelJoin(outer, inner *spath, beforeUnit, pivot, afterUnit Pt) {
+	// Skia's BluntJoiner has no early-out for nearly straight joins: it
+	// always adds the outer point and goes through the pivot on the inside.
 	before, after := beforeUnit, afterUnit
 	r := k.radius
-	dot := vdot(before, after)
-	switch fxDot2Angle(dot) {
-	case fxNearlyLine:
-		return
-	}
 	if !fxIsClockwise(before, after) {
 		outer, inner = inner, outer
 		before = Pt{-before.X, -before.Y}
@@ -851,12 +848,15 @@ func cubicDeriv(a, b, c, d Pt, t float64) Pt {
 // only approximates by quadratics (Skia's cubic stroker is not ported).
 var fxStrokeCubics = false
 
+// skStrokeNew routes StrokeMaskFx through the single-precision stroker.
+var skStrokeNew = true
+
 // StrokeMaskFx strokes p (user space) with Skia's stroker and fills the
 // outline, transformed by m, with its analytic anti-aliasing. ok is false for
 // styles it does not cover (dashes, hairlines thinner than a device pixel),
 // where StrokeMask should be used instead.
 func StrokeMaskFx(p *Path, m Matrix, st StrokeStyle, clip IRect) (mask *Mask, ok bool) {
-	if st.Width <= 0 || math.IsNaN(st.Width) || validDash(st.Dash) != nil {
+	if st.Width <= 0 || math.IsNaN(st.Width) || (validDash(st.Dash) != nil && !skStrokeNew) {
 		return nil, false
 	}
 	sc := m.MaxScale()
@@ -871,7 +871,7 @@ func StrokeMaskFx(p *Path, m Matrix, st StrokeStyle, clip IRect) (mask *Mask, ok
 			return nil, false
 		}
 	}
-	if !fxStrokeCubics {
+	if !fxStrokeCubics && !skStrokeNew {
 		for _, c := range p.Cmds {
 			if c == 'C' {
 				return nil, false
@@ -881,6 +881,29 @@ func StrokeMaskFx(p *Path, m Matrix, st StrokeStyle, clip IRect) (mask *Mask, ok
 	ml := st.MiterLimit
 	if ml <= 0 {
 		ml = 10
+	}
+	if skStrokeNew {
+		// SkDraw::drawPath: stroke in local space with the matrix's resolution
+		// scale (the larger column length), then map to the device
+		rs := float32(1)
+		if s := math.Max(math.Hypot(m[0], m[1]), math.Hypot(m[2], m[3])); s > 0 && !math.IsInf(s, 0) {
+			rs = float32(s)
+		}
+		local := p
+		if d := validDash(st.Dash); d != nil {
+			dp, ok := NewDashParams(dashF32(d), float32(st.DashOffset))
+			if !ok {
+				return nil, false
+			}
+			if dashed, stroked, ok := dp.DashPath(p, float32(st.Width), st.Cap, rs); ok {
+				local = dashed
+				if stroked {
+					return fxFillPath(local.Transform(m), clip), true
+				}
+			}
+		}
+		sp := skStrokePath(local, float32(st.Width), st.Join, st.Cap, float32(ml), rs)
+		return fxFillPath(sp.toDeviceT([4]float32{float32(m[0]), float32(m[2]), float32(m[1]), float32(m[3])}, float32(m[4]), float32(m[5])), clip), true
 	}
 	sp := fxStrokePath(p, st.Width, st.Join, st.Cap, ml, sc)
 	if !m.IsIdentity() {

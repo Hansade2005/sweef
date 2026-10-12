@@ -36,7 +36,14 @@ const (
 	ctxResScaleSign   = 175 // 2
 	ctxCuChromaQpFlag = 177
 	ctxCuChromaQpIdx  = 178
-	numCtx            = 179
+	ctxActFlag        = 179 // tu_residual_act_flag
+	ctxPaletteMode    = 180
+	ctxCopyAbove      = 181 // copy_above_palette_indices_flag
+	ctxPalTopRun      = 182 // 3, run of copy-above runs
+	ctxPalLeftRun     = 185 // 5, run of index runs
+	ctxPalTranspose   = 190
+	numCtxBase        = 179 // contexts of the version 1 and range extension syntax
+	numCtx            = 191
 )
 
 var transIdxLps = [64]uint8{
@@ -113,7 +120,10 @@ func (c *cabac) initContexts(initType, qp int) {
 		qp = 51
 	}
 	for i := 0; i < numCtx; i++ {
-		v := int(cabacInit[initType][i])
+		v := 154 // the screen content coding contexts all start at p = 0.5
+		if i < numCtxBase {
+			v = int(cabacInit[initType][i])
+		}
 		m := (v>>4)*5 - 45
 		n := (v&15)<<3 - 16
 		pre := ((m * qp) >> 4) + n
@@ -190,6 +200,15 @@ func (c *cabac) bypass() int {
 		return 1
 	}
 	return 0
+}
+
+// align implements the alignment before bypass decoding of
+// cabac_bypass_alignment_enabled_flag (9.3.4.3.6): the range becomes 256.
+func (c *cabac) align() {
+	if c.gen != nil {
+		return
+	}
+	c.rng = 256
 }
 
 func (c *cabac) bypassBits(n int) int {

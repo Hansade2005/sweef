@@ -123,7 +123,7 @@ func (d *Decoder) residualLuma(p int, intra, i16 bool, cbp int, t8 bool) error {
 	}
 	ls := &pps.ls4[list4][qp%6]
 	base := p * 256
-	bypass := d.bypassMB
+	bypass := d.bypassMB || d.spMB
 	scan := d.scan4
 	nz := &d.nzCache[p]
 	// Intra16x16 DC
@@ -262,7 +262,7 @@ func (d *Decoder) residualChroma(intra bool, cbp int) error {
 		base := (c + 1) * 256
 		if dcC[c] != [8]int32{} {
 			switch {
-			case d.bypassMB:
+			case d.bypassMB || d.spMB:
 			case cat == 1:
 				chromaDCTransform(&dcC[c], ls[0], qpc)
 			default:
@@ -293,7 +293,7 @@ func (d *Decoder) residualChroma(intra bool, cbp int) error {
 			for s := 0; s < 15; s++ {
 				if v := d.lv[s]; v != 0 {
 					r := d.scan4[s+1]
-					if d.bypassMB {
+					if d.bypassMB || d.spMB {
 						cc[r] = v
 					} else {
 						cc[r] = dequant4(v, ls[r], qpc)

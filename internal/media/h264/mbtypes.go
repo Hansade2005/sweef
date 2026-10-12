@@ -12,7 +12,8 @@ const (
 	mb8x8        = 1 << 6
 	mbInterlaced = 1 << 7
 	mbDirect2    = 1 << 8
-	mbRef0       = 1 << 9 // P_8x8ref0
+	mbRef0       = 1 << 9  // P_8x8ref0
+	mbSPS        = 1 << 10 // macroblock of an SP or SI slice (deblocking treats it like intra)
 	mbSkip       = 1 << 11
 	mbP0L0       = 1 << 12
 	mbP1L0       = 1 << 13
@@ -21,13 +22,19 @@ const (
 	mbL0         = mbP0L0 | mbP1L0
 	mbL1         = mbP0L1 | mbP1L1
 	mbL0L1       = mbL0 | mbL1
+	mbSI         = 1 << 16 // SI macroblock (Intra_4x4 prediction, 8.6.2 reconstruction)
 	mb8x8DCT     = 0x01000000
 
 	mbInter = mb16x16 | mb16x8 | mb8x16 | mb8x8
 )
 
 func isIntraT(t uint32) bool { return t&7 != 0 }
-func isInterT(t uint32) bool { return t&mbInter != 0 }
+
+// isIntraDB is isIntraT for the boundary strength derivation of the
+// deblocking filter (8.7.2.1), where a macroblock of an SP or SI slice counts
+// as intra coded.
+func isIntraDB(t uint32) bool { return t&(7|mbSPS) != 0 }
+func isInterT(t uint32) bool  { return t&mbInter != 0 }
 func isDir(t uint32, part, list int) bool {
 	return t&(mbP0L0<<uint(part+2*list)) != 0
 }

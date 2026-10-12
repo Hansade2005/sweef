@@ -35,22 +35,21 @@ func refBlock(plane []uint16, stride, pw, ph, x0, y0, w, h, before, after int, b
 }
 
 // mcLuma writes the 14-bit intermediate prediction (stride w) of a luma block.
-func (d *Decoder) mcLuma(dst []int16, ref *Picture, x0, y0, fx, fy, w, h, bd int) {
-	sc := &d.scratch
+func mcLuma[T int16 | int32](sc *scratch, mcTmp []T, dst []T, ref *Picture, x0, y0, fx, fy, w, h, bd int) {
 	src, ss := refBlock(ref.planes[0], ref.stride[0], ref.w, ref.h, x0, y0, w, h, 3, 4, sc.edgeBf[:])
 	// src points at (x0-3, y0-3)
 	shift1 := uint(bd - 8)
 	if shift1 > 4 {
 		shift1 = 4
 	}
-	shift3 := uint(14 - bd)
+	shift3 := uint(max(2, 14-bd))
 	switch {
 	case fx == 0 && fy == 0:
 		for y := 0; y < h; y++ {
 			r := src[(y+3)*ss+3:]
 			o := dst[y*w : y*w+w]
 			for x := range o {
-				o[x] = int16(r[x]) << shift3
+				o[x] = T(r[x]) << shift3
 			}
 		}
 	case fy == 0:
@@ -61,7 +60,7 @@ func (d *Decoder) mcLuma(dst []int16, ref *Picture, x0, y0, fx, fy, w, h, bd int
 			for x := range o {
 				v := c[0]*int32(r[x]) + c[1]*int32(r[x+1]) + c[2]*int32(r[x+2]) + c[3]*int32(r[x+3]) +
 					c[4]*int32(r[x+4]) + c[5]*int32(r[x+5]) + c[6]*int32(r[x+6]) + c[7]*int32(r[x+7])
-				o[x] = int16(v >> shift1)
+				o[x] = T(v >> shift1)
 			}
 		}
 	case fx == 0:
@@ -72,20 +71,20 @@ func (d *Decoder) mcLuma(dst []int16, ref *Picture, x0, y0, fx, fy, w, h, bd int
 				p := src[y*ss+x+3:]
 				v := c[0]*int32(p[0]) + c[1]*int32(p[ss]) + c[2]*int32(p[2*ss]) + c[3]*int32(p[3*ss]) +
 					c[4]*int32(p[4*ss]) + c[5]*int32(p[5*ss]) + c[6]*int32(p[6*ss]) + c[7]*int32(p[7*ss])
-				o[x] = int16(v >> shift1)
+				o[x] = T(v >> shift1)
 			}
 		}
 	default:
 		ch := &lumaFilter[fx]
 		cv := &lumaFilter[fy]
-		tmp := sc.mcTmp[:(h+7)*w]
+		tmp := mcTmp[:(h+7)*w]
 		for y := 0; y < h+7; y++ {
 			r := src[y*ss:]
 			o := tmp[y*w : y*w+w]
 			for x := range o {
 				v := ch[0]*int32(r[x]) + ch[1]*int32(r[x+1]) + ch[2]*int32(r[x+2]) + ch[3]*int32(r[x+3]) +
 					ch[4]*int32(r[x+4]) + ch[5]*int32(r[x+5]) + ch[6]*int32(r[x+6]) + ch[7]*int32(r[x+7])
-				o[x] = int16(v >> shift1)
+				o[x] = T(v >> shift1)
 			}
 		}
 		for y := 0; y < h; y++ {
@@ -94,7 +93,7 @@ func (d *Decoder) mcLuma(dst []int16, ref *Picture, x0, y0, fx, fy, w, h, bd int
 				p := tmp[y*w+x:]
 				v := cv[0]*int32(p[0]) + cv[1]*int32(p[w]) + cv[2]*int32(p[2*w]) + cv[3]*int32(p[3*w]) +
 					cv[4]*int32(p[4*w]) + cv[5]*int32(p[5*w]) + cv[6]*int32(p[6*w]) + cv[7]*int32(p[7*w])
-				o[x] = int16(v >> 6)
+				o[x] = T(v >> 6)
 			}
 		}
 	}
@@ -102,21 +101,20 @@ func (d *Decoder) mcLuma(dst []int16, ref *Picture, x0, y0, fx, fy, w, h, bd int
 
 // mcChroma writes the intermediate prediction of a chroma block; fx, fy are
 // in 1/8 sample units.
-func (d *Decoder) mcChroma(dst []int16, ref *Picture, ci, x0, y0, fx, fy, w, h, bd int) {
-	sc := &d.scratch
+func mcChroma[T int16 | int32](sc *scratch, mcTmp []T, dst []T, ref *Picture, ci, x0, y0, fx, fy, w, h, bd int) {
 	src, ss := refBlock(ref.planes[ci], ref.stride[ci], ref.cw, ref.ch, x0, y0, w, h, 1, 2, sc.edgeBf[:])
 	shift1 := uint(bd - 8)
 	if shift1 > 4 {
 		shift1 = 4
 	}
-	shift3 := uint(14 - bd)
+	shift3 := uint(max(2, 14-bd))
 	switch {
 	case fx == 0 && fy == 0:
 		for y := 0; y < h; y++ {
 			r := src[(y+1)*ss+1:]
 			o := dst[y*w : y*w+w]
 			for x := range o {
-				o[x] = int16(r[x]) << shift3
+				o[x] = T(r[x]) << shift3
 			}
 		}
 	case fy == 0:
@@ -126,7 +124,7 @@ func (d *Decoder) mcChroma(dst []int16, ref *Picture, ci, x0, y0, fx, fy, w, h, 
 			o := dst[y*w : y*w+w]
 			for x := range o {
 				v := c[0]*int32(r[x]) + c[1]*int32(r[x+1]) + c[2]*int32(r[x+2]) + c[3]*int32(r[x+3])
-				o[x] = int16(v >> shift1)
+				o[x] = T(v >> shift1)
 			}
 		}
 	case fx == 0:
@@ -136,19 +134,19 @@ func (d *Decoder) mcChroma(dst []int16, ref *Picture, ci, x0, y0, fx, fy, w, h, 
 			for x := range o {
 				p := src[y*ss+x+1:]
 				v := c[0]*int32(p[0]) + c[1]*int32(p[ss]) + c[2]*int32(p[2*ss]) + c[3]*int32(p[3*ss])
-				o[x] = int16(v >> shift1)
+				o[x] = T(v >> shift1)
 			}
 		}
 	default:
 		ch := &chromaFilter[fx]
 		cv := &chromaFilter[fy]
-		tmp := sc.mcTmp[:(h+3)*w]
+		tmp := mcTmp[:(h+3)*w]
 		for y := 0; y < h+3; y++ {
 			r := src[y*ss:]
 			o := tmp[y*w : y*w+w]
 			for x := range o {
 				v := ch[0]*int32(r[x]) + ch[1]*int32(r[x+1]) + ch[2]*int32(r[x+2]) + ch[3]*int32(r[x+3])
-				o[x] = int16(v >> shift1)
+				o[x] = T(v >> shift1)
 			}
 		}
 		for y := 0; y < h; y++ {
@@ -156,7 +154,7 @@ func (d *Decoder) mcChroma(dst []int16, ref *Picture, ci, x0, y0, fx, fy, w, h, 
 			for x := range o {
 				p := tmp[y*w+x:]
 				v := cv[0]*int32(p[0]) + cv[1]*int32(p[w]) + cv[2]*int32(p[2*w]) + cv[3]*int32(p[3*w])
-				o[x] = int16(v >> 6)
+				o[x] = T(v >> 6)
 			}
 		}
 	}
@@ -165,6 +163,16 @@ func (d *Decoder) mcChroma(dst []int16, ref *Picture, ci, x0, y0, fx, fy, w, h, 
 // predictInter builds the inter prediction of one prediction block into the
 // current picture.
 func (d *Decoder) predictInter(xPb, yPb, nPbW, nPbH int, mf *mvField) {
+	if s := d.sp; s.bitDepthY > 12 || s.bitDepthC > 12 {
+		// the 14 bit intermediate samples of the interpolation no longer fit
+		// 16 bits
+		predictInterT(d, &d.scratch.predHi, &d.scratch.mcTmpHi, xPb, yPb, nPbW, nPbH, mf)
+		return
+	}
+	predictInterT(d, &d.scratch.pred, &d.scratch.mcTmp, xPb, yPb, nPbW, nPbH, mf)
+}
+
+func predictInterT[T int16 | int32](d *Decoder, pred *[2][64 * 64]T, tmp *[(64 + 7) * 64]T, xPb, yPb, nPbW, nPbH int, mf *mvField) {
 	s, sh, p := d.sp, d.sh, d.pp
 	sc := &d.scratch
 	pic := d.cur
@@ -191,22 +199,22 @@ func (d *Decoder) predictInter(xPb, yPb, nPbW, nPbH int, mf *mvField) {
 			ref := sh.refPic[l][mf.ref[l]]
 			mvx, mvy := int(mf.mv[l][0]), int(mf.mv[l][1])
 			if ci == 0 {
-				d.mcLuma(sc.pred[l][:w*h], ref, x0+(mvx>>2), y0+(mvy>>2), mvx&3, mvy&3, w, h, bd)
+				mcLuma(sc, tmp[:], pred[l][:w*h], ref, x0+(mvx>>2), y0+(mvy>>2), mvx&3, mvy&3, w, h, bd)
 			} else {
 				fx := (mvx & ((4 << sx) - 1)) << (1 - sx)
 				fy := (mvy & ((4 << sy) - 1)) << (1 - sy)
-				d.mcChroma(sc.pred[l][:w*h], ref, ci, x0+(mvx>>(2+sx)), y0+(mvy>>(2+sy)), fx, fy, w, h, bd)
+				mcChroma(sc, tmp[:], pred[l][:w*h], ref, ci, x0+(mvx>>(2+sx)), y0+(mvy>>(2+sy)), fx, fy, w, h, bd)
 			}
 		}
 		stride := pic.stride[ci]
 		dst := pic.planes[ci][y0*stride+x0:]
 		maxV := int32(1)<<uint(bd) - 1
-		shift1 := uint(14 - bd)
+		shift1 := uint(max(2, 14-bd))
 		if !weighted {
 			if mf.pf == 3 {
 				shift := shift1 + 1
 				off := int32(1) << (shift - 1)
-				p0, p1 := sc.pred[0][:w*h], sc.pred[1][:w*h]
+				p0, p1 := pred[0][:w*h], pred[1][:w*h]
 				for y := 0; y < h; y++ {
 					row := dst[y*stride : y*stride+w]
 					a, b := p0[y*w:y*w+w], p1[y*w:y*w+w]
@@ -229,7 +237,7 @@ func (d *Decoder) predictInter(xPb, yPb, nPbW, nPbH int, mf *mvField) {
 				if shift1 > 0 {
 					off = 1 << (shift1 - 1)
 				}
-				pr := sc.pred[l][:w*h]
+				pr := pred[l][:w*h]
 				for y := 0; y < h; y++ {
 					row := dst[y*stride : y*stride+w]
 					a := pr[y*w : y*w+w]
@@ -273,7 +281,7 @@ func (d *Decoder) predictInter(xPb, yPb, nPbW, nPbH int, mf *mvField) {
 			log2WD = uint(pw.chromaLog2Denom) + shift1
 		}
 		if mf.pf == 3 {
-			p0, p1 := sc.pred[0][:w*h], sc.pred[1][:w*h]
+			p0, p1 := pred[0][:w*h], pred[1][:w*h]
 			o := (of[0] + of[1] + 1) << log2WD
 			for y := 0; y < h; y++ {
 				row := dst[y*stride : y*stride+w]
@@ -293,7 +301,7 @@ func (d *Decoder) predictInter(xPb, yPb, nPbW, nPbH int, mf *mvField) {
 			if mf.pf == 2 {
 				l = 1
 			}
-			pr := sc.pred[l][:w*h]
+			pr := pred[l][:w*h]
 			for y := 0; y < h; y++ {
 				row := dst[y*stride : y*stride+w]
 				a := pr[y*w : y*w+w]

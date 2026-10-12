@@ -183,7 +183,7 @@ func (d *Decoder) deblockMB(mbx, mby int) {
 		// the left macroblock pair has the other field/frame mode
 		firstVertDone = true
 		var bS [8]int
-		if isIntraT(typ) {
+		if isIntraDB(typ) {
 			for i := range bS {
 				bS[i] = 4
 			}
@@ -203,7 +203,7 @@ func (d *Decoder) deblockMB(mbx, mby int) {
 					j = i >> 2
 				}
 				mn := leftXY[j]
-				if isIntraT(leftType[j]) {
+				if isIntraDB(leftType[j]) {
 					bS[i] = 4
 					continue
 				}
@@ -273,7 +273,7 @@ func (d *Decoder) deblockMB(mbx, mby int) {
 				for j := 0; j < 2; j++ {
 					mn := idx - 2*stride + j*stride
 					var bS [4]int
-					if isIntraT(typ | pic.mbType[mn]) {
+					if isIntraDB(typ | pic.mbType[mn]) {
 						bS = [4]int{3, 3, 3, 3}
 					} else {
 						for i := 0; i < 4; i++ {
@@ -293,7 +293,7 @@ func (d *Decoder) deblockMB(mbx, mby int) {
 				}
 			} else {
 				var bS [4]int
-				if isIntraT(typ | mbmType) {
+				if isIntraDB(typ | mbmType) {
 					v := 3
 					if (typ|mbmType)&mbInterlaced == 0 || ((mbaff || d.fieldPic) && dir == 0) {
 						v = 4
@@ -337,7 +337,7 @@ func (d *Decoder) deblockMB(mbx, mby int) {
 				continue
 			}
 			var bS [4]int
-			if isIntraT(typ) {
+			if isIntraDB(typ) {
 				bS = [4]int{3, 3, 3, 3}
 			} else {
 				any := false

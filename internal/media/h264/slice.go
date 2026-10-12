@@ -56,7 +56,9 @@ type sliceHeader struct {
 	adaptiveMarking    bool
 	mmcos              []mmco
 	cabacInitIdc       int
-	qp                 int // SliceQPY
+	qp                 int  // SliceQPY
+	qs                 int  // QSY (SP and SI slices)
+	spSwitch           bool // sp_for_switch_flag
 	disableDeblock     int
 	alphaOff, betaOff  int
 }
@@ -234,7 +236,18 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, nalRefIdc int) (*slice
 	}
 	h.qp = h.pps.InitQP + int(r.se())
 	if h.sliceType == sliceSP || h.sliceType == sliceSI {
-		return nil, ErrUnsupported
+		// SP and SI slices exist in the Extended profile only: 8 bit 4:2:0
+		// (and CAVLC only: Extended profile forbids CABAC, 7.4.2.2 / A.2.3)
+		if sps.ChromaFormat != 1 || sps.BitDepthLuma != 8 || sps.BitDepthChroma != 8 || sps.SeparatePlanes || h.pps.CABAC {
+			return nil, ErrUnsupported
+		}
+		if h.sliceType == sliceSP {
+			h.spSwitch = r.flag()
+		}
+		h.qs = h.pps.InitQS + int(r.se())
+		if h.qs < 0 || h.qs > 51 {
+			return nil, errBitstream
+		}
 	}
 	if h.qp < -6*(sps.BitDepthLuma-8) || h.qp > 51 {
 		return nil, errBitstream

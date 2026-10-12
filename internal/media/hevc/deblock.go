@@ -20,8 +20,10 @@ func mvDiff(a, b [2]int16) bool {
 
 // motionBS compares the motion of two inter blocks (boundary strength 0 or 1).
 func motionBS(a, b *mvField) uint8 {
+	// a reference picture is identified by its POC and layer
+	key := func(m *mvField, l int) int64 { return int64(m.poc[l])<<8 | int64(m.lay[l]) }
 	if a.pf == 3 && b.pf == 3 {
-		a0, a1, b0, b1 := a.poc[0], a.poc[1], b.poc[0], b.poc[1]
+		a0, a1, b0, b1 := key(a, 0), key(a, 1), key(b, 0), key(b, 1)
 		if !((a0 == b0 && a1 == b1) || (a0 == b1 && a1 == b0)) {
 			return 1
 		}
@@ -49,7 +51,7 @@ func motionBS(a, b *mvField) uint8 {
 		if b.pf == 2 {
 			lb = 1
 		}
-		if a.poc[la] != b.poc[lb] {
+		if key(a, la) != key(b, lb) {
 			return 1
 		}
 		if mvDiff(a.mv[la], b.mv[lb]) {
@@ -134,8 +136,8 @@ func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma bo
 		return 0
 	}
 	qpL := (int(cq.qp) + int(cp.qp) + 1) >> 1
-	noP := cp.flags&cuNoFilter != 0
-	noQ := cq.flags&cuNoFilter != 0
+	noP := cp.flags&(cuNoFilter|cuPalette) != 0
+	noQ := cq.flags&(cuNoFilter|cuPalette) != 0
 	if doLuma {
 		betaOff, tcOffL := sl.betaOffsetDiv2, sl.tcOffsetDiv2
 		if tcOv != noTcOv {

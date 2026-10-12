@@ -718,6 +718,34 @@ func (p *Painter) decoRect(x, y, w, h float64, cl Color) {
 		r.H = 1 / p.c.Transform()[3]
 	}
 	p.c.SetFill(Brush{Color: cl})
+	if m := p.c.Transform(); math.Abs(m[0]) < 1e-9 && math.Abs(m[3]) < 1e-9 && m[1] != 0 && m[2] != 0 && w > 0 && r.H > 0 {
+		// a quarter turn keeps the line axis aligned: exact coverage of the
+		// rect (whole-pixel thickness, the fragment's exact length)
+		x0, y0 := m.Apply(x, r.Y)
+		x1, y1 := m.Apply(x+w, r.Y+r.H)
+		if mk := rectCoverage(x0, y0, x1, y1, p.c.drawBounds()); mk != nil {
+			p.c.draw(mk, p.c.shaderFor(p.c.st.fill, p.c.st.alpha))
+		}
+		return
+	}
+	if m := p.c.Transform(); m[1] != 0 || m[2] != 0 {
+		// Chromium snaps a decoration to device pixels only when the
+		// transform keeps it axis aligned; under rotation or skew the line
+		// keeps the fragment's exact horizontal extent (its thickness and
+		// vertical position are whole pixels already)
+		w = math.Ceil(w*64) / 64 // the fragment width is a LayoutUnit (ceil to 1/64)
+		r.X, r.W = x, w
+	}
+	if m := p.c.Transform(); (m[1] != 0 || m[2] != 0) && r.W > 0 && r.H > 0 {
+		// a rotated or skewed rect is a path to Skia: its analytic scan
+		// converter, not exact area coverage
+		pa := NewPath()
+		pa.Rect(r.X, r.Y, r.W, r.H)
+		if mk := fxFillPath(transformF32(pa, m), p.c.drawBounds()); mk != nil {
+			p.c.draw(mk, p.c.shaderFor(p.c.st.fill, p.c.st.alpha))
+		}
+		return
+	}
 	p.c.FillRect(r.X, r.Y, r.W, r.H)
 }
 

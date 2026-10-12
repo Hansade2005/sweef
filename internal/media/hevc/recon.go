@@ -4,7 +4,7 @@ package hevc
 // adds it to the prediction already present in the picture.
 var dbgTB func(d *Decoder, cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMode int)
 
-func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMode int, resScale int) {
+func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMode int, resScale int, out []int32) {
 	s, p := d.sp, d.pp
 	cu := &d.cu
 	sc := &d.scratch
@@ -29,12 +29,13 @@ func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMo
 		for i := range res {
 			res[i] = 0
 		}
-	case cu.bypass:
+	case cu.bypass && d.compatFFmpeg:
 		copy(res, coef)
 		// ffmpeg's selection of the RDPCM direction for transquant bypass
 		// blocks: the intra mode is the one of the last intra block (1 for
-		// luma of inter CUs, the previous chroma mode for chroma) and the
-		// explicit direction is ignored when implicit RDPCM is enabled.
+		// luma of inter CUs, the previous chroma mode for chroma), the
+		// explicit direction is ignored when implicit RDPCM is enabled and
+		// rotation is not applied.
 		pm := predMode
 		if !intra {
 			pm = 1
@@ -49,22 +50,57 @@ func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMo
 			}
 			d.rdpcmDir(res, n, dir)
 		}
+	case cu.bypass:
+		if s.tsRotation && n == 4 && intra {
+			for i := 0; i < nn; i++ {
+				res[i] = coef[nn-1-i]
+			}
+		} else {
+			copy(res, coef)
+		}
+		dir := -1
+		if intra {
+			if s.implicitRdpcm && (predMode == 10 || predMode == 26) {
+				dir = boolInt(predMode == 26)
+			}
+		} else if ti.explicit {
+			dir = ti.dir
+		}
+		d.rdpcmDir(res, n, dir)
 	case ti.ts:
 		rot := s.tsRotation && n == 4 && intra
-		tsShift := uint(5 + log2)
-		bdShift := uint(20 - bd)
-		rnd := int32(1) << (bdShift - 1)
-		for i := 0; i < nn; i++ {
-			v := coef[i]
-			if rot {
-				v = coef[nn-1-i]
+		if s.extPrecision {
+			bdShift := uint(max(20-bd, 11))
+			tsShift := uint(min(5, int(bdShift)-2) + log2)
+			rnd := int64(1) << (bdShift - 1)
+			for i := 0; i < nn; i++ {
+				v := coef[i]
+				if rot {
+					v = coef[nn-1-i]
+				}
+				res[i] = int32((int64(v)<<tsShift + rnd) >> bdShift)
 			}
-			res[i] = ((v << tsShift) + rnd) >> bdShift
+		} else {
+			tsShift := uint(5 + log2)
+			bdShift := uint(20 - bd)
+			rnd := int32(1) << (bdShift - 1)
+			for i := 0; i < nn; i++ {
+				v := coef[i]
+				if rot {
+					v = coef[nn-1-i]
+				}
+				res[i] = ((v << tsShift) + rnd) >> bdShift
+			}
 		}
 		d.rdpcm(res, n, ti, intra, predMode)
 	default:
 		dst := cIdx == 0 && intra && n == 4
-		inverseTransform(coef, res, log2, dst, uint(20-bd), ti.maxX, ti.maxY, &sc.tmp)
+		if s.extPrecision {
+			log2Range := max(15, bd+6)
+			inverseTransformWide(coef, res, log2, dst, uint(max(20-bd, 11)), log2Range, ti.maxX, ti.maxY, &sc.tmp)
+		} else {
+			inverseTransform(coef, res, log2, dst, uint(20-bd), ti.maxX, ti.maxY, &sc.tmp)
+		}
 	}
 	// clear coefficients for the next block
 	if !ti.zero {
@@ -76,10 +112,23 @@ func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMo
 		bdY, bdC := uint(s.bitDepthY), uint(s.bitDepthC)
 		ry := sc.resY[:nn]
 		for i := range res {
-			res[i] += (int32(resScale) * ((ry[i] << bdC) >> bdY)) >> 3
+			res[i] += int32((int64(resScale) * ((int64(ry[i]) << bdC) >> bdY)) >> 3)
 		}
 	}
-	// add to the picture
+	if out != nil {
+		// the residual is kept for the adaptive colour transform
+		copy(out, res)
+		return
+	}
+	d.addResidual(cIdx, xC, yC, n, res)
+}
+
+// addResidual adds the n x n residual res to the prediction in the picture.
+func (d *Decoder) addResidual(cIdx, xC, yC, n int, res []int32) {
+	bd := d.sp.bitDepthY
+	if cIdx > 0 {
+		bd = d.sp.bitDepthC
+	}
 	pic := d.cur
 	stride := pic.stride[cIdx]
 	pl := pic.planes[cIdx]
@@ -96,6 +145,59 @@ func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMo
 			}
 			row[x] = uint16(v)
 		}
+	}
+}
+
+// actInverse applies the inverse adaptive colour transform (8.6.8) to the
+// residuals of the three components, in the order of the coded components
+// (G, B, R for RGB content).
+func (d *Decoder) actInverse(r0, r1, r2 []int32) {
+	s := d.sp
+	bdY, bdC := s.bitDepthY, s.bitDepthC
+	maxBd := max(bdY, bdC)
+	shY, shC := uint(maxBd-bdY), uint(maxBd-bdC)
+	var rndY, rndC int32
+	if shY > 0 {
+		rndY = 1 << (shY - 1)
+	}
+	if shC > 0 {
+		rndC = 1 << (shC - 1)
+	}
+	lossless := d.cu.bypass
+	log2Y, log2C := 15, 15
+	if s.extPrecision {
+		log2Y, log2C = max(15, bdY+6), max(15, bdC+6)
+	}
+	minY, maxY := -(int32(1) << uint(log2Y)), int32(1)<<uint(log2Y)-1
+	minC, maxC := -(int32(1) << uint(log2C)), int32(1)<<uint(log2C)-1
+	clip := func(v, lo, hi int32) int32 {
+		if v < lo {
+			return lo
+		}
+		if v > hi {
+			return hi
+		}
+		return v
+	}
+	for i := range r0 {
+		y0 := clip(r0[i], minY, maxY)
+		cg := clip(r1[i], minC, maxC)
+		co := clip(r2[i], minC, maxC)
+		if !lossless {
+			y0 <<= shY
+			cg <<= shC + 1
+			co <<= shC + 1
+		}
+		t := y0 - (cg >> 1)
+		g := cg + t
+		b := t - (co >> 1)
+		r := co + b
+		if !lossless {
+			g = (g + rndY) >> shY
+			b = (b + rndC) >> shC
+			r = (r + rndC) >> shC
+		}
+		r0[i], r1[i], r2[i] = g, b, r
 	}
 }
 
@@ -237,6 +339,46 @@ func inverseTransform(coef, res []int32, log2 int, dst bool, bdShift uint, maxX,
 		o := res[y*n : y*n+n]
 		for x := 0; x < n; x++ {
 			o[x] = (line[x] + rnd2) >> bdShift
+		}
+	}
+}
+
+// inverseTransformWide is inverseTransform with 64-bit intermediates for
+// extended_precision_processing_flag, where coefficients have up to
+// Max(15, BitDepth + 6) bits and the first stage output is clipped to that
+// range instead of 16 bits.
+func inverseTransformWide(coef, res []int32, log2 int, dst bool, bdShift uint, log2Range, maxX, maxY int, tmp *[32 * 32]int32) {
+	n := 1 << uint(log2)
+	lo, hi := -(int64(1) << uint(log2Range)), int64(1)<<uint(log2Range)-1
+	rnd2 := int64(1) << (bdShift - 1)
+	basis := func(k, i int) int64 {
+		if dst {
+			return int64(dstMat[k][i])
+		}
+		return int64(dctMat[k*(32/n)][i])
+	}
+	for x := 0; x <= maxX; x++ {
+		for y := 0; y < n; y++ {
+			var sum int64
+			for k := 0; k <= maxY; k++ {
+				sum += basis(k, y) * int64(coef[k*n+x])
+			}
+			v := (sum + 64) >> 7
+			if v > hi {
+				v = hi
+			} else if v < lo {
+				v = lo
+			}
+			tmp[y*n+x] = int32(v)
+		}
+	}
+	for y := 0; y < n; y++ {
+		for x := 0; x < n; x++ {
+			var sum int64
+			for k := 0; k <= maxX; k++ {
+				sum += basis(k, x) * int64(tmp[y*n+k])
+			}
+			res[y*n+x] = int32((sum + rnd2) >> bdShift)
 		}
 	}
 }
