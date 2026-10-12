@@ -146,30 +146,86 @@ func blurAxis(pix []uint8, w, h, stride, ch int, sigma float64, horiz bool) {
 			}
 		})
 	} else {
-		parallelFor(w, 16, func(lo, hi int) {
-			tmp := make([]uint8, h)
-			col := make([]uint8, h)
-			for x := lo; x < hi; x++ {
-				for c := 0; c < ch; c++ {
-					for y := 0; y < h; y++ {
-						col[y] = pix[y*stride+x*ch+c]
+		boxVert(pix, w*ch, h, stride, passes)
+	}
+}
+
+// recip returns mul such that (n*mul)>>40 == n/d exactly for 0 <= n <= 255*d+d
+// (d < 1<<15): box sums are small, so a multiply replaces the division.
+func recip(d int) uint64 { return (1<<40)/uint64(d) + 1 }
+
+// boxVert runs the box passes down every byte column of the plane at once:
+// each pass keeps one running sum per column and walks the rows, so memory is
+// read row-wise (the per-column walk it replaces was cache-hostile). The
+// arithmetic is exactly boxRow's.
+func boxVert(pix []uint8, ncol, h, stride int, passes []boxSpec) {
+	if h == 0 || ncol == 0 {
+		return
+	}
+	parallelFor(ncol, 64, func(k0, k1 int) {
+		m := k1 - k0
+		cur := make([]uint8, m*h)
+		tmp := make([]uint8, m*h)
+		for y := 0; y < h; y++ {
+			copy(cur[y*m:(y+1)*m], pix[y*stride+k0:y*stride+k1])
+		}
+		sums := make([]int32, m)
+		for _, p := range passes {
+			d := p.lo + p.hi + 1
+			half := int32(d / 2)
+			fast := d < 1<<15
+			mul := uint64(0)
+			if fast {
+				mul = recip(d)
+			}
+			clear(sums)
+			for y := 0; y <= p.hi && y < h; y++ {
+				row := cur[y*m : (y+1)*m]
+				for i, v := range row {
+					sums[i] += int32(v)
+				}
+			}
+			for y := 0; y < h; y++ {
+				out := tmp[y*m : (y+1)*m]
+				if fast {
+					for i := range out {
+						out[i] = uint8((uint64(sums[i]+half) * mul) >> 40)
 					}
-					for _, p := range passes {
-						boxRow(col, tmp, h, 1, p.lo, p.hi)
-						copy(col, tmp)
+				} else {
+					for i := range out {
+						out[i] = uint8((sums[i] + half) / int32(d))
 					}
-					for y := 0; y < h; y++ {
-						pix[y*stride+x*ch+c] = col[y]
+				}
+				if a := y + p.hi + 1; a < h {
+					row := cur[a*m : (a+1)*m]
+					for i, v := range row {
+						sums[i] += int32(v)
+					}
+				}
+				if r := y - p.lo; r >= 0 {
+					row := cur[r*m : (r+1)*m]
+					for i, v := range row {
+						sums[i] -= int32(v)
 					}
 				}
 			}
-		})
-	}
+			cur, tmp = tmp, cur
+		}
+		for y := 0; y < h; y++ {
+			copy(pix[y*stride+k0:y*stride+k1], cur[y*m:(y+1)*m])
+		}
+	})
 }
 
 // boxRow averages src over [i-lo, i+hi] into dst (ch interleaved channels).
 func boxRow(src, dst []uint8, n, ch, lo, hi int) {
 	d := lo + hi + 1
+	half := d / 2
+	fast := d < 1<<15
+	mul := uint64(0)
+	if fast {
+		mul = recip(d)
+	}
 	for c := 0; c < ch; c++ {
 		var sum int
 		// window for i=0: [-lo, hi]
@@ -177,7 +233,11 @@ func boxRow(src, dst []uint8, n, ch, lo, hi int) {
 			sum += int(src[j*ch+c])
 		}
 		for i := 0; i < n; i++ {
-			dst[i*ch+c] = uint8((sum + d/2) / d)
+			if fast {
+				dst[i*ch+c] = uint8((uint64(sum+half) * mul) >> 40)
+			} else {
+				dst[i*ch+c] = uint8((sum + half) / d)
+			}
 			// slide: add i+hi+1, remove i-lo
 			if a := i + hi + 1; a < n {
 				sum += int(src[a*ch+c])

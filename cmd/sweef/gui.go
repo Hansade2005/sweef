@@ -20,10 +20,10 @@ import (
 //
 //	gui_ui.go     guiAssets = ui.FS
 //	gui_shell.go  app.RegisterShell(auto.Open)
-//	gui_agent.go  guiAgent = func() app.AgentHost { ... }
+//	gui_agent.go  guiAgent = func(headless bool) app.AgentHost { ... }
 var (
 	guiAssets fs.FS
-	guiAgent  func() app.AgentHost
+	guiAgent  func(headless bool) app.AgentHost
 	// guiRun runs the real-window path; gui_shell.go sets it to mainthread.Run.
 	guiRun = func(f func()) { f() }
 )
@@ -56,7 +56,7 @@ func cmdGUI(args []string) {
 		Logf:        func(f string, a ...any) { fmt.Fprintf(os.Stderr, "sweef: "+f+"\n", a...) },
 	}
 	if guiAgent != nil {
-		cfg.Agent = guiAgent()
+		cfg.Agent = guiAgent(*headlessF)
 	}
 	ctx, cancel := withSignals(context.Background())
 	defer cancel()

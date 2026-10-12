@@ -265,6 +265,29 @@ where it matters.
 Run: `go test -race ./internal/agent/...`,
 `go test -run xxx -bench . ./internal/agent/`.
 
+## GUI integration (`internal/agentbridge`)
+
+`agentbridge.Host` implements `app.AgentHost` (+ `AgentInfoer`, `AgentResumer`, `AgentConfirmer`, `AgentKeyClearer`,
+`AgentKeySetter`, `AgentChats`, `AgentSidebarWatcher`, `AgentAttacher`) over `agent.Agent`; `agentbridge.Backend` implements
+`agent.Backend` over the app's live tabs. `cmd/sweef/gui_agent.go` constructs it; `app.New` hands it the `*App`.
+
+* **Events**: text (coalesced to ~40 ms, first delta immediately), thought, action `{id,label,status pending|running|ok|error,ms,detail}`
+  (act steps are announced `pending`, flipped by the backend as each step runs), status `{state}`, confirm `{id,title,risk,action}`,
+  done `{ttft,tps,ms,sources,...}`, error `{code auth|rate_limit|network|unavailable|api|busy|agent,message,retryAfter}`.
+  `ttft` is send -> first visible output (text, thought or action) measured in the host; `tps` is output tokens over streaming time
+  (`RunStats.OutputTPS`); `apiTtft` (extra field) is the API's own first-token time.
+* **Tabs**: steps run on the visible engine tab through its worker (`App.AgentRunOnTab`), one step per worker op so the page repaints
+  between steps; navigation goes through the app's `loadURL` (HTTPS upgrade, tracker shield, history); `scroll` and ref'd actions scroll
+  the on-screen view and move the overlay cursor (`App.AgentReveal/AgentCursor`).
+* **Privacy**: every read and action re-checks the user's per-origin rule at that moment (a click that lands on a blocked origin returns
+  `[hidden by user]`; a link to a blocked origin is not followed; an undecided origin raises the app's own visibility card). Incognito tabs
+  of a normal window do not exist for the agent. Ask mode never acts: non-read steps are refused and risk cards are not shown.
+* **Key**: `agent.setKey` -> `KeyStore` (Windows: DPAPI blob; macOS/Linux: 0600 file in the 0700 profile dir; memory only without a
+  profile directory); `ANTHROPIC_API_KEY` is a development fallback; `SWEEF_AGENT_BASE_URL` overrides the API origin.
+  The key is never logged, never in `state`, redacted from every error.
+* **Tests**: `go test -race ./internal/agentbridge` (real chrome UI + engine + fake Anthropic server). Live:
+  `SWEEF_LIVE_ANTHROPIC=1 ANTHROPIC_API_KEY=... go test -run TestLiveSmoke -v ./internal/agentbridge`.
+
 ## What is not verified
 
 * Nothing was run against the live API. Field names and behaviours taken from

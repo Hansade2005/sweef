@@ -131,10 +131,15 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 		key := strings.TrimSpace(decode[struct {
 			Key string `json:"key"`
 		}](raw).Key)
-		if a.agentRaw != nil && key != "" {
-			a.agentRaw.SetKey(key)
+		ok := a.agentRaw != nil && key != ""
+		if ok {
+			if ks, isKS := a.agentRaw.(AgentKeySetter); isKS {
+				ok = ks.StoreKey(key) == nil // the host can refuse a key that cannot be right
+			} else {
+				a.agentRaw.SetKey(key)
+			}
 		}
-		a.sendTo(src, "agent.keyResult", map[string]any{"ok": a.agentRaw != nil && key != ""})
+		a.sendTo(src, "agent.keyResult", map[string]any{"ok": ok})
 		a.markState()
 	case "agent.clearKey":
 		if c, ok := a.agentRaw.(AgentKeyClearer); ok {
@@ -350,6 +355,9 @@ func (a *App) onSetting(key string, v any) {
 		if b, ok := v.(bool); ok {
 			a.model.Sidebar.Open = b
 			a.layoutFallback()
+			if w, ok := a.agentRaw.(AgentSidebarWatcher); ok && b {
+				w.SidebarOpened() // lets the host warm its API connection
+			}
 		}
 	case "zoom.default":
 		a.applyZoom()

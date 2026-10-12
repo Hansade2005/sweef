@@ -193,6 +193,9 @@ func (c *Context) ClipPath(p *Path, rule FillRule) {
 
 // ClipRect intersects the clip with a rectangle (user space).
 func (c *Context) ClipRect(x, y, w, h float64) {
+	if c.clipRectAligned(x, y, w, h) {
+		return
+	}
 	p := NewPath()
 	p.Rect(x, y, w, h)
 	c.ClipPath(p, NonZero)
@@ -287,7 +290,8 @@ func composite(dst *Surface, m *Mask, sh Shader, op CompositeOp, cl *clipState) 
 	ss, isSolid := sh.(solidShader)
 	unb := op.unbounded()
 	w := r.W()
-	parallelFor(r.H(), max(1, 65536/w), func(lo, hi int) {
+	allCov := m == nil && cl.M == nil // full coverage everywhere: no coverage row at all
+	parallelFor(r.H(), max(1, 16384/w), func(lo, hi int) {
 		src := make([]uint8, w*4)
 		cov := make([]uint8, w)
 		var clipRow, orig []uint8
@@ -303,6 +307,13 @@ func composite(dst *Surface, m *Mask, sh Shader, op CompositeOp, cl *clipState) 
 			}
 		}
 		for y := r.Y0 + lo; y < r.Y0+hi; y++ {
+			if allCov {
+				if !isSolid {
+					sh.ShadeRow(r.X0, y, w, src)
+				}
+				blendRow(dst.Row(y, r.X0, r.X1), src, nil, op, w)
+				continue
+			}
 			// coverage
 			a, b := 0, w
 			if m != nil {
@@ -467,12 +478,55 @@ func (c *Context) FillRect(x, y, w, h float64) {
 	if w == 0 || h == 0 {
 		return
 	}
+	if c.fillAligned(x, y, w, h, nil) {
+		return
+	}
 	c.draw(c.rectMask(x, y, w, h), c.shaderFor(c.st.fill, c.st.alpha))
 }
 
 // FillRectShader fills a rectangle with an explicit shader.
 func (c *Context) FillRectShader(x, y, w, h float64, sh Shader) {
+	if c.fillAligned(x, y, w, h, sh) {
+		return
+	}
 	c.draw(c.rectMask(x, y, w, h), sh)
+}
+
+// fillAligned fills a rectangle that the transform maps onto whole device
+// pixels: coverage is 1 inside and 0 outside, so no mask is built; the clip is
+// narrowed to the rectangle instead. sh nil means the fill paint. It reports
+// whether it handled the fill (not for shadows, filters or rotated transforms).
+func (c *Context) fillAligned(x, y, w, h float64, sh Shader) bool {
+	st := &c.st
+	m := st.ctm
+	if m[1] != 0 || m[2] != 0 || c.hasShadow() || len(st.filters) > 0 || st.op.unbounded() || st.op == Copy {
+		return false
+	}
+	ax, ay := m.Apply(x, y)
+	bx, by := m.Apply(x+w, y+h)
+	if ax > bx {
+		ax, bx = bx, ax
+	}
+	if ay > by {
+		ay, by = by, ay
+	}
+	x0, ok0 := nearInt(ax)
+	y0, ok1 := nearInt(ay)
+	x1, ok2 := nearInt(bx)
+	y1, ok3 := nearInt(by)
+	if !(ok0 && ok1 && ok2 && ok3) {
+		return false
+	}
+	if sh == nil {
+		sh = c.shaderFor(st.fill, st.alpha)
+	}
+	nc := *st.clip
+	nc.R = nc.R.Intersect(IRect{x0, y0, x1, y1})
+	if nc.R.Empty() {
+		return true
+	}
+	composite(c.surf, nil, sh, st.op, &nc)
+	return true
 }
 
 func (c *Context) rectMask(x, y, w, h float64) *Mask {
@@ -693,4 +747,51 @@ func (c *Context) FillPathDevice(p *Path, rule FillRule) {
 // ClipPathDevice intersects the clip with a device-space path.
 func (c *Context) ClipPathDevice(p *Path, rule FillRule) {
 	c.clipWithMask(FillMask(p, Identity, rule, c.ClipBounds()))
+}
+
+// nearInt reports whether v is within 1e-4 of an integer (and sane). At that
+// distance the 8-bit coverage of an edge pixel rounds to exactly 0 or 255, so
+// a rectangle with such edges is, pixel for pixel, a whole-pixel rectangle.
+func nearInt(v float64) (int, bool) {
+	if v != v || v > 1e8 || v < -1e8 {
+		return 0, false
+	}
+	r := math.Round(v)
+	if math.Abs(v-r) > 1e-4 {
+		return 0, false
+	}
+	return int(r), true
+}
+
+// clipRectAligned is ClipRect for an axis-aligned transform that maps the
+// rectangle onto whole device pixels: no coverage mask is needed, the clip
+// just narrows. It reports whether it handled the clip.
+func (c *Context) clipRectAligned(x, y, w, h float64) bool {
+	m := c.st.ctm
+	if m[1] != 0 || m[2] != 0 {
+		return false
+	}
+	ax, ay := m.Apply(x, y)
+	bx, by := m.Apply(x+w, y+h)
+	if ax > bx {
+		ax, bx = bx, ax
+	}
+	if ay > by {
+		ay, by = by, ay
+	}
+	x0, ok0 := nearInt(ax)
+	y0, ok1 := nearInt(ay)
+	x1, ok2 := nearInt(bx)
+	y1, ok3 := nearInt(by)
+	if !(ok0 && ok1 && ok2 && ok3) {
+		return false
+	}
+	cur := c.st.clip
+	r := cur.R.Intersect(c.surf.R).Intersect(IRect{x0, y0, x1, y1})
+	if r.Empty() {
+		c.st.clip = &clipState{}
+		return true
+	}
+	c.st.clip = &clipState{R: r, M: cur.M}
+	return true
 }

@@ -31,6 +31,10 @@ type PaintOptions struct {
 	Full           bool    // paint the whole document height (capped at 16000 CSS px)
 	Transparent    bool    // leave the canvas transparent (premultiplied alpha), for overlays
 	KeepScrollbars bool    // keep the page's own scrollbars (default: removed; the GUI draws its own)
+	// Incremental repaints only what changed since the previous incremental
+	// paint of this tab (see incremental.go); the result is then the damaged
+	// sub-rectangle of the surface unless the whole surface had to be repainted.
+	Incremental bool
 }
 
 // PaintRGBA rasterises the page straight to an RGBA image (no PNG round
@@ -95,6 +99,9 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 	env := raster.PaintEnv{Bitmap: ext.env.Bitmap}
 	if !o.Transparent {
 		env.Background = raster.Color{R: 1, G: 1, B: 1, A: 1}
+	}
+	if o.Incremental {
+		return t.paintIncremental(list, o.Width, height, o.DSF, env), true
 	}
 	return raster.Paint(list, o.Width, height, o.DSF, env), true
 }

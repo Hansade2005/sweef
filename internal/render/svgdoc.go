@@ -36,6 +36,9 @@ type SVGNode struct {
 	// object's user space; the rasterizer plays it where the element sits in
 	// the SVG paint order, under the ancestors' transforms, clips and effects.
 	Ops []Op
+
+	sigV     uint64 // content signature, see opsig.go
+	sigState uint32 // 0 unknown, 1 sigV valid, 2 not signable
 }
 
 // SVGDoc is a resolved SVG scene.
@@ -59,6 +62,8 @@ type SVGDoc struct {
 	depth    int
 	extDone  bool
 	merged   bool
+	sigV     uint64
+	sigState uint32
 }
 
 // SVGDraw paints an SVG scene. The root's viewBox / preserveAspectRatio map
@@ -120,6 +125,8 @@ var svgInheritedProps = map[string]bool{
 type svgCascade struct {
 	rules  []*style.Rule
 	custom map[string]string
+	idx    *style.EntryIndex
+	rank   map[*style.Rule]int // position of each rule in rules
 }
 
 func newSVGCascade(sheets []Sheet, env *style.Env, extra []string) *svgCascade {
@@ -138,6 +145,11 @@ func newSVGCascade(sheets []Sheet, env *style.Env, extra []string) *svgCascade {
 	for _, t := range extra {
 		sc.rules = append(sc.rules, style.ParseSheet(t, env, style.OriginAuthor, &order, layers).Rules...)
 	}
+	sc.idx = style.NewEntryIndex(sc.rules)
+	sc.rank = make(map[*style.Rule]int, len(sc.rules))
+	for i, r := range sc.rules {
+		sc.rank[r] = i
+	}
 	return sc
 }
 
@@ -152,23 +164,31 @@ type svgDecl struct {
 // declsFor returns the cascaded declarations for n, lowest priority first.
 func (sc *svgCascade) declsFor(n *html.Node) []style.Decl {
 	var ds []svgDecl
-	for _, r := range sc.rules {
-		var best uint32
-		matched := false
-		for _, en := range r.Entries {
-			if en.Pseudo != "" {
-				continue
-			}
-			if en.Sel.Match(n, nil) {
-				if !matched || en.Spec > best {
-					best = en.Spec
-				}
-				matched = true
-			}
-		}
-		if !matched {
+	// the rules whose selectors can match n, each with its best matching
+	// specificity, then walked in sheet order (the order the full scan used)
+	type hit struct {
+		rank int
+		r    *style.Rule
+		best uint32
+	}
+	var hits []hit
+	byRule := map[*style.Rule]int{}
+	for _, en := range sc.idx.Candidates(n, nil) {
+		if en.Pseudo != "" || !en.Sel.Match(n, nil) {
 			continue
 		}
+		if i, ok := byRule[en.Rule]; ok {
+			if en.Spec > hits[i].best {
+				hits[i].best = en.Spec
+			}
+			continue
+		}
+		byRule[en.Rule] = len(hits)
+		hits = append(hits, hit{rank: sc.rank[en.Rule], r: en.Rule, best: en.Spec})
+	}
+	sort.Slice(hits, func(i, j int) bool { return hits[i].rank < hits[j].rank })
+	for _, h := range hits {
+		r, best := h.r, h.best
 		lay := r.Layer
 		if lay == 0 {
 			lay = 1 << 30

@@ -978,3 +978,51 @@ func quirkMarginTag(tag string) bool {
 	}
 	return false
 }
+
+// EntryIndex buckets the entries of a rule list by the id, class or tag of
+// their rightmost compound selector, like the Engine does, so that code
+// running its own cascade (the SVG scene builder) only matches the selectors
+// that can apply to a node instead of every rule of the page.
+type EntryIndex struct {
+	byID, byClass, byTag map[string][]*Entry
+	univ                 []*Entry
+}
+
+// NewEntryIndex indexes the entries of rules.
+func NewEntryIndex(rules []*Rule) *EntryIndex {
+	ix := &EntryIndex{byID: map[string][]*Entry{}, byClass: map[string][]*Entry{}, byTag: map[string][]*Entry{}}
+	for _, r := range rules {
+		for _, en := range r.Entries {
+			k, v := bucketKey(en.key)
+			switch k {
+			case 'i':
+				ix.byID[v] = append(ix.byID[v], en)
+			case 'c':
+				ix.byClass[v] = append(ix.byClass[v], en)
+			case 't':
+				ix.byTag[v] = append(ix.byTag[v], en)
+			default:
+				ix.univ = append(ix.univ, en)
+			}
+		}
+	}
+	return ix
+}
+
+// Candidates appends to out every entry that can match n (a superset: the
+// caller still runs the selector).
+func (ix *EntryIndex) Candidates(n *html.Node, out []*Entry) []*Entry {
+	if id, ok := attrOf(n, "id"); ok && id != "" {
+		out = append(out, ix.byID[id]...)
+	}
+	if cl, ok := attrOf(n, "class"); ok && cl != "" {
+		for _, c := range strings.Fields(cl) {
+			out = append(out, ix.byClass[c]...)
+		}
+	}
+	out = append(out, ix.byTag[n.Data]...)
+	if lc := strings.ToLower(n.Data); lc != n.Data {
+		out = append(out, ix.byTag[lc]...)
+	}
+	return append(out, ix.univ...)
+}

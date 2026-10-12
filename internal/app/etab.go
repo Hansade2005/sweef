@@ -62,6 +62,7 @@ type etab struct {
 	paintW        atomic.Int32 // overlay: painted extent (CSS px)
 	paintH        atomic.Int32 // overlay: painted height (CSS px)
 	lastActive    atomic.Int64
+	loadErr       atomic.Value // string: error of the last load started by loadURL ("" = ok); read by the agent host
 	restoreScroll atomic.Int32
 }
 
@@ -258,6 +259,9 @@ func (e *etab) paint(force bool) {
 		// the chrome and the overlay are painted on a transparent canvas: where they
 		// draw nothing the page (or the chrome below the overlay) shows through
 		opts := engine.PaintOptions{DSF: scale, Transparent: true}
+		// the chrome repaints only what its mutation touched; a forced paint (a new
+		// size or scale, a recreated compositor) always repaints everything
+		opts.Incremental = e.kind == "chrome" && !force
 		if e.kind == "overlay" {
 			vw, vh = int(e.paintW.Load()), int(e.paintH.Load())
 			if vw <= 0 || vh <= 0 {

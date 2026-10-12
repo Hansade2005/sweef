@@ -120,6 +120,7 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 		if err != nil {
 			a.renderErrorPage(e, shown, err)
 			isErr = true
+			e.loadErr.Store(err.Error())
 		}
 		e.drainBindings()
 		meta := a.collectMeta(e, isErr)

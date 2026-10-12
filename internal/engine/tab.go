@@ -14,6 +14,7 @@ import (
 	"time"
 
 	fnet "github.com/sweefbrowser/sweef/internal/net"
+	"github.com/sweefbrowser/sweef/internal/raster"
 )
 
 // Ring is a fixed-capacity circular buffer of events. Bounded memory is the
@@ -99,6 +100,8 @@ type NodeInfo struct {
 // state + a mutex; JS evaluation happens on demand.
 type Tab struct {
 	ID      string
+	incrMu  sync.Mutex
+	incr    *raster.Canvas // pixels of the last incremental paint (see incremental.go)
 	mu      sync.RWMutex
 	eng     *Engine
 	ctx     *BrowserContext // isolation context (nil = engine default)

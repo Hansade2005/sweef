@@ -48,6 +48,11 @@ type RunStats struct {
 	CostUSD          float64 `json:"costUsd"`
 	ElapsedMs        int64   `json:"elapsedMs"`
 	ReusedConnection int     `json:"reusedConnections"`
+	// DecodeMs is the time spent streaming output (first generated block to
+	// message end, summed over requests that produced tokens); OutputTPS is
+	// output tokens per second over that time (0 when too short to be meaningful).
+	DecodeMs  float64 `json:"decodeMs"`
+	OutputTPS float64 `json:"outputTps"`
 }
 
 type statsCollector struct {
@@ -59,6 +64,8 @@ type statsCollector struct {
 	toolMs     []float64
 	start      time.Time
 	cacheStart CacheStats
+	decodeMs   float64
+	decodeToks int
 }
 
 func (c *statsCollector) request(m *Metrics) {
@@ -82,6 +89,19 @@ func (c *statsCollector) request(m *Metrics) {
 	}
 	if m.ReusedConn {
 		c.s.ReusedConnection++
+	}
+	if m.Usage.OutputTokens > 0 {
+		from := m.FirstToken
+		if from <= 0 {
+			from = m.FirstToolCall
+		}
+		if from <= 0 {
+			from = m.FirstByte
+		}
+		if d := m.Total - from; from > 0 && d > 0 {
+			c.decodeMs += float64(d.Microseconds()) / 1000
+			c.decodeToks += m.Usage.OutputTokens
+		}
 	}
 }
 
@@ -130,6 +150,10 @@ func (c *statsCollector) snapshot() RunStats {
 	s.FirstByteAvgMs, s.TTFTAvgMs, s.TTFTP50Ms = avg(c.firstByte), avg(c.ttft), p50(c.ttft)
 	s.TTFToolAvgMs, s.ToolAvgMs = avg(c.firstTool), avg(c.toolMs)
 	s.ElapsedMs = time.Since(c.start).Milliseconds()
+	s.DecodeMs = c.decodeMs
+	if c.decodeMs >= 50 {
+		s.OutputTPS = float64(c.decodeToks) / (c.decodeMs / 1000)
+	}
 	u := s.Usage
 	if d := u.InputTokens + u.CacheReadTokens + u.CacheCreationTokens; d > 0 {
 		s.CacheHitRate = float64(u.CacheReadTokens) / float64(d)

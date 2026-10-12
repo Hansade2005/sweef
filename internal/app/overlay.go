@@ -17,8 +17,9 @@ import (
 // chrome and the page. While the state is "off" nothing is painted or blended.
 
 type overlayState struct {
-	state string
-	rects []rect // overlay.hit
+	state  string
+	rects  []rect         // overlay.hit
+	cursor map[string]any // agent cursor {x,y,label,pressed}, viewport-relative; nil = hidden
 }
 
 func (o overlayState) visible() bool { return o.state != "" && o.state != "off" }
@@ -48,10 +49,17 @@ func (a *App) setOverlay(state, task, step string) {
 		a.ovl.rects = nil
 	}
 	vp := a.vpLog
-	a.sendTo(e, "overlay", map[string]any{
+	msg := map[string]any{
 		"state": state, "task": task, "step": step,
 		"viewport": map[string]any{"x": math.Round(vp.X), "y": math.Round(vp.Y), "w": math.Round(vp.W), "h": math.Round(vp.H)},
-	})
+	}
+	if a.ovl.cursor != nil && a.ovl.state == "acting" {
+		msg["cursor"] = a.ovl.cursor
+	}
+	if !a.ovl.visible() {
+		a.ovl.cursor = nil
+	}
+	a.sendTo(e, "overlay", msg)
 	if a.ovl.visible() {
 		e.paintW.Store(int32(a.wLog))
 		e.paintH.Store(int32(a.hLog))

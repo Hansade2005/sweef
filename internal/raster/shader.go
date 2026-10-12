@@ -319,7 +319,73 @@ func (s *ImageShader) tap(ix, iy int, inside bool) (uint32, uint32, uint32, uint
 	return s.texel(ix, iy)
 }
 
+// noCopyFast disables shadeRowCopy (tests compare both paths).
+var noCopyFast bool
+
+// shadeRowCopy is the pixel-for-pixel case: the shader maps device pixels onto
+// image pixels by a whole-pixel translation (no scale, no fraction), so every
+// bilinear sample has weight 1 on a single texel and the row is a copy. The
+// result is exactly what the general path computes. It reports false when the
+// mapping is not of that kind.
+func (s *ImageShader) shadeRowCopy(x, y, n int, dst []uint8) bool {
+	inv := s.inv
+	if inv[0] != 1 || inv[1] != 0 || inv[2] != 0 || inv[3] != 1 || s.EdgeClamp || s.alpha != 1 || s.Filter == FilterBicubic {
+		return false
+	}
+	tx, ty := inv[4], inv[5]
+	if tx != math.Trunc(tx) || ty != math.Trunc(ty) || math.Abs(tx) > 1<<30 || math.Abs(ty) > 1<<30 {
+		return false
+	}
+	c := s.Clamp
+	w, h := c.W(), c.H()
+	if w <= 0 || h <= 0 {
+		clear(dst[:n*4])
+		return true
+	}
+	iy := y + int(ty)
+	if s.RepY {
+		iy = c.Y0 + ((iy-c.Y0)%h+h)%h
+	} else if iy < c.Y0 || iy >= c.Y1 {
+		clear(dst[:n*4])
+		return true
+	}
+	row := s.Img.Pix[iy*s.Img.Stride:]
+	off := x + int(tx)
+	if s.RepX {
+		for i := 0; i < n; i++ {
+			ix := c.X0 + ((off+i-c.X0)%w+w)%w
+			copy(dst[i*4:i*4+4], row[ix*4:ix*4+4])
+		}
+	} else {
+		a := max(0, c.X0-off)
+		b := min(n, c.X1-off)
+		if a >= b {
+			clear(dst[:n*4])
+			return true
+		}
+		clear(dst[:a*4])
+		copy(dst[a*4:b*4], row[(off+a)*4:(off+b)*4])
+		clear(dst[b*4 : n*4])
+	}
+	for i := 0; i < n; i++ {
+		o := dst[i*4 : i*4+4 : i*4+4]
+		if o[0] > o[3] {
+			o[0] = o[3]
+		}
+		if o[1] > o[3] {
+			o[1] = o[3]
+		}
+		if o[2] > o[3] {
+			o[2] = o[3]
+		}
+	}
+	return true
+}
+
 func (s *ImageShader) ShadeRow(x, y, n int, dst []uint8) {
+	if !noCopyFast && s.shadeRowCopy(x, y, n, dst) {
+		return
+	}
 	fy := float64(y) + 0.5
 	al := uint32(s.alpha*256 + 0.5)
 	c := s.Clamp
@@ -353,11 +419,22 @@ func (s *ImageShader) ShadeRow(x, y, n int, dst []uint8) {
 			x0f, y0f := math.Floor(uu), math.Floor(vv)
 			fxw, fyw := uint32((uu-x0f)*256+0.5), uint32((vv-y0f)*256+0.5)
 			x0, y0 := int(x0f), int(y0f)
-			r00, g00, b00, a00, _ := s.tap(x0, y0, inside)
-			r10, g10, b10, a10, _ := s.tap(x0+1, y0, inside)
-			r01, g01, b01, a01, _ := s.tap(x0, y0+1, inside)
-			r11, g11, b11, a11, _ := s.tap(x0+1, y0+1, inside)
 			w00, w10, w01, w11 := (256-fxw)*(256-fyw), fxw*(256-fyw), (256-fxw)*fyw, fxw*fyw
+			// taps with a zero weight contribute nothing: skip them (the common
+			// case of a 1:1 pixel-aligned mapping needs a single tap)
+			var r00, g00, b00, a00, r10, g10, b10, a10, r01, g01, b01, a01, r11, g11, b11, a11 uint32
+			if w00 != 0 {
+				r00, g00, b00, a00, _ = s.tap(x0, y0, inside)
+			}
+			if w10 != 0 {
+				r10, g10, b10, a10, _ = s.tap(x0+1, y0, inside)
+			}
+			if w01 != 0 {
+				r01, g01, b01, a01, _ = s.tap(x0, y0+1, inside)
+			}
+			if w11 != 0 {
+				r11, g11, b11, a11, _ = s.tap(x0+1, y0+1, inside)
+			}
 			r = (r00*w00 + r10*w10 + r01*w01 + r11*w11 + 32768) >> 16
 			g = (g00*w00 + g10*w10 + g01*w01 + g11*w11 + 32768) >> 16
 			b = (b00*w00 + b10*w10 + b01*w01 + b11*w11 + 32768) >> 16

@@ -197,7 +197,9 @@ func (a *App) onAgentEvent(ev AgentEvent) {
 		r.state = "waiting"
 	case "done":
 		r.state = "idle"
-		if r.mode == "agent" && a.ovl.visible() {
+		if stop, _ := ev.Data["stop"].(string); stop == "stopped" {
+			// the user pressed stop: keep the "stopped" pill instead of claiming it finished
+		} else if r.mode == "agent" && a.ovl.visible() {
 			a.setOverlay("done", r.task, "")
 		}
 	case "error":

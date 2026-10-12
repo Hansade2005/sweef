@@ -242,6 +242,9 @@ func New(cfg Config) (*App, error) {
 		a.eng = engine.New(o)
 		a.ownE = true
 	}
+	if at, ok := cfg.Agent.(AgentAttacher); ok {
+		at.AttachApp(a)
+	}
 	a.startChrome()
 	return a, nil
 }
@@ -457,6 +460,9 @@ func (a *App) requestClose() {
 
 func (a *App) shutdown() error {
 	a.closing.Store(true)
+	if c, ok := a.agentRaw.(interface{ Close() }); ok {
+		c.Close() // cancel the agent run before the tabs it drives go away
+	}
 	a.prof.Session.Stop() // flush the debounced save first, then mark the exit clean
 	a.saveSession(true)
 	if a.animT != nil {

@@ -1,8 +1,12 @@
 package raster
 
 import (
+	"fmt"
 	"image"
 	"math"
+	"sort"
+	"sync"
+	"time"
 
 	"golang.org/x/net/html"
 
@@ -67,7 +71,9 @@ func (p *Painter) Surface() *Surface { return p.c.Surface() }
 // Run executes ops.
 func (p *Painter) Run(list []render.Op) {
 	for _, op := range list {
+		t0 := time.Now()
 		p.op(op)
+		OpStatAdd(op, time.Since(t0))
 	}
 	for p.c.LayerDepth() > 0 {
 		p.c.EndLayer(1, SourceOver)
@@ -874,7 +880,6 @@ func (p *Painter) gradient(o render.Gradient) {
 		tw, th := int(math.Ceil(t.Size[0]*ctm[0]/m[0])), int(math.Ceil(t.Size[1]*c.Transform()[3]))
 		if tw > 0 && th > 0 && tw*th < 1<<24 {
 			sc := c.Transform()
-			tc := NewContext(tw, th)
 			tdef := def
 			tdef.X0 -= geom.X
 			tdef.Y0 -= geom.Y
@@ -886,12 +891,17 @@ func (p *Painter) gradient(o render.Gradient) {
 				// the ellipse stretch pivots on the centre in tile coordinates
 				mt = Translate(tdef.X0, tdef.Y0).Mul(Scale(1, math.Max(o.RY, 1e-6)/def.R1)).Mul(Translate(-tdef.X0, -tdef.Y0))
 			}
-			tsh := NewGradientShader(tdef, tm.Mul(mt), 1)
-			tc.FillRectShader(0, 0, float64(tw), float64(th), tsh)
-			pat := NewImageShader(tc.Surface(), sc.Mul(Translate(t.Origin[0], t.Origin[1])).Mul(Scale(t.Size[0]/float64(tw), t.Size[1]/float64(th))), o.Tile.RepeatX, o.Tile.RepeatY, FilterBilinear, 1)
+			tsurf := cachedGradientTile(tdef, tm.Mul(mt), tw, th)
+			pat := NewImageShader(tsurf, sc.Mul(Translate(t.Origin[0], t.Origin[1])).Mul(Scale(t.Size[0]/float64(tw), t.Size[1]/float64(th))), o.Tile.RepeatX, o.Tile.RepeatY, FilterBilinear, 1)
+			if o.Radii.IsZero() && c.fillAligned(r.X, r.Y, r.W, r.H, pat) {
+				return
+			}
 			c.FillPathShader(path, NonZero, pat)
 			return
 		}
+	}
+	if o.Radii.IsZero() && c.fillAligned(r.X, r.Y, r.W, r.H, sh) {
+		return
 	}
 	c.FillPathShader(path, NonZero, sh)
 }
@@ -905,11 +915,41 @@ func (p *Painter) boxShadow(o render.BoxShadow) {
 	box := p.snap(o.Rect)
 	rad := fitRadii(box, o.Radii)
 	sigma := math.Max(0, o.Blur) / 2 * scale
-	clipb := c.ClipBounds()
+	// The mask is computed over the whole surface instead of the current clip,
+	// so it does not depend on what is being repainted: it can be cached and
+	// reused when only a part of the surface is redrawn. (Inside the clip it is
+	// the same coverage: the blur only reaches 3 sigma, and the mask is padded
+	// by that much.)
+	key := shadowKey{ctm: c.Transform(), box: box, rad: rad, dx: o.DX, dy: o.DY, blur: sigma, spread: o.Spread, inset: o.Inset, surf: c.surf.R}
+	if mk, ok := shadowCacheGet(key); ok {
+		if mk != nil {
+			c.draw(mk, Solid(col(o.Color)))
+		}
+		return
+	}
+	area := c.surf.R
+	mk, cacheable := p.shadowMask(o, box, rad, sigma, area, true)
+	if !cacheable {
+		// huge shape: compute only what the clip needs, as before
+		mk, _ = p.shadowMask(o, box, rad, sigma, c.ClipBounds(), false)
+	} else {
+		shadowCachePut(key, mk)
+	}
+	if mk != nil {
+		c.draw(mk, Solid(col(o.Color)))
+	}
+}
+
+// shadowMask is the coverage of one box shadow limited to clipb (which must
+// contain every pixel that will be drawn). cacheable is false when the mask
+// is too large to keep.
+func (p *Painter) shadowMask(o render.BoxShadow, box render.Rect, rad render.Radii, sigma float64, clipb IRect, limit bool) (mk *Mask, cacheable bool) {
+	c := p.c
+	pad := int(math.Ceil(sigma*3)) + 1
 	if !o.Inset {
 		sr := render.Rect{X: box.X - o.Spread + o.DX, Y: box.Y - o.Spread + o.DY, W: box.W + 2*o.Spread, H: box.H + 2*o.Spread}
 		if sr.W <= 0 || sr.H <= 0 {
-			return
+			return nil, true
 		}
 		var srad render.Radii
 		for i := range rad {
@@ -919,23 +959,22 @@ func (p *Painter) boxShadow(o render.BoxShadow) {
 				}
 			}
 		}
-		pad := int(math.Ceil(sigma*3)) + 1
-		bb := clipb
-		lim := IRect{bb.X0 - pad, bb.Y0 - pad, bb.X1 + pad, bb.Y1 + pad}
-		mk := FillMask(rrPath(sr, srad), c.Transform(), NonZero, lim)
+		lim := IRect{clipb.X0 - pad, clipb.Y0 - pad, clipb.X1 + pad, clipb.Y1 + pad}
+		if limit && (int(sr.W*c.Transform()[0])+2*pad+2)*(int(sr.H*c.Transform()[3])+2*pad+2) > shadowMaskMax {
+			return nil, false
+		}
+		mk = FillMask(rrPath(sr, srad), c.Transform(), NonZero, lim)
 		if mk == nil {
-			return
+			return nil, true
 		}
 		if sigma > 0 {
 			mk = BlurMask(mk, sigma, sigma, 0, 0, clipb)
 		}
 		if mk == nil {
-			return
+			return nil, true
 		}
 		inner := FillMask(rrPath(box, rad), c.Transform(), NonZero, mk.B)
-		mk = maskSub(mk, inner)
-		c.draw(mk, Solid(col(o.Color)))
-		return
+		return maskSub(mk, inner), true
 	}
 	// inset: shadow of the area outside the (offset, shrunk) hole, clipped to the box
 	hole := render.Rect{X: box.X + o.Spread + o.DX, Y: box.Y + o.Spread + o.DY, W: box.W - 2*o.Spread, H: box.H - 2*o.Spread}
@@ -949,9 +988,11 @@ func (p *Painter) boxShadow(o render.BoxShadow) {
 	}
 	boxm := FillMask(rrPath(box, rad), c.Transform(), NonZero, clipb)
 	if boxm == nil {
-		return
+		return nil, true
 	}
-	pad := int(math.Ceil(sigma*3)) + 1
+	if limit && boxm.B.W()*boxm.B.H() > shadowMaskMax {
+		return nil, false
+	}
 	area := IRect{boxm.B.X0 - pad, boxm.B.Y0 - pad, boxm.B.X1 + pad, boxm.B.Y1 + pad}
 	full := newMask(area)
 	for i := range full.A {
@@ -965,9 +1006,70 @@ func (p *Painter) boxShadow(o render.BoxShadow) {
 		full = BlurMask(full, sigma, sigma, 0, 0, boxm.B)
 	}
 	if full == nil {
+		return nil, true
+	}
+	return maskMul(full, boxm), true
+}
+
+const shadowMaskMax = 6 << 20 // px
+
+// shadowKey identifies a shadow coverage mask: everything it depends on
+// except the colour.
+type shadowKey struct {
+	ctm                  Matrix
+	box                  render.Rect
+	rad                  render.Radii
+	dx, dy, blur, spread float64
+	inset                bool
+	surf                 IRect
+}
+
+var shadowCache struct {
+	sync.Mutex
+	m     map[shadowKey]*Mask
+	order []shadowKey
+	bytes int
+}
+
+const shadowCacheBytes = 96 << 20
+
+func shadowCacheGet(k shadowKey) (*Mask, bool) {
+	shadowCache.Lock()
+	defer shadowCache.Unlock()
+	mk, ok := shadowCache.m[k]
+	return mk, ok
+}
+
+func shadowCachePut(k shadowKey, mk *Mask) {
+	n := 64
+	if mk != nil {
+		n += len(mk.A)
+	}
+	if n > shadowCacheBytes/6 {
 		return
 	}
-	c.draw(maskMul(full, boxm), Solid(col(o.Color)))
+	shadowCache.Lock()
+	defer shadowCache.Unlock()
+	if shadowCache.m == nil {
+		shadowCache.m = map[shadowKey]*Mask{}
+	}
+	if _, ok := shadowCache.m[k]; ok {
+		return
+	}
+	for shadowCache.bytes+n > shadowCacheBytes && len(shadowCache.order) > 0 {
+		old := shadowCache.order[0]
+		shadowCache.order = shadowCache.order[1:]
+		if om, ok := shadowCache.m[old]; ok {
+			shadowCache.bytes -= 64
+			if om != nil {
+				shadowCache.bytes -= len(om.A)
+			}
+			delete(shadowCache.m, old)
+		}
+	}
+	shadowCache.m[k] = mk
+	shadowCache.order = append(shadowCache.order, k)
+	shadowCache.bytes += n
 }
 
 func (p *Painter) bitmap(o render.Bitmap) {
@@ -1016,3 +1118,87 @@ func (p *Painter) bitmap(o render.Bitmap) {
 	c.SetSmoothing(true, QualityLow)
 	c.DrawImage(s, 0, 0, iw, ih, x, y, w, h)
 }
+
+// gradient tiles are rendered once and reused across frames: the chrome
+// repaints the same few static gradient backdrops on every mutation.
+var tileCache struct {
+	sync.Mutex
+	m     map[string]*Surface
+	order []string
+	bytes int
+}
+
+const tileCacheBytes = 48 << 20
+
+func cachedGradientTile(def GradientDef, m Matrix, tw, th int) *Surface {
+	key := fmt.Sprintf("%v|%v|%d|%d", def, m, tw, th)
+	tileCache.Lock()
+	if s, ok := tileCache.m[key]; ok {
+		tileCache.Unlock()
+		return s
+	}
+	tileCache.Unlock()
+	tc := NewContext(tw, th)
+	tc.FillRectShader(0, 0, float64(tw), float64(th), NewGradientShader(def, m, 1))
+	s := tc.Surface()
+	n := len(s.Pix)
+	if n > tileCacheBytes/4 {
+		return s
+	}
+	tileCache.Lock()
+	if tileCache.m == nil {
+		tileCache.m = map[string]*Surface{}
+	}
+	if _, ok := tileCache.m[key]; !ok {
+		for tileCache.bytes+n > tileCacheBytes && len(tileCache.order) > 0 {
+			k := tileCache.order[0]
+			tileCache.order = tileCache.order[1:]
+			tileCache.bytes -= len(tileCache.m[k].Pix)
+			delete(tileCache.m, k)
+		}
+		tileCache.m[key] = s
+		tileCache.order = append(tileCache.order, key)
+		tileCache.bytes += n
+	}
+	tileCache.Unlock()
+	return s
+}
+
+var opStatMu sync.Mutex
+var opStat = map[string][2]int64{}
+
+func OpStatAdd(op render.Op, d time.Duration) {
+	k := fmt.Sprintf("%T", op)
+	if _, ok := op.(render.BoxShadow); ok {
+		if op.(render.BoxShadow).Inset {
+			k += "/inset"
+		}
+	}
+	if g, ok := op.(render.Gradient); ok {
+		k += "/" + g.Kind
+		if g.Tile != nil {
+			k += "/tile"
+		}
+	}
+	opStatMu.Lock()
+	v := opStat[k]
+	v[0]++
+	v[1] += int64(d)
+	opStat[k] = v
+	opStatMu.Unlock()
+}
+func OpStatDump() string {
+	opStatMu.Lock()
+	defer opStatMu.Unlock()
+	var ks []string
+	for k := range opStat {
+		ks = append(ks, k)
+	}
+	sort.Slice(ks, func(i, j int) bool { return opStat[ks[i]][1] > opStat[ks[j]][1] })
+	s := ""
+	for _, k := range ks {
+		s += fmt.Sprintf("%-34s n=%6d total=%8.1fms\n", k, opStat[k][0], float64(opStat[k][1])/1e6)
+	}
+	return s
+}
+func OpStatReset() { opStatMu.Lock(); opStat = map[string][2]int64{}; opStatMu.Unlock() }
