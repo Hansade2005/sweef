@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -160,11 +159,11 @@ func chromiumMem(chrome, site string, tabs int) memSample {
 	defer os.RemoveAll(prof)
 	port := freePort()
 	c := exec.Command(chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--user-data-dir="+prof, "--remote-debugging-port="+strconv.Itoa(port), "about:blank")
-	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	groupAttr(c)
 	if err := c.Start(); err != nil {
 		return memSample{}
 	}
-	defer func() { syscall.Kill(-c.Process.Pid, syscall.SIGKILL); c.Wait() }()
+	defer func() { killGroup(c); c.Wait() }()
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	up := false
 	for i := 0; i < 100; i++ {
