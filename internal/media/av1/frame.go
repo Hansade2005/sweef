@@ -61,6 +61,7 @@ type frameDec struct {
 
 	// ---- tile state ----
 	sym                  symDec
+	largeScale           bool // tile decoding of the large scale tile process
 	tcdf                 cdfCtx
 	miRowStart, miRowEnd int
 	miColStart, miColEnd int

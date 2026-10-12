@@ -96,7 +96,7 @@ func classifyCodec(c string) codecInfo {
 	case strings.HasPrefix(lc, "avc1") || strings.HasPrefix(lc, "avc3"):
 		return codecInfo{"video", ccFFmpeg, "h264"}
 	case strings.HasPrefix(lc, "hvc1") || strings.HasPrefix(lc, "hev1"):
-		return codecInfo{"video", ccNo, ""}
+		return codecInfo{"video", ccFFmpeg, "hevc"}
 	case lc == "theora":
 		return codecInfo{"video", ccNo, ""}
 	case lc == "vorbis" || lc == "opus" || lc == "flac" || lc == "mp3" || lc == "1":
@@ -107,6 +107,8 @@ func classifyCodec(c string) codecInfo {
 		return codecInfo{"audio", ccFree, ""} // AAC-LC: pure-Go decoder
 	case lc == "mp4a.40.5" || lc == "mp4a.40.05" || lc == "mp4a.40.29":
 		return codecInfo{"audio", ccFree, ""} // HE-AAC v1/v2 (SBR, PS): pure-Go decoder
+	case lc == "mp4a.40.42":
+		return codecInfo{"audio", ccFFmpeg, ""} // USAC / xHE-AAC: pure-Go decoder (usac_*.go) for most streams, see nativeCodecSupport
 	case strings.HasPrefix(lc, "mp4a.40."):
 		return codecInfo{"audio", ccFFmpeg, ""}
 	case lc == "speex" || lc == "0":
@@ -124,7 +126,7 @@ type containerRule struct {
 	only         map[string]bool
 }
 
-var aacOnly = map[string]bool{"mp4a.40.2": true, "mp4a.40.02": true, "mp4a.40.1": true, "mp4a.40.5": true, "mp4a.40.29": true}
+var aacOnly = map[string]bool{"mp4a.40.2": true, "mp4a.40.02": true, "mp4a.40.1": true, "mp4a.40.5": true, "mp4a.40.29": true, "mp4a.40.42": true}
 
 var mimeRules = map[string]containerRule{
 	"audio/wav":       {audio: true, def: "maybe", only: map[string]bool{"1": true}},
@@ -200,7 +202,7 @@ func CanPlayType(mime string) string {
 			if ci.kind == "audio" && lc != "vorbis" && lc != "opus" {
 				return ""
 			}
-			if ci.kind == "video" && strings.HasPrefix(lc, "avc") {
+			if ci.kind == "video" && (strings.HasPrefix(lc, "avc") || strings.HasPrefix(lc, "hvc1") || strings.HasPrefix(lc, "hev1")) {
 				return ""
 			}
 		case "video/mp4", "audio/mp4":
@@ -220,15 +222,34 @@ func CanPlayType(mime string) string {
 // decoder, "maybe" when some streams of that profile still need ffmpeg,
 // "probably" otherwise.
 func nativeCodecSupport(lc, native string) string {
+	if lc == "mp4a.40.42" {
+		// the pure-Go USAC decoder covers FD, LPD, eSBR and MPS212 streams;
+		// a few tools (time-warped MDCT, MPS212 residual coding, ...) are
+		// only decided when the stream is opened (Playable)
+		return "maybe"
+	}
 	if native == "" || !HasNativeVideo(native) {
 		return ""
 	}
-	if strings.HasPrefix(lc, "avc1") || strings.HasPrefix(lc, "avc3") {
-		// avc1.PPCCLL: the Extended profile (88) may use data partitioning,
-		// which the native decoder lacks.
-		if len(lc) >= 7 && strings.EqualFold(lc[5:7], "58") {
+	// The Extended profile (avc1.58) is covered, data partitioning included;
+	// only SP/SI slices fall back to ffmpeg.
+	if strings.HasPrefix(lc, "hvc1") || strings.HasPrefix(lc, "hev1") {
+		// hvc1.<profile>.<compat>.<tier+level>...: Main (1), Main 10 (2) and
+		// Main Still Picture (3) are covered; Range Extensions streams may use
+		// tools the native decoder lacks, and other profiles (SCC, 3D,
+		// multilayer) are not decoded natively.
+		parts := strings.Split(lc, ".")
+		prof := ""
+		if len(parts) > 1 {
+			prof = strings.TrimLeft(parts[1], "abc")
+		}
+		switch prof {
+		case "1", "2", "3":
+			return "probably"
+		case "4":
 			return "maybe"
 		}
+		return ""
 	}
 	return "probably"
 }
@@ -268,7 +289,7 @@ func Playable(info *Info) (bool, string) {
 		switch t.Kind {
 		case "video":
 			switch t.CodecName {
-			case "vp8", "vp9", "av1", "h264":
+			case "vp8", "vp9", "av1", "h264", "hevc":
 				if !ff && !HasNativeVideo(t.CodecName) {
 					return false, t.CodecName + " needs ffmpeg"
 				}

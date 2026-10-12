@@ -81,6 +81,11 @@ type fxEdge struct {
 
 type fxBuilder struct {
 	edges []fxEdge
+	// cont is set for paths Skia does not consider convex: its general
+	// walker (aaa_walk_edges) calls SkAnalyticCubicEdge::keepContinuous()
+	// before every cubic update, which restarts the forward differencing
+	// from the x the previous line segment actually ended at.
+	cont bool
 }
 
 type fpt struct{ x, y float32 }
@@ -385,8 +390,10 @@ func (b *fxBuilder) monoCubic(c [4]fpt) {
 			slope = fxQuickDiv((newx-oldx)>>10, diffY)
 		}
 		// the edge starts at the previous curve point's x and the snapped y
-		if slope < math.MaxInt32 {
-			b.seg(oldx, sy, nsy, slope, wind)
+		emitted := slope < math.MaxInt32 && b.seg(oldx, sy, nsy, slope, wind)
+		if emitted && b.cont {
+			// keepContinuous: fCx = fX, the x the edge reaches at its lower y
+			newx = fxAdvanceX(oldx, slope, sy, nsy)
 		}
 		sy = nsy
 		oldx, oldy = newx, newy
@@ -476,8 +483,10 @@ func fxFillUnion(p, q *Path, flipP bool, clip IRect) *Mask {
 	}
 	ox, oy := float64(bounds.X0), float64(bounds.Y0)
 	var fb fxBuilder
+	fb.cont = !pathIsConvex(p)
 	fxPathEdges(&fb, p, ox, oy, flipP)
 	if q != nil {
+		fb.cont = !pathIsConvex(q)
 		fxPathEdges(&fb, q, ox, oy, false)
 	}
 	r := newRasterizer(b)

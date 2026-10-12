@@ -239,6 +239,7 @@ type Box struct {
 	Visible          bool       // false for display:none / visibility:hidden
 	Transform        [6]float64 // identity when no transform
 	HasTransform     bool
+	Xf3              *Xf3D // 3D transform data (nil without 3D involvement)
 	OffsetParent     *html.Node
 	ZIndex           int
 }

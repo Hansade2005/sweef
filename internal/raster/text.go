@@ -336,10 +336,6 @@ type Shaped struct {
 	Size   float64
 	Set    *faceSet
 	Lum    uint8 // text color luminance, selects the coverage preblend table
-	// ScreenScale, when not zero, is Blink's SVG text scaling factor: SVG
-	// text is shaped and rasterized with the font size multiplied by it and
-	// the device matrix divided by it.
-	ScreenScale float64
 }
 
 func normalizeText(s string) string {
@@ -600,10 +596,6 @@ func (c *Context) textMask(sh *Shaped, x, y, sx float64) *Mask {
 	}
 	size := sh.Size
 	a, b, cc, d := m[0]*sx, m[1]*sx, m[2], m[3]
-	if k := sh.ScreenScale; k > 0 && k != 1 {
-		size *= k
-		a, b, cc, d = a/k, b/k, cc/k, d/k
-	}
 	clip := c.drawBounds()
 	if math.Hypot(a*size, b*size) > 256 || math.Hypot(cc*size, d*size) > 256 {
 		var out *Mask
@@ -659,14 +651,6 @@ func (c *Context) placeGlyphMasks(sh *Shaped, x, y, sx float64, maskOf func(g Gl
 	for _, g := range sh.Glyphs {
 		px := x + g.X*sx
 		dx, dy := m[0]*px+m[2]*y+m[4], m[1]*px+m[3]*y+m[5]
-		if k := sh.ScreenScale; k > 0 && k != 1 {
-			// single-precision chain of Blink's scaled SVG text: origin scaled
-			// up, matrix scaled down
-			ik := float32(1 / k)
-			X, Y := float32(px)*float32(k), float32(y)*float32(k)
-			dx = float64(float32(m[0])*ik*X + float32(m[2])*ik*Y + float32(m[4]))
-			dy = float64(float32(m[1])*ik*X+float32(m[3])*ik*Y+float32(m[5])) - 1e-4
-		}
 		ix, iy, sux, suy := xfPlace(dx, dy, axis)
 		gm := maskOf(g, sux, suy)
 		if gm == nil {
@@ -790,16 +774,9 @@ func (c *Context) strokeGlyphMaskFor(sh *Shaped, x, y, sx float64, ss StrokeStyl
 	m := c.st.ctm
 	size := sh.Size
 	a, b, cc, d := m[0]*sx, m[1]*sx, m[2], m[3]
-	if k := sh.ScreenScale; k > 0 && k != 1 {
-		size *= k
-		a, b, cc, d = a/k, b/k, cc/k, d/k
-	}
 	if len(ss.Dash) > 0 || ss.Width <= 0 || sh.Fake || math.IsNaN(a+b+cc+d) ||
 		math.Hypot(a*size, b*size) > 256 || math.Hypot(cc*size, d*size) > 256 {
 		return nil, false
-	}
-	if k := sh.ScreenScale; k > 0 && k != 1 {
-		ss.Width *= k
 	}
 	st := xfStroke{w: float32(ss.Width), miter: float32(ss.MiterLimit), join: ss.Join, cap: ss.Cap}
 	return c.placeGlyphMasks(sh, x, y, sx, func(g Glyph, sux, suy int) *Mask {

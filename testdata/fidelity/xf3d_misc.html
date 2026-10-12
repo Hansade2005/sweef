@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>xf3d_misc</title>
+<style>
+body { margin: 20px; font: 13px Arial, sans-serif; background: #fff; }
+.cell { display: inline-block; vertical-align: top; width: 230px; height: 150px; margin: 8px 12px; position: relative; border: 1px solid #ccc; }
+.b { position: absolute; left: 50px; top: 30px; width: 90px; height: 50px; background: #fdb; border: 6px solid #b33; padding: 8px 4px 0 14px; box-sizing: content-box; }
+.tb1 { transform-box: content-box; transform: rotate(40deg) } .tb2 { transform-box: border-box; transform: rotate(40deg) } .tb3 { transform-box: fill-box; transform: rotate(40deg); transform-origin: 0 0 }
+.wc { will-change: transform; left: 50.4px; top: 30.4px }
+.pw { perspective: 200px; perspective-origin: 10% 90% } .pw .b { transform: rotateY(50deg) }
+.ps { transform-style: preserve-3d; perspective: 400px; } .ps .b { transform: rotateY(40deg) translateZ(30px) } .ps .b2 { left: 80px; top: 50px; background: #bdf; transform: rotateY(-40deg) translateZ(20px) }
+.ov { perspective: 300px; transform-style: preserve-3d; overflow: hidden; } .ov .w { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateY(30deg) } .ov .b { transform: rotateY(40deg) translateZ(30px) }
+.op { perspective: 300px; } .op .w { position: absolute; inset: 0; transform-style: preserve-3d; opacity: .99; transform: rotateX(30deg) } .op .b { transform: rotateY(40deg) translateZ(30px) }
+.ab { perspective: 300px; } .ab .w { position: relative; transform: rotateX(20deg); width: 100px; height: 80px; margin: 30px; background: #eef } .ab .abs { position: absolute; left: 10px; top: 10px; width: 40px; height: 30px; background: #6a6; transform: translateZ(40px) }
+.cl { perspective: 200px; } .cl .b { transform: rotateY(60deg) translateX(40px); }
+.id { perspective: 300px } .id .b { transform: perspective(100px) rotateX(40deg) rotateZ(10deg); }
+.sk { transform: skewX(20deg) rotateY(30deg) scale3d(1.1,1,1) translate3d(10px,0,5px) }
+.zo { transform: translate3d(0,0,0); } .mt { transform: matrix3d(.9,.1,0,0.0005, -.1,.9,0,0.0003, 0,0,1,0, 10,5,0,1) }
+</style></head><body>
+<div class="cell"><div class="b tb1">content-box</div></div><div class="cell"><div class="b tb2">border-box</div></div><div class="cell"><div class="b tb3">fill-box</div></div><div class="cell"><div class="b wc">will-change</div></div>
+<div class="cell pw"><div class="b">origin 10% 90%</div></div><div class="cell ps"><div class="b">p3d</div><div class="b b2">p3d b</div></div>
+<div class="cell ov"><div class="w"><div class="b">overflow</div></div></div><div class="cell op"><div class="w"><div class="b">opacity</div></div></div>
+<div class="cell ab"><div class="w"><div class="abs"></div></div></div><div class="cell cl"><div class="b">clip</div></div><div class="cell id"><div class="b">persp()</div></div><div class="cell"><div class="b sk">mixed</div></div>
+<div class="cell"><div class="b zo">translate3d0</div></div><div class="cell"><div class="b mt">matrix3d</div></div>
+<p>text <span id="sp" style="display:inline-block;transform:rotateX(30deg)">inline-block rotX</span> and <b style="display:inline-block;perspective:100px"><i style="display:inline-block;transform:rotateY(40deg)">nested</i></b> end</p>
+</body></html>

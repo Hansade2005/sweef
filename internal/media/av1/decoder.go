@@ -1,9 +1,12 @@
 // Package av1 is a pure-Go AV1 video decoder (AV1 Bitstream & Decoding
-// Process Specification v1.0.0 errata 1). It decodes Main profile streams
-// (8 and 10 bit, 4:2:0 and monochrome; other chroma formats are decoded by
-// the same code paths but are not part of the tested feature set) and
-// reproduces the normative output of the reference decoders sample for
-// sample.
+// Process Specification v1.0.0 errata 1). It decodes 8, 10 and 12 bit streams
+// in all chroma formats, both low-overhead (section 5) and Annex B
+// length-delimited streams (detected automatically), scalable streams
+// (operating point selection; by default the highest spatial layer of each
+// temporal unit is output, like dav1d) and, in LargeScale mode, tile list OBUs
+// with anchor frames (large scale tile decoding, spec 7.3). The output is
+// the normative one: bit-exact with libdav1d (and, for large scale tile
+// decoding, libaom) on the test corpus.
 package av1
 
 import (
@@ -25,6 +28,8 @@ type Picture struct {
 	// Color description from the sequence header.
 	ColorPrimaries, TransferCharacteristics, MatrixCoefficients int
 	FullRange                                                   bool
+	// Layer of the OBU the picture was coded in (scalable streams).
+	SpatialID, TemporalID int
 }
 
 // frameBuf is a set of sample planes.
@@ -77,6 +82,8 @@ type refFrame struct {
 	featData        [maxSegments][segLvlMax]int
 	showable        bool
 	mono            bool
+	spatialID       int
+	temporalID      int
 }
 
 // Decoder decodes a sequence of temporal units.
@@ -98,6 +105,44 @@ type Decoder struct {
 
 	temporalID, spatialID int
 	out                   []*Picture
+
+	// OperatingPoint selects the operating point of a scalable stream (0 is
+	// the highest quality one in practice) and AllLayers makes every shown
+	// frame an output; by default only the highest spatial layer of the
+	// operating point is output for each temporal unit, like dav1d.
+	OperatingPoint int
+	AllLayers      bool
+
+	// LargeScale selects large scale tile decoding (see largescale.go).
+	LargeScale bool
+	anchors    []*refFrame
+	camera     *cameraState
+
+	newTU bool     // the next output picture is the first of a temporal unit
+	cache *Picture // spatial layer picture waiting for a higher layer
+}
+
+// opIdc returns operating_point_idc of the selected operating point.
+func (d *Decoder) opIdc() int {
+	if d.seq == nil {
+		return 0
+	}
+	op := d.OperatingPoint
+	if op < 0 || op >= d.seq.opCnt {
+		op = 0
+	}
+	return d.seq.opIdc[op]
+}
+
+// maxSpatialID is the highest spatial layer of the operating point.
+func (d *Decoder) maxSpatialID() int {
+	m := d.opIdc() >> 8
+	n := 0
+	for m > 1 {
+		m >>= 1
+		n++
+	}
+	return n
 }
 
 // NewDecoder returns a decoder with no state.
@@ -105,7 +150,7 @@ func NewDecoder() *Decoder { return &Decoder{} }
 
 // Reset discards all decoding state (call before decoding from a key frame).
 func (d *Decoder) Reset() {
-	*d = Decoder{}
+	*d = Decoder{OperatingPoint: d.OperatingPoint, AllLayers: d.AllLayers, LargeScale: d.LargeScale}
 }
 
 // Decode decodes one temporal unit (a sequence of OBUs in the low-overhead
@@ -113,6 +158,7 @@ func (d *Decoder) Reset() {
 func (d *Decoder) Decode(data []byte) (pics []*Picture, err error) {
 	d.out = nil
 	defer func() {
+		defer func() { d.endTemporalUnit(); pics = d.out }()
 		if r := recover(); r != nil {
 			// Corrupt streams can index outside the tables; report an error
 			// rather than crashing the caller.
@@ -121,6 +167,10 @@ func (d *Decoder) Decode(data []byte) (pics []*Picture, err error) {
 			pics, err = d.out, fmt.Errorf("av1: corrupt stream: %v", r)
 		}
 	}()
+	if IsAnnexB(data) {
+		err := d.decodeAnnexB(data)
+		return d.out, err
+	}
 	pos := 0
 	for pos < len(data) {
 		n, err := d.decodeOBU(data[pos:])
@@ -165,14 +215,23 @@ func (d *Decoder) decodeOBU(data []byte) (int, error) {
 	payload := data[hdrBytes : hdrBytes+obuSize]
 	total := hdrBytes + obuSize
 	if obuType != obuSequenceHeader && obuType != obuTemporalDelimiter && d.seq != nil &&
-		d.seq.operatingPointIdc != 0 && extFlag {
-		inT := (d.seq.operatingPointIdc >> uint(temporalID)) & 1
-		inS := (d.seq.operatingPointIdc >> uint(spatialID+8)) & 1
+		d.opIdc() != 0 && extFlag {
+		idc := d.opIdc()
+		inT := (idc >> uint(temporalID)) & 1
+		inS := (idc >> uint(spatialID+8)) & 1
 		if inT == 0 || inS == 0 {
 			return total, nil
 		}
 	}
 	d.temporalID, d.spatialID = temporalID, spatialID
+	if extFlag && obuType == obuFrame {
+		if temporalID > 0 {
+			cov(covTemporalLayers)
+		}
+		if spatialID > 0 {
+			cov(covSpatialLayers)
+		}
+	}
 	switch obuType {
 	case obuSequenceHeader:
 		s := &seqHdr{}
@@ -183,9 +242,18 @@ func (d *Decoder) decodeOBU(data []byte) (int, error) {
 		d.seq = s
 	case obuTemporalDelimiter:
 		d.seenFrameHeader = false
+		d.newTU = true
 	case obuFrameHeader, obuRedundantFrameHeader:
 		if d.seq == nil {
 			return 0, errNoSeq
+		}
+		if d.LargeScale {
+			if obuType == obuFrameHeader {
+				if err := d.cameraHeaderOBU(payload); err != nil {
+					return 0, err
+				}
+			}
+			break
 		}
 		if d.seenFrameHeader {
 			break // frame_header_copy
@@ -197,6 +265,12 @@ func (d *Decoder) decodeOBU(data []byte) (int, error) {
 	case obuFrame:
 		if d.seq == nil {
 			return 0, errNoSeq
+		}
+		if d.LargeScale {
+			if err := d.cameraHeaderOBU(payload); err != nil {
+				return 0, err
+			}
+			break
 		}
 		pb := &bitReader{buf: payload}
 		if err := d.frameHeaderOBU(pb); err != nil {
@@ -216,8 +290,14 @@ func (d *Decoder) decodeOBU(data []byte) (int, error) {
 		if err := d.tileGroupOBU(payload); err != nil {
 			return 0, err
 		}
+	case obuTileList:
+		if d.LargeScale {
+			if err := d.tileListOBU(payload); err != nil {
+				return 0, err
+			}
+		}
 	default:
-		// metadata, padding, tile list, reserved: ignored
+		// metadata, padding, reserved: ignored
 	}
 	return total, nil
 }

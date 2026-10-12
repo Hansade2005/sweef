@@ -342,6 +342,7 @@ func (t *mp4Track) parseVideoConfig(typ string, kids []mp4box) {
 		t.Codec = typ
 		if c := findBox(kids, "hvcC"); c != nil && len(c.data) >= 13 {
 			t.Codec = hevcCodecString(typ, c.data)
+			t.vcfg = c.data
 		}
 	case "vp08":
 		t.CodecName, t.Codec = "vp8", "vp8"
@@ -438,6 +439,9 @@ func (t *mp4Track) parseAudioConfig(typ string, kids []mp4box) {
 					aot = 2
 				}
 				t.Codec = fmt.Sprintf("mp4a.40.%d", aot)
+				if aot == 42 {
+					t.nativeNo = !usacConfigSupported(esdsDecoderSpecific(e.data[4:]))
+				}
 				// HE-AAC: report the SBR output rate, like ffprobe and browsers do
 				if c, err := parseASC(esdsDecoderSpecific(e.data[4:])); err == nil && c.sbr && c.extRate > 0 {
 					t.SampleRate = c.extRate

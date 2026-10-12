@@ -105,7 +105,7 @@ var svgPropNames = map[string]bool{
 	"marker": true, "marker-start": true, "marker-mid": true, "marker-end": true, "paint-order": true, "vector-effect": true,
 	"shape-rendering": true, "color-interpolation-filters": true, "color-interpolation": true, "overflow": true,
 	"cx": true, "cy": true, "r": true, "rx": true, "ry": true, "x": true, "y": true, "width": true, "height": true, "d": true,
-	"mask-type": true, "image-rendering": true, "font": true,
+	"mask-type": true, "image-rendering": true, "font": true, "writing-mode": true, "text-orientation": true, "text-rendering": true,
 }
 
 var svgInheritedProps = map[string]bool{
@@ -113,7 +113,7 @@ var svgInheritedProps = map[string]bool{
 	"stroke-linecap": true, "stroke-linejoin": true, "stroke-miterlimit": true, "stroke-dasharray": true, "stroke-dashoffset": true,
 	"visibility": true, "clip-rule": true, "text-anchor": true, "letter-spacing": true, "word-spacing": true,
 	"marker-start": true, "marker-mid": true, "marker-end": true, "paint-order": true, "shape-rendering": true,
-	"color-interpolation-filters": true, "image-rendering": true,
+	"color-interpolation-filters": true, "image-rendering": true, "writing-mode": true, "text-orientation": true, "text-rendering": true,
 }
 
 // svgCascade matches author rules against SVG elements.

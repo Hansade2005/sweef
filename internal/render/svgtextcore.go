@@ -21,6 +21,9 @@ type SVGTextChar struct {
 	X, Y       float64
 	DX, DY     float64
 	Rot        float64 // degrees
+	// Explicit is set when one of the x/y/dx/dy/rotate lists has a value for
+	// this character (Blink then lays it out as a fragment of its own).
+	Explicit bool
 }
 
 // SVGTextLen is a textLength adjustment over chars [From, To).
@@ -112,6 +115,7 @@ func CollectSVGText(root *SVGNode, ln func(n *SVGNode, s string, axis byte) floa
 	for i := len(ranges) - 1; i >= 0; i-- {
 		rg := ranges[i]
 		n := rg.n
+		isPath := strings.EqualFold(n.Tag, "textpath") // <textPath> has no position lists
 		apply := func(key string, axis byte, set func(c *SVGTextChar, v float64)) {
 			v, ok := n.A[key]
 			if !ok || strings.TrimSpace(v) == "" {
@@ -122,26 +126,30 @@ func CollectSVGText(root *SVGNode, ln func(n *SVGNode, s string, axis byte) floa
 				if rg.from+k >= rg.to {
 					break
 				}
+				chars[rg.from+k].Explicit = true
 				set(&chars[rg.from+k], ln(n, f, axis))
 			}
 		}
-		apply("x", 'x', func(c *SVGTextChar, v float64) { c.HasX, c.X = true, v })
-		apply("y", 'y', func(c *SVGTextChar, v float64) { c.HasY, c.Y = true, v })
-		apply("dx", 'x', func(c *SVGTextChar, v float64) { c.DX = v })
-		apply("dy", 'y', func(c *SVGTextChar, v float64) { c.DY = v })
-		if v, ok := n.A["rotate"]; ok {
-			fs := strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\n' })
-			var rots []float64
-			for _, f := range fs {
-				rots = append(rots, svgNum(strings.TrimSuffix(f, "deg"), 0))
-			}
-			if len(rots) > 0 {
-				for k := rg.from; k < rg.to; k++ {
-					j := k - rg.from
-					if j >= len(rots) {
-						j = len(rots) - 1
+		if !isPath {
+			apply("x", 'x', func(c *SVGTextChar, v float64) { c.HasX, c.X = true, v })
+			apply("y", 'y', func(c *SVGTextChar, v float64) { c.HasY, c.Y = true, v })
+			apply("dx", 'x', func(c *SVGTextChar, v float64) { c.DX = v })
+			apply("dy", 'y', func(c *SVGTextChar, v float64) { c.DY = v })
+			if v, ok := n.A["rotate"]; ok {
+				fs := strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\n' })
+				var rots []float64
+				for _, f := range fs {
+					rots = append(rots, svgNum(strings.TrimSuffix(f, "deg"), 0))
+				}
+				if len(rots) > 0 {
+					for k := rg.from; k < rg.to; k++ {
+						j := k - rg.from
+						if j >= len(rots) {
+							j = len(rots) - 1
+						}
+						chars[k].Rot = rots[j]
+						chars[k].Explicit = true
 					}
-					chars[k].Rot = rots[j]
 				}
 			}
 		}
@@ -170,76 +178,57 @@ func sortLens(l []SVGTextLen) {
 
 // ---- text paths ---------------------------------------------------------------------
 
-// SVGTextPath measures a path for text-on-a-path layout.
+// SVGTextPath measures a path for text-on-a-path layout (see
+// svgpathmeasure.go for how Blink and Skia measure).
 type SVGTextPath struct {
-	Contours [][][2]float64
-	Start    float64 // startOffset in path units
-	lens     [][]float64
-	total    float64
-	inited   bool
+	Start float64 // startOffset in path units
+	cs    []*skContour
+	total float64
 }
 
-func (p *SVGTextPath) init() {
-	if p.inited {
-		return
+// NewSVGTextPath measures the path data d, scaled by k; Start is left zero.
+func NewSVGTextPath(d string, k float64) *SVGTextPath {
+	p := &SVGTextPath{cs: measureContours(svgNormalizePath(d), k)}
+	for _, c := range p.cs {
+		p.total += c.length
 	}
-	p.inited = true
-	p.total = 0
-	p.lens = nil
-	for _, c := range p.Contours {
-		cum := make([]float64, len(c))
-		for i := 1; i < len(c); i++ {
-			cum[i] = cum[i-1] + math.Hypot(c[i][0]-c[i-1][0], c[i][1]-c[i-1][1])
-		}
-		p.lens = append(p.lens, cum)
-		if len(cum) > 0 {
-			p.total += cum[len(cum)-1]
+	return p
+}
+
+// NewSVGTextPolyline builds a path from polylines (one per subpath).
+func NewSVGTextPolyline(contours [][][2]float64) *SVGTextPath {
+	var cmds []pathCmd
+	for _, c := range contours {
+		for i, pt := range c {
+			op := byte('L')
+			if i == 0 {
+				op = 'M'
+			}
+			cmds = append(cmds, pathCmd{op: op, p: [3][2]float64{pt}})
 		}
 	}
+	p := &SVGTextPath{cs: measureContours(cmds, 1)}
+	for _, c := range p.cs {
+		p.total += c.length
+	}
+	return p
 }
 
 // Length is the total length of all contours.
-func (p *SVGTextPath) Length() float64 { p.init(); return p.total }
+func (p *SVGTextPath) Length() float64 { return p.total }
 
 // At returns the point and unit tangent at distance s along the path.
 func (p *SVGTextPath) At(s float64) (x, y, tx, ty float64, ok bool) {
-	p.init()
 	if s < 0 || s > p.total || p.total <= 0 {
 		return 0, 0, 1, 0, false
 	}
-	for ci, c := range p.Contours {
-		cum := p.lens[ci]
-		if len(cum) < 2 {
+	for ci, c := range p.cs {
+		if s > c.length && ci < len(p.cs)-1 {
+			s -= c.length
 			continue
 		}
-		l := cum[len(cum)-1]
-		if s > l && ci < len(p.Contours)-1 {
-			s -= l
-			continue
-		}
-		if s > l {
-			s = l
-		}
-		// binary search for the segment
-		lo, hi := 1, len(c)-1
-		for lo < hi {
-			mid := (lo + hi) / 2
-			if cum[mid] >= s {
-				hi = mid
-			} else {
-				lo = mid + 1
-			}
-		}
-		for lo < len(c)-1 && cum[lo]-cum[lo-1] == 0 {
-			lo++
-		}
-		a, b := c[lo-1], c[lo]
-		sl := cum[lo] - cum[lo-1]
-		if sl == 0 {
-			return a[0], a[1], 1, 0, true
-		}
-		t := (s - cum[lo-1]) / sl
-		return a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t, (b[0] - a[0]) / sl, (b[1] - a[1]) / sl, true
+		x, y, tx, ty = c.pos(s)
+		return x, y, tx, ty, true
 	}
 	return 0, 0, 1, 0, false
 }
@@ -393,18 +382,36 @@ func LayoutSVGText(in []SVGTextIn, lens []SVGTextLen) []SVGGlyphPos {
 				out[i].Hidden = true
 				continue
 			}
-			ang := math.Atan2(ty, tx)
-			// glyph origin: back along the tangent by half the advance, offset along the normal
-			ox := px - tx*out[i].Adv/2 - ty*(-off)
-			oy := py - ty*out[i].Adv/2 + tx*(-off)
-			_ = ox
-			_ = oy
-			out[i].X = px - tx*out[i].Adv/2 + (-ty)*off
-			out[i].Y = py - ty*out[i].Adv/2 + tx*off
-			out[i].Angle = ang + in[i].Rot*math.Pi/180
+			// the glyph is rotated by the tangent angle plus its own rotate
+			// about its midpoint: back off along the rotated baseline
+			ang := math.Atan2(ty, tx) + in[i].Rot*math.Pi/180
+			sn, cs := math.Sincos(ang)
+			out[i].X = px - cs*out[i].Adv/2 + (-sn)*off
+			out[i].Y = py - sn*out[i].Adv/2 + cs*off
+			out[i].Angle = ang
 		}
 	}
 	return out
+}
+
+// LayoutSVGTextVertical lays out text whose inline axis is y (writing-mode
+// tb, vertical-rl, vertical-lr): the characters' x and y roles are swapped
+// for the horizontal algorithm. Adv is the advance along y and YOff the
+// offset across (added to x). The positions returned are x across and y along
+// the line.
+func LayoutSVGTextVertical(in []SVGTextIn, lens []SVGTextLen) []SVGGlyphPos {
+	sw := make([]SVGTextIn, len(in))
+	for i, c := range in {
+		c.HasX, c.HasY = c.HasY, c.HasX
+		c.X, c.Y = c.Y, c.X
+		c.DX, c.DY = c.DY, c.DX
+		sw[i] = c
+	}
+	pos := LayoutSVGText(sw, lens)
+	for i := range pos {
+		pos[i].X, pos[i].Y = pos[i].Y, pos[i].X
+	}
+	return pos
 }
 
 // SVGParsePct resolves a startOffset-style number or percentage of total.

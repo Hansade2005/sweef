@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>xf3d_backface</title>
+<style>
+body { margin: 20px; font: 14px Arial, sans-serif; background: #fff; }
+.scene { display: inline-block; vertical-align: top; width: 200px; height: 140px; margin: 10px 20px; perspective: 400px; border: 1px solid #888; }
+.c { width: 100px; height: 80px; margin: 30px auto; background: #c63; color: #fff; text-align: center; line-height: 80px; }
+.v1 .c { transform: rotateY(160deg) } .v2 .c { transform: rotateY(160deg); backface-visibility: hidden }
+.v3 .c { transform: rotateY(20deg); backface-visibility: hidden } .v4 .c { transform: rotateX(200deg); backface-visibility: hidden }
+.v5 .c { transform: rotateY(180deg); backface-visibility: hidden; background: #36c }
+.v6 { transform-style: preserve-3d } .v6 .c { transform: rotateY(110deg); backface-visibility: hidden }
+.v7 .c { transform: rotateY(90deg) translateZ(0); backface-visibility: hidden; }
+.v8 .c { transform: scaleX(-1); backface-visibility: hidden }
+</style></head><body>
+<div class="scene v1"><div class="c">visible</div></div><div class="scene v2"><div class="c">hidden</div></div><div class="scene v3"><div class="c">front</div></div><div class="scene v4"><div class="c">rotX</div></div>
+<div class="scene v5"><div class="c">180</div></div><div class="scene v6"><div class="c">p3d</div></div><div class="scene v7"><div class="c">edge</div></div><div class="scene v8"><div class="c">mirror</div></div>
+</body></html>

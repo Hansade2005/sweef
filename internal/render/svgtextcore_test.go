@@ -11,7 +11,9 @@ func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
 // 20px Liberation Sans on path M20 50 L220 50 L220 150.
 func TestLayoutSVGTextOnPath(t *testing.T) {
 	path := func(start float64) *SVGTextPath {
-		return &SVGTextPath{Contours: [][][2]float64{{{20, 50}, {220, 50}, {220, 150}}}, Start: start}
+		sp := NewSVGTextPolyline([][][2]float64{{{20, 50}, {220, 50}, {220, 150}}})
+		sp.Start = start
+		return sp
 	}
 	tp := &SVGNode{Tag: "textpath"}
 	advs := []float64{13.34375, 13.34375, 14.453125, 14.453125, 13.34375}

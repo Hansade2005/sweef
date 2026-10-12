@@ -235,7 +235,8 @@ func layoutFromRender(res *render.Result, env *tabEnv) *fnet.Layout {
 		if rc, ok := res.ClientRect(n); ok {
 			g.Client = [4]float64{rc.X, rc.Y, rc.W, rc.H}
 		}
-		for _, f := range b.Frags {
+		// projected through transforms (including 3D chains), one rect per fragment
+		for _, f := range res.ClientRects(n) {
 			g.Frags = append(g.Frags, [4]float64{f.X, f.Y, f.W, f.H})
 		}
 		return g, true

@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>xf3d_flip</title>
+<style>
+body { margin: 20px; font: 16px Arial, sans-serif; background: #fff; }
+.card { display: inline-block; width: 200px; height: 260px; margin: 20px 30px; perspective: 800px; vertical-align: top; }
+.inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; box-shadow: 0 4px 10px rgba(0,0,0,.3); }
+.card.f1 .inner { transform: rotateY(180deg) } .card.f2 .inner { transform: rotateY(35deg) } .card.f3 .inner { transform: rotateX(-40deg) rotateY(160deg) } .card.f4 .inner { transform: rotateY(90deg) }
+.front, .back { position: absolute; inset: 0; backface-visibility: hidden; padding: 16px; box-sizing: border-box; border-radius: 12px; }
+.front { background: #fde68a; color: #333 } .back { background: #1e3a8a; color: #fff; transform: rotateY(180deg) }
+h3 { margin: 0 0 8px } p { margin: 0 }
+</style></head><body>
+<div class="card"><div class="inner"><div class="front"><h3>Front</h3><p>Hello card</p></div><div class="back"><h3>Back</h3><p>Flipped side</p></div></div></div>
+<div class="card f1"><div class="inner"><div class="front"><h3>Front</h3><p>Hello card</p></div><div class="back"><h3>Back</h3><p>Flipped side</p></div></div></div>
+<div class="card f2"><div class="inner"><div class="front"><h3>Front</h3><p>Hello card</p></div><div class="back"><h3>Back</h3><p>Flipped side</p></div></div></div>
+<div class="card f3"><div class="inner"><div class="front"><h3>Front</h3><p>Hello card</p></div><div class="back"><h3>Back</h3><p>Flipped side</p></div></div></div>
+<div class="card f4"><div class="inner"><div class="front"><h3>Front</h3><p>Hello card</p></div><div class="back"><h3>Back</h3><p>Flipped side</p></div></div></div>
+</body></html>

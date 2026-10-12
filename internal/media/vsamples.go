@@ -16,8 +16,8 @@ type vsample struct {
 
 // vstream is the video track of a resource as a flat list of access units.
 type vstream struct {
-	codec   string // vp8 vp9 h264 av1
-	cfg     []byte // avcC / vpcC / av1C
+	codec   string // vp8 vp9 h264 hevc av1
+	cfg     []byte // avcC / hvcC / vpcC / av1C
 	w, h    int
 	samples []vsample
 }
@@ -57,8 +57,8 @@ func loadVideoStream(src Source, info *Info) (*vstream, error) {
 }
 
 func (vs *vstream) loadWebM(src Source, info *Info, trk *Track) error {
-	if vs.codec == "av1" {
-		// av1C: configuration OBUs (sequence header)
+	if vs.codec == "av1" || vs.codec == "hevc" {
+		// av1C (configuration OBUs) / hvcC (parameter sets) from CodecPrivate
 		n := int(src.Size())
 		if n > 1<<20 {
 			n = 1 << 20

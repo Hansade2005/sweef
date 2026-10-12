@@ -4,31 +4,75 @@ import (
 	"math"
 	"strings"
 
+	"github.com/sweefbrowser/sweef/internal/font"
 	"github.com/sweefbrowser/sweef/internal/render"
 )
 
 // SVG text: addressable characters (x/y/dx/dy/rotate lists, whitespace),
 // text chunks and anchors, textLength, textPath, baseline selection and
 // baseline-shift are resolved by render.LayoutSVGText; this file supplies
-// the font advances and draws the placed glyphs.
+// the font advances and the placed glyphs.
+//
+// Blink (LayoutNG SVG text) lays text out in a "scaled" space: the font is
+// instantiated at font-size * k, where k = sqrt((a^2+b^2+c^2+d^2)/2) of the
+// transform to the screen, the x/y/dx/dy lists and textLength are multiplied
+// by k, all glyph positions are computed there, and the text is painted under
+// a canvas scale of 1/k. Everything below is in that scaled space; k = 1
+// reproduces unscaled text.
+
+// bidiInfo marks text with right-to-left characters: it is shaped as a whole
+// (reordering, joining) when painted, the per-character advances only place it.
+type bidiInfo struct {
+	spec   FontSpec
+	ls, ws float64
+}
 
 type textGlyph struct {
-	text      string
+	bidi      *bidiInfo
+	r         rune
+	g         Glyph // face and, for a ligature head, the ligature glyph
+	skip      bool  // tail of a ligature: not drawn
 	st        *sStyle
 	node      *svgNode
-	x, y      float64 // glyph origin on its baseline
+	x, y      float64 // glyph origin on its baseline (scaled space)
 	angle     float64
 	sx        float64
 	w         float64 // laid out advance
 	nat       float64 // natural advance (font + letter/word spacing)
+	ex        float64 // exact advance
 	asc, desc float64
+	size      float64 // scaled font size
+	fake      bool    // synthetic bold
+	skew      bool    // synthetic italic
+	nom       int     // index of the addressable character
+	pivX      float64 // rotation pivot
+	pivY      float64
+	vert      bool // laid out along y
+	fragStart bool // starts a new painted fragment
 }
 
 func (g *textGlyph) plain() bool { return g.angle == 0 && g.sx == 1 }
 
-type glyphMetric struct{ w, asc, desc float64 }
-
 func isTextTag(t string) bool { return t == "tspan" || t == "a" || t == "textpath" }
+
+// svgScreenScale is Blink's font scaling factor for a text under the device
+// matrix m (SVGLayoutSupport::CalculateScreenFontSizeScalingFactor).
+func svgScreenScale(m Matrix) float64 {
+	k := float64(float32(math.Sqrt((m[0]*m[0] + m[1]*m[1] + m[2]*m[2] + m[3]*m[3]) / 2)))
+	if k <= 0 || math.IsNaN(k) || math.IsInf(k, 0) {
+		return 1
+	}
+	return k
+}
+
+// svgScaledSize is the pixel size of the font Blink instantiates: the font
+// size times the (single precision) scaling factor, truncated to 1/100 (the
+// platform font cache precision; a product that lands a float32 rounding
+// error below a hundredth, such as 18 * 1.37, counts as on it).
+func svgScaledSize(fs, k float64) float64 {
+	s := float64(float32(fs) * float32(k))
+	return math.Floor(s*100+1e-3) / 100
+}
 
 // baselineOffset is the downward shift of the glyph origin that puts the
 // given baseline of a font on the text position.
@@ -50,7 +94,93 @@ func baselineOffset(kind string, asc, desc, fs float64) float64 {
 	return 0
 }
 
-func (r *svgR) layoutText(n *svgNode, st *sStyle) []textGlyph {
+// svgRun is the shaping of one run of characters sharing a font.
+type svgRun struct {
+	adv        []float64 // per character, including kerning and spacing, (layout)
+	ex         []float64 // exact per-character advance (glyph offsets inside a fragment)
+	glyph      []Glyph
+	skip       []bool
+	asc, desc  float64
+	size       float64
+	fake, skew bool
+	bidi       *bidiInfo
+}
+
+// shapeSVGRun shapes rs with the font spec at its (already scaled) size the
+// way Blink does for an SVG text item: the whole run goes through the shaper
+// at once (so kerning applies across spaces), advances are linear in the
+// FreeType pixel size, and each character's advance is the difference of the
+// 1/64-floored cumulative pen positions.
+func shapeSVGRun(spec FontSpec, rs []rune, letterSp, wordSp float64) svgRun {
+	fs := resolveFaces(spec.Families, spec.Weight, spec.Italic)
+	out := svgRun{adv: make([]float64, len(rs)), ex: make([]float64, len(rs)), glyph: make([]Glyph, len(rs)), skip: make([]bool, len(rs)), size: spec.Size}
+	if len(fs.faces) > 0 {
+		f0 := fs.faces[0]
+		out.fake = spec.Weight >= 600 && f0.Style.Weight < 600
+		out.skew = spec.Italic && !f0.Style.Italic
+		m := f0.Metrics(spec.Size)
+		out.asc, out.desc = math.Round(m.Ascent), math.Round(m.Descent)
+	}
+	raw := make([]float64, len(rs))
+	opts := font.ShapeOptions{Kern: true, Liga: letterSp == 0}
+	for i := 0; i < len(rs); {
+		f := fs.faceFor(rs[i])
+		if f == nil {
+			i++
+			continue
+		}
+		if !f.HasGlyph(rs[i]) {
+			out.glyph[i] = Glyph{R: rs[i], Face: f}
+			raw[i] = spec.Size * 0.5
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(rs) && fs.faceFor(rs[j]) == f && f.HasGlyph(rs[j]) {
+			j++
+		}
+		run := f.ShapeRun(rs[i:j], spec.Size, opts)
+		for gi, g := range run {
+			next := g.X + g.Adv
+			if gi+1 < len(run) {
+				next = run[gi+1].X
+			}
+			a := next - g.X
+			n := g.NRunes
+			if n < 1 {
+				n = 1
+			}
+			for c := 0; c < n; c++ {
+				idx := i + g.Cluster + c
+				out.glyph[idx] = Glyph{R: rs[idx], Face: f}
+				raw[idx] = a / float64(n)
+				if c > 0 {
+					out.skip[idx] = true
+				}
+			}
+			if n > 1 {
+				out.glyph[i+g.Cluster].GID = g.GID
+			}
+		}
+		i = j
+	}
+	pen, prev := 0.0, 0.0
+	for i, r := range rs {
+		pen += raw[i] + letterSp
+		if r == ' ' {
+			pen += wordSp
+		}
+		out.ex[i] = raw[i] + letterSp
+		if r == ' ' {
+			out.ex[i] += wordSp
+		}
+		out.adv[i] = pen - prev
+		prev = pen
+	}
+	return out
+}
+
+func (r *svgR) layoutText(n *svgNode, st *sStyle, k float64) []textGlyph {
 	styles := map[*svgNode]*sStyle{n: st}
 	parents := map[*svgNode]*svgNode{}
 	var walk func(p *svgNode, ps sStyle, depth int)
@@ -58,14 +188,14 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle) []textGlyph {
 		if depth > 40 {
 			return
 		}
-		for _, k := range p.Kids {
-			if k.Tag == "#text" || k.A == nil || !isTextTag(k.Tag) || k.A["display"] == "none" {
+		for _, kid := range p.Kids {
+			if kid.Tag == "#text" || kid.A == nil || !isTextTag(kid.Tag) || kid.A["display"] == "none" {
 				continue
 			}
-			ks := r.inherit(ps, k.A)
-			styles[k] = &ks
-			parents[k] = p
-			walk(k, ks, depth+1)
+			ks := r.inherit(ps, kid.A)
+			styles[kid] = &ks
+			parents[kid] = p
+			walk(kid, ks, depth+1)
 		}
 	}
 	walk(n, *st, 0)
@@ -80,6 +210,14 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle) []textGlyph {
 	if len(chars) == 0 {
 		return nil
 	}
+	// scaled space
+	for i := range chars {
+		c := &chars[i]
+		c.X, c.Y, c.DX, c.DY = c.X*k, c.Y*k, c.DX*k, c.DY*k
+	}
+	for i := range lens {
+		lens[i].Length *= k
+	}
 	// text paths
 	paths := map[*svgNode]*render.SVGTextPath{}
 	for _, ch := range chars {
@@ -91,69 +229,110 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle) []textGlyph {
 		if t == nil || t.Tag != "path" {
 			return nil
 		}
-		sp := &render.SVGTextPath{Contours: render.SVGPathContours(t.A["d"])}
-		sp.Start = render.SVGParsePct(ch.Path.A["startoffset"], sp.Length())
+		sp := render.NewSVGTextPath(t.A["d"], k)
+		sp.Start = render.SVGParsePct(ch.Path.A["startoffset"], sp.Length()/k) * k
 		paths[ch.Path] = sp
 	}
-	c := r.c
-	c.Save()
-	defer c.Restore()
-	cache := map[string]glyphMetric{}
-	fm := map[string]glyphMetric{}
-	measure := func(sty *sStyle, ch rune) (glyphMetric, glyphMetric) {
-		fs := r.fontOf(sty)
-		c.SetFont(fs)
-		c.SetLetterSpacing(0)
-		c.SetWordSpacing(0)
-		c.SetFontKerning("auto")
-		f, ok := fm[fs]
-		if !ok {
-			tm := c.MeasureText("M")
-			f = glyphMetric{asc: tm.FontAscent, desc: tm.FontDescent}
-			fm[fs] = f
-		}
-		k := fs + "\x00" + string(ch)
-		g, ok := cache[k]
-		if !ok {
-			g = glyphMetric{w: c.MeasureText(string(ch)).Width}
-			cache[k] = g
-		}
-		return g, f
+	// shaping runs: consecutive characters with the same font and spacing
+	type runKey struct {
+		font   string
+		ls, ws float64
 	}
+	keyOf := func(i int) (runKey, *sStyle) {
+		sty := styles[chars[i].Node]
+		if sty == nil {
+			sty = st
+		}
+		return runKey{r.fontOf(sty), r.length(sty.letterSp, 0, sty.fontSize, 0) * k, r.length(sty.wordSp, 0, sty.fontSize, 0) * k}, sty
+	}
+	shaped := make([]svgRun, len(chars))
+	runOf := make([]int, len(chars)) // start of the run a character belongs to
+	for i := 0; i < len(chars); {
+		key, sty := keyOf(i)
+		j := i + 1
+		for j < len(chars) {
+			k2, _ := keyOf(j)
+			if k2 != key {
+				break
+			}
+			j++
+		}
+		spec, ok := ParseFont(key.font, 16)
+		if !ok {
+			spec = FontSpec{Families: []string{"serif"}, Weight: 400, Size: sty.fontSize}
+		}
+		spec.Size = svgScaledSize(sty.fontSize, k)
+		rs := make([]rune, j-i)
+		for q := i; q < j; q++ {
+			rs[q-i] = chars[q].R
+		}
+		sr := shapeSVGRun(spec, rs, key.ls, key.ws)
+		var bd *bidiInfo
+		for _, ru := range rs {
+			if font.IsRTLRune(ru) {
+				bd = &bidiInfo{spec: spec, ls: key.ls, ws: key.ws}
+				break
+			}
+		}
+		for q := i; q < j; q++ {
+			shaped[q] = svgRun{adv: sr.adv[q-i : q-i+1], ex: sr.ex[q-i : q-i+1], glyph: sr.glyph[q-i : q-i+1], skip: sr.skip[q-i : q-i+1],
+				asc: sr.asc, desc: sr.desc, size: sr.size, fake: sr.fake, skew: sr.skew, bidi: bd}
+			runOf[q] = i
+		}
+		i = j
+	}
+	// Blink splits the text into fragments (text items, and every character
+	// with an entry in a position list or on a path); the width of a fragment
+	// is ceiled to 1/64 and the next fragment starts after it.
+	fragStart := make([]bool, len(chars))
+	advs := make([]float64, len(chars))
+	for i := range chars {
+		fragStart[i] = i == 0 || chars[i].Node != chars[i-1].Node || chars[i].Explicit || chars[i].Path != nil
+		advs[i] = shaped[i].ex[0]
+	}
+	for a := 0; a < len(chars); {
+		b := a + 1
+		for b < len(chars) && !fragStart[b] {
+			b++
+		}
+		var sum float64
+		for i := a; i < b; i++ {
+			sum += shaped[i].ex[0]
+		}
+		advs[b-1] += math.Ceil(sum*64-1e-9)/64 - sum
+		a = b
+	}
+	vert := st.vertical
 	ins := make([]render.SVGTextIn, len(chars))
-	mets := make([]glyphMetric, len(chars))
 	nats := make([]float64, len(chars))
 	for i, ch := range chars {
 		sty := styles[ch.Node]
 		if sty == nil {
 			sty = st
 		}
-		g, f := measure(sty, ch.R)
-		adv := g.w + r.length(sty.letterSp, 0, sty.fontSize, 0)
-		if ch.R == ' ' {
-			adv += r.length(sty.wordSp, 0, sty.fontSize, 0)
-		}
-		nats[i] = adv
-		mets[i] = f
+		sr := &shaped[i]
+		adv := advs[i]
+		nats[i] = sr.ex[0]
 		var off float64
+		fsK := sr.size
 		if sty.alignBase != "" && sty.alignBase != "baseline" && sty.alignBase != "auto" {
-			off = baselineOffset(sty.alignBase, f.asc, f.desc, sty.fontSize)
+			off = baselineOffset(sty.alignBase, sr.asc, sr.desc, fsK)
 		} else {
-			off = baselineOffset(sty.baseline, f.asc, f.desc, sty.fontSize)
+			off = baselineOffset(sty.baseline, sr.asc, sr.desc, fsK)
 		}
 		for a := ch.Node; a != nil; a = parents[a] {
 			as := styles[a]
 			if as == nil || as.shift == "" || as.shift == "baseline" {
 				continue
 			}
-			_, af := measure(as, 'M')
+			am := r.metricOf(as, k)
 			switch as.shift {
 			case "sub":
-				off += (af.asc + af.desc) / 2
+				off += (am.asc + am.desc) / 2
 			case "super":
-				off -= (af.asc + af.desc) / 2
+				off -= (am.asc + am.desc) / 2
 			default:
-				off -= r.length(as.shift, as.fontSize, as.fontSize, 0)
+				off -= r.length(as.shift, as.fontSize, as.fontSize, 0) * k
 			}
 		}
 		anchor := 0
@@ -163,42 +342,89 @@ func (r *svgR) layoutText(n *svgNode, st *sStyle) []textGlyph {
 		case "end":
 			anchor = 2
 		}
+		if vert {
+			// the inline axis is y: sideways glyphs advance by their
+			// horizontal advance, upright ones by ascent plus descent, and
+			// either is centered on the line (central baseline)
+			if sty.upright {
+				adv = sr.asc + sr.desc
+				off = -sr.ex[0] / 2
+				fragStart[i] = true
+			} else {
+				off = -(sr.asc - sr.desc) / 2
+			}
+		}
 		ins[i] = render.SVGTextIn{SVGTextChar: ch, Adv: adv, YOff: off, Anchor: anchor, Space: ch.R == ' '}
 		if ch.Path != nil {
 			ins[i].PathM = paths[ch.Path]
 		}
 	}
-	pos := render.LayoutSVGText(ins, lens)
-	var out []textGlyph
+	var pos []render.SVGGlyphPos
+	if vert {
+		pos = render.LayoutSVGTextVertical(ins, lens)
+	} else {
+		pos = render.LayoutSVGText(ins, lens)
+	}
+	out := make([]textGlyph, 0, len(pos))
 	for i, p := range pos {
 		if p.Hidden {
 			continue
 		}
-		g := textGlyph{text: string(chars[i].R), st: styles[chars[i].Node], node: chars[i].Node, x: p.X, y: p.Y, angle: p.Angle, sx: p.ScaleX,
-			w: p.Adv, nat: nats[i], asc: mets[i].asc, desc: mets[i].desc}
-		if g.st == nil {
-			g.st = st
+		sty := styles[chars[i].Node]
+		if sty == nil {
+			sty = st
 		}
-		// merge into the previous run when the pen follows the natural advance
-		if k := len(out) - 1; k >= 0 {
-			pv := &out[k]
-			if pv.node == g.node && pv.st == g.st && pv.plain() && g.plain() && math.Abs(pv.y-g.y) < 1e-9 &&
-				math.Abs(pv.x+pv.w-g.x) < 1e-6 && math.Abs(pv.w-pv.runNat()) < 1e-6 && math.Abs(g.w-g.nat) < 1e-6 {
-				pv.text += g.text
-				pv.w += g.w
-				pv.nat += g.nat
-				continue
+		sr := &shaped[i]
+		if vert {
+			if sty.upright {
+				p.Y += sr.asc
+			} else {
+				p.Angle += math.Pi / 2
 			}
 		}
-		out = append(out, g)
+		out = append(out, textGlyph{r: chars[i].R, vert: vert, bidi: sr.bidi, g: sr.glyph[0], skip: sr.skip[0], st: sty, node: chars[i].Node,
+			x: p.X, y: p.Y, angle: p.Angle, sx: p.ScaleX, w: p.Adv, nat: nats[i], ex: sr.ex[0], fragStart: fragStart[i], asc: sr.asc, desc: sr.desc,
+			size: sr.size, fake: sr.fake, skew: sr.skew, nom: i})
+	}
+	byNom := make(map[int]*textGlyph, len(out))
+	for i := range out {
+		byNom[out[i].nom] = &out[i]
+	}
+	for i := range out {
+		g := &out[i]
+		g.pivX, g.pivY = g.x, g.y
+		// the pivot is the character position Blink reports: the run start
+		// plus the floored offset
+		if st0 := byNom[runOf[g.nom]]; st0 != nil {
+			if g.vert {
+				g.pivY = st0.y + float64(lu64(g.y)-lu64(st0.y))
+			} else {
+				g.pivX = st0.x + float64(lu64(g.x)-lu64(st0.x))
+			}
+		}
 	}
 	return out
 }
 
-func (g *textGlyph) runNat() float64 { return g.nat }
+type fontMet struct{ asc, desc float64 }
 
-func (r *svgR) textBBox(n *svgNode, st *sStyle) (Rect, bool) {
-	placed := r.layoutText(n, st)
+// metricOf is the rounded ascent and descent of the scaled font of a style.
+func (r *svgR) metricOf(sty *sStyle, k float64) fontMet {
+	spec, ok := ParseFont(r.fontOf(sty), 16)
+	if !ok {
+		return fontMet{}
+	}
+	spec.Size = svgScaledSize(sty.fontSize, k)
+	fs := resolveFaces(spec.Families, spec.Weight, spec.Italic)
+	if len(fs.faces) == 0 {
+		return fontMet{}
+	}
+	m := fs.faces[0].Metrics(spec.Size)
+	return fontMet{math.Round(m.Ascent), math.Round(m.Descent)}
+}
+
+// glyphsBBox is the box of the placed glyph cells, in user space.
+func glyphsBBox(placed []textGlyph, k float64) (Rect, bool) {
 	if len(placed) == 0 {
 		return Rect{}, false
 	}
@@ -206,8 +432,8 @@ func (r *svgR) textBBox(n *svgNode, st *sStyle) (Rect, bool) {
 	for _, p := range placed {
 		s, cs := math.Sincos(p.angle)
 		for _, pt := range [4][2]float64{{0, -p.asc}, {p.w, -p.asc}, {p.w, p.desc}, {0, p.desc}} {
-			x := p.x + pt[0]*cs - pt[1]*s
-			y := p.y + pt[0]*s + pt[1]*cs
+			x := (p.x + pt[0]*cs - pt[1]*s) / k
+			y := (p.y + pt[0]*s + pt[1]*cs) / k
 			x0, x1 = math.Min(x0, x), math.Max(x1, x)
 			y0, y1 = math.Min(y0, y), math.Max(y1, y)
 		}
@@ -215,123 +441,6 @@ func (r *svgR) textBBox(n *svgNode, st *sStyle) (Rect, bool) {
 	return Rect{x0, y0, x1 - x0, y1 - y0}, true
 }
 
-func (r *svgR) drawText(n *svgNode, st sStyle, m Matrix) {
-	if !st.visible {
-		return
-	}
-	placed := r.layoutText(n, &st)
-	if len(placed) == 0 {
-		return
-	}
-	bb, hasBB := r.textBBox(n, &st)
-	c := r.c
-	for _, p := range placed {
-		if p.st.visible == false {
-			continue
-		}
-		if strings.TrimSpace(p.text) == "" && !strings.Contains(p.st.decoration, "underline") && !strings.Contains(p.st.decoration, "line-through") {
-			continue
-		}
-		c.SetFont(r.fontOf(p.st))
-		c.SetLetterSpacing(r.length(p.st.letterSp, 0, p.st.fontSize, 0))
-		c.SetWordSpacing(r.length(p.st.wordSp, 0, p.st.fontSize, 0))
-		c.SetTextAlign("left")
-		c.SetFontKerning("auto")
-		c.SetTextBaseline("alphabetic")
-		plain := p.plain()
-		screenScale := math.Sqrt((m[0]*m[0] + m[1]*m[1] + m[2]*m[2] + m[3]*m[3]) / 2)
-		gm := m.Mul(Translate(p.x, p.y)).Mul(Rotate(p.angle)).Mul(Scale(p.sx, 1))
-		if p.st.fill.kind != pNone && p.st.fillOp > 0 {
-			if sh := r.shaderFor(p.st.fill, p.st.fillOp, n, bb, hasBB, p.st, m); sh != nil {
-				if plain {
-					shp, ox, oy, sx := c.prepText(p.text, p.x, p.y, 0)
-					shp.ScreenScale = screenScale
-					if p.st.fill.kind == pColor {
-						shp.Lum = textLum(Color{p.st.fill.col.R, p.st.fill.col.G, p.st.fill.col.B, 1})
-					}
-					if len(shp.Glyphs) > 0 {
-						c.draw(c.textMask(shp, ox, oy, sx), sh)
-					}
-				} else {
-					shp, ox, oy, sx := c.prepText(p.text, 0, 0, 0)
-					shp.ScreenScale = screenScale
-					if p.st.fill.kind == pColor {
-						shp.Lum = textLum(Color{p.st.fill.col.R, p.st.fill.col.G, p.st.fill.col.B, 1})
-					}
-					if len(shp.Glyphs) > 0 {
-						c.Save()
-						c.SetTransform(gm)
-						mk := c.textMask(shp, ox, oy, sx)
-						c.Restore()
-						c.draw(mk, sh)
-					}
-				}
-			}
-		}
-		if p.st.stroke.kind != pNone && p.st.strokeOp > 0 && p.st.sw > 0 {
-			if sh := r.shaderFor(p.st.stroke, p.st.strokeOp, n, bb, hasBB, p.st, m); sh != nil {
-				if plain {
-					shp, ox, oy, sx := c.prepText(p.text, p.x, p.y, 0)
-					shp.ScreenScale = screenScale
-					if st := r.strokeStyle(p.st); len(st.Dash) == 0 {
-						if col := p.st.stroke; col.kind == pColor {
-							shp.Lum = textLum(Color{col.col.R, col.col.G, col.col.B, 1})
-						}
-						if mk, ok := c.strokeGlyphMaskFor(shp, ox, oy, sx, st); ok {
-							c.draw(mk, sh)
-							goto strokeDone
-						}
-					}
-					if tp := c.textPath(shp, ox, oy, sx); tp != nil {
-						if mk := StrokeMask(tp, m, r.strokeStyle(p.st), c.drawBounds()); mk != nil {
-							c.draw(mk, sh)
-						}
-					}
-				} else {
-					shp, ox, oy, sx := c.prepText(p.text, 0, 0, 0)
-					shp.ScreenScale = screenScale
-					if st := r.strokeStyle(p.st); len(st.Dash) == 0 {
-						c.Save()
-						c.SetTransform(gm)
-						if col := p.st.stroke; col.kind == pColor {
-							shp.Lum = textLum(Color{col.col.R, col.col.G, col.col.B, 1})
-						}
-						mk, ok := c.strokeGlyphMaskFor(shp, ox, oy, sx, st)
-						c.Restore()
-						if ok {
-							c.draw(mk, sh)
-							goto strokeDone
-						}
-					}
-					if tp := c.textPath(shp, ox, oy, sx); tp != nil {
-						if mk := StrokeMask(tp.Transform(Rotate(p.angle).Mul(Scale(p.sx, 1))).Transform(Translate(p.x, p.y)), m, r.strokeStyle(p.st), c.drawBounds()); mk != nil {
-							c.draw(mk, sh)
-						}
-					}
-				}
-			}
-		}
-	strokeDone:
-		if p.st.decoration != "" && p.st.fill.kind == pColor {
-			th := math.Max(1, p.st.fontSize/16)
-			col := p.st.fill.col
-			col.A *= p.st.fillOp
-			deco := func(dy float64) {
-				pa := NewPath()
-				pa.Rect(0, dy, p.w, th)
-				c.FillPathShader(pa.Transform(Rotate(p.angle)).Transform(Translate(p.x, p.y)), NonZero, Solid(col))
-			}
-			if strings.Contains(p.st.decoration, "underline") {
-				deco(p.st.fontSize * 0.1)
-			}
-			if strings.Contains(p.st.decoration, "line-through") {
-				deco(-p.st.fontSize * 0.3)
-			}
-			if strings.Contains(p.st.decoration, "overline") {
-				deco(-p.asc)
-			}
-		}
-	}
-	c.SetLetterSpacing(0)
-	c.SetWordSpacing(0)
+func (r *svgR) textBBox(n *svgNode, st *sStyle) (Rect, bool) {
+	return glyphsBBox(r.layoutText(n, st, 1), 1)
 }

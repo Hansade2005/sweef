@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -148,7 +149,8 @@ func TestFixtureCoverage(t *testing.T) {
 		covSmooth, covPaeth, covOBMC, covLocalWarp, covGlobalWarp, covWedge, covDiffwtd, covDistance, covInterintra,
 		covCompoundAvg, covScaledRef, covSkipMode, covSegmentation, covDeltaQ, covDeltaLF, covQmatrix, covTx64,
 		covIdtx, covLRWiener, covLRSgr, covSuperres, covFilmGrain, covCdef, covLoopFilter, covMfmv, covTiles,
-		covInterpDual, covLossless, covIntraEdgeFilter, covRefMvTemporal}
+		covInterpDual, covLossless, covIntraEdgeFilter, covRefMvTemporal,
+		covNonUniformTiles, covShortSignaling, covSwitchFrame, covIntraOnly, covErrorRes, covSpatialLayers, covTemporalLayers}
 	for _, c := range need {
 		if coverage[c] == 0 {
 			t.Errorf("no fixture exercises %s", covNames[c])
@@ -196,7 +198,23 @@ func TestFileCompare(t *testing.T) {
 		t.Fatal(err)
 	}
 	resetCoverage()
-	pics, err := NewDecoder().Decode(data)
+	dec := NewDecoder()
+	if v, e := strconv.Atoi(os.Getenv("AV1_OP")); e == nil {
+		dec.OperatingPoint = v
+	}
+	dec.AllLayers = os.Getenv("AV1_ALL") == "1"
+	var pics []*Picture
+	if tus := os.Getenv("AV1_TU"); tus == "1" {
+		for _, tu := range splitTemporalUnits(data) {
+			ps, e := dec.Decode(tu)
+			if e != nil {
+				err = e
+			}
+			pics = append(pics, ps...)
+		}
+	} else {
+		pics, err = dec.Decode(data)
+	}
 	if err != nil {
 		t.Logf("decode error after %d pictures: %v", len(pics), err)
 	}
@@ -255,4 +273,215 @@ func BenchmarkDecode(b *testing.B) {
 		frames += len(pics)
 	}
 	b.ReportMetric(float64(frames)/b.Elapsed().Seconds(), "fps")
+}
+
+func lebBytes(v int) []byte {
+	var out []byte
+	for {
+		c := byte(v & 0x7f)
+		v >>= 7
+		if v != 0 {
+			out = append(out, c|0x80)
+		} else {
+			return append(out, c)
+		}
+	}
+}
+
+// toAnnexB rewrites a low-overhead stream as Annex B temporal units. With
+// keepSize the OBUs keep their obu_size fields (allowed by the format),
+// otherwise they are stripped.
+func toAnnexB(data []byte, keepSize bool) []byte {
+	var out []byte
+	for _, tu := range splitTemporalUnits(data) {
+		var units [][]byte // frame units
+		var cur []byte
+		frames := 0
+		for pos := 0; pos < len(tu); {
+			b := &bitReader{buf: tu[pos:]}
+			b.f(1)
+			typ := b.f(4)
+			ext := b.flag()
+			b.flag()
+			b.f(1)
+			var extb byte
+			if ext {
+				extb = byte(b.f(8))
+			}
+			size := b.leb128()
+			hdrLen := b.pos / 8
+			obu := tu[pos : pos+hdrLen+size]
+			if !keepSize {
+				h := []byte{tu[pos] &^ 2}
+				if ext {
+					h = append(h, extb)
+				}
+				obu = append(h, tu[pos+hdrLen:pos+hdrLen+size]...)
+			}
+			if (typ == obuFrame || typ == obuFrameHeader) && frames > 0 {
+				units = append(units, cur)
+				cur = nil
+			}
+			if typ == obuFrame || typ == obuFrameHeader {
+				frames++
+			}
+			cur = append(cur, lebBytes(len(obu))...)
+			cur = append(cur, obu...)
+			pos += hdrLen + size
+		}
+		units = append(units, cur)
+		var body []byte
+		for _, u := range units {
+			body = append(body, lebBytes(len(u))...)
+			body = append(body, u...)
+		}
+		out = append(out, lebBytes(len(body))...)
+		out = append(out, body...)
+	}
+	return out
+}
+
+// TestAnnexB decodes every fixture rewritten in the Annex B format (with and
+// without obu_size fields) and requires the same pictures.
+func TestAnnexB(t *testing.T) {
+	for _, f := range fixtureList(t) {
+		name := strings.TrimSuffix(filepath.Base(f), ".obu")
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(data) > 30000 {
+			continue // keep the test short
+		}
+		want, err := NewDecoder().Decode(data)
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		for _, keep := range []bool{false, true} {
+			ab := toAnnexB(data, keep)
+			if !IsAnnexB(ab) {
+				t.Fatalf("%s keep=%v: not detected as Annex B", name, keep)
+			}
+			if !keep {
+				got, err := NewDecoder().Decode(ab)
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				if fmt.Sprint(md5s(got)) != fmt.Sprint(md5s(want)) {
+					t.Fatalf("%s: pictures differ", name)
+				}
+				continue
+			}
+			// one temporal unit per call, OBUs keeping their obu_size
+			d := NewDecoder()
+			var all []*Picture
+			for p := 0; p < len(ab); {
+				sz, n, _ := lebAt(ab, p)
+				ps, err := d.Decode(ab[p : p+n+sz])
+				if err != nil {
+					t.Fatal(err)
+				}
+				all = append(all, ps...)
+				p += n + sz
+			}
+			if fmt.Sprint(md5s(all)) != fmt.Sprint(md5s(want)) {
+				t.Fatalf("%s: per-temporal-unit decoding differs", name)
+			}
+		}
+		if IsAnnexB(data) {
+			t.Fatalf("%s: section 5 stream detected as Annex B", name)
+		}
+	}
+}
+
+// decodeMD5File decodes data with dec and compares the pictures with the md5
+// list in file.
+func checkMD5(t *testing.T, dec *Decoder, data []byte, md5file string) {
+	t.Helper()
+	wantRaw, err := os.ReadFile(md5file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Fields(string(wantRaw))
+	pics, err := dec.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := md5s(pics)
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("%d pictures, reference has %d (or content differs): %v vs %v", len(got), len(want), got, want)
+	}
+}
+
+// TestLayers decodes the scalable fixtures with the layer options named by
+// the md5 file suffix: .all.md5 outputs every spatial layer, .opN.md5 selects
+// operating point N (the references are libdav1d and libaom output).
+func TestLayers(t *testing.T) {
+	files, _ := filepath.Glob("../testdata/av1_svc_*.*.md5")
+	if len(files) == 0 {
+		t.Fatal("no layer fixtures")
+	}
+	for _, f := range files {
+		base := filepath.Base(f)
+		parts := strings.Split(strings.TrimSuffix(base, ".md5"), ".")
+		data, err := os.ReadFile("../testdata/" + parts[0] + ".obu")
+		if err != nil {
+			t.Fatal(err)
+		}
+		dec := NewDecoder()
+		switch {
+		case parts[1] == "all":
+			dec.AllLayers = true
+		case strings.HasPrefix(parts[1], "op"):
+			dec.OperatingPoint, _ = strconv.Atoi(parts[1][2:])
+		}
+		t.Run(base, func(t *testing.T) { checkMD5(t, dec, data, f) })
+	}
+}
+
+// TestAnnexBFixture decodes a stream written by aomenc --annexb=1 (libdav1d
+// reads it with its annexb demuxer and gives the same pictures).
+func TestAnnexBFixture(t *testing.T) {
+	data, err := os.ReadFile("../testdata/avb_annexb.obu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !IsAnnexB(data) {
+		t.Fatal("not detected as Annex B")
+	}
+	checkMD5(t, NewDecoder(), data, "../testdata/avb_annexb.md5")
+	// temporal unit by temporal unit
+	d := NewDecoder()
+	var all []*Picture
+	for p := 0; p < len(data); {
+		sz, n, _ := lebAt(data, p)
+		ps, err := d.Decode(data[p : p+n+sz])
+		if err != nil {
+			t.Fatal(err)
+		}
+		all = append(all, ps...)
+		p += n + sz
+	}
+	want, _ := os.ReadFile("../testdata/avb_annexb.md5")
+	if fmt.Sprint(md5s(all)) != fmt.Sprint(strings.Fields(string(want))) {
+		t.Fatal("per temporal unit decoding differs")
+	}
+}
+
+// TestLargeScaleTile decodes a libaom lightfield tile list file (4 anchor
+// frames, the camera frame header and 3 tile lists of tiles taken from 16
+// views) and compares the assembled pictures with the output of libaom's
+// lightfield_tile_list_decoder. libdav1d does not implement large scale
+// tile decoding.
+func TestLargeScaleTile(t *testing.T) {
+	data, err := os.ReadFile("../testdata/av1ls_tiles.ivf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRaw, _ := os.ReadFile("../testdata/av1ls_tiles.md5")
+	want := strings.Fields(string(wantRaw))
+	got := md5s(decodeTileListFile(t, data, 4))
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
 }

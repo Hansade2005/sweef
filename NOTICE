@@ -24,6 +24,50 @@ the behaviour, including implementation details, of FFmpeg's libavcodec
 aacsbr / aacps decoders (LGPL-2.1-or-later), against whose output they were
 verified. See https://ffmpeg.org/legal.html.
 
+USAC / xHE-AAC decoding
+-----------------------
+internal/media/usac_*.go, lpd_*.go, esbr_*.go and mps_*.go decode ISO/IEC
+23003-3 (USAC): the frequency-domain core coder, the linear-prediction-domain
+core coder (ACELP and TCX), the enhanced SBR tool (eSBR, including the
+harmonic transposer, predictive vector coding and inter-subband-sample TES)
+and the MPEG Surround 2-1-2 upmix, in pure Go.
+
+FFmpeg. The decoding process of the frequency-domain core coder (UsacConfig
+parsing, arithmetic spectral coder, scalefactors, noise filling, TNS, M/S,
+window handling) follows FFmpeg 8.1's libavcodec/aac/aacdec_usac.c and
+aacdec_ac.c (LGPL-2.1-or-later); the tables in usac_tables_gen.go were
+extracted by tools/usacgen/gen_usac_tables.py from FFmpeg's aactab.c, and the
+MPS212 bitstream element layout was cross-checked against
+libavcodec/aac/aacdec_usac_mps212.c. See https://ffmpeg.org/legal.html.
+
+libxaac. The LPD core coder, eSBR and MPS212 stages, the complex prediction
+MDST filters, the pre-roll handling and the loudness normalisation are ports of
+the processing chains of libxaac, the open source xHE-AAC codec contributed by
+Ittiam Systems (https://github.com/ittiam-systems/libxaac):
+
+  Copyright (C) 2015, 2018, 2023 The Android Open Source Project
+  Originally developed and contributed by Ittiam Systems Pvt. Ltd, Bangalore
+  Licensed under the Apache License, Version 2.0 (the "License"); you may not
+  use these files except in compliance with the License. You may obtain a copy
+  of the License at http://www.apache.org/licenses/LICENSE-2.0 (a copy is in
+  third_party/libxaac/LICENSE). Unless required by applicable law or agreed to
+  in writing, software distributed under the License is distributed on an "AS
+  IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+  implied. See the License for the specific language governing permissions and
+  limitations under the License.
+
+The Go code is a rewrite, not a transliteration, but it reproduces libxaac's
+algorithms and constants (including its handling of corner cases) and was
+verified stage by stage against an instrumented build of libxaac. The constant
+tables derived from libxaac are generated from its source text by the scripts
+in tools/usacgen/ (gen_esbr_tables.py, gen_mps_tables.py,
+gen_usac_tables_xaac.py); every generated file (esbr_tables_gen.go,
+mps_tables_gen.go, usac_tables_xaac_gen.go) carries a provenance header and is
+kept separate from the hand written code so that it can be replaced. libxaac
+also generated the test streams (testdata/usac/xaac_*.m4a, encoded with
+libxaac's xaacenc) and the reference output (the .s16 files, decoded with
+libxaac's xaacdec) of the tests in usac_xaac_test.go.
+
 Opus decoding
 -------------
 Opus decoding uses github.com/thesyncim/gopus (BSD-3-Clause).
@@ -68,3 +112,10 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Vendored libraries
+------------------
+third_party/gopus is github.com/thesyncim/gopus v0.1.2 (BSD-3-Clause) with its CELT
+table built lazily. third_party/go-mp3 is github.com/hajimehoshi/go-mp3 (Apache-2.0)
+with its decoding tables built lazily. Both changes only move work from process
+start-up to first use; licence files are kept in each directory.

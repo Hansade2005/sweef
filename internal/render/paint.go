@@ -25,6 +25,8 @@ type hitRec struct {
 	clips []clipRec
 	m     [6]float64
 	hasM  bool
+	hp    [9]float64
+	hasHP bool
 	noPE  bool
 	ext   []func(x, y float64) bool
 }
@@ -35,6 +37,13 @@ type painter struct {
 	clips []clipRec
 	m     [6]float64
 	hasM  bool
+	// hp is the projective map (3x3, row-major) from the current local space to
+	// the page while inside a 3D layer; hasHP is false outside of one
+	hp    [9]float64
+	hasHP bool
+	// fr is the nearest enclosing 3D layer (nil outside), see paint_3d.go
+	fr   *frame3
+	seq3 int
 	// latX, latY is the origin of the pixel lattice rectangles snap to (the
 	// box origin of the nearest lattice-opening ancestor), see paint_snap.go
 	latX, latY float64
@@ -175,7 +184,7 @@ func (p *painter) addHit(b *lbox, rects ...Rect) {
 	if b.n == nil {
 		return
 	}
-	p.hits = append(p.hits, hitRec{n: b.n, rects: rects, clips: p.clips, m: p.m, hasM: p.hasM, noPE: b.st.PointerEvents == "none", ext: p.hitExt})
+	p.hits = append(p.hits, hitRec{n: b.n, rects: rects, clips: p.clips, m: p.m, hasM: p.hasM, hp: p.hp, hasHP: p.hasHP, noPE: b.st.PointerEvents == "none", ext: p.hitExt})
 }
 
 // paintSC paints a stacking context rooted at b.
@@ -229,11 +238,13 @@ func (p *painter) paintSC(b *lbox, isRoot bool) {
 // beginEffects opens the transform and layer (opacity, filter, blend) of b and
 // returns the function that closes them.
 func (p *painter) beginEffects(b *lbox) func() {
-	st := b.st
-	layer := st.OpacitySet && st.Opacity < 1 || len(st.Filter) > 0 || st.MixBlend != "normal" && st.MixBlend != ""
+	if pl := p.plan3(b); pl != nil {
+		return p.beginEffects3D(b, pl)
+	}
 	drop := b.dropsFraction()
 	tx := b.hasTransform() || drop
 	saveM, saveHas := p.m, p.hasM
+	saveHP, saveHasHP := p.hp, p.hasHP
 	saveLX, saveLY := p.latX, p.latY
 	if tx {
 		pm, lx, ly := p.frameMatrix(b, drop)
@@ -243,8 +254,28 @@ func (p *painter) beginEffects(b *lbox) func() {
 			m := b.fullMatrix()
 			p.m = mulM(p.m, m)
 			p.hasM = true
+			if p.hasHP {
+				p.hp = mul3(p.hp, m3of(m))
+			}
 		}
 	}
+	endFx := p.beginFx(b)
+	return func() {
+		endFx()
+		if tx {
+			p.emit(PopTransform{})
+		}
+		p.m, p.hasM = saveM, saveHas
+		p.hp, p.hasHP = saveHP, saveHasHP
+		p.latX, p.latY = saveLX, saveLY
+	}
+}
+
+// beginFx opens the backdrop filter, opacity / filter / blend layers and the
+// clip-path and mask of b (inside its transform) and returns the closer.
+func (p *painter) beginFx(b *lbox) func() {
+	st := b.st
+	layer := st.OpacitySet && st.Opacity < 1 || len(st.Filter) > 0 || st.MixBlend != "normal" && st.MixBlend != ""
 	if len(st.BackdropFilter) > 0 && st.Visibility != "hidden" {
 		bf := BackdropFilter{Rect: rectOf(b), Radii: p.radii(b)}
 		for _, f := range st.BackdropFilter {
@@ -294,11 +325,6 @@ func (p *painter) beginEffects(b *lbox) func() {
 		if outer {
 			p.emit(PopLayer{})
 		}
-		if tx {
-			p.emit(PopTransform{})
-		}
-		p.m, p.hasM = saveM, saveHas
-		p.latX, p.latY = saveLX, saveLY
 	}
 }
 

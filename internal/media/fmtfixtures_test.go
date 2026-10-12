@@ -56,17 +56,20 @@ func TestCanPlayNativeVideoProfiles(t *testing.T) {
 	SetFFmpegEnabled(false)
 	defer SetFFmpegEnabled(true)
 	for mime, want := range map[string]string{
-		`video/mp4; codecs="avc1.42E01E"`:     "probably",
-		`video/mp4; codecs="avc1.64001F"`:     "probably",
-		`video/mp4; codecs="avc1.6E0033"`:     "probably", // High 10
-		`video/mp4; codecs="avc1.7A0033"`:     "probably", // High 4:2:2
-		`video/mp4; codecs="avc1.F4001F"`:     "probably", // High 4:4:4 Predictive
-		`video/mp4; codecs="avc1.58A01E"`:     "maybe",    // Extended
-		`video/webm; codecs="vp09.00.10.08"`:  "probably",
-		`video/webm; codecs="vp09.01.20.08"`:  "probably",
-		`video/webm; codecs="vp09.02.10.10"`:  "probably",
-		`video/webm; codecs="vp09.03.10.12"`:  "probably",
-		`video/mp4; codecs="hvc1.1.6.L93.B0"`: "",
+		`video/mp4; codecs="avc1.42E01E"`:      "probably",
+		`video/mp4; codecs="avc1.64001F"`:      "probably",
+		`video/mp4; codecs="avc1.6E0033"`:      "probably", // High 10
+		`video/mp4; codecs="avc1.7A0033"`:      "probably", // High 4:2:2
+		`video/mp4; codecs="avc1.F4001F"`:      "probably", // High 4:4:4 Predictive
+		`video/mp4; codecs="avc1.58A01E"`:      "probably", // Extended
+		`video/webm; codecs="vp09.00.10.08"`:   "probably",
+		`video/webm; codecs="vp09.01.20.08"`:   "probably",
+		`video/webm; codecs="vp09.02.10.10"`:   "probably",
+		`video/webm; codecs="vp09.03.10.12"`:   "probably",
+		`video/mp4; codecs="hvc1.1.6.L93.B0"`:  "probably",
+		`video/mp4; codecs="hvc1.2.4.L93.B0"`:  "probably", // Main 10
+		`video/mp4; codecs="hev1.4.10.L93.B0"`: "maybe",    // Range Extensions
+		`video/mp4; codecs="hvc1.9.20.L93.B0"`: "",         // Screen content
 	} {
 		if got := CanPlayType(mime); got != want {
 			t.Errorf("CanPlayType(%s) = %q, want %q", mime, got, want)

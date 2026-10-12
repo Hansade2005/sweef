@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>xf3d_cube</title>
+<style>
+body { margin: 20px; font: bold 28px Arial, sans-serif; background: #fff; }
+.scene { display: inline-block; width: 300px; height: 300px; margin: 20px 40px; perspective: 600px; perspective-origin: 50% 40%; vertical-align: top; }
+.cube { position: relative; width: 200px; height: 200px; margin: 50px; transform-style: preserve-3d; transform: translateZ(-100px) rotateX(-25deg) rotateY(35deg); }
+.face { position: absolute; width: 200px; height: 200px; border: 2px solid #222; box-sizing: border-box; display: flex; align-items: center; justify-content: center; color: #fff; }
+.front { background: hsla(0,70%,50%,0.9); transform: rotateY(0) translateZ(100px) }
+.back { background: hsla(60,70%,40%,0.9); transform: rotateY(180deg) translateZ(100px) }
+.right { background: hsla(120,70%,35%,0.9); transform: rotateY(90deg) translateZ(100px) }
+.left { background: hsla(180,70%,35%,0.9); transform: rotateY(-90deg) translateZ(100px) }
+.top { background: hsla(240,70%,50%,0.9); transform: rotateX(90deg) translateZ(100px) }
+.bottom { background: hsla(300,70%,40%,0.9); transform: rotateX(-90deg) translateZ(100px) }
+.s2 .cube { transform: translateZ(-100px) rotateX(60deg) rotateZ(40deg); }
+.s2 .face { background-image: linear-gradient(135deg, rgba(255,255,255,.3), rgba(0,0,0,.2)); }
+</style></head><body>
+<div class="scene"><div class="cube"><div class="face front">1</div><div class="face back">2</div><div class="face right">3</div><div class="face left">4</div><div class="face top">5</div><div class="face bottom">6</div></div></div><div class="scene s2"><div class="cube"><div class="face front">1</div><div class="face back">2</div><div class="face right">3</div><div class="face left">4</div><div class="face top">5</div><div class="face bottom">6</div></div></div>
+</body></html>

@@ -20,7 +20,7 @@ var errAACUnsupported = fmt.Errorf("%w: aac feature", ErrUnsupported)
 
 // nativeAAC reports whether the pure-Go AAC decoder handles the track.
 func nativeAAC(a *Track) bool {
-	return a != nil && a.CodecName == "aac" && (a.Codec == "mp4a.40.2" || a.Codec == "mp4a.40.5" || a.Codec == "mp4a.40.29")
+	return a != nil && a.CodecName == "aac" && (a.Codec == "mp4a.40.2" || a.Codec == "mp4a.40.5" || a.Codec == "mp4a.40.29" || nativeUSAC(a))
 }
 
 type aacBits struct {
@@ -144,8 +144,9 @@ type aacStats struct{ ms, is, pns, tns, pulse, short, start, stop, faults int }
 type aacConfig struct {
 	aot, sfi, rate, chCfg int
 	sbr, ps               bool
-	extRate               int  // SBR output rate (explicit signalling), 0 if unknown
-	probe                 bool // implicit signalling: detect SBR/PS from the payload
+	extRate               int   // SBR output rate (explicit signalling), 0 if unknown
+	probe                 bool  // implicit signalling: detect SBR/PS from the payload
+	pceOrder              []int // chCfg 0: element channel -> output channel (from the PCE)
 }
 
 func parseASC(b []byte) (aacConfig, error) {
@@ -196,6 +197,11 @@ func parseASC(b []byte) (aacConfig, error) {
 		return c, errAACUnsupported
 	}
 	r.bit() // extensionFlag
+	if c.chCfg == 0 {
+		if err := parsePCE(r, &c); err != nil {
+			return c, err
+		}
+	}
 	// backward compatible signalling
 	if !c.sbr && len(b)*8-r.pos >= 16 && r.peek(11) == 0x2b7 {
 		r.bits(11)
@@ -221,6 +227,102 @@ func parseASC(b []byte) (aacConfig, error) {
 	return c, nil
 }
 
+// parsePCE reads a program_config_element (14496-3 4.5.2.1) and maps it to
+// the channel count and the output order FFmpeg uses (native channel mask
+// order: FL FR FC LFE BL BR FLC FRC BC SL SR). Layouts equal to a standard
+// channel configuration are folded into it.
+func parsePCE(r *aacBits, c *aacConfig) error {
+	r.bits(4) // element_instance_tag
+	r.bits(2) // object type
+	r.bits(4) // sampling frequency index
+	nf, ns, nb, nl, na, nc := r.bits(4), r.bits(4), r.bits(4), r.bits(2), r.bits(3), r.bits(4)
+	if r.bit() {
+		r.bits(4)
+	}
+	if r.bit() {
+		r.bits(4)
+	}
+	if r.bit() {
+		r.bits(3)
+	}
+	// native mask bit of each channel, in element (bitstream) order
+	var bitsOf []int
+	const (
+		chFL, chFR, chFC, chLFE, chBL, chBR, chFLC, chFRC, chBC, chSL, chSR = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+	)
+	// FFmpeg's layout for several front elements: an SCE is the centre, the
+	// last CPE is FL/FR and any earlier CPE the front-left/right-of-centre
+	// pair (this is what its channel-order sniffing yields for 5.1 PCEs)
+	var frontKinds []bool
+	for i := 0; i < nf; i++ {
+		frontKinds = append(frontKinds, r.bit())
+		r.bits(4)
+	}
+	lastCPE := -1
+	for i, cpe := range frontKinds {
+		if cpe {
+			lastCPE = i
+		}
+	}
+	for i, cpe := range frontKinds {
+		switch {
+		case !cpe:
+			bitsOf = append(bitsOf, chFC)
+		case i == lastCPE:
+			bitsOf = append(bitsOf, chFL, chFR)
+		default:
+			bitsOf = append(bitsOf, chFLC, chFRC)
+		}
+	}
+	for i := 0; i < ns; i++ {
+		if r.bit() {
+			bitsOf = append(bitsOf, chSL, chSR)
+		} else {
+			bitsOf = append(bitsOf, chSL)
+		}
+		r.bits(4)
+	}
+	for i := 0; i < nb; i++ {
+		if r.bit() {
+			bitsOf = append(bitsOf, chBL, chBR)
+		} else {
+			bitsOf = append(bitsOf, chBC)
+		}
+		r.bits(4)
+	}
+	for i := 0; i < nl; i++ {
+		bitsOf = append(bitsOf, chLFE)
+		r.bits(4)
+	}
+	for i := 0; i < na; i++ {
+		r.bits(4)
+	}
+	for i := 0; i < nc; i++ {
+		r.bits(5)
+	}
+	r.pos = (r.pos + 7) &^ 7 // byte_alignment
+	cl := r.bits(8)
+	r.skip(8 * cl)
+	if r.err || len(bitsOf) == 0 || len(bitsOf) > 8 {
+		return errAACUnsupported
+	}
+	order := make([]int, len(bitsOf))
+	for i, b := range bitsOf {
+		rank := 0
+		for _, o := range bitsOf {
+			if o < b {
+				rank++
+			}
+		}
+		order[i] = rank
+	}
+	c.pceOrder = order
+	if len(order) == 1 {
+		c.chCfg = 1
+	}
+	return nil
+}
+
 var aacChanOrder = map[int][]int{
 	// element order -> output index (L R C LFE Ls Rs ...)
 	1: {0},
@@ -235,6 +337,9 @@ var aacChanCount = map[int]int{1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 8}
 
 func newAACDecoder(c aacConfig) (*aacDecoder, error) {
 	n, ok := aacChanCount[c.chCfg]
+	if c.chCfg == 0 && len(c.pceOrder) > 0 {
+		n, ok = len(c.pceOrder), true
+	}
 	if !ok {
 		return nil, errAACUnsupported
 	}
@@ -253,6 +358,9 @@ func newAACDecoder(c aacConfig) (*aacDecoder, error) {
 	}
 	// aacChanOrder[cfg][elementChannelIndex] = output index
 	d.order = aacChanOrder[c.chCfg]
+	if c.chCfg == 0 {
+		d.order = c.pceOrder
+	}
 	if d.sbr && !d.down {
 		d.outN = 2048
 	}
@@ -942,6 +1050,16 @@ func (d *aacDecoder) decodeFrame(data []byte) error {
 	}
 }
 
+// sbrHasData reports whether any SBR element has seen a header and data.
+func (d *aacDecoder) sbrHasData() bool {
+	for _, e := range d.sbrEl {
+		if e != nil && e.start {
+			return true
+		}
+	}
+	return false
+}
+
 // sbrFor returns the SBR decoder of element ordinal ei.
 func (d *aacDecoder) sbrFor(ei int, e aacElem) *sbrElem {
 	for len(d.sbrEl) <= ei {
@@ -1081,6 +1199,9 @@ func (d *aacDecoder) finishChannel(ch int, c *aacChan, out []float32) {
 
 // decodeAACStream decodes every access unit of the stream to planar PCM.
 func decodeAACStream(data []byte, as *audioStream) (*PCM, error) {
+	if isUSACConfig(as.cfg) { // AOT 42: usac_stream.go
+		return decodeUSACStream(as)
+	}
 	cfg, err := parseASC(as.cfg)
 	if err != nil {
 		return nil, err
@@ -1091,11 +1212,18 @@ func decodeAACStream(data []byte, as *audioStream) (*PCM, error) {
 		pc := cfg
 		pc.probe = true
 		if pd, err := newAACDecoder(pc); err == nil {
+			// SBR/PS headers may arrive late (some encoders send them every N
+			// frames), so scan up to 8 packets after the first SBR payload with a
+			// header, at most 400 in all
+			after := 0
 			for i, p := range as.packets {
-				if i >= 8 || (pd.sawSBR && (pd.sawPS || cfg.chCfg != 1)) {
+				if i >= 400 || (i >= 8 && !pd.sawSBR) || (pd.sawPS || (pd.sawSBR && cfg.chCfg != 1)) || after >= 8 {
 					break
 				}
 				pd.decodeFrameSafe(p)
+				if pd.sbrHasData() {
+					after++
+				}
 			}
 			if pd.sawSBR && !cfg.sbr {
 				cfg.sbr = true

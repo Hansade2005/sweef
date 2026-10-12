@@ -612,8 +612,46 @@ func (d *Decoder) decodeMB() error {
 		if err := d.readQPDelta(); err != nil {
 			return err
 		}
+		if d.dpOn {
+			// residual lives in partition B (intra) or C (inter)
+			intra := isIntraT(mbType)
+			if d.dpContaminated(intra) {
+				// the non-zero counts of a neighbour whose residual was lost
+				// are unknown, so this partition can no longer be parsed
+				if intra {
+					d.brB = nil
+				} else {
+					d.brC = nil
+				}
+			}
+			d.resBr = d.brC
+			if intra {
+				d.resBr = d.brB
+			}
+			if d.resBr == nil {
+				d.dpLost[idx] = d.curSlice
+				// lost partition: reconstruct from the prediction alone
+				d.blkNZ = [48]bool{}
+				cbp = 0
+				d.curPic.mbType[idx] = mbType
+				d.writeBackNZ()
+				d.finishMB(mbType, cbp)
+				if isIntraT(mbType) {
+					d.reconIntra(mbType, i16Mode, chromaMode, cbp, t8)
+				} else {
+					d.motionComp(mbType)
+					d.addInterResidual(cbp, t8)
+				}
+				d.prevMBSkipped = false
+				return nil
+			}
+		}
+		rs := d.resBr.pos
 		if err := d.parseResidual(isIntraT(mbType), mbType&mbIntra16x16 != 0, cbp, t8); err != nil {
 			return err
+		}
+		if dpTrace != nil {
+			dpTrace(dpSpan{start: rs, end: d.resBr.pos, intra: isIntraT(mbType), mbx: d.mbx, mby: d.mby, cbp: cbp, i16: mbType&mbIntra16x16 != 0})
 		}
 	} else {
 		d.lastDQ = false
@@ -649,14 +687,24 @@ func (d *Decoder) dct8x8Allowed() bool {
 }
 
 func (d *Decoder) decodePCM(mbType uint32) error {
-	idx := d.mbIdx
 	pic := d.cur
 	var r *bitReader
+	pcmPre := 0
 	if d.cabacOn {
 		// after the terminating bin the stream continues byte aligned
 		pos := (d.cab.pos + 7) &^ 7
 		r = &bitReader{b: d.cab.data, pos: pos, end: len(d.cab.data) * 8}
+	} else if d.dpOn {
+		pcmPre = -1
+		r = d.brB
+		if r == nil {
+			d.fillGreyPCM()
+			d.finishPCM(mbType)
+			return nil
+		}
+		r.byteAlign()
 	} else {
+		pcmPre = d.br.pos
 		d.br.byteAlign()
 		r = d.br
 	}
@@ -689,6 +737,15 @@ func (d *Decoder) decodePCM(mbType uint32) error {
 	if d.cabacOn {
 		d.cab.start(r.pos)
 	}
+	if dpTrace != nil {
+		dpTrace(dpSpan{start: r.pos - need, end: r.pos, intra: true, pcm: true, pre: pcmPre, mbx: d.mbx, mby: d.mby})
+	}
+	d.finishPCM(mbType)
+	return nil
+}
+
+func (d *Decoder) finishPCM(mbType uint32) {
+	idx := d.mbIdx
 	for k := 0; k < 48; k++ {
 		d.nz[idx*48+k] = 16
 	}
@@ -700,5 +757,27 @@ func (d *Decoder) decodePCM(mbType uint32) error {
 	d.mbBypass[idx] = false
 	d.lastDQ = false
 	d.prevMBSkipped = false
-	return nil
+}
+
+// fillGreyPCM stands in for the samples of an I_PCM macroblock whose
+// partition B was lost.
+func (d *Decoder) fillGreyPCM() {
+	pl, _ := d.planeOf(0)
+	for y := 0; y < 16; y++ {
+		row := pl[d.mbOff[0]+y*d.mbStr[0]:]
+		for x := 0; x < 16; x++ {
+			row[x] = uint16(1) << uint(d.f.bdY-1)
+		}
+	}
+	if d.f.cat != 0 {
+		for c := 1; c <= 2; c++ {
+			cpl, _ := d.planeOf(c)
+			for y := 0; y < d.f.mbHC; y++ {
+				row := cpl[d.mbOff[c]+y*d.mbStr[c]:]
+				for x := 0; x < d.f.mbWC; x++ {
+					row[x] = uint16(1) << uint(d.f.bdC-1)
+				}
+			}
+		}
+	}
 }

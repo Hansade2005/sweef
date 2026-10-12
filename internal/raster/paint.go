@@ -40,6 +40,8 @@ type Painter struct {
 	// lat is the stack of snapping lattices opened by PushTransform ops that
 	// carry one (see render.PushTransform); the top entry applies.
 	lat []latRec
+	// proj is the stack of open projective layers (see layer3d.go)
+	proj []projRec
 }
 
 type latRec struct {
@@ -199,6 +201,10 @@ func (p *Painter) op(op render.Op) {
 		if n := len(p.lat); n > 0 {
 			p.lat = p.lat[:n-1]
 		}
+	case render.PushTransform3D:
+		p.push3D(o)
+	case render.PopTransform3D:
+		p.pop3D()
 	case render.Bitmap:
 		p.bitmap(o)
 	case render.SVGDraw:

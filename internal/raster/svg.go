@@ -51,6 +51,9 @@ type sStyle struct {
 	visible            bool
 	mStart, mMid, mEnd string
 	paintOrder         string
+	vertical           bool // writing-mode tb / vertical-*
+	upright            bool // text-orientation: upright
+	geomPrec           bool // text-rendering: geometricPrecision (no scaled font)
 	vecEff             string
 	cif                string // color-interpolation-filters
 	imageRendering     string
@@ -386,6 +389,16 @@ func (r *svgR) inherit(par sStyle, a map[string]string) sStyle {
 	}
 	if v, ok := get("paint-order"); ok {
 		st.paintOrder = v
+	}
+	if v, ok := get("writing-mode"); ok {
+		v = strings.ToLower(v)
+		st.vertical = strings.HasPrefix(v, "tb") || strings.HasPrefix(v, "vertical")
+	}
+	if v, ok := get("text-rendering"); ok {
+		st.geomPrec = strings.ToLower(v) == "geometricprecision"
+	}
+	if v, ok := get("text-orientation"); ok {
+		st.upright = strings.ToLower(v) == "upright"
 	}
 	if v, ok := get("vector-effect"); ok {
 		st.vecEff = v

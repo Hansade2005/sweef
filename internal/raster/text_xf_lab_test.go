@@ -99,7 +99,7 @@ var xfGroups = []xfGroup{
 		{"InterRegular", "400 SZpx 'Inter'", "Inter", 400, false, false},
 		{"InterBold", "700 SZpx 'Inter'", "Inter", 700, false, false},
 		{"InterItalic", "italic 400 SZpx 'Inter'", "Inter", 400, true, false},
-	}, []float64{12, 16, 24, 40}, xfTfsAll, []rune("oRgQe"), 0.04, 0.005},
+	}, []float64{12, 16, 24, 40}, xfTfsAll, []rune("oRgQe"), 0.006, 0.001},
 }
 
 // xfCur is the group the helpers below work on.

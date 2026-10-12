@@ -106,13 +106,21 @@ type Decoder struct {
 	curSlice           uint16
 
 	// current slice
-	hdr           *sliceHeader
-	br            *bitReader
-	cab           cabacDec
-	cabacOn       bool
-	qp            int
-	lastDQ        bool
-	skipRun       int
+	hdr     *sliceHeader
+	br      *bitReader
+	cab     cabacDec
+	cabacOn bool
+	qp      int
+	lastDQ  bool
+	skipRun int
+	// data partitioning (nal_unit_type 2..4): the pending partition A with
+	// the B and C partitions that followed it, the residual reader of the
+	// macroblock being decoded and the partition mode of the slice.
+	dpA           *dpSlice
+	dpOn          bool
+	brB, brC      *bitReader
+	dpLost        []uint16
+	resBr         *bitReader
 	prevMBSkipped bool
 	nextMBSkipped bool
 	listCount     int
@@ -273,6 +281,9 @@ func (d *Decoder) DecodeFrame(data []byte) (img *yuv.Frame, err error) {
 			firstErr = err
 		}
 	}
+	if err := d.flushPartitions(); err != nil && firstErr == nil {
+		firstErr = err
+	}
 	d.finishPicture()
 	pic := d.pending
 	d.pending = nil
@@ -315,6 +326,17 @@ func (d *Decoder) pictureFrame(p *Picture) *yuv.Frame {
 func (d *Decoder) handleNAL(n []byte) error {
 	typ := int(n[0] & 31)
 	refIdc := int(n[0]>>5) & 3
+	var dpErr error
+	if typ != 3 && typ != 4 {
+		dpErr = d.flushPartitions()
+	}
+	if err := d.handleNALType(n, typ, refIdc); err != nil {
+		return err
+	}
+	return dpErr
+}
+
+func (d *Decoder) handleNALType(n []byte, typ, refIdc int) error {
 	switch typ {
 	case 7:
 		s, err := parseSPS(unescape(n[1:]))
@@ -330,8 +352,10 @@ func (d *Decoder) handleNAL(n []byte) error {
 		d.pps[p.ID] = p
 	case 1, 5:
 		return d.handleSlice(n, typ, refIdc)
-	case 2, 3, 4:
-		return ErrUnsupported
+	case 2:
+		return d.handlePartitionA(n, refIdc)
+	case 3, 4:
+		return d.handlePartitionBC(n, typ)
 	}
 	return nil
 }
@@ -362,6 +386,10 @@ func (d *Decoder) handleSlice(n []byte, typ, refIdc int) error {
 	if err != nil {
 		return err
 	}
+	return d.startSlice(h, r, typ, refIdc)
+}
+
+func (d *Decoder) startSlice(h *sliceHeader, r *bitReader, typ, refIdc int) error {
 	if DebugSlice != nil {
 		DebugSlice(fmt.Sprintf("nal=%d ref=%d first=%d type=%d fn=%d struct=%d poc=%d numRef=%v mods=%v mmco=%v adaptive=%v idr=%v long=%v", typ, refIdc, h.firstMB, h.sliceType, h.frameNum, h.structure, h.pocLsb, h.numRef, h.refMods, h.mmcos, h.adaptiveMarking, h.idr, h.longTermRef))
 	}

@@ -20,11 +20,13 @@ package media
 //	              (cached, asynchronous, at most two ffmpeg processes)
 //	pure Go       VP8 key frames (golang.org/x/image/vp8), MJPEG in AVI/MP4,
 //	              animated GIF and APNG by wall time. AV1 (internal/media/av1)
-//	              is decoded natively, with all its inter tools. Codecs without a
-//	              pure-Go decoder (HEVC, and VP9/H.264 where unavailable) are refused
+//	              is decoded natively, with all its inter tools, and so is HEVC
+//	              (internal/media/hevc: Main, Main 10, Main Still Picture and the
+//	              range extensions up to 12 bit 4:4:4). Codecs without a
+//	              pure-Go decoder are refused
 //	              (MEDIA_ERR_SRC_NOT_SUPPORTED, canPlayType "").
 //
-// canPlayType claims H.264 and HE-AAC only with a decoder (AAC-LC is native). The element clock does
+// canPlayType claims H.264, HEVC and HE-AAC only with a decoder (AAC-LC is native). The element clock does
 // not need decoded audio: currentTime, ended, timeupdate and seeking work for
 // every container above; audio is decoded only when connected to Web Audio
 // (MediaElementAudioSourceNode) or captured.

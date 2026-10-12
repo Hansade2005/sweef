@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff}</style></head><body>
+<svg width="1280" height="800" xmlns="http://www.w3.org/2000/svg" font-family="Liberation Sans" font-size="18">
+<defs>
+<path id="a" d="M 40 100 C 200 20 400 180 600 90"/>
+<path id="b" d="M 700 80 Q 850 200 1000 80 T 1250 80"/>
+<path id="c" d="M 40 300 A 120 80 20 1 1 300 340"/>
+<path id="d" d="M 400 260 L 700 260 L 700 360 L 400 360 Z"/>
+<path id="e" d="M 800 250 C 900 250 1000 400 1200 300"/>
+</defs>
+<text><textPath href="#a">Plain <tspan rotate="15" fill="#c00">tspan rotate</tspan> then more text</textPath></text>
+<text><textPath href="#a" startOffset="15" ><tspan dy="8">tspan dy</tspan> and <tspan baseline-shift="6" fill="#06c">baseline shift</tspan> end</textPath></text>
+<text><textPath href="#b" rotate="10 20 30" >Rotate list on path chars here</textPath></text>
+<text dy="12"><textPath href="#b" startOffset="40">Text dy twelve</textPath></text>
+<text><textPath href="#c" startOffset="10">Elliptical arc <tspan font-size="26" fill="#080">big</tspan> small</textPath></text>
+<text><textPath href="#d" startOffset="20" dx="5 5 5">Closed rectangle path with dx text going around</textPath></text>
+<text text-anchor="end"><textPath href="#e" startOffset="95%">End anchored on path</textPath></text>
+<text><textPath href="#e" startOffset="5" letter-spacing="3" word-spacing="8">Spaced text</textPath></text>
+<text><textPath href="#a" startOffset="320" side="right">Right side text</textPath></text>
+</svg></body></html>
