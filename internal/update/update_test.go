@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -294,7 +295,8 @@ func TestReplaceCommit(t *testing.T) {
 	if readStr(t, target) != "new" || readStr(t, target+".old") != "old" {
 		t.Fatal("swap wrong")
 	}
-	if st, _ := os.Stat(target); st.Mode().Perm()&0o100 == 0 {
+	// Windows has no execute permission bit; the check only means something on Unix.
+	if st, _ := os.Stat(target); runtime.GOOS != "windows" && st.Mode().Perm()&0o100 == 0 {
 		t.Fatal("new binary must be executable")
 	}
 	if err := r.Commit(); err != nil {

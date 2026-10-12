@@ -41,6 +41,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends fontconfig fonts-inter fonts-liberation fonts-freefont-ttf fonts-dejavu-core fonts-dejavu-mono fonts-crosextra-carlito fonts-crosextra-caladea fonts-wqy-zenhei fonts-ipafont-gothic fonts-tlwg-loma-otf fonts-unifont fonts-noto-color-emoji
+          # The reference set has real regular and bold DejaVu only; the runner image also ships
+          # fonts-dejavu-extra (real italics), which changes which glyphs get synthesised.
+          sudo apt-get remove -y fonts-dejavu-extra || true
           fc-cache -f
       - name: Test (Linux, everything; short, FATE-gated heavy tests stay off)
         if: runner.os == 'Linux'
@@ -52,7 +55,7 @@ jobs:
         if: runner.os != 'Linux'
         shell: bash
         run: |
-          go test -short -count=1 -timeout 25m $(go list ./... | grep -v -e '/internal/render' -e '/internal/raster' -e '/internal/font' -e '/internal/gl' -e '/internal/media' -e '/internal/engine$' -e '/internal/ui' -e '/internal/app' -e '/internal/agentbridge')
+          go test -short -count=1 -timeout 25m $(go list ./... | grep -v -e '/internal/render' -e '/internal/raster' -e '/internal/font' -e '/internal/pdf' -e '/internal/gl' -e '/internal/media' -e '/internal/engine$' -e '/internal/ui' -e '/internal/app' -e '/internal/agentbridge')
 
   packaging-smoke:
     name: packaging smoke test (linux)
