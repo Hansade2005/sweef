@@ -3,7 +3,6 @@ package media
 import (
 	"fmt"
 	"math"
-	"os"
 	"sync"
 )
 
@@ -191,6 +190,27 @@ func usacSfIndex(rate int) int {
 		}
 	}
 	return -1
+}
+
+// usacTableRate is the rate that selects the band tables, TNS limits and
+// window offsets: 4/3 of the core rate for 768 sample frames.
+func usacTableRate(coreLen, coreRate int) int {
+	if coreLen == 768 {
+		return coreRate * 4 / 3
+	}
+	return coreRate
+}
+
+// usacSfIndexBound maps a rate to the table index by the lower boundaries of
+// the rate ranges (libxaac's ixheaacd_sampling_boundaries).
+func usacSfIndexBound(rate int) int {
+	bounds := [11]int{92017, 75132, 55426, 46009, 37566, 27713, 23004, 18783, 13856, 11502, 9391}
+	for i, b := range bounds {
+		if rate >= b {
+			return i
+		}
+	}
+	return 11
 }
 
 // ---- ics info -----------------------------------------------------------------
@@ -489,9 +509,6 @@ func (d *usacDec) synth(c *usacCh, out []float64) {
 		special = false
 	}
 	facOn := special && c.facPresent
-	if special && os.Getenv("MODS") != "" {
-		println("MYSPEC short", short, "seq", ics.seq, "seqEff", ics.seqEff, "fac", c.facPresent, "longSpecial", longSpecial)
-	}
 	var rawTail [128]float64
 	var old []float64
 	if special {

@@ -201,16 +201,7 @@ func (d *usacDec) lpdTCX(c *usacCh, f *lpdFrame, k int, lp []float64, lg int) {
 	}
 	tmp := math.Sqrt(energy) / float64(lg)
 	gainTCX := math.Pow(10, float64(f.globalGain[k])/28) / (tmp * 2)
-	if lpdDbg && lpdDbgN < 1 {
-		println("MYXB", x[40], x[41], x[42], x[43], x[44], x[45], x[46], x[47], x[48], x[49], x[50], x[51])
-	}
 	lpdNoiseShaping(x, lg, lenSub/4, gain1[:], gain2[:])
-	if lpdDbg && lpdDbgN < 1 {
-		println("MYXA", x[40], x[41], x[42], x[43], x[44], x[45], x[46], x[47], x[48], x[49], x[50], x[51])
-	}
-	if lpdDbg && lpdDbgN < 3 {
-		println("MYTCX", lpdDbgN, "k", k, "lg", lg, "gain_tcx", gainTCX, "gg", f.globalGain[k], "nf", f.noiseFactor[k], "g1", gain1[0], "g2", gain2[0])
-	}
 	st.mdctMain(x, xnBuf, 2*fl, lg-2*fl)
 	sc := 2 / float64(lg)
 	for i := 0; i < lg+2*fl; i++ {
@@ -284,10 +275,6 @@ func (d *usacDec) lpdTCX(c *usacCh, f *lpdFrame, k int, lp []float64, lg int) {
 		loops := (fl - ttt) / lpdSubfr
 		lpdResidual(st.lpFltPrev[:], buf, lpdOrder+ttt, eb, eBase+ttt-fl, lpdSubfr, loops)
 	}
-	if lpdDbg && lpdDbgN < 3 {
-		println("MYTCX2", lpdDbgN, xnBuf[fl], xnBuf[fl+1], xnBuf[fl+2], xnBuf[fl+3], xnBuf[fl+4], xnBuf[fl+5], "mid", xnBuf[fl+lg/2], xnBuf[fl+lg/2+1])
-		lpdDbgN++
-	}
 	copy(sb[sBase:sBase+lg], xnBuf[fl:fl+lg])
 	// pre-emphasised copy of the output for the excitation
 	pre := make([]float64, lpdOrder+1+lg)
@@ -304,6 +291,3 @@ func (d *usacDec) lpdTCX(c *usacCh, f *lpdFrame, k int, lp []float64, lg int) {
 	copy(st.lpFltPrev[:lpdOrder+1], lp[2*(lpdOrder+1):3*(lpdOrder+1)])
 	copy(st.lpFltPrev[lpdOrder+1:], lp[2*(lpdOrder+1):3*(lpdOrder+1)])
 }
-
-var lpdDbg = false
-var lpdDbgN int

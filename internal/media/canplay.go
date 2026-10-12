@@ -108,7 +108,7 @@ func classifyCodec(c string) codecInfo {
 	case lc == "mp4a.40.5" || lc == "mp4a.40.05" || lc == "mp4a.40.29":
 		return codecInfo{"audio", ccFree, ""} // HE-AAC v1/v2 (SBR, PS): pure-Go decoder
 	case lc == "mp4a.40.42":
-		return codecInfo{"audio", ccFree, ""} // USAC / xHE-AAC: pure-Go FD core (usac_*.go); LPD, eSBR, MPS212 fall back to ffmpeg
+		return codecInfo{"audio", ccFFmpeg, ""} // USAC / xHE-AAC: pure-Go decoder (usac_*.go) for most streams, see nativeCodecSupport
 	case strings.HasPrefix(lc, "mp4a.40."):
 		return codecInfo{"audio", ccFFmpeg, ""}
 	case lc == "speex" || lc == "0":
@@ -222,6 +222,12 @@ func CanPlayType(mime string) string {
 // decoder, "maybe" when some streams of that profile still need ffmpeg,
 // "probably" otherwise.
 func nativeCodecSupport(lc, native string) string {
+	if lc == "mp4a.40.42" {
+		// the pure-Go USAC decoder covers FD, LPD, eSBR and MPS212 streams;
+		// a few tools (time-warped MDCT, MPS212 residual coding, ...) are
+		// only decided when the stream is opened (Playable)
+		return "maybe"
+	}
 	if native == "" || !HasNativeVideo(native) {
 		return ""
 	}

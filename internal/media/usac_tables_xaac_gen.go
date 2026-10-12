@@ -2,7 +2,7 @@
 //
 // PROVENANCE AND LICENSE: the constant tables below were extracted by script
 // from the source text of libxaac (https://github.com/ittiam-systems/libxaac,
-// Copyright (C) 2018 The Android Open Source Project, originally developed and
+// Copyright (C) 2015, 2018, 2023 The Android Open Source Project, originally developed and
 // contributed by Ittiam Systems Pvt. Ltd, Bangalore), which is licensed under
 // the Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0).
 // See NOTICE.

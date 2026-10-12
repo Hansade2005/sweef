@@ -3,9 +3,6 @@ package media
 import (
 	"errors"
 	"fmt"
-	"math"
-	"os"
-	"runtime/debug"
 )
 
 // USAC decoder: access unit parsing, channel elements, stereo processing and
@@ -23,7 +20,20 @@ var errUSACUnsupported = fmt.Errorf("%w: usac feature", ErrUnsupported)
 
 // nativeUSAC reports whether the pure-Go USAC decoder handles the track.
 func nativeUSAC(a *Track) bool {
-	return a != nil && a.CodecName == "aac" && a.Codec == "mp4a.40.42"
+	return a != nil && a.CodecName == "aac" && a.Codec == "mp4a.40.42" && !a.nativeNo
+}
+
+// usacConfigSupported reports whether the pure-Go decoder can run the stream
+// described by an AudioSpecificConfig (every tool the configuration enables
+// is implemented). Tools signalled per frame (time-warped MDCT, MPS212
+// temporal shaping and steering) are only detected while decoding.
+func usacConfigSupported(asc []byte) bool {
+	cfg, err := parseUsacASC(asc)
+	if err != nil || cfg == nil {
+		return false
+	}
+	_, err = newUSACDecoder(cfg)
+	return err == nil
 }
 
 type usacElem struct {
@@ -33,6 +43,8 @@ type usacElem struct {
 	ch    [2]usacCh
 	st    usacStereo
 	first int // index of the first output channel
+	sbr   *esbrElem
+	mps   *mps212
 }
 
 type usacDec struct {
@@ -58,6 +70,10 @@ type usacDec struct {
 }
 
 type usacStats struct{ short, start, stop, ms, pred, cpred, tns, noise, lpd, acelp, tcx, sbr, mps, fac int }
+
+// usacTestMPSPos lets tests learn the bit range of the MPS212 payload of each
+// access unit.
+var usacTestMPSPos func(start, end int)
 
 var lastUSACStats usacStats
 
@@ -85,8 +101,8 @@ func (d *usacDec) configure(cfg *usacConfig) error {
 	d.elems = nil
 	d.frameOut = nil
 	d.sfi = usacSfIndex(cfg.coreRate)
-	if cfg.sbrRatioIdx != 0 {
-		return fmt.Errorf("%w: usac eSBR", ErrUnsupported)
+	if cfg.coreLen == 768 {
+		d.sfi = usacSfIndexBound(usacTableRate(cfg.coreLen, cfg.coreRate))
 	}
 	if d.sfi < 0 {
 		return fmt.Errorf("%w: usac sampling rate %d", ErrUnsupported, cfg.coreRate)
@@ -103,7 +119,7 @@ func (d *usacDec) configure(cfg *usacConfig) error {
 	for i := range d.order {
 		d.order[i] = i
 	}
-	if o, ok := aacChanOrder[cfg.chCfgIdx]; ok && len(o) == cfg.nCoreCh {
+	if o, ok := usacChanOrder(cfg.chCfgIdx); ok && len(o) == cfg.nCoreCh {
 		copy(d.order, o)
 	}
 	ch := 0
@@ -119,12 +135,54 @@ func (d *usacDec) configure(cfg *usacConfig) error {
 			d.elems = append(d.elems, el)
 			continue
 		}
+		if e.hasSBR && e.typ != usacElemLFE {
+			sbrCh := el.nch
+			if e.typ == usacElemCPE && (e.stereoCfg == 1 || e.stereoCfg == 2) {
+				sbrCh = 1
+			}
+			sb, err := newESBRElem(cfg, e, sbrCh)
+			if err != nil {
+				return err
+			}
+			el.sbr = sb
+			if e.typ == usacElemCPE && e.stereoCfg > 0 {
+				mp, err := newMPS212(&e.mps, e.stereoCfg, cfg.outFrame/64)
+				if err != nil {
+					return err
+				}
+				el.mps = mp
+			}
+		} else if e.typ == usacElemCPE && e.stereoCfg > 0 {
+			return fmt.Errorf("%w: usac mps212 without sbr", ErrUnsupported)
+		}
 		ch += el.nch
 		el.ch[0].noiseSeed = 0x3039
 		el.ch[1].noiseSeed = 0x10932
 		d.elems = append(d.elems, el)
 	}
 	return nil
+}
+
+// usacChanOrder returns the output channel index of each element channel for
+// a channelConfigurationIndex. The output order is FFmpeg's native channel
+// order (FL FR FC LFE BL BR FLC FRC BC SL SR TFL TFR), so that the native and
+// the FFmpeg decoder agree. Configurations 11, 12 and 14 follow ISO/IEC
+// 23001-8 (6.1: C L R Ls Rs Cs LFE; 7.1: C L R Ls Rs Lsr Rsr LFE with a side
+// and a back pair; 7.1 top: C L R Ls Rs LFE Ltf Rtf).
+func usacChanOrder(idx int) ([]int, bool) {
+	switch idx {
+	case 11:
+		// SCE C, CPE L R, CPE BL BR, SCE BC, LFE
+		return []int{2, 0, 1, 4, 5, 6, 3}, true
+	case 12:
+		// SCE C, CPE L R, CPE SL SR, CPE BL BR, LFE
+		return []int{2, 0, 1, 6, 7, 4, 5, 3}, true
+	case 14:
+		// SCE C, CPE L R, CPE BL BR, LFE, CPE TFL TFR
+		return []int{2, 0, 1, 4, 5, 3, 6, 7}, true
+	}
+	o, ok := aacChanOrder[idx]
+	return o, ok
 }
 
 // ---- ics_info -----------------------------------------------------------------
@@ -155,9 +213,12 @@ func (d *usacDec) coreElement(r *aacBits, el *usacElem, indep bool) error {
 	st := &el.st
 	lfe := ec.typ == usacElemLFE
 	coreCh := nch
+	if nch > 1 && ec.stereoCfg == 1 {
+		coreCh = 1 // mono core, MPS212 upmix
+	}
 	st.commonWindow, st.commonTW = false, false
 	st.tnsOnLR = false
-	for i := 0; i < nch; i++ {
+	for i := 0; i < coreCh; i++ {
 		c := &el.ch[i]
 		c.tns.present = false
 		c.tnsData = false
@@ -165,9 +226,6 @@ func (d *usacDec) coreElement(r *aacBits, el *usacElem, indep bool) error {
 		if !lfe {
 			c.coreMode = r.bits(1)
 		}
-	}
-	if nch > 1 && ec.stereoCfg == 1 {
-		coreCh = 1
 	}
 	if coreCh == 2 {
 		if err := d.stereoInfo(r, el, indep); err != nil {
@@ -177,9 +235,6 @@ func (d *usacDec) coreElement(r *aacBits, el *usacElem, indep bool) error {
 	for i := 0; i < coreCh; i++ {
 		c := &el.ch[i]
 		ics := &c.ics
-		if os.Getenv("MODS") != "" {
-			println("CORE", d.frames, i, c.coreMode, c.tdPrev)
-		}
 		if c.coreMode != 0 {
 			if err := d.lpdChannel(r, el, i, indep); err != nil {
 				return err
@@ -255,10 +310,35 @@ func (d *usacDec) coreElement(r *aacBits, el *usacElem, indep bool) error {
 			d.dequantize(&el.ch[i])
 		}
 	}
-	if el.cfg.hasSBR {
-		return fmt.Errorf("%w: usac eSBR", ErrUnsupported)
+	if el.sbr != nil {
+		sbrCh := nch
+		if ec.stereoCfg == 1 || ec.stereoCfg == 2 {
+			sbrCh = 1 // one SBR channel over the downmix; MPS212 follows
+		}
+		if err := el.sbr.parse(r, indep, sbrCh); err != nil {
+			return err
+		}
+		d.stats.sbr++
+	}
+	if el.mps != nil {
+		start := r.pos
+		if err := el.mps.parseFrame(r, indep); err != nil {
+			return err
+		}
+		if usacTestMPSPos != nil {
+			usacTestMPSPos(start, r.pos)
+		}
 	}
 	d.spectrumDecode(el, coreCh, indep)
+	if el.mps != nil {
+		if err := d.mpsProcess(el); err != nil {
+			return err
+		}
+	} else if el.sbr != nil {
+		if err := d.sbrProcess(el, nch); err != nil {
+			return err
+		}
+	}
 	for i := 0; i < coreCh; i++ {
 		el.ch[i].tdPrev = el.ch[i].coreMode != 0
 	}
@@ -288,15 +368,6 @@ func (d *usacDec) lpdChannel(r *aacBits, el *usacElem, i int, indep bool) error 
 	fo := d.frameOut[el.first+i]
 	for k := 0; k < n; k++ {
 		fo[k] = float32(out[k])
-	}
-	if os.Getenv("MODS") != "" {
-		mx := 0.0
-		for k := 0; k < n; k++ {
-			if v := math.Abs(out[k]); v > mx {
-				mx = v
-			}
-		}
-		println("OUTMAX", i, mx)
 	}
 	c.ics.seq, c.ics.seqEff = usacEightShort, usacEightShort
 	c.ics.kb = 0
@@ -564,9 +635,6 @@ var errUSACEnd = errors.New("usac: end")
 func (d *usacDec) decodeAU(data []byte) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			if os.Getenv("USAC_STACK") != "" {
-				debug.PrintStack()
-			}
 			err = fmt.Errorf("media: usac decoder fault: %v", r)
 		}
 	}()
@@ -713,6 +781,68 @@ func (d *usacDec) audioPreRoll(pl []byte) error {
 				return err
 			}
 			// a damaged pre-roll frame only costs the state it would have set
+		}
+	}
+	return nil
+}
+
+// mpsProcess runs the eSBR QMF stage of the downmix channel and the MPS212
+// upmix of a stereoConfigIndex 1 or 2 element into its two output channels.
+func (d *usacDec) mpsProcess(el *usacElem) error {
+	n := d.cfg.coreLen
+	fo := d.frameOut[el.first]
+	if el.cfg.stereoCfg > 1 && (el.cfg.mps.pseudoLR || mpsTestPseudoLR) {
+		// pseudo L/R: the core channels are a 45 degree rotation of the
+		// downmix and the residual
+		f1 := d.frameOut[el.first+1]
+		const rot = float32(0.7071067812)
+		for k := 0; k < n; k++ {
+			a, b := fo[k], f1[k]
+			fo[k] = (a + b) * rot
+			f1[k] = (a - b) * rot
+		}
+	}
+	core := make([]float64, n)
+	for k := 0; k < n; k++ {
+		core[k] = float64(fo[k]) * 32768
+	}
+	slots := d.outFrame / 64
+	sRe, sIm, err := el.sbr.processQMF(0, core, slots, true)
+	if err != nil {
+		return err
+	}
+	var out [2][]float32
+	for ch := range out {
+		out[ch] = make([]float32, d.outFrame)
+	}
+	if err := el.mps.apply(sRe, sIm, el.sbr.hdr.subEnd, &out); err != nil {
+		return err
+	}
+	for ch := 0; ch < 2; ch++ {
+		o := d.frameOut[el.first+ch]
+		for k := 0; k < d.outFrame; k++ {
+			o[k] = out[ch][k] / 32768
+		}
+	}
+	d.stats.mps++
+	return nil
+}
+
+// sbrProcess runs the SBR decoder on the core output of an element.
+func (d *usacDec) sbrProcess(el *usacElem, nch int) error {
+	n := d.cfg.coreLen
+	for i := 0; i < nch; i++ {
+		fo := d.frameOut[el.first+i]
+		core := make([]float64, n)
+		for k := 0; k < n; k++ {
+			core[k] = float64(fo[k]) * 32768
+		}
+		out := make([]float64, d.outFrame)
+		if err := el.sbr.process(i, core, out); err != nil {
+			return err
+		}
+		for k := 0; k < d.outFrame; k++ {
+			fo[k] = float32(out[k] / 32768)
 		}
 	}
 	return nil

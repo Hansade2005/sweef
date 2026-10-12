@@ -30,6 +30,10 @@ type Track struct {
 	Name          string  `json:"name,omitempty"`
 	Default       bool    `json:"default,omitempty"`
 	Frames        int     `json:"frames,omitempty"`
+
+	// nativeNo marks a track whose codec configuration needs a tool the
+	// pure-Go decoder lacks (decided when the stream is opened).
+	nativeNo bool
 }
 
 // SeekPoint maps a presentation time to a byte offset (a keyframe/cue/page).

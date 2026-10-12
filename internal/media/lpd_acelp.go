@@ -1,7 +1,6 @@
 package media
 
 import (
-	"fmt"
 	"math"
 )
 
@@ -406,13 +405,6 @@ func (d *usacDec) lpdACELP(c *usacCh, f *lpdFrame, k int, lp []float64, stabilit
 		}
 		post[lpdSubfr-1] += code[lpdSubfr-1] - cpe*code[lpdSubfr-2]
 		lpdSynthFilter(lp[lpOff:], post[:], sb[sBase+sub:sBase+sub+lpdSubfr], synthTemp[:lpdOrder])
-		lpdAcN++
-		if lpdAcN == 1 {
-			println("MYA16", fmt.Sprintf("%.7f", lp[lpOff+1:lpOff+17]))
-		}
-		if lpdAcN <= 24 {
-			println("MYAC", lpdAcN, "lag", pitchLag, "frac", pitchFrac, "pg", float32(pitchGain), "gc", float32(gainCode), "gs", float32(gs), "post", float32(post[0]), float32(post[1]), float32(post[2]), "syn", float32(sb[sBase+sub]), float32(sb[sBase+sub+1]), float32(sb[sBase+sub+2]), "lpc", float32(lp[lpOff+1]), float32(lp[lpOff+2]), float32(lp[lpOff+3]), "last", float32(sb[sBase+sub+60]), float32(sb[sBase+sub+61]), float32(sb[sBase+sub+62]), float32(sb[sBase+sub+63]), "a8", float32(lp[lpOff+8]), "a16", float32(lp[lpOff+16]))
-		}
 		copy(synthTemp[:lpdOrder], sb[sBase+sub+lpdSubfr-lpdOrder:sBase+sub+lpdSubfr])
 		lpOff += lpdOrder + 1
 		subNb++
@@ -455,7 +447,13 @@ func (d *usacDec) lpdACELP(c *usacCh, f *lpdFrame, k int, lp []float64, stabilit
 // is read), y written in buf at yOff.
 func lpdResidual(a []float64, x []float64, xOff int, y []float64, yOff, l, loops int) {
 	for j := 0; j < loops; j++ {
-		aa := a[j*(lpdOrder+1):]
+		// the reference reads past its two stored LPC sets for 768 sample
+		// frames; the last set is reused
+		off := j * (lpdOrder + 1)
+		if off+lpdOrder+1 > len(a) {
+			off = len(a) - (lpdOrder + 1)
+		}
+		aa := a[off:]
 		for i := 0; i < l; i++ {
 			xi := xOff + j*l + i
 			s := x[xi]
@@ -466,5 +464,3 @@ func lpdResidual(a []float64, x []float64, xOff int, y []float64, yOff, l, loops
 		}
 	}
 }
-
-var lpdAcN int

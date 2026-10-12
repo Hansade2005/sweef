@@ -1,7 +1,6 @@
 package media
 
 import (
-	"os"
 	"errors"
 	"math"
 )
@@ -29,9 +28,6 @@ func decodeUSACStream(as *audioStream) (*PCM, error) {
 		if err := d.decodeAU(p); err != nil {
 			if errors.Is(err, ErrUnsupported) {
 				return nil, err
-			}
-			if os.Getenv("MODS") != "" {
-				println("AUERR", d.frames, err.Error())
 			}
 			if d.frames == 0 {
 				return nil, err
