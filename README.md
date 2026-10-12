@@ -40,6 +40,33 @@ Plain steps run 23x to 28x faster. The two React steps are slower (10x to open, 
 
 What makes navigation fast: pages with no scripts get no JavaScript VM at all; pages with scripts take a VM from a pre-warmed pool; framework bundles are compiled to bytecode once and the bytecode is kept on disk across daemon restarts; sub-resources go through an HTTP cache with ETag revalidation; scripts and stylesheets are prefetched in parallel; the previous page is torn down in the background.
 
+## The desktop browser (alpha)
+
+`sweef gui` opens a real window. The browser UI (tabs, omnibox, Sidekick panel, new tab, settings) is HTML
+drawn by Sweef's own engine, composited with the page and handed to a thin pure-Go native shell (X11 today
+verified; Windows and macOS shells compile but are **unverified at runtime**). Sidekick is an AI agent in the
+sidebar that reads the page, acts on your real tabs, and asks before anything sensitive. The agent loop is
+written in Go against the Anthropic Messages API directly (`claude-haiku-5-5`, bring your own key), with a
+byte-stable cached prefix, snapshot deltas and early dispatch of tool calls; see `docs/agent.md`.
+
+![Sweef on Linux under Xvfb](docs/design/real-gui-linux-xvfb.png)
+
+Measured on one 4-vCPU Linux VM (reproduce with `go run ./internal/app/cmd/appbench`; details in
+`internal/app/BENCH.md`):
+
+| Measure | Result |
+|---|---|
+| First frame, cold | about 0.4 s |
+| Memory, 1 tab / 10 tabs (idle) | 94 / 153 MiB (Chromium headless without UI: 283 / 380 MiB PSS) |
+| Omnibox keystroke to pixels, 1x | 13.9 ms p50, 20.3 ms p99 (was 81 ms) |
+| History search, 100k entries | about 0.04 ms p50 |
+| Live agent task (3 model turns, real API) | 3.4 s, $0.0014; provider time is about 85% of wall clock |
+
+Known limits: we have not hit our 8 ms keystroke target yet (JS in the omnibox handler and per-mutation style
+and layout dominate), the Chromium memory comparison is against a headless build that draws no browser UI,
+sites that need features we lack (DRM, extensions, WebRTC) will not work and show an "Open in system
+browser" action, and macOS/Windows packaging and signing are untested. Installers: `docs/install.md`.
+
 ## Batching: one call, many steps, one observation
 
 Agents pay per tool call, and a model round trip costs seconds while a Sweef command costs milliseconds. Send the whole plan at once:
