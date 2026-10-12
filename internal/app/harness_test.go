@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"testing"
 	"time"
 
@@ -58,6 +59,7 @@ func newHarness(t *testing.T, o hopts) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	PanicHook = func(r any) { t.Errorf("panic on a tab worker: %v\n%s", r, debug.Stack()) }
 	h := &harness{t: t, app: a, win: win, done: make(chan error, 1), dir: t.TempDir()}
 	go func() { h.done <- a.Run(context.Background()) }()
 	t.Cleanup(h.close)

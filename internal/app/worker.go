@@ -31,7 +31,11 @@ func (w *worker) run() {
 		case f := <-w.ops:
 			func() {
 				defer w.pending.Add(-1)
-				defer func() { _ = recover() }() // a bad page must not kill the browser
+				defer func() { // a bad page must not kill the browser
+					if r := recover(); r != nil && PanicHook != nil {
+						PanicHook(r)
+					}
+				}()
 				f()
 			}()
 		case <-w.quit:
@@ -71,3 +75,7 @@ func (w *worker) stop() {
 	w.once.Do(func() { close(w.quit) })
 	<-w.done
 }
+
+// PanicHook, when set, is told about panics recovered on tab workers (tests
+// fail on them; the CLI logs them).
+var PanicHook func(any)

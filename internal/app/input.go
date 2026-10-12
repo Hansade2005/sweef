@@ -4,6 +4,7 @@ import (
 	"math"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,7 +18,8 @@ type mouseState struct {
 	downY       float64
 	downBtn     int
 	moveBusy    atomic.Bool
-	moveX       atomic.Value // pending [2]float64
+	moveMu      sync.Mutex
+	movePending *[4]int // latest position queued while a move was in flight
 	hoverTarget string
 }
 
@@ -117,7 +119,9 @@ func (a *App) onMouseMove(ev shell.Event) {
 	hover := a.mouse.captured == ""
 	// coalesce: at most one move in flight per target, always the latest position
 	if !a.mouse.moveBusy.CompareAndSwap(false, true) {
-		a.mouse.moveX.Store([4]int{px, py, modBits(ev.Mods), b2i(hover)})
+		a.mouse.moveMu.Lock()
+		a.mouse.movePending = &[4]int{px, py, modBits(ev.Mods), b2i(hover)}
+		a.mouse.moveMu.Unlock()
 		return
 	}
 	a.runMove(e, tgt, px, py, modBits(ev.Mods), hover)
@@ -137,7 +141,6 @@ func (a *App) runMove(e *etab, tgt string, px, py, mods int, hover bool) {
 		if hover {
 			var c string
 			err := e.eval("__sweefCursor("+itoa(px)+","+itoa(py)+")", &c)
-			a.logf("cursor eval %d,%d -> %q %v", px, py, c, err)
 			if err == nil {
 				cur = cursorFor(c)
 			}
@@ -145,12 +148,15 @@ func (a *App) runMove(e *etab, tgt string, px, py, mods int, hover bool) {
 		e.drainBindings()
 		e.paint(false)
 		// pick up a newer queued position, if any
-		if v := a.mouse.moveX.Swap(nil); v != nil {
-			if p, ok := v.([4]int); ok {
-				a.post(func() { a.runMoveNext(tgt, p) })
-			}
-		}
+		a.mouse.moveMu.Lock()
+		next := a.mouse.movePending
+		a.mouse.movePending = nil
+		a.mouse.moveMu.Unlock()
 		a.mouse.moveBusy.Store(false)
+		if next != nil {
+			p := *next
+			a.post(func() { a.runMoveNext(tgt, p) })
+		}
 		if hover {
 			a.post(func() { a.setCursor(cur) })
 		}
@@ -163,7 +169,9 @@ func (a *App) runMoveNext(tgt string, p [4]int) {
 		return
 	}
 	if !a.mouse.moveBusy.CompareAndSwap(false, true) {
-		a.mouse.moveX.Store(p)
+		a.mouse.moveMu.Lock()
+		a.mouse.movePending = &p
+		a.mouse.moveMu.Unlock()
 		return
 	}
 	a.runMove(e, tgt, p[0], p[1], p[2], p[3] == 1)
