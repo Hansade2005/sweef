@@ -173,7 +173,7 @@ Measured against Chromium 1194 on this repo's fixtures (`go run ./tools/fidelity
 
 | Area | Result |
 |---|---|
-| Element boxes, 84 pages (basic CSS through shop, dashboard, email, docs, Bootstrap, container queries, subgrid, writing modes, multicol, clip-path, mask, SVG, bidi) at 1280x800 | mean IoU 0.996, 97.7% of boxes within 1 px, 98.9% within 4 px |
+| Element boxes, 107 pages (basic CSS through shop, dashboard, email, docs, Bootstrap, container queries, subgrid, writing modes, multicol, clip-path, mask, SVG, bidi) at 1280x800 | mean IoU 0.996, 97.7% of boxes within 1 px, 98.9% within 4 px |
 | Same pages at 390x844 and 1920x1080 | mean IoU 0.998 at both |
 | Pixels (ink agreement with Chromium screenshots) | 98.5% overall; blog 99.6%, landing 99.9%, Arabic and bidi pages 93 to 96% |
 | Glyph pixels, 1134 glyphs (9 faces x 14 sizes, 9 to 100 px) | 0.33% of pixels differ by more than 8/255, none by more than 24/255 |
