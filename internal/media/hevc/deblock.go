@@ -72,26 +72,26 @@ func (d *Decoder) sliceOfCtb(ctb int) *sliceHeader {
 // (horizontal) side of the 4x4 unit (bx, by): the luma segment of 4 samples
 // and, when the edge lies on the chroma 8 sample grid and has strength 2, the
 // 4 chroma samples starting at the same position.
-func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma, doChroma bool) {
+func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma bool, plane int, tcOv int) uint8 {
 	s, pp := d.sp, d.pp
 	w4 := s.wTb4
 	if bx >= w4 || by >= s.hTb4 {
-		return
+		return 0
 	}
 	var e uint8
 	if vertical {
 		if bx&1 != 0 || bx == 0 {
-			return
+			return 0
 		}
 		e = d.edge[by*w4+bx] & 3
 	} else {
 		if by&1 != 0 || by == 0 {
-			return
+			return 0
 		}
 		e = (d.edge[by*w4+bx] >> 2) & 3
 	}
 	if e == 0 {
-		return
+		return 0
 	}
 	l2c := uint(s.log2Ctb)
 	l2m := uint(s.log2MinCb)
@@ -106,17 +106,17 @@ func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma, d
 	ctbP := (yp>>l2c)*s.wCtb + xp>>l2c
 	sl := d.sliceOfCtb(ctbQ)
 	if sl == nil || sl.deblockDisabled {
-		return
+		return 0
 	}
 	if ctbP != ctbQ {
 		if d.sliceOfCtb(ctbP) == nil {
-			return
+			return 0
 		}
 		if d.ctbSliceAddr[ctbP] != d.ctbSliceAddr[ctbQ] && !sl.loopFilterAcross {
-			return
+			return 0
 		}
 		if pp.tileRs[ctbP] != pp.tileRs[ctbQ] && !pp.loopFilterAcrossTiles {
-			return
+			return 0
 		}
 	}
 	cq := d.cuTab[(yq>>l2m)*s.wMinCb+xq>>l2m]
@@ -131,7 +131,7 @@ func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma, d
 		bs = motionBS(&pic.mvf[(yq>>2)*pic.w4+xq>>2], &pic.mvf[(yp>>2)*pic.w4+xp>>2])
 	}
 	if bs == 0 {
-		return
+		return 0
 	}
 	qpL := (int(cq.qp) + int(cp.qp) + 1) >> 1
 	noP := cp.flags&cuNoFilter != 0
@@ -148,8 +148,12 @@ func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma, d
 			filterLuma(pic.planes[0], yq*stride+xq, stride, 1, beta, tc, noP, noQ, s.bitDepthY)
 		}
 	}
-	if !doChroma || s.chromaArrayType == 0 || bs != 2 {
-		return
+	if plane == 0 || s.chromaArrayType == 0 || bs != 2 {
+		return bs
+	}
+	tcOff := sl.tcOffsetDiv2
+	if tcOv != noTcOv {
+		tcOff = tcOv
 	}
 	cx, cy := xq>>s.subW, yq>>s.subH
 	// chroma edges lie on an 8 sample chroma grid and are filtered in
@@ -157,12 +161,12 @@ func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma, d
 	// luma position of their first sample.
 	if vertical {
 		if cx&7 != 0 || yq&((4<<s.subH)-1) != 0 {
-			return
+			return bs
 		}
 	} else if cy&7 != 0 || xq&((4<<s.subW)-1) != 0 {
-		return
+		return bs
 	}
-	for ci := 1; ci <= 2; ci++ {
+	for ci := plane; ci <= plane; ci++ {
 		off := pp.cbQpOffset
 		if ci == 2 {
 			off = pp.crQpOffset
@@ -184,7 +188,7 @@ func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma, d
 				qpc = 51
 			}
 		}
-		tq := clip3(0, 53, qpc+2*(int(bs)-1)+(sl.tcOffsetDiv2<<1))
+		tq := clip3(0, 53, qpc+2*(int(bs)-1)+(tcOff<<1))
 		tc := int(tcTable[tq]) << uint(s.bitDepthC-8)
 		stride := pic.stride[ci]
 		if vertical {
@@ -193,6 +197,7 @@ func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma, d
 			filterChroma(pic.planes[ci], cy*stride+cx, stride, 1, 4, tc, noP, noQ, s.bitDepthC)
 		}
 	}
+	return bs
 }
 
 // deblockCTB deblocks the edges belonging to the CTB at luma position
