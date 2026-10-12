@@ -192,6 +192,15 @@ func (c *cabac) bypass() int {
 	return 0
 }
 
+// align implements the alignment before bypass decoding of
+// cabac_bypass_alignment_enabled_flag (9.3.4.3.6): the range becomes 256.
+func (c *cabac) align() {
+	if c.gen != nil {
+		return
+	}
+	c.rng = 256
+}
+
 func (c *cabac) bypassBits(n int) int {
 	v := 0
 	for ; n > 0; n-- {

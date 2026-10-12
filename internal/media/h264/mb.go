@@ -159,6 +159,9 @@ func (d *Decoder) decodeSkipMB() {
 		fillMV(&d.mvCache[0], 0, 0, 4, 4, m)
 		fillRef(&d.refCache[1], 0, 0, 4, 4, refNotUsed)
 	}
+	if h.sliceType == sliceSP {
+		mbType |= mbSPS
+	}
 	d.curPic.mbType[idx] = mbType
 	d.writeBackMotion(mbType)
 	d.cbpTable[idx] = 0
@@ -166,6 +169,10 @@ func (d *Decoder) decodeSkipMB() {
 	d.lastDQ = false
 	d.finishMB(mbType, 0)
 	d.motionComp(mbType)
+	if h.sliceType == sliceSP {
+		d.clearCoef()
+		d.spInter()
+	}
 	d.prevMBSkipped = true
 }
 
@@ -248,6 +255,8 @@ func (d *Decoder) decodeMB() error {
 	cbp := 0
 	i16Mode := 0
 	intraRaw := -1
+	isSI := false
+	d.spMB, d.curSI = false, false
 	switch {
 	case h.isB():
 		var raw int
@@ -266,6 +275,14 @@ func (d *Decoder) decodeMB() error {
 			intraRaw = d.cabacIntraMBType(true, 0)
 		} else {
 			intraRaw = int(br.ue())
+		}
+		if h.sliceType == sliceSI {
+			// Table 7-12: mb_type 0 is SI, the others are the I types shifted by one
+			intraRaw--
+			isSI = intraRaw < 0
+			if isSI {
+				intraRaw = 0
+			}
 		}
 	default:
 		var raw int
@@ -286,12 +303,20 @@ func (d *Decoder) decodeMB() error {
 		}
 		info := iMbTypeInfo[intraRaw]
 		mbType, cbp = info.typ, int(info.cbp)
+		if isSI {
+			mbType |= mbSI
+		}
 		if intraRaw >= 1 && intraRaw <= 24 {
 			i16Mode = (intraRaw - 1) & 3
 		}
 	}
 	if d.mbField {
 		mbType |= mbInterlaced
+	}
+	if h.sliceType == sliceSP || h.sliceType == sliceSI {
+		mbType |= mbSPS
+		d.spMB = isSI || h.sliceType == sliceSP && !isIntraT(mbType)
+		d.curSI = isSI
 	}
 	d.sliceTable[idx] = d.curSlice
 
@@ -304,7 +329,7 @@ func (d *Decoder) decodeMB() error {
 	if isIntraT(mbType) {
 		if mbType&mbIntra4x4 != 0 {
 			step := 1
-			if dct8x8Allowed {
+			if dct8x8Allowed && !isSI {
 				var t8 bool
 				if cabac {
 					t8 = d.cabacT8()

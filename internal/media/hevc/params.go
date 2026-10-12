@@ -422,9 +422,6 @@ func parseSPS(b []byte) (*SPS, error) {
 	if r.err {
 		return nil, errBitstream
 	}
-	if s.extPrecision || s.cabacBypassAlign {
-		return nil, ErrUnsupported
-	}
 	s.ctbSize = 1 << uint(s.log2Ctb)
 	s.wCtb = (s.width + s.ctbSize - 1) >> uint(s.log2Ctb)
 	s.hCtb = (s.height + s.ctbSize - 1) >> uint(s.log2Ctb)

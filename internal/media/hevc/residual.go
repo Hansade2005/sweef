@@ -23,10 +23,12 @@ type scratch struct {
 	av   [4*64 + 1]bool
 
 	// inter
-	pred   [2][64 * 64]int16
-	mcTmp  [(64 + 7) * 64]int16
-	edgeBf [(64 + 8) * (64 + 8)]uint16
-	saoBuf [(64 + 2) * (64 + 2)]uint16
+	pred    [2][64 * 64]int16
+	predHi  [2][64 * 64]int32
+	mcTmp   [(64 + 7) * 64]int16
+	mcTmpHi [(64 + 7) * 64]int32
+	edgeBf  [(64 + 8) * (64 + 8)]uint16
+	saoBuf  [(64 + 2) * (64 + 2)]uint16
 }
 
 // chromaQp returns Qp'C for component cIdx (1 or 2).
@@ -144,7 +146,12 @@ func (d *Decoder) residualCoding(log2, cIdx int, intra bool, predMode int) tbInf
 	if cIdx > 0 {
 		bd = s.bitDepthC
 	}
-	bdShift := uint(bd + log2 - 5)
+	log2Range := 15
+	if s.extPrecision {
+		log2Range = max(15, bd+6)
+	}
+	cMin, cMaxC := int64(-1)<<uint(log2Range), int64(1)<<uint(log2Range)-1
+	bdShift := uint(bd + log2 + 10 - log2Range)
 	rnd := int64(1) << (bdShift - 1)
 	scale := int64(16) * levelScale[qp%6] << uint(qp/6)
 	var mtab []uint8
@@ -293,6 +300,7 @@ func (d *Decoder) residualCoding(log2, cIdx int, intra bool, predMode int) tbInf
 		}
 		var g1 [8]bool
 		firstG1 := -1
+		escape := nSig > 8
 		for m := 0; m < nG1; m++ {
 			inc := ctxSet*4 + gt1Ctx
 			if cIdx > 0 {
@@ -304,6 +312,8 @@ func (d *Decoder) residualCoding(log2, cIdx int, intra bool, predMode int) tbInf
 				gt1Ctx = 0
 				if firstG1 < 0 {
 					firstG1 = m
+				} else {
+					escape = true
 				}
 			} else if gt1Ctx > 0 && gt1Ctx < 3 {
 				gt1Ctx++
@@ -316,6 +326,12 @@ func (d *Decoder) residualCoding(log2, cIdx int, intra bool, predMode int) tbInf
 				inc += 4
 			}
 			g2 = c.bin(ctxGt2+inc) != 0
+			if g2 {
+				escape = true
+			}
+		}
+		if s.cabacBypassAlign && escape {
+			c.align()
 		}
 		hidden := false
 		if p.signHiding && !signHiddenOff {
@@ -353,12 +369,24 @@ func (d *Decoder) residualCoding(log2, cIdx int, intra bool, predMode int) tbInf
 			if base == thr {
 				// coeff_abs_level_remaining
 				prefix := 0
-				for prefix < 32 && c.bypass() != 0 {
+				maxPrefix := 32
+				if s.extPrecision {
+					maxPrefix = 32 - log2Range
+				}
+				for prefix < maxPrefix && c.bypass() != 0 {
 					prefix++
 				}
 				var rem int
 				if prefix <= 3 {
 					rem = prefix<<uint(rice) + c.bypassBits(rice)
+				} else if s.extPrecision {
+					// limited prefix length escape (9.3.3.12)
+					pl := prefix - 3
+					sl := pl + rice
+					if prefix == maxPrefix {
+						sl = log2Range
+					}
+					rem = (((1 << uint(pl)) - 1 + 3) << uint(rice)) + c.bypassBits(sl)
 				} else {
 					sl := prefix - 3 + rice
 					if sl > 30 {
@@ -397,10 +425,10 @@ func (d *Decoder) residualCoding(log2, cIdx int, intra bool, predMode int) tbInf
 			pos := int(sigPos[m])
 			xC := xS<<2 + int(posScan[pos][0])
 			yC := yS<<2 + int(posScan[pos][1])
-			if val > 32767 {
-				val = 32767
-			} else if val < -32768 {
-				val = -32768
+			if int64(val) > cMaxC {
+				val = int(cMaxC)
+			} else if int64(val) < cMin {
+				val = int(cMin)
 			}
 			var v int32
 			if bypass {
@@ -413,10 +441,10 @@ func (d *Decoder) residualCoding(log2, cIdx int, intra bool, predMode int) tbInf
 					sc64 = scale
 				}
 				r := (int64(val)*sc64 + rnd) >> bdShift
-				if r > 32767 {
-					r = 32767
-				} else if r < -32768 {
-					r = -32768
+				if r > cMaxC {
+					r = cMaxC
+				} else if r < cMin {
+					r = cMin
 				}
 				v = int32(r)
 			}

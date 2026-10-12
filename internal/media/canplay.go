@@ -231,8 +231,9 @@ func nativeCodecSupport(lc, native string) string {
 	if native == "" || !HasNativeVideo(native) {
 		return ""
 	}
-	// The Extended profile (avc1.58) is covered, data partitioning included;
-	// only SP/SI slices fall back to ffmpeg.
+	// The Extended profile (avc1.58) is covered in full: B slices, interlace,
+	// FMO/ASO, data partitioning and SP/SI slices are all decoded natively
+	// (CABAC cannot occur in it, so no CABAC combination is left out).
 	if strings.HasPrefix(lc, "hvc1") || strings.HasPrefix(lc, "hev1") {
 		// hvc1.<profile>.<compat>.<tier+level>...: Main (1), Main 10 (2) and
 		// Main Still Picture (3) are covered; Range Extensions streams may use

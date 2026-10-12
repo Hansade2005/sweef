@@ -172,10 +172,10 @@ func (d *Decoder) intraPredict(cIdx, xC, yC, log2, mode int) {
 		angle := intraPredAngle[mode]
 		var rb [128]int32
 		const off = 32
-		// The specification disables the edge filters when implicit RDPCM
-		// and transquant bypass are both active; ffmpeg does not, and its
-		// behaviour is followed here.
-		const disableBF = false
+		// Implicit RDPCM together with transquant bypass disables the
+		// boundary filters of the horizontal and vertical modes
+		// (disableIntraBoundaryFilter of 8.4.4.2.6; HM does the same).
+		disableBF := s.implicitRdpcm && d.cu.bypass && !d.compatFFmpeg
 		if mode >= 18 {
 			for x := 0; x <= n; x++ {
 				rb[off+x] = top(x - 1)

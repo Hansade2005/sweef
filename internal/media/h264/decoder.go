@@ -160,6 +160,8 @@ type Decoder struct {
 	curDirect       uint8
 	blkNZ           [48]bool
 	bypassMB        bool
+	spMB            bool // levels of the macroblock are kept raw for SP/SI reconstruction (8.6)
+	curSI           bool // the macroblock being reconstructed is an SI macroblock
 	scan4           *[16]uint8
 	scan8           *[64]uint8
 	mbOff, mbStr    [3]int

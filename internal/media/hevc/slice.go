@@ -8,22 +8,23 @@ const (
 
 // NAL unit types.
 const (
-	nalTrailN   = 0
-	nalRaslN    = 8
-	nalRaslR    = 9
-	nalRadlN    = 6
-	nalRadlR    = 7
-	nalBlaWLP   = 16
-	nalBlaNLP   = 18
-	nalIdrWRadl = 19
-	nalIdrNLP   = 20
-	nalCra      = 21
-	nalVPS      = 32
-	nalSPS      = 33
-	nalPPS      = 34
-	nalAUD      = 35
-	nalEOS      = 36
-	nalEOB      = 37
+	nalTrailN    = 0
+	nalRaslN     = 8
+	nalRaslR     = 9
+	nalRadlN     = 6
+	nalRadlR     = 7
+	nalBlaWLP    = 16
+	nalBlaNLP    = 18
+	nalIdrWRadl  = 19
+	nalIdrNLP    = 20
+	nalCra       = 21
+	nalVPS       = 32
+	nalSPS       = 33
+	nalPPS       = 34
+	nalAUD       = 35
+	nalEOS       = 36
+	nalEOB       = 37
+	nalSuffixSEI = 40
 )
 
 type predWeights struct {

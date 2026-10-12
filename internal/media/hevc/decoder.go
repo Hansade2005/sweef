@@ -132,6 +132,16 @@ type Decoder struct {
 	cu              cuState
 	staleChromaMode int
 
+	// CheckHash makes the decoder verify every picture that carries a decoded
+	// picture hash SEI (see HashStats).
+	CheckHash bool
+	// compatFFmpeg reproduces ffmpeg's deviations from the specification in
+	// transquant bypass coding (tests that compare with ffmpeg only).
+	compatFFmpeg bool
+	hashChecked  int
+	hashBad      int
+	curHash      *picHash
+
 	scratch    scratch
 	saoApplied [3][]bool
 	saoH, saoV [3][]uint16
@@ -344,6 +354,13 @@ func (d *Decoder) handleNAL(n []byte) error {
 	case typ == nalAUD:
 		d.finishPicture()
 		return nil
+	case typ == nalSuffixSEI:
+		if d.CheckHash && d.cur != nil {
+			if h := parseSEIHash(unescape(n[2:])); h != nil {
+				d.curHash = h
+			}
+		}
+		return nil
 	case typ <= 9 || (typ >= 16 && typ <= 21):
 		return d.handleSlice(n, typ, tid)
 	}
@@ -414,7 +431,7 @@ func (d *Decoder) startPicture(sh *sliceHeader) error {
 	if err := pps.setup(sps); err != nil {
 		return err
 	}
-	if sps.bitDepthY > 12 || sps.bitDepthC > 12 || (sps.chromaFormat != 0 && sps.bitDepthY != sps.bitDepthC) {
+	if sps.chromaFormat != 0 && sps.bitDepthY != sps.bitDepthC {
 		return ErrUnsupported
 	}
 	if d.asps != sps {
@@ -783,6 +800,13 @@ func (d *Decoder) finishPicture() {
 	d.picInit = false
 	d.cur = nil
 	d.loopFilterPicture(p)
+	if d.curHash != nil {
+		d.hashChecked++
+		if !d.curHash.verify(p) {
+			d.hashBad++
+		}
+		d.curHash = nil
+	}
 	if p.needOutput {
 		d.pending = p
 		// C.5.2.3: latency counts and additional bumping

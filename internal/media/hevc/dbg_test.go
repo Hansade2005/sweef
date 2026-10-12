@@ -152,7 +152,7 @@ func TestDumpFlags(t *testing.T) {
 				t.Log("SPS err", err)
 				continue
 			}
-			t.Logf("SPS cf=%d bd=%d/%d ctb=%d mincb=%d tb=%d..%d amp=%v sao=%v pcm=%v scal=%v strong=%v tsRot=%v tsCtx=%v implRdpcm=%v explRdpcm=%v intraSmoothOff=%v highPrec=%v persRice=%v", s.chromaFormat, s.bitDepthY, s.bitDepthC, s.log2Ctb, s.log2MinCb, s.log2MinTb, s.log2MaxTb, s.amp, s.sao, s.pcm, s.scalingEnabled, s.strongIntra, s.tsRotation, s.tsContext, s.implicitRdpcm, s.explicitRdpcm, s.intraSmoothingOff, s.highPrecOffsets, s.persistentRice)
+			t.Logf("SPS cf=%d bd=%d/%d ctb=%d mincb=%d tb=%d..%d amp=%v sao=%v pcm=%v scal=%v strong=%v tsRot=%v tsCtx=%v implRdpcm=%v explRdpcm=%v intraSmoothOff=%v highPrec=%v persRice=%v extprec=%v align=%v", s.chromaFormat, s.bitDepthY, s.bitDepthC, s.log2Ctb, s.log2MinCb, s.log2MinTb, s.log2MaxTb, s.amp, s.sao, s.pcm, s.scalingEnabled, s.strongIntra, s.tsRotation, s.tsContext, s.implicitRdpcm, s.explicitRdpcm, s.intraSmoothingOff, s.highPrecOffsets, s.persistentRice, s.extPrecision, s.cabacBypassAlign)
 		case 34:
 			s, err := parsePPS(unescape(n[2:]))
 			if err != nil {

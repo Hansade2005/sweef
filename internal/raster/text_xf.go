@@ -168,6 +168,42 @@ type xfStroke struct {
 	w, miter float32
 	join     LineJoin
 	cap      LineCap
+	dash     string // packed float32 intervals followed by the phase (empty: solid)
+}
+
+// xfDashKey packs a dash array and phase (in the scaled space of the text)
+// into a comparable key.
+func xfDashKey(intervals []float64, phase float64) string {
+	if len(intervals) == 0 {
+		return ""
+	}
+	n := len(intervals)
+	if n%2 == 1 {
+		n *= 2
+	}
+	b := make([]byte, 0, 4*(n+1))
+	put := func(v float32) {
+		u := math.Float32bits(v)
+		b = append(b, byte(u), byte(u>>8), byte(u>>16), byte(u>>24))
+	}
+	for i := 0; i < n; i++ {
+		put(float32(intervals[i%len(intervals)]))
+	}
+	put(float32(phase))
+	return string(b)
+}
+
+// dashParams decodes the key into Skia's dash parameters.
+func (s xfStroke) dashParams() (DashParams, bool) {
+	if s.dash == "" {
+		return DashParams{}, false
+	}
+	n := len(s.dash) / 4
+	v := make([]float32, n)
+	for i := range v {
+		v[i] = math.Float32frombits(uint32(s.dash[4*i]) | uint32(s.dash[4*i+1])<<8 | uint32(s.dash[4*i+2])<<16 | uint32(s.dash[4*i+3])<<24)
+	}
+	return NewDashParams(v[:n-1], v[n-1])
 }
 
 type xfKey struct {
@@ -209,7 +245,7 @@ func xfGlyphMaskS(g Glyph, size, a, b, c, d float64, bold, italic bool, subX, su
 	if p := xfGlyphPath(g, size, a, b, c, d, italic, subX, subY); p != nil {
 		if st.w > 0 {
 			if o := xfStrokeOutline(p, a, b, c, d, st); o != nil {
-				m = pathMaskTrim(o)
+				m = pathMaskTrimW(o)
 			}
 		} else if bold {
 			if fill, sp, flip := xfBoldPaths(p, size, a, b, c, d); fill != nil {
@@ -253,6 +289,23 @@ func pathMaskTrim(p *Path) *Mask {
 		return nil
 	}
 	return fxTrim(fxFillPath(p, IRect{ox, oy, ox + w, oy + h}))
+}
+
+// pathMaskTrimW is pathMaskTrim for a path whose contours overlap (a stroke
+// outline: inner joins loop back through the pivot): coverage follows the
+// winding number of the overlapping loops instead of adding signed areas.
+func pathMaskTrimW(p *Path) *Mask {
+	minX, minY, maxX, maxY := pathBounds(p)
+	if minX > maxX {
+		return nil
+	}
+	ox, oy := int(math.Floor(minX)), int(math.Floor(minY))
+	w := int(math.Ceil(maxX)) - ox
+	h := int(math.Ceil(maxY)) - oy
+	if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
+		return nil
+	}
+	return fxTrim(fxFillUnion(p, NewPath(), false, IRect{ox, oy, ox + w, oy + h}))
 }
 
 // fxUnionMask fills a glyph together with its stroke outline.
@@ -305,11 +358,10 @@ func xfPathGlyph(g Glyph, size float64, m Matrix, italic bool, penX, penY float6
 // outline back to device space.
 func xfStrokeOutline(p *Path, a, b, c, d float64, st xfStroke) *Path {
 	A00, A10, A01, A11 := relax32(float32(a)), relax32(float32(b)), relax32(float32(c)), relax32(float32(d))
-	det := A00*A11 - A01*A10
-	if det == 0 {
+	inv, ok := skInvert2x2(A00, A01, A10, A11)
+	if !ok {
 		return nil
 	}
-	inv := [4]float32{A11 / det, -A01 / det, -A10 / det, A00 / det}
 	fwd := [4]float32{A00, A01, A10, A11}
 	mapPath := func(src *Path, m [4]float32) *Path {
 		q := &Path{Cmds: append([]byte(nil), src.Cmds...), Pts: make([]float64, len(src.Pts))}
@@ -320,6 +372,44 @@ func xfStrokeOutline(p *Path, a, b, c, d float64, st xfStroke) *Path {
 		}
 		return q
 	}
-	o := fxStrokePath(mapPath(p, inv), float64(st.w), st.join, st.cap, float64(st.miter), 1)
-	return mapPath(o, fwd)
+	local := mapPath(p, inv)
+	if dp, ok := st.dashParams(); ok {
+		// the scaler context runs the path effect on the user-space outline
+		// before the stroker (resScale 1)
+		if dashed, stroked, ok := dp.DashPath(local, st.w, st.cap, 1); ok {
+			local = dashed
+			if stroked {
+				return mapPath(local, fwd) // dash rectangles, already stroked
+			}
+		}
+	}
+	return skStrokePath(local, st.w, st.join, st.cap, st.miter, 1).toDevice(fwd)
+}
+
+// skInvert2x2 is SkMatrix::invert for the linear part (x' = a*x + c*y, y' =
+// b*x + d*y): a scale-only matrix is inverted per axis in float, anything else
+// through a double determinant, rounding each entry to float at the end.
+func skInvert2x2(a, c, b, d float32) (inv [4]float32, ok bool) {
+	if c == 0 && b == 0 {
+		if a == 1 && d == 1 {
+			return [4]float32{1, 0, 0, 1}, true
+		}
+		ia, id := float32(1)/a, float32(1)/d
+		if math.IsInf(float64(ia), 0) || math.IsInf(float64(id), 0) || ia != ia || id != id {
+			return inv, false
+		}
+		return [4]float32{ia, 0, 0, id}, true
+	}
+	det := float64(a)*float64(d) - float64(c)*float64(b)
+	if math.Abs(float64(float32(det))) <= 1.0/(1<<36) { // SkScalarNearlyZero cubed
+		return inv, false
+	}
+	invDet := 1 / det
+	inv = [4]float32{float32(float64(d) * invDet), float32(-float64(c) * invDet), float32(-float64(b) * invDet), float32(float64(a) * invDet)}
+	for _, v := range inv {
+		if math.IsInf(float64(v), 0) || v != v {
+			return inv, false
+		}
+	}
+	return inv, true
 }

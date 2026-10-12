@@ -32,6 +32,12 @@ func (d *Decoder) handlePartitionA(n []byte, refIdc int) error {
 	if err != nil {
 		return err
 	}
+	if h.pps.CABAC {
+		// the Extended profile, the only one with data partitioning, requires
+		// entropy_coding_mode_flag 0 (A.2.3): no valid stream partitions
+		// CABAC slice data
+		return ErrUnsupported
+	}
 	id := int(r.ue())
 	if r.overrun() {
 		return errBitstream

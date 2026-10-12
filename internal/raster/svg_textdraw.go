@@ -333,12 +333,20 @@ func (r *svgR) strokeFragment(c *Context, n *svgNode, fr fragment, xf svgTextXf,
 			big = true
 		}
 	}
-	if len(ss.Dash) == 0 && !p0.fake && !big {
+	if !p0.fake && !big {
 		var lum uint8
 		if col := p0.st.stroke; col.kind == pColor {
 			lum = textLum(Color{col.col.R, col.col.G, col.col.B, 1})
 		}
 		xs := xfStroke{w: float32(ss.Width * xf.k), miter: float32(ss.MiterLimit), join: ss.Join, cap: ss.Cap}
+		if len(ss.Dash) > 0 {
+			// Blink scales the dash array and offset with the stroke width
+			d := make([]float64, len(ss.Dash))
+			for i, v := range ss.Dash {
+				d[i] = v * xf.k
+			}
+			xs.dash = xfDashKey(d, ss.DashOffset*xf.k)
+		}
 		if mk := c.svgGlyphMask(pgs, p0.size, false, p0.skew, lum, xs); mk != nil {
 			c.draw(mk, sh)
 		}
@@ -371,6 +379,12 @@ func (r *svgR) strokeFragment(c *Context, n *svgNode, fr fragment, xf svgTextXf,
 		sc.DashOffset *= xf.k
 	}
 	dm := m.Mul(Scale(1/xf.k, 1/xf.k))
+	if len(sc.Dash) > 0 {
+		if mk := dashedStrokeMask(path, dm, sc, c.drawBounds()); mk != nil {
+			c.draw(mk, sh)
+			return
+		}
+	}
 	if mk := StrokeMask(path, dm, sc, c.drawBounds()); mk != nil {
 		c.draw(mk, sh)
 	}
