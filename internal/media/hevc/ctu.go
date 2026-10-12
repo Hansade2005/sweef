@@ -725,6 +725,9 @@ func (d *Decoder) parseIntraModes(x0, y0, log2Cb int) {
 			m = int(mode422[m])
 		}
 		cu.chromaMode[i] = m
+		if i == 0 {
+			d.staleChromaMode = m
+		}
 	}
 	if nc == 1 {
 		for i := 1; i < 4; i++ {

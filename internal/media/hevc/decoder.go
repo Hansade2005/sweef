@@ -127,7 +127,8 @@ type Decoder struct {
 	log2MinCuQpDeltaSize       int
 	log2MinCuChromaQpSize      int
 
-	cu cuState
+	cu              cuState
+	staleChromaMode int
 
 	scratch    scratch
 	saoApplied [3][]bool

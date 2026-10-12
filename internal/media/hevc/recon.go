@@ -31,7 +31,13 @@ func (d *Decoder) reconTB(cIdx, xC, yC, log2 int, ti *tbInfo, intra bool, predMo
 		}
 	case cu.bypass:
 		copy(res, coef)
-		d.rdpcm(res, n, ti, intra, predMode)
+		if !intra && cIdx > 0 && s.implicitRdpcm && (d.staleChromaMode == 10 || d.staleChromaMode == 26) {
+			// ffmpeg reuses the chroma mode of the previous intra CU here
+			// (it is not reset for inter CUs); reproduced for exactness.
+			d.rdpcmDir(res, n, boolInt(d.staleChromaMode == 26))
+		} else {
+			d.rdpcm(res, n, ti, intra, predMode)
+		}
 	case ti.ts:
 		rot := s.tsRotation && n == 4 && intra
 		tsShift := uint(5 + log2)
@@ -97,6 +103,10 @@ func (d *Decoder) rdpcm(res []int32, n int, ti *tbInfo, intra bool, predMode int
 	} else if ti.explicit {
 		dir = ti.dir
 	}
+	d.rdpcmDir(res, n, dir)
+}
+
+func (d *Decoder) rdpcmDir(res []int32, n, dir int) {
 	switch dir {
 	case 0:
 		for y := 0; y < n; y++ {
