@@ -549,7 +549,7 @@ func TestMediaRangeRequestsAndHonestBuffered(t *testing.T) {
 	}
 }
 
-// TestMediaNativeVideoWithoutFFmpeg checks that VP8 and H.264 (B-frames)
+// TestMediaNativeVideoWithoutFFmpeg checks that VP8, H.264 and HEVC (B-frames)
 // decode with the pure-Go decoders and frames follow currentTime when
 // ffmpeg is unavailable.
 func TestMediaNativeVideoWithoutFFmpeg(t *testing.T) {
@@ -567,7 +567,7 @@ func TestMediaNativeVideoWithoutFFmpeg(t *testing.T) {
 	if cp[0] != "probably" || cp[1] != "probably" || cp[2] != "probably" || cp[3] != "probably" || cp[4] != true {
 		t.Fatalf("canPlayType = %v", cp)
 	}
-	for _, c := range []struct{ id, src string }{{"h", "h264_bframes.mp4"}, {"w", "clip.webm"}} {
+	for _, c := range []struct{ id, src string }{{"h", "h264_bframes.mp4"}, {"x", "hevc_bframes.mp4"}, {"w", "clip.webm"}} {
 		evalJSON(t, tab, `new Promise(function(res){var v=document.createElement('video');v.id='`+c.id+`';v.muted=true;v.preload='auto';v.src='`+c.src+`';document.body.appendChild(v);v.onloadeddata=function(){res(1)};v.onerror=function(){res(0)}})`, nil)
 		w, h, s0 := waitFrame(t, tab, "#"+c.id, 0)
 		if w != 160 || h != 120 {

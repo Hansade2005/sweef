@@ -44,10 +44,9 @@ func (d *Decoder) loopFilterPicture(pic *Picture) {
 		d.saoInit(pic)
 	}
 	ctb := s.ctbSize
-	for y := 0; y < s.hCtb; y++ {
-		for x := 0; x < s.wCtb; x++ {
-			d.hlsFilters(pic, x*ctb, y*ctb, deblock, sao)
-		}
+	// decoding order, i.e. tile scan
+	for _, rs := range pp.tsToRs {
+		d.hlsFilters(pic, rs%s.wCtb*ctb, rs/s.wCtb*ctb, deblock, sao)
 	}
 	// the last CTB
 	lx, ly := (s.wCtb-1)*ctb, (s.hCtb-1)*ctb

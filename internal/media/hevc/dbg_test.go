@@ -113,9 +113,11 @@ func TestDump(t *testing.T) {
 	data, _ := os.ReadFile(p)
 	ref := ffmpegRaw(t, p, pf)
 	frames, _ := decodeAnnexB(t, data)
-	f := frames[0]
+	fi := 0
+	fmt.Sscan(os.Getenv("HEVC_FRAME"), &fi)
+	f := frames[fi]
 	fb := frameBytes(f)
-	r := ref[:len(fb)]
+	r := ref[fi*len(fb) : (fi+1)*len(fb)]
 	off := 0
 	pw := f.Width
 	if plane >= 1 {

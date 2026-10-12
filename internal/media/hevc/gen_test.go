@@ -1261,6 +1261,9 @@ func ffmpegRaw1(t testing.TB, path, pixFmt string) ([]byte, error) {
 	return so.Bytes(), err
 }
 
+// genExportName names the stream written when HEVC_EXPORT is set.
+var genExportName string
+
 // checkGenerated decodes the stream with ffmpeg and with this package.
 func checkGenerated(t *testing.T, c gcfg, seed int64) {
 	t.Helper()
@@ -1273,6 +1276,9 @@ func checkGenerated(t *testing.T, c gcfg, seed int64) {
 		}
 	}()
 	data, stats := genStream(t, c, seed)
+	if dir := os.Getenv("HEVC_EXPORT"); dir != "" && genExportName != "" && seed == 1 {
+		_ = os.WriteFile(filepath.Join(dir, genExportName+".hevc"), data, 0o644)
+	}
 	path := writeAnnexB(t, "gen.hevc", data)
 	ref, ferr := ffmpegRaw1(t, path, c.pixFmt())
 	frames, derr := decodeAnnexB(t, data)
@@ -1313,13 +1319,18 @@ func TestGenerated(t *testing.T) {
 		t.Skip("no ffmpeg")
 	}
 	n := 40
+	if v := os.Getenv("HEVC_N"); v != "" {
+		fmt.Sscan(v, &n)
+	}
 	if testing.Short() {
 		n = 8
 	}
 	start := int64(0)
 	if v := os.Getenv("HEVC_SEED"); v != "" {
 		fmt.Sscan(v, &start)
-		n = 1
+		if os.Getenv("HEVC_N") == "" {
+			n = 1
+		}
 	}
 	for seed := start; seed < start+int64(n); seed++ {
 		seed := seed
@@ -1366,30 +1377,72 @@ func TestGenFeatures(t *testing.T) {
 		{"tqbypass", func(c *gcfg) { c.tqBypass = true }},
 		{"deblock-ctl", func(c *gcfg) { c.dbControl = true; c.dbOverride = true; c.dbBeta = 2; c.dbTc = -2 }},
 		{"loop-slices", func(c *gcfg) { c.loopAcrossSlices = true; c.sliceMode = 1 }},
-		{"cqp-422-dep", func(c *gcfg) { c.chroma = 2; c.bd = 12; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.sliceMode = 2; c.depSlices = true; c.frames = 6 }},
-		{"cqp-422-i-delta-nodb", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.frames = 1; c.dbControl = true; c.dbDis = true }},
-		{"cqp-422-d1", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}}; c.cuQpDelta = true; c.frames = 1 }},
-		{"cqp-420-d6", func(c *gcfg) { c.chroma = 1; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.frames = 1 }},
-		{"cqp-444-d6", func(c *gcfg) { c.chroma = 3; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.frames = 1 }},
+		{"cqp-422-dep", func(c *gcfg) {
+			c.chroma = 2
+			c.bd = 12
+			c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}
+			c.cuQpDelta = true
+			c.sliceMode = 2
+			c.depSlices = true
+			c.frames = 6
+		}},
 		{"d-422", func(c *gcfg) { c.chroma = 2; c.cuQpDelta = true; c.frames = 1 }},
-		{"m27", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.temporalMvp = false; c.depSlices = true; c.initQp = 40; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.frames = 6; c.sliceMode = 2 }},
-		{"m27-nocqp", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.temporalMvp = false; c.depSlices = true; c.initQp = 40; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.frames = 6; c.sliceMode = 2 }},
-		{"m27-nodb", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.temporalMvp = false; c.depSlices = true; c.initQp = 40; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.frames = 6; c.sliceMode = 2 }},
-		{"v27a", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.frames = 1; }},
-		{"v27b", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.frames = 1; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; }},
-		{"v27c", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.frames = 1; c.depSlices = true; c.sliceMode = 2; }},
-		{"v27d", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.frames = 1; c.initQp = 40; }},
-		{"v27e", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb = 5; c.log2MaxTb = 3; c.depthInter = 1; c.depthIntra = 1; c.frames = 1; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.sliceMode = 1 }},
-		{"w1", func(c *gcfg) { c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.sliceMode = 1; c.frames = 1; }},
-		{"w2", func(c *gcfg) { c.log2Ctb = 6; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.sliceMode = 1; c.frames = 1; }},
-		{"w3", func(c *gcfg) { c.log2Ctb = 6; c.log2MaxTb=3; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.sliceMode = 1; c.frames = 1; }},
-		{"w4", func(c *gcfg) { c.log2Ctb = 6; c.log2MinCb=5; c.dbControl = true; c.dbOverride = true; c.dbBeta = -6; c.dbTc = 2; c.sliceMode = 1; c.frames = 1; }},
-		{"cqp-422-nodelta", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.frames = 1 }},
+		{"m27", func(c *gcfg) {
+			c.log2Ctb = 6
+			c.log2MinCb = 5
+			c.log2MaxTb = 3
+			c.depthInter = 1
+			c.depthIntra = 1
+			c.temporalMvp = false
+			c.depSlices = true
+			c.initQp = 40
+			c.dbControl = true
+			c.dbOverride = true
+			c.dbBeta = -6
+			c.dbTc = 2
+			c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}
+			c.frames = 6
+			c.sliceMode = 2
+		}},
+		{"dep-deblock-override", func(c *gcfg) {
+			c.dbControl = true
+			c.dbOverride = true
+			c.dbBeta = -6
+			c.dbTc = 2
+			c.sliceMode = 2
+			c.depSlices = true
+			c.frames = 8
+			c.initQp = 40
+		}},
+		{"cqp-422-nodelta", func(c *gcfg) {
+			c.chroma = 2
+			c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}
+			c.frames = 1
+		}},
 		{"cqp-422-1", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}}; c.frames = 1 }},
-		{"cqp-422-i-delta", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.frames = 1 }},
-		{"cqp-422-p-nodelta", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.frames = 4 }},
-		{"cqp-422", func(c *gcfg) { c.chroma = 2; c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true }},
-		{"cqp-dep", func(c *gcfg) { c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}; c.cuQpDelta = true; c.sliceMode = 2; c.depSlices = true; c.frames = 6 }},
+		{"cqp-422-i-delta", func(c *gcfg) {
+			c.chroma = 2
+			c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}
+			c.cuQpDelta = true
+			c.frames = 1
+		}},
+		{"cqp-422-p-nodelta", func(c *gcfg) {
+			c.chroma = 2
+			c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}
+			c.frames = 4
+		}},
+		{"cqp-422", func(c *gcfg) {
+			c.chroma = 2
+			c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}
+			c.cuQpDelta = true
+		}},
+		{"cqp-dep", func(c *gcfg) {
+			c.cqpList = [][2]int{{6, 1}, {-5, -6}, {1, -1}, {-2, 2}, {2, 4}, {-6, 0}}
+			c.cuQpDelta = true
+			c.sliceMode = 2
+			c.depSlices = true
+			c.frames = 6
+		}},
 		{"slices-sao", func(c *gcfg) { c.sao = true; c.loopAcrossSlices = true; c.sliceMode = 1 }},
 		{"slices-sao-noloop", func(c *gcfg) { c.sao = true; c.sliceMode = 1 }},
 		{"slices", func(c *gcfg) { c.sliceMode = 1 }},
@@ -1440,6 +1493,8 @@ func TestGenFeatures(t *testing.T) {
 		}
 		f := f
 		t.Run(f.name, func(t *testing.T) {
+			genExportName = f.name
+			defer func() { genExportName = "" }()
 			for seed := int64(1); seed <= 4; seed++ {
 				c := baseCfg()
 				f.f(&c)

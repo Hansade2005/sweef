@@ -67,15 +67,20 @@ func (s *lpdState) dct4(in []float64, out []float64) {
 
 // ---- LSF / LPC helpers -----------------------------------------------------------
 
+// The LPC chain below deliberately rounds to float32 at every step: the
+// LSP -> LPC polynomial expansion cancels heavily, and the reference decoder
+// (single precision) leaves noise there that resonant synthesis filters then
+// amplify. Matching the rounding keeps the output bit-near to the reference.
+
 func lpdLsp2Lsf(lsp []float64, lsf []float64) {
 	for i := 0; i < lpdOrder; i++ {
-		lsf[i] = math.Acos(lsp[i]) * 6400 / math.Pi
+		lsf[i] = float64(float32(math.Acos(lsp[i]) * (6400 / math.Pi)))
 	}
 }
 
 func lpdLsf2Lsp(lsf []float64, lsp []float64) {
 	for i := 0; i < lpdOrder; i++ {
-		lsp[i] = math.Cos(lsf[i] * math.Pi / 6400)
+		lsp[i] = float64(float32(math.Cos(lsf[i] * (math.Pi / 6400))))
 	}
 }
 
@@ -88,74 +93,55 @@ func boolInt(b bool) int {
 
 // lpdLsp2Lp converts 16 LSPs to the 17 LPC coefficients a[0..16].
 func lpdLsp2Lp(lsp []float64, a []float64) {
-	// poly arrays are indexed with an offset of one so that f[-1] reads 0
-	var p1, p2 [lpdOrder/2 + 2]float64
-	var f1, f2 [lpdOrder/2 + 2]float64
-	// f1/f2 use index -1 and -2 in the reference code: both are zero
-	f1[0], f2[0] = 1, 1 // f[0]
-	// emulate with explicit helpers
-	g1 := func(i int) float64 {
-		if i < 0 {
-			return 0
-		}
-		return f1[i]
-	}
-	g2 := func(i int) float64 {
-		if i < 0 {
-			return 0
-		}
-		return f2[i]
-	}
+	var f1, f2 [lpdOrder/2 + 3]float32 // index i+2 holds f[i]; f[-1], f[-2] stay 0
+	f1[2], f2[2] = 1, 1
 	q := 0
 	for i := 1; i <= lpdOrder/2; i++ {
-		b1 := -2 * lsp[q]
-		b2 := -2 * lsp[q+1]
+		b1 := float32(-2) * float32(lsp[q])
+		b2 := float32(-2) * float32(lsp[q+1])
 		q += 2
-		f1[i] = b1*g1(i-1) + 2*g1(i-2)
-		f2[i] = b2*g2(i-1) + 2*g2(i-2)
+		x := b1 * f1[i+1]
+		f1[i+2] = x + 2*f1[i]
+		y := b2 * f2[i+1]
+		f2[i+2] = y + 2*f2[i]
 		for j := i - 1; j > 0; j-- {
-			f1[j] += b1*g1(j-1) + g1(j-2)
-			f2[j] += b2*g2(j-1) + g2(j-2)
+			t := b1 * f1[j+1]
+			f1[j+2] += t + f1[j]
+			u := b2 * f2[j+1]
+			f2[j+2] += u + f2[j]
 		}
 	}
-	p1[0], p2[0] = 0, 0
+	var p1, p2 [lpdOrder/2 + 3]float32 // [0]=0, [1+i]=f[i]
 	for i := 0; i <= lpdOrder/2; i++ {
-		p1[i+1] = f1[i]
-		p2[i+1] = f2[i]
+		p1[i+1] = f1[i+2]
+		p2[i+1] = f2[i+2]
 	}
-	// poly1/2 index: [0]=0, [1..]=f
-	pp1 := lpdOrder/2 + 1
-	pp2 := lpdOrder/2 + 1
-	for i := 0; i < lpdOrder/2; i++ {
-		p1[pp1] += p1[pp1-1]
-		p2[pp2] -= p2[pp2-1]
-		pp1--
-		pp2--
+	for pp := lpdOrder/2 + 1; pp > 1; pp-- {
+		p1[pp] += p1[pp-1]
+		p2[pp] -= p2[pp-1]
 	}
+	// the reference loop runs ORDER/2 times from the top; pp reaches 2
+	// (index 1 is never touched again)
 	a[0] = 1
-	bot := 1
-	top := lpdOrder
-	i1, i2 := 2, 2
+	bot, top := 1, lpdOrder
 	for i := 0; i < lpdOrder/2; i++ {
-		a[bot] = 0.5 * (p1[i1] + p2[i2])
-		a[top] = 0.5 * (p1[i1] - p2[i2])
+		a[bot] = float64(0.5 * (p1[2+i] + p2[2+i]))
+		a[top] = float64(0.5 * (p1[2+i] - p2[2+i]))
 		bot++
 		top--
-		i1++
-		i2++
 	}
 }
 
 // lpdInterpLsp interpolates between two LSP vectors for nb subframes and
 // returns (nb+1) LPC sets of 17 coefficients.
 func lpdInterpLsp(old, nw []float64, a []float64, nb int) {
-	factor := 1.0 / float64(nb)
-	xp := 0.5 * factor
+	factor := float32(1) / float32(nb)
+	xp := float32(0.5) * factor
 	var lsp [lpdOrder]float64
 	for k := 0; k < nb; k++ {
-		xm := 1 - xp
+		xm := float32(1) - xp
 		for i := 0; i < lpdOrder; i++ {
-			lsp[i] = old[i]*xm + nw[i]*xp
+			lsp[i] = float64(float32(old[i])*xm + float32(nw[i])*xp)
 		}
 		xp += factor
 		lpdLsp2Lp(lsp[:], a[k*(lpdOrder+1):])
@@ -165,12 +151,12 @@ func lpdInterpLsp(old, nw []float64, a []float64, nb int) {
 
 // lpdLpcCoefGen: set 0 is the middle interpolation, 1 the old, 2 the new LSP.
 func lpdLpcCoefGen(old, nw []float64, a []float64, nb int) {
-	inc := 1 / float64(nb)
-	fnew := 0.5 - 0.5*inc
-	fold := 1 - fnew
+	inc := float32(1) / float32(nb)
+	fnew := float32(0.5) - float32(0.5)*inc
+	fold := float32(1) - fnew
 	var lsf [lpdOrder]float64
 	for i := 0; i < lpdOrder; i++ {
-		lsf[i] = old[i]*fold + nw[i]*fnew
+		lsf[i] = float64(float32(old[i])*fold + float32(nw[i])*fnew)
 	}
 	lpdLsp2Lp(lsf[:], a)
 	lpdLsp2Lp(old, a[lpdOrder+1:])
@@ -214,6 +200,8 @@ func lpdAVQDecode(read []int) (int, [lpdOrder]int) {
 	return pos, out
 }
 
+func f32(x float64) float64 { return float64(float32(x)) }
+
 func lpdFirstApproxAbs(lsf []float64, idx []int) int {
 	pos := 1
 	w := usacLsfWeightAVQ[idx[0]*lpdOrder:]
@@ -222,43 +210,43 @@ func lpdFirstApproxAbs(lsf []float64, idx []int) int {
 	}
 	p, avq := lpdAVQDecode(idx[pos:])
 	pos += p
-	min := lpdLsfGap
+	min := float32(lpdLsfGap)
 	for i := 0; i < lpdOrder; i++ {
-		lsf[i] += float64(w[i]) * float64(avq[i])
-		if lsf[i] < min {
-			lsf[i] = min
+		lsf[i] = float64(float32(lsf[i]) + w[i]*float32(avq[i]))
+		if float32(lsf[i]) < min {
+			lsf[i] = float64(min)
 		}
-		min = lsf[i] + lpdLsfGap
+		min = float32(lsf[i]) + float32(lpdLsfGap)
 	}
-	min = lpdFreqMax - lpdLsfGap
+	min = float32(lpdFreqMax - lpdLsfGap)
 	for i := lpdOrder - 1; i >= 0; i-- {
-		if lsf[i] > min {
-			lsf[i] = min
+		if float32(lsf[i]) > min {
+			lsf[i] = float64(min)
 		}
-		min = lsf[i] - lpdLsfGap
+		min = float32(lsf[i]) - float32(lpdLsfGap)
 	}
 	return pos
 }
 
 func lpdFirstApproxRel(lsf []float64, idx []int, mode int) int {
-	var d [lpdOrder + 1]float64
-	d[0] = lsf[0]
-	d[lpdOrder] = lpdFreqMax - lsf[lpdOrder-1]
+	var d [lpdOrder + 1]float32
+	d[0] = float32(lsf[0])
+	d[lpdOrder] = float32(lpdFreqMax) - float32(lsf[lpdOrder-1])
 	for i := 1; i < lpdOrder; i++ {
-		d[i] = lsf[i] - lsf[i-1]
+		d[i] = float32(lsf[i]) - float32(lsf[i-1])
 	}
-	var w [lpdOrder]float64
+	var w [lpdOrder]float32
 	for i := 0; i < lpdOrder; i++ {
-		w[i] = lpdFactorTable[mode] * math.Sqrt(d[i]*d[i+1]) / lpdFreqDiv
+		w[i] = float32(lpdFactorTable[mode] * math.Sqrt(float64(d[i]*d[i+1])) / lpdFreqDiv)
 	}
 	pos, avq := lpdAVQDecode(idx)
-	min := lpdLsfGap
+	min := float32(lpdLsfGap)
 	for i := 0; i < lpdOrder; i++ {
-		lsf[i] += w[i] * float64(avq[i])
-		if lsf[i] < min {
-			lsf[i] = min
+		lsf[i] = float64(float32(lsf[i]) + w[i]*float32(avq[i]))
+		if float32(lsf[i]) < min {
+			lsf[i] = float64(min)
 		}
-		min = lsf[i] + lpdLsfGap
+		min = float32(lsf[i]) + float32(lpdLsfGap)
 	}
 	return pos
 }
@@ -295,7 +283,7 @@ func lpdDequant(f *lpdFrame, first bool, lsf []float64) {
 		idx = idx[1:]
 		if mode == 1 {
 			for i := 0; i < lpdOrder; i++ {
-				lsf[lpdOrder+i] = 0.5 * (lsf[i] + lsf[2*lpdOrder+i])
+				lsf[lpdOrder+i] = f32(0.5 * f32(lsf[i]+lsf[2*lpdOrder+i]))
 			}
 		} else {
 			if mode == 0 {
@@ -315,7 +303,7 @@ func lpdDequant(f *lpdFrame, first bool, lsf []float64) {
 			pos = lpdFirstApproxAbs(lsf[3*lpdOrder:], idx)
 		case 1:
 			for i := 0; i < lpdOrder; i++ {
-				lsf[3*lpdOrder+i] = 0.5 * (lsf[2*lpdOrder+i] + lsf[4*lpdOrder+i])
+				lsf[3*lpdOrder+i] = f32(0.5 * f32(lsf[2*lpdOrder+i]+lsf[4*lpdOrder+i]))
 			}
 			pos = lpdFirstApproxRel(lsf[3*lpdOrder:], idx, 1)
 		case 2:

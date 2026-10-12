@@ -3,6 +3,9 @@ package media
 import (
 	"errors"
 	"fmt"
+	"math"
+	"os"
+	"runtime/debug"
 )
 
 // USAC decoder: access unit parsing, channel elements, stereo processing and
@@ -174,6 +177,9 @@ func (d *usacDec) coreElement(r *aacBits, el *usacElem, indep bool) error {
 	for i := 0; i < coreCh; i++ {
 		c := &el.ch[i]
 		ics := &c.ics
+		if os.Getenv("MODS") != "" {
+			println("CORE", d.frames, i, c.coreMode, c.tdPrev)
+		}
 		if c.coreMode != 0 {
 			if err := d.lpdChannel(r, el, i, indep); err != nil {
 				return err
@@ -227,7 +233,7 @@ func (d *usacDec) coreElement(r *aacBits, el *usacElem, indep bool) error {
 		lg := int(ics.swb[ics.maxSfb])
 		for w := 0; w < ics.numWindows; w++ {
 			if !usacDecodeSpectrumAC(c.q[w*stride:(w+1)*stride], r, &c.arith, reset && w == 0, lg, stride) {
-				return fmt.Errorf("media: usac bad spectral data")
+				return fmt.Errorf("media: usac bad spectral data (lg %d stride %d maxsfb %d w %d seq %d)", lg, stride, ics.maxSfb, w, ics.seq)
 			}
 		}
 		c.facPresent = r.bit()
@@ -282,6 +288,15 @@ func (d *usacDec) lpdChannel(r *aacBits, el *usacElem, i int, indep bool) error 
 	fo := d.frameOut[el.first+i]
 	for k := 0; k < n; k++ {
 		fo[k] = float32(out[k])
+	}
+	if os.Getenv("MODS") != "" {
+		mx := 0.0
+		for k := 0; k < n; k++ {
+			if v := math.Abs(out[k]); v > mx {
+				mx = v
+			}
+		}
+		println("OUTMAX", i, mx)
 	}
 	c.ics.seq, c.ics.seqEff = usacEightShort, usacEightShort
 	c.ics.kb = 0
@@ -549,6 +564,9 @@ var errUSACEnd = errors.New("usac: end")
 func (d *usacDec) decodeAU(data []byte) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
+			if os.Getenv("USAC_STACK") != "" {
+				debug.PrintStack()
+			}
 			err = fmt.Errorf("media: usac decoder fault: %v", r)
 		}
 	}()

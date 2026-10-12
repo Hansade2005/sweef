@@ -107,6 +107,10 @@ func lpdBassPostfilter(synth []float64, sOff int, pitch []int, pgain []float64, 
 // the overlap data of the previous (FD) frame in libxaac's layout.
 func (d *usacDec) lpdDecode(c *usacCh, f *lpdFrame, first bool, out []float64) error {
 	st := c.lpd
+	if st.fscale > 24000 {
+		// the pitch ranges of the reference decoder end at a 24 kHz core
+		return fmt.Errorf("%w: usac LPD above 24 kHz", ErrUnsupported)
+	}
 	cfg := d.cfg
 	lenFr := cfg.coreLen
 	lenSub := lenFr / 4
@@ -142,6 +146,10 @@ func (d *usacDec) lpdDecode(c *usacCh, f *lpdFrame, first bool, out []float64) e
 		lpdLsp2Lsf(st.lspOld[:], lsf[:lpdOrder])
 	}
 	lpdDequant(f, first, lsf[:])
+	if os.Getenv("MODS") != "" && lpdDbgN2 < 8 {
+		lpdDbgN2++
+		println("MYLSF", first, fmt.Sprintf("%.5f %.5f %.5f %.5f %.5f %.5f", lsf[64], lsf[65], lsf[66], lsf[67], lsf[68], lsf[79]))
+	}
 	if first {
 		copy(st.lsfPrev[:], lsf[:lpdOrder])
 		lpdLsf2Lsp(st.lsfPrev[:], st.lspOld[:])
@@ -242,6 +250,10 @@ func (d *usacDec) lpdDecode(c *usacCh, f *lpdFrame, first bool, out []float64) e
 			stability = 0
 		}
 		if mode == 0 {
+			lpdLspN++
+			if lpdLspN == 1 {
+				println("MYLSP old", fmt.Sprintf("%.7f new %.7f k %d", st.lspOld[:], lspCur[:], k))
+			}
 			lpdInterpLsp(st.lspOld[:], lspCur[:], lpFlt[:], numSub)
 			d.lpdACELPCall(c, f, k, lpFlt[:], stability)
 			if st.modePrev != 0 && f.bpfControl {
@@ -272,7 +284,7 @@ func (d *usacDec) lpdDecode(c *usacCh, f *lpdFrame, first bool, out []float64) e
 		copy(st.lspOld[:], lspCur[:])
 		copy(st.lsfPrev[:], lsfCur[:])
 	}
-	if lpdDbg && lpdDbgN2 < 2 {
+	if lpdDbg && lpdDbgN2 < 8 {
 		lpdDbgN2++
 		println("MYSY", lpdDbgN2, sb[synthBase], sb[synthBase+1], sb[synthBase+2], sb[synthBase+3], "256:", sb[synthBase+256], sb[synthBase+257], sb[synthBase+258], sb[synthBase+259], "800:", sb[synthBase+800], sb[synthBase+801], sb[synthBase+802], sb[synthBase+803], st.lspOld[0], st.lspOld[1])
 	}
@@ -330,13 +342,13 @@ func (d *usacDec) lpdFwdAlias(c *usacCh, x []float64, facLen int, a []float64, g
 	st := c.lpd
 	sig := make([]float64, facLen)
 	st.dct4(x[:facLen], sig)
-	for i := range sig {
-		sig[i] *= 2 / float64(facLen)
-	}
 	var ap [lpdOrder + 1]float64
 	lpdWeightLPC(a, ap[:], 0.92)
 	var zero [lpdOrder]float64
 	lpdSynthFilter(ap[:], sig, sig, zero[:])
+	if os.Getenv("MODS") != "" {
+		println("MYFA gain", float32(gain), "x", int(x[0]), int(x[1]), int(x[2]), int(x[3]), int(x[4]), int(x[5]), "sig", float32(sig[0]), float32(sig[1]), float32(sig[2]), float32(sig[3]))
+	}
 	base := d.cfg.coreLen/2 - facLen
 	for i := 0; i < facLen; i++ {
 		c.olap[base+i] += sig[i] * gain / 32768
@@ -344,3 +356,5 @@ func (d *usacDec) lpdFwdAlias(c *usacCh, x []float64, facLen int, a []float64, g
 }
 
 var lpdDbgN2 int
+
+var lpdLspN int

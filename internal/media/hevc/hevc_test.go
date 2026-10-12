@@ -2,11 +2,14 @@ package hevc
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sweefbrowser/sweef/internal/media/yuv"
@@ -247,4 +250,38 @@ func TestFormats(t *testing.T) {
 		vs = append(vs, variant{pf + "-intra", genOpts{pixFmt: pf, x265: "keyint=1", frames: 3}})
 	}
 	runVariants(t, vs)
+}
+
+// TestGeneratedFixtures decodes the committed generator streams (tiles, PCM,
+// long-term references, range extension tools, ...) and compares each output
+// frame with the MD5 ffmpeg produced for it. It needs no ffmpeg.
+func TestGeneratedFixtures(t *testing.T) {
+	files, _ := filepath.Glob("../testdata/hevcgen/*.hevc")
+	if len(files) == 0 {
+		t.Fatal("no fixtures")
+	}
+	for _, f := range files {
+		f := f
+		t.Run(strings.TrimSuffix(filepath.Base(f), ".hevc"), func(t *testing.T) {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, _ := os.ReadFile(strings.TrimSuffix(f, ".hevc") + ".md5")
+			wl := strings.Fields(string(want))
+			frames, err := decodeAnnexB(t, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(frames) != len(wl) {
+				t.Fatalf("decoded %d frames, reference has %d", len(frames), len(wl))
+			}
+			for i, fr := range frames {
+				sum := md5.Sum(frameBytes(fr))
+				if got := hex.EncodeToString(sum[:]); got != wl[i] {
+					t.Fatalf("frame %d: md5 %s want %s", i, got, wl[i])
+				}
+			}
+		})
+	}
 }

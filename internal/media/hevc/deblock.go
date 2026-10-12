@@ -72,7 +72,7 @@ func (d *Decoder) sliceOfCtb(ctb int) *sliceHeader {
 // (horizontal) side of the 4x4 unit (bx, by): the luma segment of 4 samples
 // and, when the edge lies on the chroma 8 sample grid and has strength 2, the
 // 4 chroma samples starting at the same position.
-func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma bool, plane int, tcOv int) uint8 {
+func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma bool, plane int, tcOv, betaOv int) uint8 {
 	s, pp := d.sp, d.pp
 	w4 := s.wTb4
 	if bx >= w4 || by >= s.hTb4 {
@@ -137,9 +137,16 @@ func (d *Decoder) deblockUnit(pic *Picture, vertical bool, bx, by int, doLuma bo
 	noP := cp.flags&cuNoFilter != 0
 	noQ := cq.flags&cuNoFilter != 0
 	if doLuma {
-		bq := clip3(0, 51, qpL+(sl.betaOffsetDiv2<<1))
+		betaOff, tcOffL := sl.betaOffsetDiv2, sl.tcOffsetDiv2
+		if tcOv != noTcOv {
+			tcOffL = tcOv
+		}
+		if betaOv != noTcOv {
+			betaOff = betaOv
+		}
+		bq := clip3(0, 51, qpL+(betaOff<<1))
 		beta := int(betaTable[bq]) << uint(s.bitDepthY-8)
-		tq := clip3(0, 53, qpL+2*(int(bs)-1)+(sl.tcOffsetDiv2<<1))
+		tq := clip3(0, 53, qpL+2*(int(bs)-1)+(tcOffL<<1))
 		tc := int(tcTable[tq]) << uint(s.bitDepthY-8)
 		stride := pic.stride[0]
 		if vertical {
@@ -213,10 +220,26 @@ func (d *Decoder) deblockCTB(pic *Picture, x0, y0 int) {
 	if xEnd2 != s.width {
 		xEnd2 -= 8
 	}
+	// ffmpeg takes the tc offsets of chroma edges from the current and the
+	// left CTB in a way that does not always follow the slice of the edge;
+	// tcSt mimics its variable that carries over between the loops.
+	ctbAddr := (y0>>uint(s.log2Ctb))*s.wCtb + x0>>uint(s.log2Ctb)
+	offOf := func(c int) (int, int) {
+		if sl := d.sliceOfCtb(c); sl != nil {
+			return sl.betaOffsetDiv2, sl.tcOffsetDiv2
+		}
+		return 0, 0
+	}
+	curBeta, curTc := offOf(ctbAddr)
+	leftBeta, leftTc := 0, 0
+	if x0 > 0 {
+		leftBeta, leftTc = offOf(ctbAddr - 1)
+	}
+	tcSt, betaSt := curTc, curBeta
 	for y := y0; y < yEnd; y += 8 {
 		for x := max(x0, 8); x < xEnd; x += 8 {
-			d.deblockUnit(pic, true, x>>2, y>>2, true, false)
-			d.deblockUnit(pic, true, x>>2, y>>2+1, true, false)
+			d.deblockUnit(pic, true, x>>2, y>>2, true, 0, tcSt, betaSt)
+			d.deblockUnit(pic, true, x>>2, y>>2+1, true, 0, tcSt, betaSt)
 		}
 		if y == 0 {
 			continue
@@ -226,36 +249,51 @@ func (d *Decoder) deblockCTB(pic *Picture, x0, y0 int) {
 			xs = x0 - 8
 		}
 		for x := xs; x < xEnd2; x += 8 {
-			d.deblockUnit(pic, false, x>>2, y>>2, true, false)
-			d.deblockUnit(pic, false, x>>2+1, y>>2, true, false)
+			b0 := d.deblockUnit(pic, false, x>>2, y>>2, true, 0, noTcOv, noTcOv)
+			b1 := d.deblockUnit(pic, false, x>>2+1, y>>2, true, 0, noTcOv, noTcOv)
+			if b0 != 0 || b1 != 0 {
+				if x >= x0 {
+					tcSt, betaSt = curTc, curBeta
+				} else {
+					tcSt, betaSt = leftTc, leftBeta
+				}
+			}
 		}
 	}
 	if s.chromaArrayType == 0 {
 		return
 	}
 	h, v := 1<<s.subW, 1<<s.subH
-	for y := y0; y < yEnd; y += 8 * v {
-		for x := max(x0, 8*h); x < xEnd; x += 8 * h {
-			d.deblockUnit(pic, true, x>>2, y>>2, false, true)
-			d.deblockUnit(pic, true, x>>2, (y+4*v)>>2, false, true)
-		}
-		if y == 0 {
-			continue
-		}
-		xe := xEnd
-		if xEnd != s.width {
-			xe = xEnd - 8*h
-		}
-		xs := 0
-		if x0 > 0 {
-			xs = x0 - 8*h
-		}
-		for x := xs; x < xe; x += 8 * h {
-			d.deblockUnit(pic, false, x>>2, y>>2, false, true)
-			d.deblockUnit(pic, false, (x+4*h)>>2, y>>2, false, true)
+	for pl := 1; pl <= 2; pl++ {
+		for y := y0; y < yEnd; y += 8 * v {
+			for x := max(x0, 8*h); x < xEnd; x += 8 * h {
+				d.deblockUnit(pic, true, x>>2, y>>2, false, pl, tcSt, noTcOv)
+				d.deblockUnit(pic, true, x>>2, (y+4*v)>>2, false, pl, tcSt, noTcOv)
+			}
+			if y == 0 {
+				continue
+			}
+			xe := xEnd
+			if xEnd != s.width {
+				xe = xEnd - 8*h
+			}
+			xs := 0
+			if x0 > 0 {
+				xs = x0 - 8*h
+			}
+			tcSt = curTc
+			if x0 > 0 {
+				tcSt = leftTc
+			}
+			for x := xs; x < xe; x += 8 * h {
+				d.deblockUnit(pic, false, x>>2, y>>2, false, pl, tcSt, noTcOv)
+				d.deblockUnit(pic, false, (x+4*h)>>2, y>>2, false, pl, curTc, noTcOv)
+			}
 		}
 	}
 }
+
+const noTcOv = 1 << 20
 
 // filterLuma filters one 4-sample long luma edge segment. q0 of the first line
 // is at index base; across steps from p to q, along steps between lines.

@@ -1,6 +1,10 @@
 package media
 
-import "math"
+import (
+	"fmt"
+	"math"
+	"os"
+)
 
 // Transitions between the FD and LPD cores: state resets, hand-over of the
 // overlap data, forward aliasing cancellation for FD frames following an LPD
@@ -117,7 +121,15 @@ func (d *usacDec) lpdBpfFix(c *usacCh, short bool, out []float64) error {
 	synthDelay := by2 * lpdSubfr
 	buf := make([]float64, lpdMaxPitch+lpdSynthDelay+lpdSuper+lpdSubfr)
 	copy(buf, st.synthPrev[:lpdMaxPitch+synthDelay])
-	copy(buf[lpdMaxPitch-lpdSubfr:], out[:synthDelay+n+lpdSubfr])
+	// the reference reads past the frame here; only samples inside it reach
+	// the filtered part
+	cnt := synthDelay + n + lpdSubfr
+	if cnt > len(out) {
+		cnt = len(out)
+	}
+	for i := 0; i < cnt; i++ {
+		buf[lpdMaxPitch-lpdSubfr+i] = out[i] * 32768
+	}
 	var pitch [24]int
 	var gain [24]float64
 	for i := 0; i < by2; i++ {
@@ -158,7 +170,9 @@ func (d *usacDec) lpdBpfFix(c *usacCh, short bool, out []float64) error {
 	if err := lpdBassPostfilter(buf, sy, pitch[:], gain[:], sig, (sbf+2)*lpdSubfr+lpdSubfr, n-(sbf+4)*lpdSubfr, st.bpfPrev[:]); err != nil {
 		return err
 	}
-	copy(out[:(sbf+2)*lpdSubfr+lpdSubfr], sig[:(sbf+2)*lpdSubfr+lpdSubfr])
+	for i := 0; i < (sbf+2)*lpdSubfr+lpdSubfr; i++ {
+		out[i] = sig[i] / 32768
+	}
 	return nil
 }
 
@@ -168,13 +182,14 @@ func (d *usacDec) lpdCalFac(c *usacCh, lfac int, fac []float64) {
 	st := c.lpd
 	gain := math.Pow(10, float64(c.facData[0])/28)
 	var x [lpdFacLength]float64
+	// natural order (the reference permutes for its FFT based DCT-IV)
 	for k := 0; k < lfac; k++ {
 		x[k] = float64(c.facData[1+k])
 	}
 	y := make([]float64, 2*lfac)
 	st.dct4(x[:lfac], y[:lfac])
-	for i := 0; i < lfac; i++ {
-		y[i] *= 2 / float64(lfac)
+	if os.Getenv("MODS") != "" {
+		println("MYY0", float32(y[0]), float32(y[1]), float32(y[2]), float32(y[3]))
 	}
 	var ap [lpdOrder + 1]float64
 	lpdWeightLPC(c.lpcPrev[:], ap[:], 0.92)
@@ -190,8 +205,21 @@ func (d *usacDec) lpdCalFac(c *usacCh, lfac int, fac []float64) {
 		t1 := c.acelpIn[1+l2+i] * fw1
 		t2 := c.acelpIn[1+l2-1-i] * fw0
 		fac[i] = (gain*y[i]*lpdFacHalf + t1 + t2) / 32768
+		if os.Getenv("MODS") != "" && i < 3 {
+			println("MYT", i, float32(t1), float32(t2), float32(y[i]))
+		}
 		fac[lfac+i] = gain * y[lfac+i] * lpdFacHalf / 32768
+	}
+	if os.Getenv("MODS") != "" {
+		str := "MYCALF"
+		for i := 0; i < 2*lfac; i++ {
+			str += fmt.Sprintf(" %f", fac[i]*32768)
+		}
+		println(str)
+	}
+	if os.Getenv("MODS") != "" {
+		println("MYCAL lfac", lfac, "gaincode", c.facData[0], "gain", float32(gain), "x", c.facData[1], c.facData[2], c.facData[3], "acelp_in", float32(c.acelpIn[0]), float32(c.acelpIn[1]), float32(c.acelpIn[2]), float32(c.acelpIn[3]), "lpc", float32(c.lpcPrev[0]), float32(c.lpcPrev[1]), float32(c.lpcPrev[2]), "out", float32(fac[0]*32768), float32(fac[1]*32768), float32(fac[2]*32768), float32(fac[3]*32768))
 	}
 }
 
-const lpdFacHalf = 0.5
+const lpdFacHalf = 1.0

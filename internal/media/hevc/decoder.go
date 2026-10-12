@@ -98,6 +98,8 @@ type Decoder struct {
 	slices       []*sliceHeader
 	tabSPS       *SPS
 	lastIndep    *sliceHeader
+	stickBeta    int // deblocking offsets of the previous slice header
+	stickTc      int
 	picInit      bool
 	decodedCtbs  int
 

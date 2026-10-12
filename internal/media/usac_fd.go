@@ -3,6 +3,7 @@ package media
 import (
 	"fmt"
 	"math"
+	"os"
 	"sync"
 )
 
@@ -488,6 +489,9 @@ func (d *usacDec) synth(c *usacCh, out []float64) {
 		special = false
 	}
 	facOn := special && c.facPresent
+	if special && os.Getenv("MODS") != "" {
+		println("MYSPEC short", short, "seq", ics.seq, "seqEff", ics.seqEff, "fac", c.facPresent, "longSpecial", longSpecial)
+	}
 	var rawTail [128]float64
 	var old []float64
 	if special {

@@ -298,8 +298,13 @@ func (d *Decoder) parseSliceHeader(r *bitReader, nalType, tid int, prev *sliceHe
 			if !sh.deblockDisabled {
 				sh.betaOffsetDiv2 = int(r.se())
 				sh.tcOffsetDiv2 = int(r.se())
+			} else {
+				// ffmpeg keeps the offsets of the previous slice here, and
+				// they leak into the filtering of neighbouring CTBs.
+				sh.betaOffsetDiv2, sh.tcOffsetDiv2 = d.stickBeta, d.stickTc
 			}
 		}
+		d.stickBeta, d.stickTc = sh.betaOffsetDiv2, sh.tcOffsetDiv2
 		sh.loopFilterAcross = pps.loopFilterAcrossSlices
 		if pps.loopFilterAcrossSlices && (sh.saoLuma || sh.saoChroma || !sh.deblockDisabled) {
 			sh.loopFilterAcross = r.flag()
