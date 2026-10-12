@@ -1,0 +1,42 @@
+{
+    "version": "@VERSION@",
+    "description": "Independent pure-Go browser engine with a built-in agent interface (alpha)",
+    "homepage": "https://github.com/sweefbrowser/sweef",
+    "license": "Proprietary",
+    "architecture": {
+        "64bit": {
+            "url": "@URL_AMD64@",
+            "hash": "@SHA_AMD64@",
+            "extract_dir": "sweef-@VERSION@-windows-amd64"
+        },
+        "arm64": {
+            "url": "@URL_ARM64@",
+            "hash": "@SHA_ARM64@",
+            "extract_dir": "sweef-@VERSION@-windows-arm64"
+        }
+    },
+    "bin": "sweef.exe",
+    "shortcuts": [
+        ["Sweef.exe", "Sweef"]
+    ],
+    "checkver": {
+        "github": "https://github.com/sweefbrowser/sweef",
+        "regex": "tag/v([\\d.]+(?:-[\\w.]+)?)"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/sweefbrowser/sweef/releases/download/v$version/sweef_$version_windows_amd64.zip",
+                "extract_dir": "sweef-$version-windows-amd64"
+            },
+            "arm64": {
+                "url": "https://github.com/sweefbrowser/sweef/releases/download/v$version/sweef_$version_windows_arm64.zip",
+                "extract_dir": "sweef-$version-windows-arm64"
+            }
+        },
+        "hash": {
+            "url": "$baseurl/../SHA256SUMS",
+            "regex": "$sha256\\s+$basename"
+        }
+    }
+}

@@ -1,0 +1,87 @@
+name: ci
+
+# TODO(owner): pin every `uses:` below by full commit SHA (with the tag as a trailing comment) before the
+# first public release. Major tags are used now because commit SHAs could not be looked up when this file was written.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: build, vet, test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4          # TODO: pin by SHA
+      - uses: actions/setup-go@v5          # TODO: pin by SHA
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet -composites=false ./...
+      - name: Install the reference fonts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fontconfig fonts-inter fonts-liberation fonts-freefont-ttf fonts-dejavu-core fonts-dejavu-mono fonts-crosextra-carlito fonts-crosextra-caladea fonts-wqy-zenhei fonts-ipafont-gothic fonts-tlwg-loma-otf fonts-unifont fonts-noto-color-emoji ffmpeg
+          # The reference set has real regular and bold DejaVu only; the runner image also ships
+          # fonts-dejavu-extra (real italics), which changes which glyphs get synthesised.
+          sudo apt-get remove -y fonts-dejavu-extra || true
+          fc-cache -f
+      - name: Test (Linux, everything; short, FATE-gated heavy tests stay off)
+        if: runner.os == 'Linux'
+        run: go test -short -count=1 -timeout 25m ./...
+      # The render, raster and font fidelity tests compare against Chromium references captured on Linux with
+      # the font set above, so they only make sense on Linux. macOS and Windows still build and vet everything
+      # and run the tests that do not depend on those fonts.
+      - name: Test (macOS and Windows, platform-relevant packages)
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          go test -short -count=1 -timeout 25m $(go list ./... | grep -v -e '/internal/render' -e '/internal/raster' -e '/internal/font' -e '/internal/pdf' -e '/internal/gl' -e '/internal/media' -e '/internal/engine$' -e '/internal/ui' -e '/internal/app' -e '/internal/agentbridge')
+
+  packaging-smoke:
+    name: packaging smoke test (linux)
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4          # TODO: pin by SHA
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5          # TODO: pin by SHA
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm nsis osslsigncode desktop-file-utils appstream lintian librsvg2-bin shellcheck
+      - name: shellcheck
+        run: shellcheck -x -S warning scripts/release/*.sh packaging/linux/*.sh packaging/macos/*.sh packaging/windows/*.sh
+      - name: Build linux binaries and packages
+        run: |
+          scripts/release/build.sh --targets "linux/amd64 linux/arm64"
+          packaging/linux/build-deb.sh
+          packaging/linux/build-rpm.sh
+          packaging/linux/build-tarball.sh
+          scripts/release/checksums.sh
+      - name: Verify packages
+        run: scripts/release/verify.sh amd64

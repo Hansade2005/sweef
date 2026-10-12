@@ -31,6 +31,8 @@ type BrowserContext struct {
 	created time.Time
 	closed  bool
 	mu      sync.RWMutex
+
+	httpClient *http.Client // per-context client with its own cookie jar (see clientFor)
 }
 
 type ContextOptions struct {
@@ -425,7 +427,7 @@ func (c *BrowserContext) Fetch(method, urlStr string, headers map[string]string,
 	if ck := c.jar.ForURL(urlStr); ck != "" {
 		req.Header.Set("Cookie", ck)
 	}
-	resp, err := c.eng.client().Do(req)
+	resp, err := c.eng.clientFor(c).Do(req)
 	if err != nil {
 		return 0, nil, "", err
 	}

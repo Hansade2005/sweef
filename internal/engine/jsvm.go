@@ -1269,7 +1269,7 @@ func (t *Tab) httpForScript(method, rawurl string, headers map[string]string, bo
 	rec := fnet.RequestRecord{Method: req.Method, URL: abs, Headers: flattenHeaders(req.Header)}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 	start := time.Now()
-	res, err := t.eng.client().Do(req)
+	res, err := t.eng.clientFor(t.Context()).Do(req)
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": abs, "error": err.Error()}})
 		return nil, fmt.Errorf("TypeError: Failed to fetch (%s)", err.Error())

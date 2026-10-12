@@ -1,7 +1,10 @@
 package style
 
 import (
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 
 	snet "github.com/sweefbrowser/sweef/internal/net"
 )
@@ -93,6 +96,82 @@ func ParseSheet(text string, env *Env, origin Origin, order *int, layers map[str
 // ParseSheetQ is ParseSheet for a document in quirks mode (class and id
 // selectors compare case-insensitively).
 func ParseSheetQ(text string, env *Env, origin Origin, order *int, layers map[string]int, quirks bool) *Parsed {
+	if len(text) < 256 || len(text) > 8<<20 || env == nil {
+		return parseSheetQ(text, env, origin, order, layers, quirks)
+	}
+	// A page repeats the same stylesheets on every layout; parsing is a pure
+	// function of the text, the environment and the shared counters, so the
+	// parsed rules (immutable once built) are reused.
+	k := parseKey{text: text, env: *env, origin: origin, quirks: quirks, order: *order, layers: layersKey(layers)}
+	parseCache.Lock()
+	if e, ok := parseCache.m[k]; ok {
+		parseCache.Unlock()
+		*order = e.order
+		for n, v := range e.layers {
+			layers[n] = v
+		}
+		return e.out
+	}
+	parseCache.Unlock()
+	before := make(map[string]int, len(layers))
+	for n, v := range layers {
+		before[n] = v
+	}
+	out := parseSheetQ(text, env, origin, order, layers, quirks)
+	e := &parseEntry{out: out, order: *order, layers: map[string]int{}}
+	for n, v := range layers {
+		if bv, ok := before[n]; !ok || bv != v {
+			e.layers[n] = v
+		}
+	}
+	parseCache.Lock()
+	if parseCache.m == nil {
+		parseCache.m = map[parseKey]*parseEntry{}
+	}
+	if len(parseCache.order) >= 24 {
+		delete(parseCache.m, parseCache.order[0])
+		parseCache.order = parseCache.order[1:]
+	}
+	parseCache.m[k] = e
+	parseCache.order = append(parseCache.order, k)
+	parseCache.Unlock()
+	return out
+}
+
+type parseKey struct {
+	text   string
+	env    Env
+	origin Origin
+	quirks bool
+	order  int
+	layers string
+}
+
+type parseEntry struct {
+	out    *Parsed
+	order  int
+	layers map[string]int
+}
+
+var parseCache struct {
+	sync.Mutex
+	m     map[parseKey]*parseEntry
+	order []parseKey
+}
+
+func layersKey(l map[string]int) string {
+	if len(l) == 0 {
+		return ""
+	}
+	ks := make([]string, 0, len(l))
+	for k, v := range l {
+		ks = append(ks, k+"\x00"+strconv.Itoa(v))
+	}
+	sort.Strings(ks)
+	return strings.Join(ks, "\x01")
+}
+
+func parseSheetQ(text string, env *Env, origin Origin, order *int, layers map[string]int, quirks bool) *Parsed {
 	p := &parser{env: env, origin: origin, order: order, layers: layers, out: &Parsed{}, quirks: quirks}
 	n := len(layers)
 	p.layerSeq = &n

@@ -1,0 +1,56 @@
+.TH SWEEF 1 "" "Sweef" "User Commands"
+.SH NAME
+sweef \- independent browser engine in pure Go, with a built-in agent interface
+.SH SYNOPSIS
+.B sweef gui
+.RI [ URL ...]
+.br
+.B sweef
+.I command
+.RI [ args ]
+.SH DESCRIPTION
+Sweef is a browser with its own engine, written in Go. It ships as one static
+binary with a JavaScript engine and a Model Context Protocol (MCP) server.
+This is an alpha release.
+.PP
+.B sweef gui
+starts the graphical browser. The other commands work headless.
+.SH COMMANDS
+.TP
+.B gui [URL...]
+Start the graphical browser.
+.TP
+.B fetch URL [--html]
+Print the page text (or HTML).
+.TP
+.B snapshot URL [--aria]
+Print the accessibility tree of a page.
+.TP
+.B shot URL [--out FILE]
+Render a PNG.
+.TP
+.B eval URL JS
+Evaluate a JavaScript expression after load.
+.TP
+.B mcp
+Run an MCP server on standard input and output.
+.TP
+.B serve [--addr ADDR]
+Run the JSON-RPC server.
+.TP
+.B version
+Print the version.
+.PP
+Run
+.B sweef help
+for the complete list, including the persistent session commands
+(open, click, fill, wait, ...).
+.SH FILES
+.TP
+.I /usr/share/doc/sweef/NOTICE
+Third-party attributions.
+.SH BUGS
+https://github.com/sweefbrowser/sweef/issues
+.SH SEE ALSO
+.BR xdg-settings (1),
+.BR update-alternatives (1)

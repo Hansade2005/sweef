@@ -14,6 +14,7 @@ import (
 	"time"
 
 	fnet "github.com/sweefbrowser/sweef/internal/net"
+	"github.com/sweefbrowser/sweef/internal/raster"
 )
 
 // Ring is a fixed-capacity circular buffer of events. Bounded memory is the
@@ -98,15 +99,18 @@ type NodeInfo struct {
 // Tab is one browsing context. Goroutine-light: no dedicated thread, just
 // state + a mutex; JS evaluation happens on demand.
 type Tab struct {
-	ID      string
-	mu      sync.RWMutex
-	eng     *Engine
-	ctx     *BrowserContext // isolation context (nil = engine default)
-	title   string
-	url     *url.URL
-	html    string
-	dom     *fnet.Doc // parsed tree held by our DOM layer
-	scripts []*CompiledScript
+	ID        string
+	incrMu    sync.Mutex
+	incr      *raster.Canvas // pixels of the last incremental paint (see incremental.go)
+	lastPaint atomic.Pointer[PaintInfo]
+	mu        sync.RWMutex
+	eng       *Engine
+	ctx       *BrowserContext // isolation context (nil = engine default)
+	title     string
+	url       *url.URL
+	html      string
+	dom       *fnet.Doc // parsed tree held by our DOM layer
+	scripts   []*CompiledScript
 
 	consoleRing *Ring
 	netRing     *Ring
@@ -305,7 +309,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 		t.emit(EvRequest, rec)
 		t.touchNet()
-		if res, err = t.eng.client().Do(req); err != nil {
+		if res, err = t.eng.clientFor(t.Context()).Do(req); err != nil {
 			return nil, err
 		}
 	}
@@ -661,7 +665,7 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	rec := fnet.RequestRecord{Method: "POST", URL: rawurl, Headers: flattenHeaders(req.Header)}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 	start := time.Now()
-	res, err := t.eng.client().Do(req)
+	res, err := t.eng.clientFor(t.Context()).Do(req)
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": rawurl, "error": err.Error()}})
 		return err

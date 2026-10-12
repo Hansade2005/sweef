@@ -1,0 +1,15 @@
+[Desktop Entry]
+Version=1.5
+Type=Application
+Name=Sweef
+GenericName=Web Browser
+Comment=Fast independent browser with a built-in agent
+Keywords=browser;web;internet;http;https;
+Exec=@EXEC@ gui %U
+TryExec=@TRYEXEC@
+Icon=sweef
+Terminal=false
+StartupNotify=true
+StartupWMClass=sweef
+Categories=Network;WebBrowser;
+MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/ftp;

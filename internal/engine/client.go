@@ -32,3 +32,21 @@ func newCookieJar() http.CookieJar {
 	jarOnce.Do(func() { sharedJar = makeSimpleJar() })
 	return sharedJar
 }
+
+// clientFor returns the HTTP client for a browsing context. The default
+// context shares the engine-wide client; every other context (private
+// browsing, Playwright-style isolated contexts) gets a client with its own
+// cookie jar on the same transport, so the automatic cookie handling of
+// net/http (redirect chains) cannot carry cookies across contexts.
+func (e *Engine) clientFor(c *BrowserContext) *http.Client {
+	base := e.client()
+	if c == nil || c.name == "default" {
+		return base
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.httpClient == nil {
+		c.httpClient = &http.Client{Timeout: base.Timeout, Transport: base.Transport, Jar: makeSimpleJar()}
+	}
+	return c.httpClient
+}

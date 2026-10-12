@@ -3,3 +3,4 @@
 page.png
 /.claude/worktrees/
 *.test
+/dist/

@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/sweefbrowser/sweef/internal/agent"
 	"os"
 	"os/signal"
 	"strings"
@@ -25,7 +26,10 @@ import (
 	"github.com/sweefbrowser/sweef/internal/rpc"
 )
 
-const version = "0.1.0"
+var (
+	version = "0.1.0"
+	commit  = "unknown"
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -54,6 +58,10 @@ func main() {
 		cmdEval(args)
 	case "call":
 		cmdCall(args)
+	case "agent":
+		os.Exit(agent.RunCLI(args, os.Stdin, os.Stdout))
+	case "gui":
+		cmdGUI(args)
 	case "version", "--version":
 		fmt.Println("sweef", version)
 	case "help", "-h", "--help":
@@ -88,6 +96,7 @@ one-shot and server commands:
   sweef mcp                              MCP server over stdio (for AI agents)
   sweef serve [--addr host:port|unix:path] [--idle-timeout 1h]
   sweef call <Method> [params-json]      raw RPC against a running server
+  sweef gui [--headless --script f.json --out dir --size WxH --profile dir --incognito --stats] [url...]
   sweef version
 `)
 }
