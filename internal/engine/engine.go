@@ -342,10 +342,16 @@ func (e *Engine) Close() error {
 	// keep-alive connections would otherwise outlive the engine (their reader
 	// goroutines wait for IdleConnTimeout)
 	e.mu.Lock()
-	if e.httpClient != nil {
-		e.httpClient.CloseIdleConnections()
-	}
+	hc := e.httpClient
 	e.mu.Unlock()
+	if hc != nil {
+		hc.CloseIdleConnections()
+		// Requests that were in flight at Close (favicons, subresources) turn idle only when they
+		// finish, after the sweep above; sweep again so their connections do not linger either.
+		for _, d := range []time.Duration{300 * time.Millisecond, 1500 * time.Millisecond} {
+			time.AfterFunc(d, hc.CloseIdleConnections)
+		}
+	}
 	return nil
 }
 
