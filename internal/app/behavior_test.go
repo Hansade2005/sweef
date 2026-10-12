@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
@@ -609,12 +608,10 @@ func TestIdleUsesNoCPUAndNoTimers(t *testing.T) {
 	if h.animating() {
 		t.Fatal("animation timer left running while idle")
 	}
-	var r0, r1 syscall.Rusage
-	syscall.Getrusage(syscall.RUSAGE_SELF, &r0)
+	c0 := processCPU()
 	presents := h.win.Presents()
 	time.Sleep(2 * time.Second)
-	syscall.Getrusage(syscall.RUSAGE_SELF, &r1)
-	cpu := time.Duration(r1.Utime.Nano()+r1.Stime.Nano()-r0.Utime.Nano()-r0.Stime.Nano()) * time.Nanosecond
+	cpu := processCPU() - c0
 	t.Logf("idle for 2s: %v CPU, %d frames", cpu, h.win.Presents()-presents)
 	if h.win.Presents() != presents {
 		t.Fatal("frames presented while idle")
