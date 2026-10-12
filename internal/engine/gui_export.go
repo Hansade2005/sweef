@@ -1,8 +1,15 @@
 package engine
 
-import "image"
+import (
+	"image"
+	"math"
 
-// gui_export.go: two additive hooks used by internal/app (the GUI layer).
+	"github.com/sweefbrowser/sweef/internal/raster"
+	"github.com/sweefbrowser/sweef/internal/render"
+)
+
+// gui_export.go: additive hooks used by internal/app (the GUI layer). They
+// only expose what paintPage already computes.
 
 // Generation returns the document's mutation counter (0 without a document).
 // It changes whenever the DOM or computed styles change, so a compositor can
@@ -17,17 +24,90 @@ func (t *Tab) Generation() uint64 {
 	return d.MutationGen()
 }
 
+// PaintOptions selects how PaintRGBAOpts rasterises.
+type PaintOptions struct {
+	Width, Height  int     // CSS px; Height <= 0 uses the tab viewport height
+	DSF            float64 // device pixel ratio
+	Full           bool    // paint the whole document height (capped at 16000 CSS px)
+	Transparent    bool    // leave the canvas transparent (premultiplied alpha), for overlays
+	KeepScrollbars bool    // keep the page's own scrollbars (default: removed; the GUI draws its own)
+}
+
 // PaintRGBA rasterises the page straight to an RGBA image (no PNG round
-// trip). width/height are CSS pixels; the result is (width*dsf)x(height*dsf).
-// full paints the whole document height (capped) so the caller can scroll
-// the result without asking the engine again. ok is false when the render
-// pipeline is not active for this document.
+// trip) with an opaque white canvas and no page scrollbars. width/height are
+// CSS pixels; the result is (width*dsf)x(height*dsf).
 func (t *Tab) PaintRGBA(width, height int, dsf float64, full bool) (*image.RGBA, bool) {
-	if width <= 0 {
-		width = 1280
+	return t.PaintRGBAOpts(PaintOptions{Width: width, Height: height, DSF: dsf, Full: full})
+}
+
+// PaintRGBAOpts is PaintRGBA with options. ok is false when the render
+// pipeline is not active for this document.
+func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
+	t.mu.RLock()
+	doc := t.dom
+	vh := t.vpH
+	t.mu.RUnlock()
+	if doc == nil || !renderEnabled() {
+		return nil, false
 	}
-	if dsf <= 0 {
-		dsf = 1
+	if o.Width <= 0 {
+		o.Width = 1280
 	}
-	return t.paintPage(width, height, dsf, full)
+	if o.DSF <= 0 {
+		o.DSF = 1
+	}
+	l := doc.Layout(o.Width)
+	ext, _ := l.Ext.(*renderExt)
+	if ext == nil {
+		return nil, false
+	}
+	height := o.Height
+	if o.Full {
+		height = int(math.Ceil(ext.res.Height))
+		if height < 1 {
+			height = 1
+		}
+		if height > 16000 {
+			height = 16000
+		}
+	}
+	if height <= 0 {
+		height = vh
+		if height <= 0 {
+			height = 720
+		}
+	}
+	list := ext.res.List
+	if !o.KeepScrollbars {
+		kept := make([]render.Op, 0, len(list))
+		for _, op := range list {
+			switch op.(type) {
+			case render.Scrollbar, render.ScrollCorner:
+				// only the root scrollbars: element scrollbars are not top-left anchored
+				if isRootScrollbar(op, ext.res.Viewport) {
+					continue
+				}
+			}
+			kept = append(kept, op)
+		}
+		list = kept
+	}
+	env := raster.PaintEnv{Bitmap: ext.env.Bitmap}
+	if !o.Transparent {
+		env.Background = raster.Color{R: 1, G: 1, B: 1, A: 1}
+	}
+	return raster.Paint(list, o.Width, height, o.DSF, env), true
+}
+
+func isRootScrollbar(op render.Op, vp render.Rect) bool {
+	switch o := op.(type) {
+	case render.Scrollbar:
+		if o.Vertical {
+			return o.Rect.Y == 0 && o.Rect.X+o.Rect.W >= vp.W-0.5
+		}
+		return o.Rect.X == 0 && o.Rect.Y+o.Rect.H >= vp.H-0.5
+	case render.ScrollCorner:
+		return o.Rect.X+o.Rect.W >= vp.W-0.5 && o.Rect.Y+o.Rect.H >= vp.H-0.5
+	}
+	return false
 }

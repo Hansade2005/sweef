@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.sweefbrowser.sweef</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <!-- TODO(owner): the repository has no LICENSE file yet. Replace with the real SPDX id before the first public release. -->
+  <project_license>LicenseRef-proprietary</project_license>
+  <name>Sweef</name>
+  <summary>Independent browser engine in pure Go, with a built-in agent</summary>
+  <description>
+    <p>Sweef is a browser with its own engine, written in Go: one static binary, a real JavaScript engine, and a Model Context Protocol server built in so AI agents can use the web through a compact, readable view of each page.</p>
+    <p>This is an alpha release. Some sites will not render correctly yet; Sweef offers to open those in your system browser.</p>
+  </description>
+  <launchable type="desktop-id">sweef.desktop</launchable>
+  <url type="homepage">https://github.com/sweefbrowser/sweef</url>
+  <url type="bugtracker">https://github.com/sweefbrowser/sweef/issues</url>
+  <provides>
+    <binary>sweef</binary>
+  </provides>
+  <categories>
+    <category>Network</category>
+    <category>WebBrowser</category>
+  </categories>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <content_rating type="oars-1.1"/>
+  <developer id="io.github.sweefbrowser">
+    <name>Sweef</name>
+  </developer>
+  <releases>
+    <release version="@VERSION@" date="@DATE@">
+      <description>
+        <p>Alpha release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -76,15 +76,15 @@ type Window struct {
 
 // ClosedTab is an entry of the reopen stack.
 type ClosedTab struct {
-	URL       string   `json:"url"`
-	Title     string   `json:"title"`
-	History   []string `json:"history,omitempty"`
-	HIdx      int      `json:"hidx"`
-	Scroll    int      `json:"scroll"`
-	Pinned    bool     `json:"pinned"`
-	Index     int      `json:"index"`
-	Window    int      `json:"window"`
-	Incognito bool     `json:"-"`
+	URL       string    `json:"url"`
+	Title     string    `json:"title"`
+	History   []string  `json:"history,omitempty"`
+	HIdx      int       `json:"hidx"`
+	Scroll    int       `json:"scroll"`
+	Pinned    bool      `json:"pinned"`
+	Index     int       `json:"index"`
+	Window    int       `json:"window"`
+	Incognito bool      `json:"-"`
 	At        time.Time `json:"at"`
 }
 
@@ -167,6 +167,16 @@ func (m *Model) WindowInfo(win int) (Window, bool) {
 	c := *x
 	c.Order = append([]string(nil), x.Order...)
 	return c, true
+}
+
+// SetFocused records window focus.
+func (m *Model) SetFocused(win int, f bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if w := m.windows[win]; w != nil && w.Focused != f {
+		w.Focused = f
+		m.bump()
+	}
 }
 
 // AddTab inserts a tab. index < 0 appends (after pinned tabs for unpinned).

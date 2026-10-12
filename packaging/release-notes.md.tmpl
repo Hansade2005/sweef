@@ -1,0 +1,38 @@
+# Sweef @VERSION@ (ALPHA)
+
+> **This is an alpha release.** Sweef is a young independent browser engine. Expect missing features,
+> sites that do not render correctly, and rough edges. Sweef offers to open such pages in your system
+> browser. Please do not rely on it for banking or other sensitive browsing yet.
+
+Commit: `@COMMIT@`
+
+## Install
+
+| Platform | File | Notes |
+|---|---|---|
+| Linux (Debian/Ubuntu) | `sweef_@VERSION@_linux_<arch>.deb` | `sudo apt install ./sweef_...deb` |
+| Linux (Fedora/openSUSE) | `sweef_@VERSION@_linux_<arch>.rpm` | `sudo dnf install ./sweef_...rpm` |
+| Linux (any) | `sweef_@VERSION@_linux_<arch>.AppImage` | `chmod +x` and run |
+| Linux (any) | `sweef_@VERSION@_linux_<arch>.tar.gz`, or `install.sh` | user-level install, no root |
+| macOS 12+ | `sweef_@VERSION@_darwin_universal.dmg` | @MAC_NOTE@ |
+| Windows 10/11 | `sweef_@VERSION@_windows_<arch>_setup.exe` or `.zip` | @WIN_NOTE@ |
+
+`<arch>` is `amd64` or `arm64`. Full instructions, uninstall steps and the unsigned-binary
+workarounds are in [docs/install.md](https://github.com/sweefbrowser/sweef/blob/v@VERSION@/docs/install.md).
+
+## Verify your download
+
+```sh
+sha256sum -c SHA256SUMS --ignore-missing
+gh attestation verify <file> --repo sweefbrowser/sweef    # build provenance (SLSA)
+```
+
+## Known alpha limitations
+
+- Installers are @SIGN_NOTE@
+- No automatic updates yet: download the new version to update.
+- See the README for rendering-fidelity numbers and known gaps.
+
+## Changes
+
+@CHANGES@

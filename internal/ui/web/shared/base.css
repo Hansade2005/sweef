@@ -13,7 +13,7 @@ svg { display: block; flex: none; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .num { font-variant-numeric: tabular-nums; }
 .mono { font-family: var(--mono); }
-.trunc { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+.trunc { overflow: hidden; white-space: nowrap; min-width: 0; padding-right: 14px; margin-right: -14px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); }
 :focus { outline: none; }
 :focus-visible { box-shadow: var(--focus); border-radius: var(--r-1); }
 input:focus-visible, textarea:focus-visible { box-shadow: none; }
@@ -78,3 +78,6 @@ select.field { appearance: none; padding-right: 28px; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(61, 245, 196, 0); } }
 .fav { width: 16px; height: 16px; border-radius: 4px; flex: none; display: inline-flex; align-items: center; justify-content: center; font: 700 10px/1 var(--font); color: #fff; overflow: hidden; }
 .fav img { width: 16px; height: 16px; display: block; }
+.sbar { position: absolute; right: 2px; top: 0; width: 6px; border-radius: 6px; background: var(--line-2); opacity: 0; transition: opacity var(--dur-3); z-index: 6; }
+.sbar.h { right: auto; top: auto; bottom: 2px; left: 0; width: auto; height: 6px; }
+.sbar.on, .sbar:hover, *:hover > .sbar { opacity: .85; }

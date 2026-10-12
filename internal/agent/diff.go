@@ -46,7 +46,7 @@ func DeltaText(prev, cur string) string {
 		if !inHunk {
 			if lastCtx != "" {
 				sb.WriteString("@ ")
-				sb.WriteString(strings.TrimSpace(lastCtx))
+				sb.WriteString(clip(strings.TrimSpace(lastCtx), 160))
 				sb.WriteByte('\n')
 			}
 			inHunk = true
@@ -225,7 +225,6 @@ func TruncateSnapshot(s string, maxTokens int) (string, bool) {
 			used += cost[i]
 		}
 	}
-	// pass 3: leftover interactive lines if budget remains
 	var sb strings.Builder
 	kept := 0
 	droppedRefs := 0

@@ -68,6 +68,16 @@ func OpenDownloads(b Backend) *Downloads {
 		forEachLine(data, func(l []byte) {
 			var it DownloadItem
 			if json.Unmarshal(l, &it) == nil && it.ID != "" {
+				if it.State == "removed" {
+					delete(d.items, it.ID)
+					for i, o := range d.order {
+						if o == it.ID {
+							d.order = append(d.order[:i], d.order[i+1:]...)
+							break
+						}
+					}
+					return
+				}
 				if _, ok := d.items[it.ID]; !ok {
 					d.order = append(d.order, it.ID)
 				}

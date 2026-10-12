@@ -19,7 +19,7 @@
         else if (k === "class") v.split(" ").forEach(function (c) { if (c) el.classList.add(c); });
         else if (k === "text") el.textContent = v;
         else if (k === "value") el.value = v;
-        else if (k === "style" && typeof v === "object") for (var s in v) el.style.setProperty(s, v[s]);
+        else if (k === "style" && typeof v === "object") for (var s in v) el.style.setProperty(s.replace(/[A-Z]/g, function (c) { return "-" + c.toLowerCase(); }), v[s]);
         else el.setAttribute(k, v === true ? "" : v);
       }
     }
@@ -89,13 +89,18 @@
   SW.setting = function (key, d) { var s = SW.state.settings || {}; return s[key] != null ? s[key] : d; };
   SW.set = function (key, value) {  // optimistic settings.set
     SW.state.settings = SW.state.settings || {}; SW.state.settings[key] = value;
-    SW.post("settings.set", { key: key, value: value }); SW.emit("state", SW.state);
+    SW.post("settings.set", { key: key, value: value }); SW.emit("state", SW.state); SW.render();
   };
-  var ping = SW.schedule(function () { SW.emit("render", SW.state); });
+  var ping = SW.render = SW.schedule(function () { SW.emit("render", SW.state); });
   window.sweef.onMessage = function (type, p) {
     if (type === "state") { SW.state = p || {}; SW.applyTheme(); SW.emit("state", SW.state); ping(); }
     else if (type === "state.patch") { SW.state = merge(SW.state, p) || {}; SW.applyTheme(); SW.emit("state", SW.state); ping(); }
-    else SW.emit(type, p);
+    else if (type === "downloads.update" && p) {  // one item, an array, or {items}
+      var l = p.items || (Array.isArray(p) ? p : (p.id ? [p] : [])), by = {}, ord = [];
+      (SW.state.downloads || []).forEach(function (d) { by[d.id] = d; ord.push(d.id); });
+      l.forEach(function (d) { if (!by[d.id]) ord.unshift(d.id); by[d.id] = Object.assign(by[d.id] || {}, d); });
+      SW.state.downloads = ord.map(function (k) { return by[k]; }); SW.emit("downloads.update", p); ping();
+    } else SW.emit(type, p);
   };
   SW.ready = function (page) { SW.post("ui.ready", { page: page }); };
 
@@ -109,6 +114,7 @@
     var d = (s.settings && s.settings.density) || "comfortable";
     if (r.getAttribute("data-density") !== d) r.setAttribute("data-density", d);
   };
+  SW.applyTheme();
   /* a page can force a theme with ?theme=dark (used by previews and error pages) */
   try { var q = /[?&]theme=(\w+)/.exec(location.search); if (q) document.documentElement.setAttribute("data-theme", q[1]); } catch (e) {}
   SW.query = function (k) { var m = new RegExp("[?&]" + k + "=([^&#]*)").exec(location.search); return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : ""; };

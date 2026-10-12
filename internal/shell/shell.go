@@ -16,6 +16,10 @@ type Config struct {
 	// Icon is an optional window icon (any size; premultiplied RGBA).
 	// Shells that cannot show one ignore it.
 	Icon *image.RGBA
+	// UnifiedTitleBar (macOS only, ignored elsewhere) lets the content extend
+	// under a transparent title bar; the traffic-light buttons stay on top of
+	// the content in its top-left corner.
+	UnifiedTitleBar bool
 }
 
 type Kind int

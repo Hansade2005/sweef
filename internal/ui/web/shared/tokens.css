@@ -24,6 +24,7 @@
   --warn: #B45F06; --warn-soft: rgba(217, 119, 6, .13);
   --danger: #D8284A; --danger-soft: rgba(216, 40, 74, .10);
   --scrim: rgba(18, 18, 44, .38);
+  --glass: rgba(255, 255, 255, .66); --glass-hover: rgba(255, 255, 255, .42); --tab-on: #FFFFFF;
   --ink: #0B0C1E;          /* deep ink: agent pill, tooltips */
   --ink-text: #F1F1FF;
   --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
@@ -67,6 +68,7 @@
   --warn: #F0A53A; --warn-soft: rgba(240, 165, 58, .14);
   --danger: #FF6B86; --danger-soft: rgba(255, 107, 134, .13);
   --scrim: rgba(3, 3, 14, .6);
+  --glass: rgba(255, 255, 255, .07); --glass-hover: rgba(255, 255, 255, .05); --tab-on: #23253F;
   --ink: #07081A; --ink-text: #F1F1FF;
   --sh-1: 0 1px 1px rgba(0, 0, 0, .3), 0 1px 3px rgba(0, 0, 0, .3);
   --sh-2: 0 2px 4px rgba(0, 0, 0, .25), 0 10px 24px -6px rgba(0, 0, 0, .5);
@@ -86,6 +88,7 @@
   --warn: #F0A53A; --warn-soft: rgba(240, 165, 58, .14);
   --danger: #FF6B86; --danger-soft: rgba(255, 107, 134, .13);
   --scrim: rgba(3, 2, 12, .66);
+  --glass: rgba(205, 190, 255, .08); --glass-hover: rgba(205, 190, 255, .05); --tab-on: #221D3D;
   --ink: #05040E; --ink-text: #F1EEFF;
   --volt-grad: linear-gradient(90deg, #8A5BFF 0%, #B79BFF 55%, #E1B8FF 100%);
   --sh-1: 0 1px 1px rgba(0, 0, 0, .35), 0 1px 3px rgba(0, 0, 0, .35);

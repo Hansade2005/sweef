@@ -1,0 +1,69 @@
+name: ci
+
+# TODO(owner): pin every `uses:` below by full commit SHA (with the tag as a trailing comment) before the
+# first public release. Major tags are used now because commit SHAs could not be looked up when this file was written.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: build, vet, test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4          # TODO: pin by SHA
+      - uses: actions/setup-go@v5          # TODO: pin by SHA
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test (short; FATE-gated heavy tests stay off)
+        run: go test -short -count=1 -timeout 20m ./...
+
+  packaging-smoke:
+    name: packaging smoke test (linux)
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4          # TODO: pin by SHA
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5          # TODO: pin by SHA
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm nsis osslsigncode desktop-file-utils appstream lintian librsvg2-bin shellcheck
+      - name: shellcheck
+        run: shellcheck -x -S warning scripts/release/*.sh packaging/linux/*.sh packaging/macos/*.sh packaging/windows/*.sh
+      - name: Build linux binaries and packages
+        run: |
+          scripts/release/build.sh --targets "linux/amd64 linux/arm64"
+          packaging/linux/build-deb.sh
+          packaging/linux/build-rpm.sh
+          packaging/linux/build-tarball.sh
+          scripts/release/checksums.sh
+      - name: Verify packages
+        run: scripts/release/verify.sh amd64

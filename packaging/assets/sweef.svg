@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sweef mark: a speed-streak "S" on a rounded square. Violet #5B5BFF. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Sweef</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6E6EFF"/>
+      <stop offset="1" stop-color="#5B5BFF"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <!-- speed streaks -->
+  <g stroke="#FFFFFF" stroke-linecap="round" fill="none">
+    <path d="M58 188H132" stroke-width="22" opacity="0.35"/>
+    <path d="M44 252H108" stroke-width="22" opacity="0.55"/>
+    <path d="M58 316H110" stroke-width="22" opacity="0.35"/>
+  </g>
+  <!-- the S, slanted slightly forward -->
+  <g transform="translate(0 0) skewX(-8) translate(30 0)">
+    <path d="M360 168C348 122 232 108 214 178C198 240 340 250 326 330C312 400 196 400 168 346"
+          fill="none" stroke="#FFFFFF" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

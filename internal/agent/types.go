@@ -152,14 +152,14 @@ const (
 // Config configures a Client and an Agent. The zero value plus an APIKey is
 // valid; defaults are applied by New / NewClient.
 type Config struct {
-	APIKey  string // never logged; redacted from every error
+	APIKey  string `json:"-"` // never logged; redacted from every error
 	BaseURL string // default https://api.anthropic.com
 	Model   string // default claude-haiku-5-5
 
 	Effort           string       // output_config.effort; default "low"
 	Thinking         ThinkingMode // default adaptive
 	ThoughtSummaries bool         // request thinking.display = "summarized" and emit EventThought
-	MaxTokens        int          // per response; default 4096 (always sent explicitly)
+	MaxTokens        int          // per response; default 8192 (thinking tokens count against it; always sent explicitly)
 
 	// Run budgets.
 	MaxTurns        int     // default 40
@@ -175,10 +175,10 @@ type Config struct {
 	Compact           CompactConfig
 
 	// Transport.
-	HTTPClient   *http.Client                             // optional override
-	MaxRetries   int                                      // default 4 (5 attempts)
-	RetryBase    time.Duration                            // default 400ms
-	RetryMaxWait time.Duration                            // largest retry-after honoured; default 30s
+	HTTPClient   *http.Client                               // optional override
+	MaxRetries   int                                        // default 4 (5 attempts)
+	RetryBase    time.Duration                              // default 400ms
+	RetryMaxWait time.Duration                              // largest retry-after honoured; default 30s
 	Sleep        func(context.Context, time.Duration) error // test hook
 
 	Logf func(format string, args ...any) // optional debug sink; never sees the key
@@ -218,7 +218,7 @@ func (c *Config) applyDefaults() {
 		c.Thinking = ThinkingAdaptive
 	}
 	if c.MaxTokens <= 0 {
-		c.MaxTokens = 4096
+		c.MaxTokens = 8192
 	}
 	if c.MaxTurns <= 0 {
 		c.MaxTurns = 40

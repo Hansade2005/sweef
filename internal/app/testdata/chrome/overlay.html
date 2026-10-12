@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sweef placeholder overlay</title>
+<style>
+  html, body { margin: 0; background: transparent; }
+  #pop { position: absolute; left: 120px; top: 78px; width: 520px; background: #232840; border-radius: 8px; display: none; padding: 4px 0; }
+  .row { height: 26px; padding: 0 12px; color: #dfe3f5; font: 13px sans-serif; display: flex; align-items: center; }
+  .row.sel { background: #3b4258; }
+</style>
+</head>
+<body>
+<div id="pop"></div>
+<script>
+var pop = document.getElementById('pop');
+function report(vis) {
+  var r = pop.getBoundingClientRect();
+  sweef.post('overlay', { rect: { x: r.left, y: r.top, w: r.width, h: r.height }, visible: vis });
+}
+function hide() { pop.style.display = 'none'; report(false); }
+sweef.onMessage = function (type, p) {
+  if (type === 'omni.suggestions') {
+    pop.textContent = '';
+    (p.items || []).forEach(function (it, i) {
+      var d = document.createElement('div');
+      d.className = 'row' + (i === 0 ? ' sel' : '');
+      d.textContent = it.title;
+      d.addEventListener('click', function () { hide(); sweef.post('nav.go', { input: it.text }); });
+      pop.appendChild(d);
+    });
+    if (p.items && p.items.length) { pop.style.display = 'block'; report(true); } else hide();
+  } else if (type === 'overlay.dismiss' || (type === 'focus' && p.target === 'page')) { hide(); }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sweef placeholder chrome</title>
+<style>
+  html, body { margin: 0; height: 100%; font: 13px sans-serif; background: #1c2030; color: #e8eaf2; overflow: hidden; }
+  #tabs { position: absolute; left: 0; top: 0; right: 0; height: 36px; background: #1c2030; display: flex; align-items: flex-end; }
+  .tab { height: 28px; width: 180px; margin-left: 4px; padding: 0 10px; background: #2a3045; border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: space-between; color: #aab; overflow: hidden; }
+  .tab.active { background: #3b4258; color: #fff; }
+  .tab.loading { color: #ffd479; }
+  .tab .x { margin-left: 8px; color: #889; }
+  #newtab { height: 28px; width: 28px; margin-left: 6px; display: flex; align-items: center; justify-content: center; color: #aab; }
+  #bar { position: absolute; left: 0; top: 36px; right: 0; height: 44px; background: #3b4258; display: flex; align-items: center; }
+  .btn { width: 32px; height: 28px; margin-left: 6px; border-radius: 6px; background: #4a5270; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .btn.off { color: #778; background: #3f465f; }
+  #omnibox { flex: 1; height: 28px; margin: 0 8px; padding: 0 12px; border: 0; border-radius: 14px; background: #1c2030; color: #fff; font: 13px sans-serif; }
+  #lock { width: 10px; height: 10px; border-radius: 5px; background: #666; margin-left: 8px; }
+  #lock.secure { background: #3ecf7a; } #lock.insecure { background: #e5534b; } #lock.internal { background: #6f8cff; }
+  #viewport { position: absolute; left: 0; top: 80px; bottom: 0; right: 0; }
+  #side { position: absolute; top: 80px; bottom: 0; right: 0; width: 0; background: #20263a; display: none; color: #cfd3e6; padding: 8px; }
+  #sidelog { font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="tabs"></div>
+<div id="bar">
+  <div class="btn" id="back">&lt;</div><div class="btn" id="fwd">&gt;</div><div class="btn" id="reload">R</div>
+  <div id="lock"></div>
+  <input id="omnibox" type="text" value="">
+  <div class="btn" id="star">*</div>
+</div>
+<div id="viewport"></div>
+<div id="side"><div>Agent</div><div id="sidelog"></div></div>
+<script>
+var S = {}, lastLayout = '';
+function merge(t, p) {
+  for (var k in p) {
+    var v = p[k];
+    if (v === null) { delete t[k]; }
+    else if (typeof v === 'object' && !Array.isArray(v) && typeof t[k] === 'object' && t[k] && !Array.isArray(t[k])) { merge(t[k], v); }
+    else { t[k] = v; }
+  }
+}
+function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function render() {
+  var tabs = document.getElementById('tabs');
+  tabs.textContent = '';
+  (S.tabs || []).forEach(function (t) {
+    var d = el('div', 'tab' + (t.id === S.active ? ' active' : '') + (t.loading ? ' loading' : ''));
+    d.setAttribute('data-id', t.id);
+    d.appendChild(el('span', '', (t.title || t.url || 'New Tab').slice(0, 18)));
+    var x = el('span', 'x', 'x'); x.setAttribute('data-close', t.id); d.appendChild(x);
+    d.addEventListener('click', function (ev) { sweef.post('tab.activate', { id: t.id }); });
+    x.addEventListener('click', function (ev) { sweef.post('tab.close', { id: t.id }); });
+    tabs.appendChild(d);
+  });
+  var nt = el('div', '', '+'); nt.id = 'newtab'; nt.addEventListener('click', function () { sweef.post('tab.new', {}); }); tabs.appendChild(nt);
+  var ob = document.getElementById('omnibox');
+  if (document.activeElement !== ob) ob.value = S.url || '';
+  document.getElementById('lock').className = (S.security && S.security.level) || '';
+  document.getElementById('back').className = 'btn' + (S.canBack ? '' : ' off');
+  document.getElementById('fwd').className = 'btn' + (S.canForward ? '' : ' off');
+  var side = document.getElementById('side');
+  var open = S.sidebar && S.sidebar.open, w = (S.sidebar && S.sidebar.width) || 360;
+  side.style.display = open ? 'block' : 'none';
+  side.style.width = open ? (w - 16) + 'px' : '0px';
+  document.getElementById('viewport').style.right = open ? w + 'px' : '0px';
+  reportLayout();
+}
+function reportLayout() {
+  var r = document.getElementById('viewport').getBoundingClientRect();
+  var key = [r.left, r.top, r.width, r.height].join(',');
+  if (key !== lastLayout) { lastLayout = key; sweef.post('layout', { viewport: { x: r.left, y: r.top, w: r.width, h: r.height } }); }
+}
+sweef.onMessage = function (type, p) {
+  if (type === 'state') { S = p; render(); }
+  else if (type === 'state.patch') { merge(S, p); render(); }
+  else if (type === 'agent.event') { var l = document.getElementById('sidelog'); l.appendChild(el('div', '', (p.kind || '') + ': ' + (p.text || ''))); }
+  else if (type === 'omnibox.focus') { var o = document.getElementById('omnibox'); o.focus(); }
+};
+var ob = document.getElementById('omnibox');
+ob.addEventListener('input', function () { sweef.post('omni.input', { text: ob.value }); });
+ob.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { sweef.post('nav.go', { input: ob.value }); }
+});
+document.getElementById('back').addEventListener('click', function () { sweef.post('nav.back', {}); });
+document.getElementById('fwd').addEventListener('click', function () { sweef.post('nav.forward', {}); });
+document.getElementById('reload').addEventListener('click', function () { sweef.post('nav.reload', {}); });
+document.getElementById('star').addEventListener('click', function () { sweef.post('bookmark.toggle', {}); });
+reportLayout();
+</script>
+</body>
+</html>

@@ -39,7 +39,14 @@ var (
 	mu       sync.Mutex
 	platform Platform = newChanLoop()
 	running  atomic.Bool
+	stopped  = make(chan struct{}) // closed when Run's app function returned
 )
+
+func stoppedCh() <-chan struct{} {
+	mu.Lock()
+	defer mu.Unlock()
+	return stopped
+}
 
 // SetPlatform replaces the default channel-based loop. Call from init().
 func SetPlatform(p Platform) {
@@ -60,11 +67,19 @@ var ErrNotRunning = errors.New("mainthread: Run is not active (call mainthread.R
 // Run executes app on a new goroutine and runs the platform loop on the
 // calling (main) thread until app returns. It must be called from main().
 func Run(app func()) {
-	p := cur()
+	mu.Lock()
+	p := platform
+	done := make(chan struct{})
+	stopped = done
+	if c, ok := p.(*chanLoop); ok {
+		c.reset()
+	}
+	mu.Unlock()
 	running.Store(true)
 	go func() {
 		defer func() {
 			running.Store(false)
+			close(done)
 			p.Stop()
 		}()
 		app()
@@ -96,29 +111,51 @@ func Do(f func()) error {
 		defer func() { done <- recover() }()
 		f()
 	})
-	if r := <-done; r != nil {
-		panic(r)
+	select {
+	case r := <-done:
+		if r != nil {
+			panic(r)
+		}
+		return nil
+	case <-stoppedCh():
+		return ErrNotRunning
 	}
-	return nil
 }
 
 // chanLoop is the default platform: a plain task queue.
 type chanLoop struct {
-	q    chan func()
-	stop chan struct{}
-	once sync.Once
+	q chan func()
+
+	mu      sync.Mutex
+	stop    chan struct{}
+	stopped bool
 }
 
 func newChanLoop() *chanLoop {
 	return &chanLoop{q: make(chan func(), 256), stop: make(chan struct{})}
 }
 
+func (c *chanLoop) stopCh() chan struct{} {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.stop
+}
+
+// reset prepares the loop for another Run (tests; programs run once).
+func (c *chanLoop) reset() {
+	c.mu.Lock()
+	c.stop = make(chan struct{})
+	c.stopped = false
+	c.mu.Unlock()
+}
+
 func (c *chanLoop) Run() {
+	stop := c.stopCh()
 	for {
 		select {
 		case f := <-c.q:
 			f()
-		case <-c.stop:
+		case <-stop:
 			return
 		}
 	}
@@ -127,8 +164,15 @@ func (c *chanLoop) Run() {
 func (c *chanLoop) Post(f func()) {
 	select {
 	case c.q <- f:
-	case <-c.stop:
+	case <-c.stopCh():
 	}
 }
 
-func (c *chanLoop) Stop() { c.once.Do(func() { close(c.stop) }) }
+func (c *chanLoop) Stop() {
+	c.mu.Lock()
+	if !c.stopped {
+		c.stopped = true
+		close(c.stop)
+	}
+	c.mu.Unlock()
+}

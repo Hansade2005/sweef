@@ -32,7 +32,7 @@ type hEntry struct {
 	url, title string
 	hay        string // lower-case "host/path title", what queries match
 	host       string
-	mask       uint64 // which of a-z0-9 occur in hay (pre-filter)
+	mask       [2]uint64 // bigram Bloom bits of hay (pre-filter: a match needs all query bigram bits)
 	visits     int32
 	typed      int32
 	last       int64   // unix seconds
@@ -136,20 +136,19 @@ func (h *History) remove(u string) {
 	delete(h.byURL, u)
 }
 
-func charMask(s string) uint64 {
-	var m uint64
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c >= 'a' && c <= 'z':
-			m |= 1 << (c - 'a')
-		case c >= '0' && c <= '9':
-			m |= 1 << (26 + c - '0')
-		case c >= 0x80:
-			m |= 1 << 62
-		default:
-			m |= 1 << 63
+// charMask returns a 128-bit Bloom signature of the byte bigrams of s. A
+// haystack can only contain a query if its signature covers the query's, so
+// one AND per entry rejects nearly everything that cannot match, without
+// touching the string. Single-byte queries have no bigrams and always pass.
+func charMask(s string) [2]uint64 {
+	var m [2]uint64
+	for i := 0; i+1 < len(s); i++ {
+		a, b := s[i], s[i+1]
+		if a == ' ' || b == ' ' {
+			continue
 		}
+		h := (uint32(a)*0x9E3779B1 ^ uint32(b)*0x85EBCA6B) >> 25 // 7 bits
+		m[h>>6] |= 1 << (h & 63)
 	}
 	return m
 }
@@ -393,11 +392,11 @@ func (h *History) Search(q string, limit int) []HistoryEntry {
 		return h.Top(limit)
 	}
 	terms := strings.Fields(q)
-	masks := make([]uint64, len(terms))
-	var qmask uint64
-	for i, t := range terms {
-		masks[i] = charMask(t)
-		qmask |= masks[i]
+	var qmask [2]uint64
+	for _, t := range terms {
+		m := charMask(t)
+		qmask[0] |= m[0]
+		qmask[1] |= m[1]
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -421,7 +420,7 @@ func (h *History) Search(q string, limit int) []HistoryEntry {
 			continue
 		}
 		e := &h.ents[i]
-		if e.mask&qmask != qmask {
+		if e.mask[0]&qmask[0] != qmask[0] || e.mask[1]&qmask[1] != qmask[1] {
 			continue
 		}
 		tier, ok := matchTier(e, terms, first)

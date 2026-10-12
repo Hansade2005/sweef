@@ -1,0 +1,71 @@
+# Binary RPM spec for Sweef: packages a prebuilt static Go binary (built by scripts/release/build.sh).
+# Not for building from source in a distro buildroot. Built by packaging/linux/build-rpm.sh.
+%global debug_package %{nil}
+%global __strip /bin/true
+%global __os_install_post %{nil}
+%global _build_id_links none
+AutoReqProv: no
+
+Name:           sweef
+Version:        @RPM_VERSION@
+Release:        @RPM_RELEASE@
+Summary:        @SUMMARY@
+# TODO(owner): the repository has no LICENSE file yet; replace with the real SPDX id.
+License:        LicenseRef-Callaway-Proprietary
+URL:            @HOMEPAGE@
+Packager:       @MAINTAINER@
+Provides:       webclient
+Recommends:     xdg-utils
+Requires(post):   /usr/sbin/update-alternatives
+Requires(postun): /usr/sbin/update-alternatives
+
+%description
+Sweef is a browser with its own engine, written in pure Go: a single static
+binary with a real JavaScript engine and a built-in Model Context Protocol
+server for AI agents.
+
+This is an ALPHA release. Run "sweef gui" for the graphical browser.
+
+%prep
+# nothing: the tree is pre-staged in %{stagedir}
+
+%build
+# nothing: pure-Go cross-compiled binary
+
+%install
+rm -rf %{buildroot}
+mkdir -p %{buildroot}
+cp -a %{stagedir}/. %{buildroot}/
+
+%files
+%{_bindir}/sweef
+%{_bindir}/sweef-browser
+%{_datadir}/applications/sweef.desktop
+%{_datadir}/metainfo/sweef.metainfo.xml
+%{_datadir}/icons/hicolor/*/apps/sweef.png
+%{_datadir}/icons/hicolor/scalable/apps/sweef.svg
+%{_mandir}/man1/sweef.1.gz
+%{_mandir}/man1/sweef-browser.1.gz
+%dir %{_datadir}/sweef
+%{_datadir}/sweef/NOTICE
+%doc %{_docdir}/sweef/NOTICE
+
+%post
+# low priority (25): an alpha browser must not silently become the default
+/usr/sbin/update-alternatives --install %{_bindir}/x-www-browser x-www-browser %{_bindir}/sweef-browser 25 || :
+/usr/bin/update-desktop-database -q %{_datadir}/applications >/dev/null 2>&1 || :
+/bin/touch --no-create %{_datadir}/icons/hicolor >/dev/null 2>&1 || :
+/usr/bin/gtk-update-icon-cache -q -t -f %{_datadir}/icons/hicolor >/dev/null 2>&1 || :
+
+%preun
+if [ $1 -eq 0 ]; then
+  /usr/sbin/update-alternatives --remove x-www-browser %{_bindir}/sweef-browser || :
+fi
+
+%postun
+/usr/bin/update-desktop-database -q %{_datadir}/applications >/dev/null 2>&1 || :
+/usr/bin/gtk-update-icon-cache -q -t -f %{_datadir}/icons/hicolor >/dev/null 2>&1 || :
+
+%changelog
+* @CHANGELOG_DATE@ @MAINTAINER@ - @RPM_VERSION@-@RPM_RELEASE@
+- Alpha release @VERSION@ (commit @COMMIT@)

@@ -4,11 +4,10 @@
 (function () {
   var SW = window.SW = window.SW || {};
   var h = function (t, a) { var e = document.createElement(t); if (a) for (var k in a) e.setAttribute(k, a[k]); return e; };
-  var INL = /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)|\*\*([^*\n]+?)\*\*|__([^_\n]+?)__|\*([^*\s][^*\n]*?)\*|(?:^|\b)_([^_\s][^_\n]*?)_(?=\b|$)|~~([^~\n]+?)~~|\[([^\]\n]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<)]+[^\s<).,;:!?])/g;
+  var INLS = /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)|\*\*([^*\n]+?)\*\*|__([^_\n]+?)__|\*([^*\s][^*\n]*?)\*|(?:^|\b)_([^_\s][^_\n]*?)_(?=\b|$)|~~([^~\n]+?)~~|\[([^\]\n]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<)]+[^\s<).,;:!?])/;
   function safeHref(u) { return /^(https?:\/\/|mailto:)/i.test(u) ? u : ""; }
   function inline(s, parent) {
-    var last = 0, m;
-    INL.lastIndex = 0;
+    var last = 0, m, INL = new RegExp(INLS.source, "g");
     while ((m = INL.exec(s))) {
       if (m.index > last) parent.appendChild(document.createTextNode(s.slice(last, m.index)));
       last = INL.lastIndex;

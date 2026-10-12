@@ -6,13 +6,13 @@
   S.brand = { name: "Sweef", agent: "Sidekick", agentFull: "Sweef Sidekick", tagline: "Fast. Calm. Yours." };
   S.f = function (s, v) {
     v = v || {};
-    return String(s).replace(/\{(\w+)\}/g, function (m, k) { return v[k] != null ? v[k] : (S.brand[k] != null ? S.brand[k] : m); });
+    return String(s).replace(/\{(\w+)\}/g, function (m, k) { return v[k] != null ? v[k] : k === "brand" ? S.brand.name : (S.brand[k] != null ? S.brand[k] : m); });
   };
   S.tab = { new: "New tab", newTitle: "New Tab", close: "Close tab", pin: "Pin tab", unpin: "Unpin tab", mute: "Mute tab", unmute: "Unmute tab", search: "Search tabs", playing: "Playing audio", muted: "Muted", loading: "Loading", closeOthers: "Close other tabs", duplicate: "Duplicate", reload: "Reload", closeRight: "Close tabs to the right", untitled: "Untitled", crashed: "This tab crashed", list: "Tabs" };
   S.nav = { back: "Back", forward: "Forward", reload: "Reload", stop: "Stop loading", sidebar: "Toggle {agent}", menu: "Menu", downloads: "Downloads", bookmark: "Bookmark this page", unbookmark: "Remove bookmark", siteInfo: "Site information", find: "Find in page", omnibox: "Address and search bar", address: "Search or enter address", askPill: "Ask {brand}", home: "Home" };
   S.win = { min: "Minimize", max: "Maximize", restore: "Restore", close: "Close" };
   S.omni = {
-    placeholder: "Search or ask {brand}", goTo: "Go to", searchFor: "Search for", pasteGo: "Paste and go", askFor: "Ask {brand}", askSub: "Get an answer, not ten links",
+    placeholder: "Search or ask {brand}", goTo: "Go to site", searchFor: "Search the web", pasteGo: "Paste and go", askFor: "Ask {brand}", askSub: "Get an answer, not ten links",
     secHistory: "History", secBookmarks: "Bookmarks", secSearch: "Search", secAsk: "Ask {brand}", secTabs: "Open tabs", switchTab: "Switch to tab",
     hint: "Enter to go", hintAsk: "Ctrl+Enter to ask", hintAskMac: "Cmd+Enter to ask", none: "Keep typing"
   };
@@ -46,11 +46,12 @@
     srcChrome: "Chrome", srcEdge: "Edge", srcFirefox: "Firefox", srcSafari: "Safari", importing: "Importing", imported: "Imported", importOff: "Not available yet on this device", importTry: "Import",
     defaultTitle: "Make {brand} your default browser", defaultSub: "Links from other apps open here.", defaultBtn: "Set as default", defaultDone: "Default browser",
     themeTitle: "Pick a look", themeLight: "Light", themeDark: "Dark", themeSystem: "Match system",
+    t1: "Pure Go, no Chromium", t1d: "{brand} draws pages and its own interface with its own engine.", t2: "{agent} built in", t2d: "Reads the page, answers, and acts. It asks before anything sensitive.", t3: "Your key, your data", t3d: "Your Anthropic key stays on this device. Nothing is sent until you ask.",
     s2Title: "Meet your {agent}", s2Sub: "It reads the page you are on, answers, and does the clicking for you. Watch.",
     demoUser: "Find a good beach hat under $25 and add it to my cart.", demoThink: "Looking at the page for hats, then filtering by price.", demoA1: "Searched for \"beach hat\"", demoA2: "Filtered price under $25", demoA3: "Added \"Bucket Hat\" to cart", demoDone: "Done. One hat in your cart, $19.99. I stopped before checkout.", demoReplay: "Replay",
     keyTitle: "Bring your own Anthropic key", keySub: "{agent} runs on Claude. Paste your API key to switch it on.", keyHow: "Your key stays on this device, in your system keychain (or a private file only you can read). We never see it, and it is never sent anywhere except Anthropic.", keyGet: "Get a key at console.anthropic.com", keyPlaceholder: "sk-ant-...", keySave: "Save key", keySaved: "Saved on this device", keyBad: "That does not look like an Anthropic key.", keyLater: "I will do this later",
     s3Title: "Your privacy, your call", s3Sub: "You can change all of this later in Settings.", trackTitle: "Tracker blocking", trackStd: "Standard", trackStdSub: "Blocks known trackers. Sites keep working.", trackStrict: "Strict", trackStrictSub: "Blocks more. A few sites may break, and we will tell you.", trackOff: "Off", trackOffSub: "No blocking.",
-    visTitle: "Can {agent} see the pages you visit?", visAsk: "Ask me per site", visAskSub: "Recommended. {agent} asks the first time on each site.", visAllowed: "Always allowed", visAllowedSub: "{agent} can read any page you ask it about.", visBlocked: "Never", visBlockedSub: "{agent} cannot see any page until you allow a site.",
+    visTitle: "Can {agent} see the pages you visit?", visAsk: "Ask me per site", visAskSub: "{agent} asks the first time on each site.", visAllowed: "Always allowed", visAllowedSub: "{agent} can read any page you ask it about.", visBlocked: "Never", visBlockedSub: "{agent} cannot see any page until you allow a site.",
     privNote: "Page contents are only sent to Anthropic when you ask {agent} something. Incognito windows are never shared.", ready: "You are set.", readySub: "Open a tab and ask for something. Your first answer should take seconds."
   };
   S.nt = {
@@ -63,6 +64,7 @@
     incNotPrivate: "Still visible to", incNotPrivateBody: "Websites you visit, sites you sign in to, your employer or school, and your internet provider can still see your activity.",
     incDownloads: "Downloads and bookmarks", incDownloadsBody: "Files you download and bookmarks you make are kept on your device after you close the window."
   };
+  S.incog = { badge: "Incognito", tip: "Incognito: nothing from this window is saved to your history. It does not hide you from sites, your employer or your network." };
   S.set = {
     title: "Settings", search: "Search settings", about: "About", alpha: "Alpha", version: "Version",
     nav: { general: "General", search: "Search engine", privacy: "Privacy and security", agent: "{agent}", appearance: "Appearance", downloads: "Downloads", startup: "On startup", default: "Default browser", about: "About {brand}" }

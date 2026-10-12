@@ -1,0 +1,6 @@
+#!/bin/sh
+# Entry point for update-alternatives (x-www-browser, gnome-www-browser), BROWSER=,
+# and scripts: open the Sweef GUI with the given URLs. Resolves its own location
+# so it also works from a portable tarball or an AppImage.
+here="$(dirname "$(readlink -f "$0")")"
+exec "$here/sweef" gui "$@"
