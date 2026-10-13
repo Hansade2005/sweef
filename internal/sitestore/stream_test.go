@@ -24,7 +24,7 @@ func TestCursorOverAMillionRecordsDoesNotGrowTheHeap(t *testing.T) {
 		t.Skip("fills a million records")
 	}
 	dir := t.TempDir()
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	o := m.Origin("http://million")
 	sink := &testSink{}
 	conn := open(t, o, "db", 1, sink, func(tx int64) { _ = m.CreateStore(tx, "s", "", false, false) })
@@ -46,7 +46,7 @@ func TestCursorOverAMillionRecordsDoesNotGrowTheHeap(t *testing.T) {
 	m.CloseConn(conn)
 	m.Shutdown() // flush: the walk below reads tables, not the memtable
 
-	m = NewManager(dir, 0)
+	m = newTestManager(t, dir, 0)
 	defer m.Shutdown()
 	o = m.Origin("http://million")
 	conn = open(t, o, "db", 0, sink, nil)
@@ -110,7 +110,7 @@ func openFDs() int {
 func TestOpenCloseHundredTimesLeaksNothing(t *testing.T) {
 	dir := t.TempDir()
 	cycle := func(i int) {
-		m := NewManagerOptions(dir, Options{IdleClose: time.Millisecond})
+		m := newTestManagerOptions(t, dir, Options{IdleClose: time.Millisecond})
 		o := m.Origin("http://leak")
 		sink := &testSink{}
 		conn := open(t, o, "db", 1, sink, func(tx int64) { _ = m.CreateStore(tx, "s", "", false, false) })
@@ -157,7 +157,7 @@ func TestOpenCloseHundredTimesLeaksNothing(t *testing.T) {
 		t.Fatalf("heap: %d KiB -> %d KiB", h0>>10, h1>>10)
 	}
 	// all 103 values are there
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	defer m.Shutdown()
 	sink := &testSink{}
 	conn := open(t, m.Origin("http://leak"), "db", 0, sink, nil)
@@ -171,7 +171,7 @@ func TestOpenCloseHundredTimesLeaksNothing(t *testing.T) {
 // The idle timer closes a store nobody uses and the next access reopens it, with its data.
 func TestIdleStoreClosesAndReopens(t *testing.T) {
 	dir := t.TempDir()
-	m := NewManagerOptions(dir, Options{IdleClose: 20 * time.Millisecond})
+	m := newTestManagerOptions(t, dir, Options{IdleClose: 20 * time.Millisecond})
 	defer m.Shutdown()
 	o := m.Origin("http://idle")
 	sink := &testSink{}
@@ -194,7 +194,7 @@ func TestIdleStoreClosesAndReopens(t *testing.T) {
 
 // Only a few origins keep their store open at once; the least recently released are closed first.
 func TestOpenStoresAreCapped(t *testing.T) {
-	m := NewManagerOptions(t.TempDir(), Options{MaxOpenStores: 3, IdleClose: time.Hour})
+	m := newTestManagerOptions(t, t.TempDir(), Options{MaxOpenStores: 3, IdleClose: time.Hour})
 	defer m.Shutdown()
 	var origins []*Origin
 	for i := 0; i < 8; i++ {

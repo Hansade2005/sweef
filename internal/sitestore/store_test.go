@@ -20,7 +20,7 @@ func blobFiles(dir string) []string {
 
 func TestLargeValuesAreBlobFiles(t *testing.T) {
 	dir := t.TempDir()
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 1, sink, func(tx int64) { _ = m.CreateStore(tx, "s", "", false, false) })
@@ -48,7 +48,7 @@ func TestLargeValuesAreBlobFiles(t *testing.T) {
 	// the same value after a restart
 	m.CloseConn(conn)
 	m.Close()
-	m = NewManager(dir, 0)
+	m = newTestManager(t, dir, 0)
 	o = m.Origin("http://a")
 	conn = open(t, o, "db", 0, sink, nil)
 	tx = begin(t, m, conn, ModeReadWrite, "s")
@@ -104,7 +104,7 @@ func kvKeyCount(o *Origin) (n int) {
 
 func TestClearAndDeleteDatabaseDropDataInTheBackground(t *testing.T) {
 	dir := t.TempDir()
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 1, sink, func(tx int64) {
@@ -204,7 +204,7 @@ func TestUnknownOrDamagedStoreIsSetAsideNotDeleted(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			m := NewManager(dir, 0)
+			m := newTestManager(t, dir, 0)
 			o := m.Origin("http://a")
 			o.writeMeta()
 			kv := filepath.Join(o.dir, "kv")
@@ -233,12 +233,12 @@ func TestUnknownOrDamagedStoreIsSetAsideNotDeleted(t *testing.T) {
 
 func TestLockedStoreIsNotMistakenForDamage(t *testing.T) {
 	dir := t.TempDir()
-	m1 := NewManager(dir, 0)
+	m1 := newTestManager(t, dir, 0)
 	o1 := m1.Origin("http://a")
 	sink := &testSink{}
 	open(t, o1, "db", 1, sink, func(tx int64) { _ = m1.CreateStore(tx, "s", "", false, false) })
 	// a second manager (a second process, in real life) on the same directory must fail, not move the data away
-	m2 := NewManager(dir, 0)
+	m2 := newTestManager(t, dir, 0)
 	o2 := m2.Origin("http://a")
 	if _, err := o2.acquire(); err == nil {
 		t.Fatal("a store held by another opener must not open twice")
@@ -334,7 +334,7 @@ func walkCursor(t *testing.T, m *Manager, tx int64, index string, dir int, r Ran
 func TestRandomTransactionsMatchAModel(t *testing.T) {
 	dir := t.TempDir()
 	rnd := rand.New(rand.NewSource(424242))
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	o := m.Origin("http://model")
 	sink := &testSink{}
 	conn := open(t, o, "db", 1, sink, func(tx int64) {
@@ -490,7 +490,7 @@ func TestRandomTransactionsMatchAModel(t *testing.T) {
 		if round%15 == 14 { // a restart in the middle
 			m.CloseConn(conn)
 			m.Close()
-			m = NewManager(dir, 0)
+			m = newTestManager(t, dir, 0)
 			o = m.Origin("http://model")
 			conn = open(t, o, "db", 0, sink, nil)
 			tx = begin(t, m, conn, ModeReadOnly, "s")
@@ -506,7 +506,7 @@ func TestRandomTransactionsMatchAModel(t *testing.T) {
 }
 
 func TestOverwriteReplacesIndexEntriesAndUniqueIsChecked(t *testing.T) {
-	m := NewManager("", 0)
+	m := newTestManager(t, "", 0)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 1, sink, func(tx int64) {
@@ -563,7 +563,7 @@ func TestOverwriteReplacesIndexEntriesAndUniqueIsChecked(t *testing.T) {
 }
 
 func TestCreateIndexOnExistingRecordsPagesThroughTheStore(t *testing.T) {
-	m := NewManager("", 0)
+	m := newTestManager(t, "", 0)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 1, sink, func(tx int64) { _ = m.CreateStore(tx, "s", "", false, false) })

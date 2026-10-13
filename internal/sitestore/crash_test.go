@@ -108,7 +108,7 @@ func TestCrashChild(t *testing.T) {
 		t.Skip("helper process of TestKillMidWriteLeavesWholeTransactions")
 	}
 	start, _ := strconv.Atoi(os.Getenv("SWEEF_STORE_CRASH_START"))
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	conn, err := openCrashDB(m, "http://crash")
 	if err != nil {
 		fmt.Println("error", err)
@@ -157,7 +157,7 @@ func TestKillMidWriteLeavesWholeTransactions(t *testing.T) {
 		<-done
 		_ = cmd.Wait()
 
-		m := NewManager(dir, 0)
+		m := newTestManager(t, dir, 0)
 		conn, err := openCrashDB(m, "http://crash")
 		if err != nil {
 			t.Fatalf("round %d: the store does not open after a kill: %v", round, err)
@@ -196,7 +196,7 @@ func TestPowerLossKeepsSyncedTransactionsAndAtomicity(t *testing.T) {
 		root := t.TempDir()
 		lossy := newLossyStorage()
 		opts := Options{openStore: func(dir string) (*kvStore, error) { _ = os.MkdirAll(dir, 0o700); return openKVOn(lossy, "") }}
-		m := NewManagerOptions(root, opts)
+		m := newTestManagerOptions(t, root, opts)
 		conn, err := openCrashDB(m, "http://power")
 		if err != nil {
 			t.Fatal(err)
@@ -215,7 +215,7 @@ func TestPowerLossKeepsSyncedTransactionsAndAtomicity(t *testing.T) {
 		crashed := lossy.crash(rnd)
 		m.Shutdown()
 
-		m2 := NewManagerOptions(root, Options{openStore: func(dir string) (*kvStore, error) { _ = os.MkdirAll(dir, 0o700); return openKVOn(crashed, "") }})
+		m2 := newTestManagerOptions(t, root, Options{openStore: func(dir string) (*kvStore, error) { _ = os.MkdirAll(dir, 0o700); return openKVOn(crashed, "") }})
 		conn2, err := openCrashDB(m2, "http://power")
 		if err != nil {
 			t.Fatalf("seed %d: the store does not open after a power loss: %v", seed, err)

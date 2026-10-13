@@ -7,7 +7,7 @@ import (
 
 func TestCacheStoreReplaceCompactAndReload(t *testing.T) {
 	dir := t.TempDir()
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	o := m.Origin("http://a")
 	c, err := o.Caches()
 	if err != nil {
@@ -37,7 +37,7 @@ func TestCacheStoreReplaceCompactAndReload(t *testing.T) {
 	}
 	m.Close()
 
-	m2 := NewManager(dir, 0)
+	m2 := newTestManager(t, dir, 0)
 	c2, _ := m2.Origin("http://a").Caches()
 	got := c2.Match("v1", false, CacheQuery{URL: "http://a/x", Method: "GET"}, false)
 	if len(got) != 1 || string(got[0].Body) != "body 599" || got[0].Entry.Status != 200 || got[0].Entry.ResHeaders[0][1] != "text/plain" {

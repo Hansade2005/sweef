@@ -74,7 +74,7 @@ func begin(t *testing.T, m *Manager, conn int64, mode int, stores ...string) int
 }
 
 func TestPutGetOrderAndRange(t *testing.T) {
-	m := NewManager("", 0)
+	m := newTestManager(t, "", 0)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 0, sink, func(tx int64) {
@@ -114,7 +114,7 @@ func TestPutGetOrderAndRange(t *testing.T) {
 }
 
 func TestAbortRollsBackEverything(t *testing.T) {
-	m := NewManager("", 0)
+	m := newTestManager(t, "", 0)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 0, sink, func(tx int64) {
@@ -158,7 +158,7 @@ func TestAbortRollsBackEverything(t *testing.T) {
 func idxKeys(name string, keys ...string) map[string][]string { return map[string][]string{name: keys} }
 
 func TestIndexUniqueAndCursor(t *testing.T) {
-	m := NewManager("", 0)
+	m := newTestManager(t, "", 0)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 0, sink, func(tx int64) {
@@ -262,7 +262,7 @@ func TestIndexUniqueAndCursor(t *testing.T) {
 
 func TestPersistenceAcrossRestart(t *testing.T) {
 	dir := t.TempDir()
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 3, sink, func(tx int64) {
@@ -284,7 +284,7 @@ func TestPersistenceAcrossRestart(t *testing.T) {
 	m.CloseConn(conn)
 	m.Close()
 
-	m2 := NewManager(dir, 0)
+	m2 := newTestManager(t, dir, 0)
 	o2 := m2.Origin("http://a")
 	if got := o2.Databases(); len(got) != 1 || got[0].Name != "db" || got[0].Version != 3 {
 		t.Fatalf("databases: %+v", got)
@@ -305,7 +305,7 @@ func TestPersistenceAcrossRestart(t *testing.T) {
 }
 
 func TestTransactionScheduling(t *testing.T) {
-	m := NewManager("", 0)
+	m := newTestManager(t, "", 0)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 0, sink, func(tx int64) {
@@ -340,7 +340,7 @@ func TestTransactionScheduling(t *testing.T) {
 }
 
 func TestVersionChangeHandshake(t *testing.T) {
-	m := NewManager("", 0)
+	m := newTestManager(t, "", 0)
 	o := m.Origin("http://a")
 	s1, s2 := &testSink{}, &testSink{}
 	c1 := open(t, o, "db", 1, s1, func(tx int64) { _ = m.CreateStore(tx, "s", "", false, false) })
@@ -386,7 +386,7 @@ func TestVersionChangeHandshake(t *testing.T) {
 }
 
 func TestQuotaExceeded(t *testing.T) {
-	m := NewManager("", 10_000)
+	m := newTestManager(t, "", 10_000)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 1, sink, func(tx int64) { _ = m.CreateStore(tx, "s", "", false, false) })
@@ -405,7 +405,7 @@ func TestQuotaExceeded(t *testing.T) {
 
 func TestClearOriginWipesDisk(t *testing.T) {
 	dir := t.TempDir()
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	o := m.Origin("http://a")
 	sink := &testSink{}
 	conn := open(t, o, "db", 1, sink, func(tx int64) { _ = m.CreateStore(tx, "s", "", false, false) })

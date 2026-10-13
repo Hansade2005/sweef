@@ -410,7 +410,7 @@ func (h *rtcHost) newAPI(mode WebRTCHostCandidates) (*rtcmedia.API, error) {
 	}
 	if rtcTestLoopback.Load() {
 		se.SetIncludeLoopbackCandidate(true)
-		se.SetInterfaceFilter(func(name string) bool { return strings.HasPrefix(name, "lo") })
+		se.SetInterfaceFilter(func(name string) bool { return strings.HasPrefix(strings.ToLower(name), "lo") }) // lo, lo0, "Loopback Pseudo-Interface 1"
 	}
 	var w *wireCounters
 	if t := h.j.tab; t != nil {

@@ -53,7 +53,7 @@ func newQuotaManager(t *testing.T, root string, volume int64, extra func(*Option
 	if extra != nil {
 		extra(&opts)
 	}
-	m := NewManagerOptions(root, opts)
+	m := newTestManagerOptions(t, root, opts)
 	vol.m.Store(m)
 	t.Cleanup(m.Shutdown)
 	return m, vol, clk
@@ -327,7 +327,7 @@ func TestPersistSemantics(t *testing.T) {
 	}
 	// the grant survives a restart (it is in meta.json)
 	m.Shutdown()
-	m2 := NewManagerOptions(root, Options{})
+	m2 := newTestManagerOptions(t, root, Options{})
 	if !m2.Origin("http://site").Persisted() {
 		t.Fatal("persisted flag lost across a restart")
 	}
@@ -343,7 +343,7 @@ func TestPersistSemantics(t *testing.T) {
 		t.Fatal("persistence survived clearing the site")
 	}
 	// a memory-only manager can never grant it, whatever the policy says
-	mem := NewManagerOptions("", Options{PersistPolicy: func(string) bool { return true }})
+	mem := newTestManagerOptions(t, "", Options{PersistPolicy: func(string) bool { return true }})
 	if mem.Origin("http://site").RequestPersist() {
 		t.Fatal("nothing survives a memory-only manager")
 	}

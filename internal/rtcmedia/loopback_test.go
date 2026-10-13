@@ -20,7 +20,8 @@ func testSettings() webrtc.SettingEngine {
 	se := webrtc.SettingEngine{}
 	se.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
 	se.SetIncludeLoopbackCandidate(true)
-	se.SetInterfaceFilter(func(name string) bool { return strings.HasPrefix(name, "lo") })
+	// "lo" on Linux, "lo0" on macOS, "Loopback Pseudo-Interface 1" on Windows
+	se.SetInterfaceFilter(func(name string) bool { return strings.HasPrefix(strings.ToLower(name), "lo") })
 	se.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
 	return se
 }
@@ -61,7 +62,7 @@ func (p *pair) connect(t testing.TB) {
 	if err := p.a.SetLocalDescription(offer); err != nil {
 		t.Fatal(err)
 	}
-	<-done
+	gathered(t, done)
 	if err := p.b.SetRemoteDescription(*p.a.LocalDescription()); err != nil {
 		t.Fatal(err)
 	}
@@ -73,9 +74,19 @@ func (p *pair) connect(t testing.TB) {
 	if err := p.b.SetLocalDescription(answer); err != nil {
 		t.Fatal(err)
 	}
-	<-doneB
+	gathered(t, doneB)
 	if err := p.a.SetRemoteDescription(*p.b.LocalDescription()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// gathered waits for ICE gathering, but never forever: a missing candidate must fail the test, not hang it.
+func gathered(t testing.TB, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("ICE gathering did not complete in 30 s (no loopback candidates?)")
 	}
 }
 

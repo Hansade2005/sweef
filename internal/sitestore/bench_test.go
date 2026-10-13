@@ -47,7 +47,7 @@ type benchDB struct {
 
 func openBenchDB(t testing.TB, dir string, indexed bool) *benchDB {
 	// no quota in the way: this measures the store, and a 1 GB database is over the default cap of a small disk
-	m := NewManagerOptions(dir, Options{OriginQuota: 64 << 30, Budget: 64 << 30})
+	m := newTestManagerOptions(t, dir, Options{OriginQuota: 64 << 30, Budget: 64 << 30})
 	o := m.Origin("http://bench")
 	sink := &testSink{}
 	d, err := o.DB("db")

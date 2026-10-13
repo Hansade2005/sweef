@@ -11,7 +11,7 @@ import (
 
 func TestOPFSTreeSurvivesARestartAndLargeFilesAreBlobs(t *testing.T) {
 	dir := t.TempDir()
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	fs := m.Origin("http://opfs").OPFS()
 	must := func(err error) {
 		t.Helper()
@@ -34,7 +34,7 @@ func TestOPFSTreeSurvivesARestartAndLargeFilesAreBlobs(t *testing.T) {
 	}
 	m.Shutdown()
 
-	m = NewManager(dir, 0)
+	m = newTestManager(t, dir, 0)
 	defer m.Shutdown()
 	fs = m.Origin("http://opfs").OPFS()
 	b, mtime, err := fs.Read([]string{"docs", "small.txt"})
@@ -93,7 +93,7 @@ func TestOPFSTreeSurvivesARestartAndLargeFilesAreBlobs(t *testing.T) {
 }
 
 func TestOPFSMemoryOnlyManagerKeepsNothingOnDisk(t *testing.T) {
-	m := NewManager("", 0)
+	m := newTestManager(t, "", 0)
 	defer m.Shutdown()
 	fs := m.Origin("http://private").OPFS()
 	if err := fs.Get([]string{"f"}, false, true); err != nil {
@@ -113,7 +113,7 @@ func TestOPFSMemoryOnlyManagerKeepsNothingOnDisk(t *testing.T) {
 
 func TestCacheBodiesStreamAndEntriesKeepTheirPlace(t *testing.T) {
 	dir := t.TempDir()
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	o := m.Origin("http://cache")
 	c, _ := o.Caches()
 	if _, err := c.Open("v1"); err != nil {
@@ -209,7 +209,7 @@ func TestCacheBodiesStreamAndEntriesKeepTheirPlace(t *testing.T) {
 
 func TestCacheKeysInCreationOrderSurviveARestart(t *testing.T) {
 	dir := t.TempDir()
-	m := NewManager(dir, 0)
+	m := newTestManager(t, dir, 0)
 	c, _ := m.Origin("http://cache").Caches()
 	for _, n := range []string{"zeta", "alpha", "mid"} {
 		if created, err := c.Open(n); err != nil || !created {
@@ -221,7 +221,7 @@ func TestCacheKeysInCreationOrderSurviveARestart(t *testing.T) {
 	}
 	c.Delete("alpha")
 	m.Shutdown()
-	m = NewManager(dir, 0)
+	m = newTestManager(t, dir, 0)
 	defer m.Shutdown()
 	c, _ = m.Origin("http://cache").Caches()
 	if fmt.Sprint(c.Keys()) != "[zeta mid]" {
