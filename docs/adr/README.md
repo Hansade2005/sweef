@@ -11,3 +11,4 @@ ADR; supersede it.
 | # | Title | Status |
 |---|---|---|
 | [0001](0001-apache-2-license.md) | License the project under Apache-2.0 | Accepted |
+| [0002](0002-ordered-kv-store-for-site-storage.md) | An ordered key-value store (goleveldb) under IndexedDB, Cache Storage and OPFS | Accepted |
