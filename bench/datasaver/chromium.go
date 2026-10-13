@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"golang.org/x/net/websocket"
@@ -534,14 +533,14 @@ func chromiumLaunch(o ChromiumOpts, mode, rawurl, profile string, keep bool) (Vi
 	_ = os.Remove(filepath.Join(profile, "DevToolsActivePort"))
 	cmd := exec.Command(o.Binary, append(flags, "about:blank")...)
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	procGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return v, "", "", flags, err
 	}
 	exited := make(chan struct{})
 	go func() { cmd.Wait(); close(exited) }()
 	killAll := func() {
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		killGroup(cmd)
 		<-exited
 	}
 	defer func() {

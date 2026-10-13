@@ -287,3 +287,12 @@ func withMeter(req *http.Request, c *BrowserContext, t *Tab, kind DataKind, pol 
 	mi.declared.Store(-1)
 	return req.WithContext(context.WithValue(req.Context(), meterKey, mi)), mi
 }
+
+// CloseIdleConnections forwards to the wrapped transport. net/http's Client.CloseIdleConnections only
+// reaches a transport that implements it, so without this the wrapper hid it and Engine.Close left
+// keep-alive connections (and their goroutines) behind.
+func (m *meterRT) CloseIdleConnections() {
+	if ci, ok := m.base.(interface{ CloseIdleConnections() }); ok {
+		ci.CloseIdleConnections()
+	}
+}
