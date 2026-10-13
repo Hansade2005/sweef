@@ -181,6 +181,11 @@ func buildVM(o Options) (*jsVM, error) {
 	}
 	vm.SetMemoryLimit(uintptr(mem) << 20)
 	vm.SetMaxStackSize(1 << 20)
+	// Loading the prelude allocates a few MiB of long-lived objects and almost no garbage, but QuickJS's
+	// cycle collector would still run several times on the way (its threshold starts at 256 KiB), each pass
+	// marking everything allocated so far. Measured: about 1.3 ms of the ~25 ms build, more as the prelude
+	// grows. Turn the collector off for the build and give it a normal pace afterwards.
+	vm.SetGCThreshold(1 << 30)
 	to := time.Duration(o.JSTimeoutMs) * time.Millisecond
 	if to <= 0 {
 		to = 5 * time.Second
@@ -211,6 +216,7 @@ func buildVM(o Options) (*jsVM, error) {
 		vm.Close()
 		return nil, fmt.Errorf("prelude did not initialise")
 	}
+	vm.SetGCThreshold(10 << 20)
 	return j, nil
 }
 

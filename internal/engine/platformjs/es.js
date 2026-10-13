@@ -8,6 +8,15 @@ function isCtor(f) {
 function def(o, k, v) { H.define(o, k, v); }
 function defineAccessorFreeze(o, k, v) { Object.defineProperty(o, k, { value: v, writable: false, enumerable: false, configurable: false }); }
 
+// ---- V8 stack-trace API that libraries probe for -----------------------------------------------------
+if (H.missing(Error, 'captureStackTrace')) {
+  def(Error, 'captureStackTrace', function captureStackTrace(o) {
+    if (o === null || (typeof o !== 'object' && typeof o !== 'function')) throw new TypeError('Invalid argument');
+    var s = new Error().stack;
+    Object.defineProperty(o, 'stack', { value: (o.name || 'Error') + (o.message ? ': ' + o.message : '') + '\n' + String(s || '').split('\n').slice(2).join('\n'), writable: true, configurable: true });
+  });
+}
+
 // ---- Array.fromAsync ----------------------------------------------------------------------
 if (H.missing(Array, 'fromAsync')) {
   def(Array, 'fromAsync', {

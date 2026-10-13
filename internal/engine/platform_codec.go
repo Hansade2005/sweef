@@ -148,6 +148,7 @@ func (c *codec) settle() {
 }
 
 func (j *jsVM) codecHost(f map[string]hostFn) {
+	ops := map[string]hostFn{}
 	var (
 		mu     sync.Mutex
 		next   = 1
@@ -176,7 +177,7 @@ func (j *jsVM) codecHost(f map[string]hostFn) {
 			delete(stream, id)
 		}
 	})
-	f["zNew"] = func(a []any) (any, error) {
+	ops["new"] = func(a []any) (any, error) {
 		format, decompress := argS(a, 0), argB(a, 1)
 		c := &codec{dec: decompress}
 		c.cond = sync.NewCond(&c.mu)
@@ -209,7 +210,7 @@ func (j *jsVM) codecHost(f map[string]hostFn) {
 		mu.Unlock()
 		return id, nil
 	}
-	f["zPush"] = func(a []any) (any, error) {
+	ops["push"] = func(a []any) (any, error) {
 		c, err := get(a)
 		if err != nil {
 			return nil, err
@@ -240,7 +241,7 @@ func (j *jsVM) codecHost(f map[string]hostFn) {
 		}
 		return c.take(), nil
 	}
-	f["zPull"] = func(a []any) (any, error) {
+	ops["pull"] = func(a []any) (any, error) {
 		c, err := get(a)
 		if err != nil {
 			return nil, err
@@ -253,7 +254,7 @@ func (j *jsVM) codecHost(f map[string]hostFn) {
 		}
 		return c.take(), nil
 	}
-	f["zEnd"] = func(a []any) (any, error) {
+	ops["end"] = func(a []any) (any, error) {
 		c, err := get(a)
 		if err != nil {
 			return nil, err
@@ -283,7 +284,7 @@ func (j *jsVM) codecHost(f map[string]hostFn) {
 		}
 		return res, nil
 	}
-	f["zClose"] = func(a []any) (any, error) {
+	ops["close"] = func(a []any) (any, error) {
 		mu.Lock()
 		id := int(argI(a, 0))
 		c := stream[id]
@@ -293,5 +294,16 @@ func (j *jsVM) codecHost(f map[string]hostFn) {
 			closeCodec(c)
 		}
 		return nil, nil
+	}
+	// One host function for the whole codec: every registration costs start-up time in every VM.
+	f["codec"] = func(a []any) (any, error) {
+		if len(a) == 0 {
+			return nil, fmt.Errorf("TypeError: missing codec operation")
+		}
+		op := ops[argS(a, 0)]
+		if op == nil {
+			return nil, fmt.Errorf("TypeError: unknown codec operation")
+		}
+		return op(a[1:])
 	}
 }

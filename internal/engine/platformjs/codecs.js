@@ -31,10 +31,10 @@ function hostCall(fn) {
 // while the consumer is reading, and the write promise stays pending meanwhile,
 // so back-pressure reaches the producer of the compressed bytes.
 function codecPair(format, decompress) {
-  var id = hostCall(function () { return sw.zNew(format, decompress); });
+  var id = hostCall(function () { return sw.codec('new', format, decompress); });
   var rctrl, wctrl, waiter = null, finished = false;
   function wake() { if (waiter) { var w = waiter; waiter = null; w(); } }
-  function release() { if (!finished) { finished = true; try { sw.zClose(id); } catch (e) { } } }
+  function release() { if (!finished) { finished = true; try { sw.codec('close', id); } catch (e) { } } }
   function fail(e) { release(); try { rctrl.error(e); } catch (x) { } wake(); }
   async function emit(r) {
     for (;;) {
@@ -43,7 +43,7 @@ function codecPair(format, decompress) {
       if (!r.more) return;
       if (rctrl.desiredSize !== null && rctrl.desiredSize <= 0) await new Promise(function (res) { waiter = res; });
       if (finished) return;
-      r = sw.zPull(id);
+      r = sw.codec('pull', id);
     }
   }
   var readable = new g.ReadableStream({
@@ -55,10 +55,10 @@ function codecPair(format, decompress) {
     start: function (c) { wctrl = c; },
     write: function (chunk) {
       var u8 = bytesOf(chunk);
-      return emit(sw.zPush(id, toB64(u8))).catch(function (e) { fail(e); throw e; });
+      return emit(sw.codec('push', id, toB64(u8))).catch(function (e) { fail(e); throw e; });
     },
     close: function () {
-      return emit(sw.zEnd(id)).then(function () { release(); rctrl.close(); }, function (e) { fail(e); throw e; });
+      return emit(sw.codec('end', id)).then(function () { release(); rctrl.close(); }, function (e) { fail(e); throw e; });
     },
     abort: function (reason) { fail(reason); }
   }, { highWaterMark: 1 });

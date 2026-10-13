@@ -1,133 +1,87 @@
 /*
- * Sweef platform layer, bootstrap. Evaluated in every VM, so it stays tiny:
- * it declares which names belong to which module and installs one lazy
+ * Sweef platform layer, bootstrap. Evaluated in every VM, so it is kept small
+ * and cheap: a table of which names belong to which module, and one lazy
  * accessor per name. The first touch of a name evaluates platformjs/<module>.js
  * (fetched through __sw.platformSrc), which replaces the accessors with the
- * real properties. See platform.go.
+ * real properties. Shared helpers live in h.js and load with the first module.
+ * See platform.go and docs/web-platform.md.
  */
 (function (g) {
   'use strict';
   var sw = g.__sw;
   if (!sw || typeof sw.platformSrc !== 'function') return;
-  var loaded = Object.create(null);
-  var H = {
-    sw: sw,
-    define: function (o, k, v) { Object.defineProperty(o, k, { value: v, writable: true, configurable: true, enumerable: false }); },
-    tag: function (C, n) { Object.defineProperty(C.prototype, Symbol.toStringTag, { value: n, configurable: true }); },
-    glob: function (n, v) { Object.defineProperty(g, n, { value: v, writable: true, configurable: true, enumerable: false }); },
-    exc: function (m, n) { return new g.DOMException(m, n); },
-    // Go reports errors as "Name: message"; turn them into DOMExceptions.
-    hostErr: function (e) {
-      var m = /^([A-Za-z]+Error): ([\s\S]*)$/.exec(String(e && e.message || e));
-      if (!m) return e;
-      return m[1] === 'TypeError' ? new TypeError(m[2]) : new g.DOMException(m[2], m[1]);
-    },
-    // accessor properties with enumerable getters, like WebIDL attributes
-    attrs: function (proto, map) {
-      Object.keys(map).forEach(function (k) {
-        var d = map[k];
-        Object.defineProperty(proto, k, { get: typeof d === 'function' ? d : d.get, set: d.set, enumerable: true, configurable: true });
-      });
-    },
-    // true when a name is absent or still only our lazy accessor
-    missing: function (o, k) { var d = Object.getOwnPropertyDescriptor(o, k); return !d || !!(d.get && d.get.lazy); },
-    // event classes in the prelude's style: plain constructors with own data fields
-    eventClass: function (name, fields, sup, required) {
-      sup = sup || g.Event;
-      var C = function (type, init) {
-        if (!(this instanceof C)) throw new TypeError("Failed to construct '" + name + "': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
-        if (arguments.length === 0) throw new TypeError("Failed to construct '" + name + "': 1 argument required, but only 0 present.");
-        if (required && (init === null || typeof init !== 'object' || init[required] === undefined)) throw new TypeError("Failed to construct '" + name + "': Failed to read the '" + required + "' property from '" + name + "Init': Required member is undefined.");
-        sup.call(this, type, init);
-        init = init || {};
-        for (var f in fields) this[f] = f in init ? init[f] : fields[f];
-      };
-      Object.setPrototypeOf(C.prototype, sup.prototype);
-      Object.setPrototypeOf(C, sup);
-      Object.defineProperty(C, 'name', { value: name, configurable: true });
-      H.tag(C, name);
-      H.glob(name, C);
-      return C;
-    },
-    // on<type> handler properties backed by addEventListener
-    handlers: function (proto, types) {
-      types.forEach(function (n) {
-        var key = '__on' + n;
-        Object.defineProperty(proto, 'on' + n, {
-          configurable: true, enumerable: true,
-          get: function () { return this[key] || null; },
-          set: function (fn) {
-            if (this[key]) this.removeEventListener(n, this[key]);
-            Object.defineProperty(this, key, { value: typeof fn === 'function' ? fn : null, writable: true, configurable: true });
-            if (this[key]) this.addEventListener(n, this[key]);
-          }
-        });
-      });
-    },
-    load: load
-  };
+  var loaded = Object.create(null), lazyGets = new Set(), H = null;
+  // Defining ~120 accessors on the global object itself is slow (it is a huge object, ~2 ms in
+  // every VM); defining them on a small object in its prototype chain is not, and global name
+  // lookup, `in`, typeof and assignment all follow the chain. A real definition by a module
+  // lands on the global object and shadows the accessor.
+  var L = Object.create(Object.getPrototypeOf(g));
+  Object.setPrototypeOf(g, L);
   function load(m) {
     if (loaded[m]) return;
     loaded[m] = 1;
     try {
+      if (!H) H = (0, g.eval)('(function(g,load,lazyGets){"use strict";' + sw.platformSrc('h') + '\n})')(g, load, lazyGets);
       var src = sw.platformSrc(m);
       if (!src) throw new Error('platform module missing: ' + m);
       (0, g.eval)('(function(g,H){"use strict";' + src + '\n})')(g, H);
     } catch (e) { loaded[m] = 0; throw e; }
   }
-  function lazy(obj, name, mod, enumerable, onlyMissing) {
-    if (onlyMissing && name in obj) return;
-    var desc = {
-      configurable: true, enumerable: !!enumerable,
-      get: function () {
-        load(mod);
-        var d = Object.getOwnPropertyDescriptor(obj, name);
-        if (d && d.get === desc.get) throw new Error('platform: ' + name + ' was not defined by module ' + mod);
-        return Reflect.get(obj, name, this);
-      },
-      set: function (v) { Object.defineProperty(obj === g ? g : this, name, { value: v, writable: true, configurable: true, enumerable: !!enumerable }); }
-    };
-    desc.get.lazy = true;
-    Object.defineProperty(obj, name, desc);
+  // One record per name, captured by both accessors, keeps closure creation cheap.
+  function resolve(r, self) {
+    load(r.m);
+    var o = r.o === L ? g : r.o, d = Object.getOwnPropertyDescriptor(o, r.n);
+    if (!d || lazyGets.has(d.get)) throw new Error('platform: ' + r.n + ' was not defined by module ' + r.m);
+    return Reflect.get(o, r.n, self);
   }
-  function names(mod, list, obj, enumerable, onlyMissing) {
-    list.split(' ').forEach(function (n) { lazy(obj || g, n, mod, enumerable, onlyMissing); });
+  function assign(r, self, v) {
+    Object.defineProperty(r.o === L ? g : self, r.n, { value: v, writable: true, configurable: true, enumerable: r.e });
   }
-  // The streams stubs of the base prelude are replaced by the real thing.
-  names('streams', 'ReadableStream ReadableStreamDefaultReader ReadableStreamBYOBReader ReadableStreamDefaultController ReadableByteStreamController ReadableStreamBYOBRequest WritableStream WritableStreamDefaultWriter WritableStreamDefaultController TransformStream TransformStreamDefaultController CountQueuingStrategy ByteLengthQueuingStrategy');
-  names('codecs', 'CompressionStream DecompressionStream TextEncoderStream TextDecoderStream');
-  names('xpath', 'XPathEvaluator XPathExpression XPathResult XPathNSResolver');
-  names('xpath', 'evaluate createExpression createNSResolver', g.Document.prototype, true);
-  names('urlpattern', 'URLPattern');
-  names('nav', 'navigation Navigation NavigationHistoryEntry NavigateEvent NavigationDestination NavigationTransition NavigationActivation NavigationCurrentEntryChangeEvent');
-  names('vt', 'ViewTransition ViewTransitionTypeSet');
-  names('vt', 'startViewTransition activeViewTransition', g.Document.prototype);
-  names('internals', 'ElementInternals CustomStateSet');
-  names('internals', 'ValidityState', g, false, true);
-  names('internals', 'attachInternals', g.Element.prototype);
-  names('css', 'AbstractRange Highlight HighlightRegistry CSSPropertyRule ContentVisibilityAutoStateChangeEvent');
-  names('css', 'CSSRule', g, false, true);
-  names('css', 'highlights registerProperty registeredProperty', g.CSS, true);
-  names('devices', 'ScreenOrientation DeviceOrientationEvent DeviceMotionEvent DeviceMotionEventAcceleration DeviceMotionEventRotationRate Gamepad GamepadButton GamepadEvent WakeLockSentinel WakeLock MediaMetadata MediaSession Credential PasswordCredential FederatedCredential PublicKeyCredential CredentialsContainer PaymentRequest PaymentResponse PaymentRequestUpdateEvent TrustedHTML TrustedScript TrustedScriptURL TrustedTypePolicy TrustedTypePolicyFactory trustedTypes PictureInPictureWindow PictureInPictureEvent');
-  names('devices', 'getGamepads wakeLock mediaSession credentials', g.Navigator.prototype, true);
-  names('devices', 'orientation', g.Screen.prototype, true);
-  names('devices', 'hasStorageAccess requestStorageAccess pictureInPictureEnabled pictureInPictureElement exitPictureInPicture', g.Document.prototype, true);
-  if (g.HTMLVideoElement) names('devices', 'requestPictureInPicture disablePictureInPicture', g.HTMLVideoElement.prototype, true);
-  names('opfs', 'FileSystemHandle FileSystemFileHandle FileSystemDirectoryHandle FileSystemWritableFileStream StorageManager showOpenFilePicker showSaveFilePicker showDirectoryPicker');
-  names('opfs', 'storage', g.Navigator.prototype, true);
-  names('es', 'fromAsync', Array, false, true);
-  names('es', 'dispose asyncDispose', Symbol, false, true);
-  names('es', 'DisposableStack AsyncDisposableStack SuppressedError', g, false, true);
-  if (typeof Atomics === 'object') names('es', 'waitAsync', Atomics, false, true);
-  names('intl', 'Locale', g.Intl, false, true);
-  names('sched', 'scheduler Scheduler TaskController TaskSignal TaskPriorityChangeEvent');
-  Object.defineProperty(g, '__swPlatformLoad', { value: load });
-  // V8 stack-trace API that libraries probe for.
-  if (!Error.captureStackTrace) {
-    H.define(Error, 'captureStackTrace', function captureStackTrace(o) {
-      if (o === null || (typeof o !== 'object' && typeof o !== 'function')) throw new TypeError('Invalid argument');
-      var s = new Error().stack;
-      Object.defineProperty(o, 'stack', { value: (o.name || 'Error') + (o.message ? ': ' + o.message : '') + '\n' + String(s || '').split('\n').slice(2).join('\n'), writable: true, configurable: true });
-    });
+  var desc = { configurable: true, enumerable: false, get: null, set: null };
+  function lazy(r) {
+    var get = function () { return resolve(r, this); };
+    lazyGets.add(get);
+    desc.get = get; desc.set = function (v) { assign(r, this, v); }; desc.enumerable = r.e;
+    Object.defineProperty(r.o, r.n, desc);
+  }
+  // [module, target, names, enumerable, only-when-missing]
+  var D = g.Document.prototype, N = g.Navigator.prototype, T = [
+    ['streams', L, 'ReadableStream ReadableStreamDefaultReader ReadableStreamBYOBReader ReadableStreamDefaultController ReadableByteStreamController ReadableStreamBYOBRequest WritableStream WritableStreamDefaultWriter WritableStreamDefaultController TransformStream TransformStreamDefaultController CountQueuingStrategy ByteLengthQueuingStrategy'],
+    ['codecs', L, 'CompressionStream DecompressionStream TextEncoderStream TextDecoderStream'],
+    ['xpath', L, 'XPathEvaluator XPathExpression XPathResult XPathNSResolver'],
+    ['xpath', D, 'evaluate createExpression createNSResolver', 1],
+    ['urlpattern', L, 'URLPattern'],
+    ['nav', L, 'navigation Navigation NavigationHistoryEntry NavigateEvent NavigationDestination NavigationTransition NavigationActivation NavigationCurrentEntryChangeEvent'],
+    ['vt', L, 'ViewTransition ViewTransitionTypeSet'],
+    ['vt', D, 'startViewTransition activeViewTransition', 1],
+    ['internals', L, 'ElementInternals CustomStateSet'],
+    ['internals', L, 'ValidityState', 0, 1],
+    ['internals', g.Element.prototype, 'attachInternals', 1],
+    ['css', L, 'AbstractRange Highlight HighlightRegistry CSSPropertyRule ContentVisibilityAutoStateChangeEvent'],
+    ['css', L, 'CSSRule', 0, 1],
+    ['css', g.CSS, 'highlights registerProperty registeredProperty', 1],
+    ['devices', L, 'ScreenOrientation DeviceOrientationEvent DeviceMotionEvent DeviceMotionEventAcceleration DeviceMotionEventRotationRate Gamepad GamepadButton GamepadEvent WakeLockSentinel WakeLock MediaMetadata MediaSession Credential PasswordCredential FederatedCredential PublicKeyCredential CredentialsContainer PaymentRequest PaymentResponse PaymentRequestUpdateEvent TrustedHTML TrustedScript TrustedScriptURL TrustedTypePolicy TrustedTypePolicyFactory trustedTypes PictureInPictureWindow PictureInPictureEvent'],
+    ['devices', N, 'getGamepads wakeLock mediaSession credentials', 1],
+    ['devices', g.Screen.prototype, 'orientation', 1],
+    ['devices', D, 'hasStorageAccess requestStorageAccess', 1],
+    ['devices', D, 'pictureInPictureEnabled pictureInPictureElement exitPictureInPicture', 1, 1], // the media prelude has the Chromium-matched versions
+    ['opfs', L, 'FileSystemHandle FileSystemFileHandle FileSystemDirectoryHandle FileSystemWritableFileStream StorageManager showOpenFilePicker showSaveFilePicker showDirectoryPicker'],
+    ['opfs', N, 'storage', 1],
+    ['es', Array, 'fromAsync', 0, 1],
+    ['es', Symbol, 'dispose asyncDispose', 0, 1],
+    ['es', L, 'DisposableStack AsyncDisposableStack SuppressedError', 0, 1],
+    ['es', Error, 'captureStackTrace', 0, 1],
+    ['intl', g.Intl, 'Locale', 0, 1],
+    ['sched', L, 'scheduler Scheduler TaskController TaskSignal TaskPriorityChangeEvent']
+  ];
+  if (typeof Atomics === 'object') T.push(['es', Atomics, 'waitAsync', 0, 1]);
+  if (g.HTMLVideoElement) T.push(['devices', g.HTMLVideoElement.prototype, 'requestPictureInPicture disablePictureInPicture', 1, 1]);
+  for (var i = 0; i < T.length; i++) {
+    var row = T[i], ns = row[2].split(' ');
+    if (!row[1]) continue;
+    for (var k = 0; k < ns.length; k++) {
+      if (row[4] && ns[k] in row[1]) continue;
+      lazy({ m: row[0], o: row[1], n: ns[k], e: !!row[3] });
+    }
   }
 })(globalThis);
