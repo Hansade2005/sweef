@@ -129,6 +129,8 @@ func (a *App) internalData(e *etab, u *url.URL) map[string]any {
 			"items": a.prof.Bookmarks.All()}
 	case "downloads":
 		return map[string]any{"items": p.Downloads.List()}
+	case "datastop":
+		return a.dataStopData(u)
 	case "settings":
 		return map[string]any{"values": a.prof.Settings.All(), "schema": store.Schema, "sites": a.prof.Sites.All(),
 			"engines": omnibox.Engines, "usage": a.prof.Stats.Snapshot(a.model.TabCount()),

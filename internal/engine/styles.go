@@ -16,8 +16,18 @@ func (t *Tab) applyStyles(doc *fnet.Doc) {
 	links := doc.StylesheetLinks()
 	var scriptSrcs []string
 	if !t.eng.opts.DisableJS {
+		// Data Saver: with a script budget the scripts are read in document order by
+		// the loader (a parallel prefetch would spend the budget in a random order),
+		// and third-party scripts the policy blocks are not asked for at all.
+		pol := t.policy()
 		for _, s := range doc.ScriptElements() {
 			if s.Src != "" && isJavaScriptType(s.Type) && !s.NoModule {
+				if pol.ScriptMaxBytes > 0 {
+					continue
+				}
+				if abs, err := resolveURL(doc.BaseURL(), s.Src); pol.BlockThirdPartyScripts && err == nil && thirdParty(doc.BaseURL(), abs) {
+					continue
+				}
 				scriptSrcs = append(scriptSrcs, s.Src)
 			}
 		}
@@ -32,7 +42,7 @@ func (t *Tab) applyStyles(doc *fnet.Doc) {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-				if body, status, err := t.fetchResourceFrom(doc, href); err == nil && status < 400 {
+				if body, status, err := t.fetchResourceFromKind(doc, href, KindStyle); err == nil && status < 400 {
 					fetched[i] = body
 				}
 			}(i, href)
@@ -43,7 +53,7 @@ func (t *Tab) applyStyles(doc *fnet.Doc) {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-				_, _, _ = t.fetchResourceFrom(doc, src)
+				_, _, _ = t.fetchResourceFromKind(doc, src, KindScript)
 			}(src)
 		}
 		done := make(chan struct{})
@@ -69,11 +79,15 @@ func (t *Tab) applyStyles(doc *fnet.Doc) {
 // fetchResourceFrom resolves a sub-resource against the document being
 // installed (the tab URL may still point at the previous page).
 func (t *Tab) fetchResourceFrom(doc *fnet.Doc, ref string) (string, int, error) {
+	return t.fetchResourceFromKind(doc, ref, KindOther)
+}
+
+func (t *Tab) fetchResourceFromKind(doc *fnet.Doc, ref string, kind DataKind) (string, int, error) {
 	abs, err := resolveURL(doc.BaseURL(), ref)
 	if err != nil {
 		return "", 0, err
 	}
-	return t.fetchResource(abs)
+	return t.fetchRes(abs, fetchOpts{kind: kind, page: doc.BaseURL(), prefetch: true})
 }
 
 // PDF renders the current page as a PDF document (Playwright page.pdf).

@@ -71,6 +71,17 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 	if strings.HasPrefix(strings.ToLower(target), "javascript:") {
 		return
 	}
+	// Data Saver: a used-up budget with the hard stop on shows the interstitial
+	// instead of the page; "Load fully, once" and the agent mode set this
+	// load's policy (cleared again by the next load).
+	stop := a.dataStopFor(e, target)
+	fullOnce := e.fullOnce.Swap(false)
+	e.fullActive.Store(fullOnce) // shown in state.data.tab.once until the next navigation
+	level := a.tabLevelFor(e, target)
+	if a.dat.agent.active {
+		a.agentTouch(tabID)
+	}
+	a.dataBankTab(tabID)
 	orig := target
 	upgraded := false
 	if site := a.prof.Sites.Rule(target); !site.NoUpgrade {
@@ -97,8 +108,18 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 	a.markState()
 	a.stats.navStart(tabID, seq)
 	e.w.do(func() {
+		if stop {
+			a.dataStopLoad(e, seq, target, mode)
+			return
+		}
+		a.dat.eng.SetTabPolicy(e.t, level)
 		a.prepareInternal(e, target)
-		err := e.t.Navigate(target, nil)
+		var err error
+		if fullOnce {
+			err = a.dat.eng.LoadFully(e.t) // reloads this page with everything on, once
+		} else {
+			err = e.t.Navigate(target, nil)
+		}
 		fellBack := false
 		if err != nil && upgraded && e.navSeq.Load() == seq {
 			// the site does not speak HTTPS: fall back to the URL the user asked for
@@ -133,6 +154,21 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 		a.post(func() { a.onLoaded(e, seq, shown, mode, typed, meta) })
 		e.armPump()
 	})
+}
+
+// dataStopLoad shows the hard-stop interstitial for target (worker only).
+func (a *App) dataStopLoad(e *etab, seq int64, target string, mode int32) {
+	if e.navSeq.Load() != seq {
+		return
+	}
+	a.renderDataStop(e, target)
+	e.loadErr.Store("data limit reached: the budget is used up and the hard stop is on")
+	e.certError.Store(false)
+	e.drainBindings()
+	meta := a.collectMeta(e, true)
+	e.paint(true)
+	a.post(func() { a.onLoaded(e, seq, target, mode, false, meta) })
+	e.armPump()
 }
 
 // pageMeta is what the worker reads after a load.

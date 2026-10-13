@@ -46,6 +46,7 @@
     user: '<circle cx="12" cy="8.500" r="3.500"/>' + P("M5 20c.8-3.500 3.600-5.500 7-5.500s6.200 2 7 5.500"), up: P("M12 19V6M7 11l5-5 5 5"), layers: P("M12 4l8.500 4.500L12 13 3.500 8.500zM3.500 12.500L12 17l8.500-4.500M3.500 16L12 20.500 20.500 16"),
     brush: P("M14 5.500l4.500 4.500L10 18.500H5.500V14zM12 7.500l4.500 4.500"), zap: P("M13 3.500L5.500 13.500h5.500l-1 7 7.500-10h-5.500z"), play: '<path fill="currentColor" stroke="none" d="M8 5.500v13l11-6.500z"/>',
     maxi: '<rect x="6" y="6" width="12" height="12" rx="1.500"/>', restore: '<rect x="5.500" y="8.500" width="10" height="10" rx="1.500"/>' + P("M9 8.500V6.500A1.500 1.500 0 0 1 10.500 5h7A1.500 1.500 0 0 1 19 6.500v7a1.500 1.500 0 0 1-1.500 1.500H15.500"), mini: P("M6 17.500h12"),
+    drop: P("M12 3.800c3.300 3.900 5.500 6.800 5.500 9.800a5.500 5.500 0 0 1-11 0c0-3 2.200-5.900 5.500-9.800z"),
     key: '<circle cx="8" cy="15" r="3.500"/>' + P("M10.500 12.500L19 4M16 7l2.500 2.500M14 9l2 2"), flag: P("M6 20V4.500M6 5h11l-2 4 2 4H6")
   };
   var cache = {};
@@ -70,6 +71,20 @@
     s.innerHTML = logoSVG(h, id || "wm") + "<span>sweef</span>";
     return s;
   }
+  /* Progress ring: pct 0..100, drawn in currentColor so the wrapper's colour is the tone. */
+  function dataRing(pct, size, sw) {
+    var n = size || 18, w = sw || 4, c = 2 * Math.PI * 14, f = Math.max(0, Math.min(100, +pct || 0)) / 100, s = document.createElement("span");
+    s.className = "dring";
+    s.innerHTML = '<svg width="' + n + '" height="' + n + '" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-opacity=".2" stroke-width="' + w + '"/>' +
+      (f > 0 ? '<circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="' + w + '" stroke-linecap="round" stroke-dasharray="' + (c * f).toFixed(1) + " " + c.toFixed(1) + '" transform="rotate(-90 16 16)"/>' : "") + "</svg>";
+    return s;
+  }
   window.SW = window.SW || {};
+  SW.dataRing = dataRing;
+  /* Meter tone from the budget: calm below the first warn threshold, warmer after, never red until it is used up. */
+  SW.dataTone = function (b) {
+    if (!b || !b.enabled) return ""; var w = b.warnAt || [70, 90], p = +b.pct || 0;
+    return b.exhausted ? "x" : p >= (w[1] || 90) ? "w2" : p >= (w[0] || 70) ? "w1" : "";
+  };
   SW.I = I; SW.icon = icon; SW.logo = logo; SW.wordmark = wordmark; SW.logoSVG = logoSVG;
 })();

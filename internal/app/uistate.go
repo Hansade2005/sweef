@@ -35,6 +35,7 @@ func (a *App) buildState() map[string]any {
 		snap["page"] = map[string]any{"type": a.pageTypes.get(act.ID)}
 	}
 	snap["agent"] = a.agentState(act, hasAct)
+	snap["data"] = a.dataState()
 	return snap
 }
 

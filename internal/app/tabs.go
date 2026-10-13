@@ -25,6 +25,7 @@ type openOpts struct {
 	Pinned    bool
 	Title     string
 	Lazy      bool // restore as a discarded tab: no load until activated
+	Agent     bool // opened by the agent: loads use the agent mode
 }
 
 func (a *App) newTab(url string, incognito, activate bool) string {
@@ -36,6 +37,7 @@ func (a *App) incogContext() *engine.BrowserContext {
 	defer a.mu.Unlock()
 	if a.incogCtx == nil {
 		a.incogCtx = a.eng.NewContext("incognito", engine.ContextOptions{})
+		a.dat.eng.SetContextPolicy(a.incogCtx, a.dataLevel()) // private windows save data too
 	}
 	return a.incogCtx
 }
@@ -75,6 +77,9 @@ func (a *App) openTab(o openOpts) string {
 	}
 	st.Security = securityFor(st.URL, false)
 	a.model.AddTab(a.winID, st, idx, o.Activate)
+	if e != nil && o.Agent {
+		e.agentLoad.Store(true)
+	}
 	if url == "" {
 		url = newTabURL
 	}
@@ -162,8 +167,11 @@ func (a *App) closeTab(id string) {
 		e.close()
 	}
 	if st.Incognito {
+		a.dataBook() // book the private bytes before their counters can disappear
 		a.maybeWipeIncognito()
 	}
+	delete(a.dat.tabAcc, id)
+	delete(a.dat.agent.touched, id)
 	if next == "" {
 		if a.model.TabCount() == 0 {
 			a.requestClose()
@@ -221,6 +229,12 @@ func (a *App) activateTab(id string) {
 	prev := a.activeShown()
 	a.model.Activate(id)
 	a.setActiveShown(id)
+	if prev != id {
+		if prev != "" {
+			a.dataMarkBackground(prev, true) // hidden tabs get no timers or requests
+		}
+		a.dataMarkBackground(id, false)
+	}
 	e.lastActive.Store(time.Now().UnixNano())
 	if prev != id {
 		a.comp.SetPage(nil)

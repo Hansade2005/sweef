@@ -119,3 +119,9 @@ third_party/gopus is github.com/thesyncim/gopus v0.1.2 (BSD-3-Clause) with its C
 table built lazily. third_party/go-mp3 is github.com/hajimehoshi/go-mp3 (Apache-2.0)
 with its decoding tables built lazily. Both changes only move work from process
 start-up to first use; licence files are kept in each directory.
+
+Brotli decoding
+---------------
+internal/engine/wire.go decodes Content-Encoding: br with github.com/dsnet/compress/brotli
+(BSD-3-Clause, Copyright (c) 2015, Joe Tsai and The Go Authors), a pure Go
+decoder-only implementation of RFC 7932; no code is vendored, it is a go.mod dependency.

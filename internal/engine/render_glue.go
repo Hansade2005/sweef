@@ -34,6 +34,7 @@ type tabEnv struct {
 	mu   sync.Mutex
 	imgs map[string]image.Image
 	svgs map[string]string
+	lz   lazyState // Data Saver: lazy, skipped and forced images (lazy.go)
 }
 
 func (e *tabEnv) source(n *html.Node) BitmapSource {
@@ -59,8 +60,9 @@ func (e *tabEnv) Image(u string) image.Image {
 			data = b
 		}
 	} else if !e.t.IsOfflineMode() || strings.HasPrefix(u, "file:") {
-		if body, status, err := e.t.fetchResource(u); err == nil && status < 400 {
-			data = []byte(body)
+		var memo bool
+		if data, memo = e.loadImageBytes(u); !memo {
+			return nil // deferred or withheld by the Data Saver policy: not final, do not remember
 		}
 	}
 	if len(data) > 0 {
@@ -108,8 +110,10 @@ func (e *tabEnv) SVGSource(u string) (string, bool) {
 		if _, b, err := decodeDataURL(u); err == nil {
 			markup = string(b)
 		}
-	} else if body, status, err := e.t.fetchResource(u); err == nil && status < 400 {
-		markup = body
+	} else if data, memo := e.loadImageBytes(u); !memo {
+		return "", false // deferred or withheld by the Data Saver policy
+	} else {
+		markup = string(data)
 	}
 	if !strings.Contains(strings.ToLower(markup), "<svg") {
 		markup = ""
@@ -169,6 +173,34 @@ func (e *tabEnv) pageSheets() []render.Sheet {
 	return out
 }
 
+// sheet reads a linked stylesheet. Under the saver levels a sheet is read once
+// per document (a relayout does not ask the server again); otherwise every
+// layout goes through the cache as before.
+func (e *tabEnv) sheet(abs string) (string, bool) {
+	keep := e.t.policy().ExtendCache
+	if keep {
+		e.lz.mu.Lock()
+		s, ok := e.lz.sheets[abs]
+		e.lz.mu.Unlock()
+		if ok {
+			return s, s != ""
+		}
+	}
+	body, status, err := e.t.fetchResourceKind(abs, KindStyle)
+	if err != nil || status >= 400 {
+		body = ""
+	}
+	if keep {
+		e.lz.mu.Lock()
+		if e.lz.sheets == nil {
+			e.lz.sheets = map[string]string{}
+		}
+		e.lz.sheets[abs] = body
+		e.lz.mu.Unlock()
+	}
+	return body, body != ""
+}
+
 func attrOf(n *html.Node, k string) string {
 	for _, a := range n.Attr {
 		if a.Key == k {
@@ -184,6 +216,7 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 		return
 	}
 	env := &tabEnv{t: t, doc: doc, imgs: map[string]image.Image{}, svgs: map[string]string{}}
+	t.ds.env.Store(env)
 	doc.SetLayoutProvider(func(width int) *fnet.Layout {
 		_, vh, dsf, _, _ := t.Viewport()
 		if vh <= 0 {
@@ -192,11 +225,20 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 		if dsf <= 0 {
 			dsf = 1
 		}
-		res := render.Layout(doc.Root, render.Options{
-			Width: float64(width), Height: float64(vh), DPR: dsf,
-			ColorScheme: t.ColorSchemeName(), BaseURL: doc.BaseURL(),
-			Sheets: env.pageSheets(), Env: env,
-		})
+		var res *render.Result
+		for round := 0; ; round++ {
+			env.lz.resetHints()
+			res = render.Layout(doc.Root, render.Options{
+				Width: float64(width), Height: float64(vh), DPR: dsf,
+				ColorScheme: t.ColorSchemeName(), BaseURL: doc.BaseURL(),
+				Sheets: env.pageSheets(), Env: env,
+			})
+			// Data Saver: admit images that came into range, put placeholders
+			// on withheld ones, then lay out again (no-op without a policy)
+			if round >= maxLazyRounds || !env.settleLazy(float64(vh)) {
+				break
+			}
+		}
 		return layoutFromRender(res, env)
 	})
 }

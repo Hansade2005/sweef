@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/publicsuffix"
@@ -32,7 +33,8 @@ type BrowserContext struct {
 	closed  bool
 	mu      sync.RWMutex
 
-	httpClient *http.Client // per-context client with its own cookie jar (see clientFor)
+	httpClient *http.Client            // per-context client with its own cookie jar (see clientFor)
+	ds         atomic.Pointer[ctxData] // Data Saver policy, counters and stats (datasaver.go)
 }
 
 type ContextOptions struct {
@@ -172,6 +174,7 @@ func (c *BrowserContext) Close() error {
 	if c.options.StoragePath != "" {
 		_ = c.SaveState(c.options.StoragePath)
 	}
+	c.closeIdle()
 	c.eng.removeContext(c.name)
 	c.eng.emit(EvConsole, map[string]any{"contextClosed": c.name})
 	return nil
@@ -427,6 +430,7 @@ func (c *BrowserContext) Fetch(method, urlStr string, headers map[string]string,
 	if ck := c.jar.ForURL(urlStr); ck != "" {
 		req.Header.Set("Cookie", ck)
 	}
+	req, _ = withMeter(req, c, nil, KindXHR, c.policy())
 	resp, err := c.eng.clientFor(c).Do(req)
 	if err != nil {
 		return 0, nil, "", err

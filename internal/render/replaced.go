@@ -51,6 +51,10 @@ func (c *ctx) setupReplaced(b *lbox) bool {
 	r := &replacedInfo{kind: n.Data}
 	switch n.Data {
 	case "img":
+		if attr(n, "data-sweef-lite") == "skipped" {
+			setupLite(r, n, "skipped")
+			break
+		}
 		src := attr(n, "src")
 		if src == "" {
 			if ss := attr(n, "srcset"); ss != "" {
@@ -109,6 +113,9 @@ func (c *ctx) setupReplaced(b *lbox) bool {
 		r.iw, r.ih, r.hasIW, r.hasIH = 300, 54, true, true
 	case "iframe", "embed", "object":
 		r.iw, r.ih, r.hasIW, r.hasIH = 300, 150, true, true
+		if n.Data == "iframe" && attr(n, "data-sweef-lite") == "frame" {
+			setupLite(r, n, "frame")
+		}
 	case "svg":
 		r.iw, r.ih, r.hasIW, r.hasIH = 300, 150, true, true
 		w, okw := parseDim(attr(n, "width"))

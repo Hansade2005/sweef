@@ -167,11 +167,18 @@
     if (rate && ev.retryAfter) { var n = ev.retryAfter, d = eb.firstChild, iv = setInterval(function () { n--; if (n <= 0 || !box.parentNode) { clearInterval(iv); d.textContent = S.agent.errRate.replace("{s}", "0").replace(/ in 0s.*/, ". You can retry now."); } else d.textContent = S.f(S.agent.errRate, { s: n }); }, 1000); }
     finish(a, true); addPart(a, { type: "error", el: box }); pin();
   }
+  /* "Research used 412 KB": the real bytes of the pages the agent opened; the estimate is labelled as one */
+  function dataLine(d) {
+    var T = S.data, el = h("div.amdata", { title: S.f(T.researchTip) }, icon("drop", 13), h("span", h("b.num", { text: S.f(T.research, { n: SW.fmtBytes(d.bytes) }) })));
+    if (d.savedEstimated > 0) el.appendChild(h("div.est", { text: S.f(T.researchNot, { n: SW.fmtBytes(d.savedEstimated) }) }));
+    return el;
+  }
   function finish(a, errored, ev) {
     if (a.done) return; a.done = true; setLive(a, ""); a.parts.forEach(function (p) { if (p.type === "thought") endThought(p); if (p.type === "steps") SW.$$(".step.running", p.el).forEach(function (s) { s.classList.remove("running"); }); });
     a.dirty = true; flush(a); if (a.pend && a.pend.parentNode) a.pend.parentNode.removeChild(a.pend);
     if (curRun === a) { curRun = null; setBusy(false); }
     var txt = a.parts.filter(function (p) { return p.type === "text"; }).map(function (p) { return p.buf; }).join("\n\n");
+    if (!errored && ev && ev.data && ev.data.available !== false && ev.data.bytes != null) a.el.appendChild(dataLine(ev.data));
     if (!errored && txt) a.el.appendChild(h("div.amfoot", h("button.ibtn", { title: S.agent.copy, "aria-label": S.agent.copy, onclick: function () { post("clipboard.write", { text: txt }); C().toast(S.agent.copied); } }, icon("copy", 15))));
     var ttft = (ev && ev.ttft) != null ? ev.ttft : a.ttft, tps = ev && ev.tps; if (ttft != null && !errored) { lastLat = { ttft: ttft, tps: tps, ms: ev && ev.ms }; renderLat(); }
     pin();

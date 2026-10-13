@@ -64,12 +64,20 @@ type etab struct {
 	lastActive    atomic.Int64
 	loadErr       atomic.Value // string: error of the last load started by loadURL ("" = ok); read by the agent host
 	restoreScroll atomic.Int32
+
+	// Data Saver
+	agentLoad   atomic.Bool  // the agent drives this tab: loads use the agent mode
+	fullOnce    atomic.Bool  // request: the next load runs without saving (consumed by loadURL)
+	fullActive  atomic.Bool  // the current page was loaded fully, once
+	loadOnce    atomic.Value // string: URL allowed through the hard stop once
+	liteSkipped atomic.Int32 // tap-to-load placeholders on the page (from the engine's counters)
 }
 
 func (a *App) newEtab(kind, id string, t *engine.Tab, incog bool) *etab {
 	e := &etab{a: a, id: id, t: t, kind: kind, incog: incog, w: newWorker(&a.pending)}
 	e.topURL.Store("")
 	e.navTarget.Store("")
+	e.loadOnce.Store("")
 	e.installHooks()
 	return e
 }
@@ -446,6 +454,10 @@ func (a *App) etabByEngineID(id string) *etab {
 }
 
 func (a *App) onEngineEvent(ev engine.Event) {
+	if a.dat.eng != nil && a.dat.eng.IsDataEvent(ev) {
+		a.dataKick() // throttled "data" events: the counters moved
+		return
+	}
 	if ev.Tab == "" {
 		return
 	}

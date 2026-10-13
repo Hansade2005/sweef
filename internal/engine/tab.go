@@ -151,6 +151,8 @@ type Tab struct {
 	bindingReplies map[string]string
 	bindingRing    *Ring
 	downloads      []Download
+
+	ds tabDS // Data Saver state (datasaver.go)
 }
 
 func newTab(e *Engine, id string) *Tab {
@@ -234,6 +236,7 @@ func (t *Tab) Navigate(rawurl string, headers map[string]string) error {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": rawurl, "error": err.Error()}})
 		return err
 	}
+	t.resetDataForNavigation()
 	res, err := t.fetch(u, headers)
 	if errors.Is(err, errDownloaded) {
 		return nil // the response was saved as a download; the page stays
@@ -285,6 +288,9 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	rec := fnet.RequestRecord{Method: method, URL: target}
 	start := time.Now()
 	var res *http.Response
+	var docEntry *resEntry
+	var docKey string
+	var docMI *meterInfo
 	if synth != nil {
 		res = synth
 		rec.Headers = map[string]string{"x-sweef-route": "fulfill"}
@@ -305,13 +311,31 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		if ck := t.Context().JarRef().ForURL(target); ck != "" {
 			req.Header.Set("Cookie", ck)
 		}
+		// Saver levels: revalidate a stored copy of the document instead of
+		// downloading it again. A document is never served without asking the server.
+		pol := t.policy()
+		if pol.ExtendCache && method == "GET" && !strings.Contains(strings.ToLower(req.Header.Get("Cache-Control")), "no-cache") {
+			docKey = t.eng.res.key(t.Context(), "doc:"+target)
+			if e := t.eng.res.get(docKey); e != nil && (e.etag != "" || e.lastMod != "") &&
+				(len(e.vary) == 0 || e.varyVal == t.varyValue(e.vary, target, hdrs)) {
+				docEntry = e
+				if e.etag != "" {
+					req.Header.Set("If-None-Match", e.etag)
+				}
+				if e.lastMod != "" {
+					req.Header.Set("If-Modified-Since", e.lastMod)
+				}
+			}
+		}
 		rec.Headers = flattenHeaders(req.Header)
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 		t.emit(EvRequest, rec)
 		t.touchNet()
-		if res, err = t.eng.clientFor(t.Context()).Do(req); err != nil {
+		mreq, mi := withMeter(req, t.Context(), t, KindDocument, pol)
+		if res, err = t.eng.clientFor(t.Context()).Do(mreq); err != nil {
 			return nil, err
 		}
+		docMI = mi
 	}
 	if isDownloadResponse(res.Header) && res.StatusCode < 400 {
 		defer res.Body.Close()
@@ -344,7 +368,27 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	rec.ResponseHeaders = flattenHeaders(res.Header)
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
 	t.emit(EvResponse, rec)
-	return &fetchResult{body: string(body), finalURL: rec.FinalURL, status: res.StatusCode, har: rec}, nil
+	status, text := res.StatusCode, string(body)
+	if docKey != "" {
+		switch {
+		case res.StatusCode == http.StatusNotModified && docEntry != nil:
+			// the stored copy is current: only the headers crossed the wire
+			status, text = docEntry.status, docEntry.body
+			rec.Status = status
+			t.noteCacheHit(docEntry.xfer)
+		case res.StatusCode == http.StatusOK && cacheable(res.Header) && docMI != nil &&
+			(res.Header.Get("ETag") != "" || res.Header.Get("Last-Modified") != ""):
+			names := varyNames(res.Header)
+			t.eng.res.put(docKey, &resEntry{
+				body: text, status: status, etag: res.Header.Get("ETag"), lastMod: res.Header.Get("Last-Modified"),
+				storedAt: time.Now(), xfer: docMI.hdrBytes.Load() + docMI.rawBytes.Load(),
+				vary: names, varyVal: t.varyValue(names, target, hdrs), tab: t.ID, epoch: t.ds.epoch.Load(),
+			})
+		default:
+			t.eng.res.drop(docKey) // no-store, no validator, or an error: do not keep an old copy around
+		}
+	}
+	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec}, nil
 }
 
 func flattenHeaders(h map[string][]string) map[string]string {
@@ -528,7 +572,11 @@ func (t *Tab) Evaluate(expr string) (json.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return j.evaluate(expr)
+	r, err := j.evaluate(expr)
+	if strings.HasPrefix(expr, "__sweefScrollTo(") {
+		t.scrollFromEval(expr) // the app's scroll notification doubles as the lazy-image trigger
+	}
+	return r, err
 }
 
 // ensureJS returns the tab's VM, binding one to the current document when the
@@ -652,6 +700,7 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	for k, v := range hdrs {
 		req.Header.Set(k, v)
 	}
+	t.resetDataForNavigation()
 	t.touchNet()
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", t.UserAgent())
@@ -665,6 +714,7 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	rec := fnet.RequestRecord{Method: "POST", URL: rawurl, Headers: flattenHeaders(req.Header)}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 	start := time.Now()
+	req, _ = withMeter(req, t.Context(), t, KindDocument, t.policy())
 	res, err := t.eng.clientFor(t.Context()).Do(req)
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": rawurl, "error": err.Error()}})

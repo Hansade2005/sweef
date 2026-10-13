@@ -32,6 +32,11 @@ const helperJS = `(function(G){
     }
     if (kind === 'up') { G.__swMouse('mouseup', x, y, init); return null; }
     if (kind === 'click') {
+      var sk = closest(el, '[data-sweef-lite="skipped"]');
+      if (sk) { // Data Saver placeholder: tap to load (the app resolves the index to an engine node)
+        var all = D.querySelectorAll('[data-sweef-lite="skipped"]');
+        for (var i = 0; i < all.length; i++) if (all[i] === sk) return {lite: i};
+      }
       var a = closest(el, 'a[href]');
       if (a && !/^\s*javascript:/i.test(a.getAttribute('href')||'')) {
         var bg = init.ctrlKey || init.metaKey || (b|0) === 1;

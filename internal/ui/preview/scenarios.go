@@ -153,7 +153,7 @@ func Scenarios() []Scenario {
 	add(Scenario{Name: "newtab-incognito-page", Page: "newtab/index.html", Query: "?incognito=1", W: 1280, H: 712, State: inc, Skip: true})
 	add(Scenario{Name: "newtab-incognito", Page: "newtab/index.html", W: 1280, H: 800, State: inc})
 	// ---- onboarding
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= 4; i++ {
 		setup := fmt.Sprintf(`__send("onboarding.step",{n:%d});`, i)
 		if i == 1 {
 			setup += `__send("import.progress",{source:"chrome",pct:0.64});__send("import.done",{source:"firefox",bookmarks:212});__send("import.unavailable",{source:"safari"});`
@@ -163,7 +163,10 @@ func Scenarios() []Scenario {
 		}
 		add(Scenario{Name: fmt.Sprintf("onboarding-%d", i), Page: "onboarding/index.html", Query: "?demo=done", W: 1280, H: 800, State: light, Setup: setup})
 	}
-	add(Scenario{Name: "onboarding-3-dark", Page: "onboarding/index.html", W: 1280, H: 800, State: dark, Setup: `__send("onboarding.step",{n:3});`})
+	add(Scenario{Name: "onboarding-4-dark", Page: "onboarding/index.html", W: 1280, H: 800, State: dark, Setup: `__send("onboarding.step",{n:4});`})
+	add(Scenario{Name: "onboarding-3-data-picked", Page: "onboarding/index.html", W: 1280, H: 800, State: light, Setup: `__send("onboarding.step",{n:3});document.querySelectorAll(".plan")[0].click();`})
+	add(Scenario{Name: "onboarding-3-data-dark", Page: "onboarding/index.html", W: 1280, H: 800, State: dark, Setup: `__send("onboarding.step",{n:3});document.querySelectorAll(".plan")[1].click();`})
+	add(Scenario{Name: "onboarding-3-data-incognito", Page: "onboarding/index.html", W: 1280, H: 800, State: inc, Setup: `__send("onboarding.step",{n:3});`})
 	// ---- internal pages
 	add(Scenario{Name: "settings-agent", Page: "settings/index.html", Query: "?s=agent", W: 1280, H: 800, State: with(light, "agent.sites", []M{{"origin": "https://www.wsj.com", "allowed": true}, {"origin": "https://bank.example.com", "allowed": false}})})
 	add(Scenario{Name: "settings-privacy-dark", Page: "settings/index.html", Query: "?s=privacy", W: 1280, H: 800, State: dark})
@@ -173,9 +176,73 @@ func Scenarios() []Scenario {
 	add(Scenario{Name: "bookmarks-dark", Page: "bookmarks/index.html", W: 1280, H: 800, State: dark, Setup: `__send("data.result",{kind:"bookmarks",id:1,total:4,items:[{id:"1",title:"Pro Git book",url:"https://git-scm.com/book/en/v2"},{id:"2",title:"Tax Foundation",url:"https://taxfoundation.org/"},{id:"3",title:"Hacker News",url:"https://news.ycombinator.com/"},{id:"4",title:"Recipes: weeknight ramen",url:"https://recipes.example.com/ramen"}]});`})
 	add(Scenario{Name: "downloads", Page: "downloads/index.html", W: 1280, H: 800, State: with(light, "downloads", []M{{"id": "d1", "name": "sweef-0.1.0-alpha.3-linux-amd64.tar.gz", "url": "https://sweef.dev/dl/sweef.tar.gz", "state": "progress", "received": 18_400_000, "total": 31_000_000, "speed": 4_200_000}, {"id": "d2", "name": "2026-tax-guide.pdf", "url": "https://www.irs.gov/pub/guide.pdf", "state": "done", "received": 2_100_000, "total": 2_100_000}, {"id": "d3", "name": "installer.exe", "url": "https://files.example.com/installer.exe", "state": "failed", "received": 0, "total": 0}})})
 	// ---- error pages
+
+	// ---- Data Saver
+	dsLight := with(light, "data", dataState(0.394, "standard"), "sidebar.open", false)
+	dsDark := with(dark, "data", dataState(0.394, "standard"), "sidebar.open", false)
+	dsInc := with(inc, "data", dataState(0.394, "standard"), "sidebar.open", false)
+	dsWarn := with(light, "data", dataState(0.78, "strict"), "sidebar.open", false)
+	dsWarn2 := with(dark, "data", dataState(0.93, "strict"), "sidebar.open", false)
+	dsOut := with(light, "data", dataState(1.04, "strict"), "sidebar.open", false)
+	dsFree := with(light, "data", dataFree(), "sidebar.open", false)
+	pop := `document.getElementById('databtn').click();`
+	add(Scenario{Name: "data-popover-light", Page: "chrome/index.html", W: 1280, H: 800, State: dsLight, Backdrop: "article", Setup: pop})
+	add(Scenario{Name: "data-popover-dark", Page: "chrome/index.html", W: 1280, H: 800, State: dsDark, Backdrop: "article", Setup: pop})
+	add(Scenario{Name: "data-popover-incognito", Page: "chrome/index.html", W: 1280, H: 800, State: dsInc, BackdropFrom: "newtab-incognito-page", Setup: pop})
+	add(Scenario{Name: "data-popover-warn", Page: "chrome/index.html", W: 1280, H: 800, State: dsWarn, Backdrop: "article", Setup: pop})
+	add(Scenario{Name: "data-popover-exhausted", Page: "chrome/index.html", W: 1280, H: 800, State: dsOut, Backdrop: "article", Setup: pop})
+	add(Scenario{Name: "data-popover-nolimit", Page: "chrome/index.html", W: 1280, H: 800, State: dsFree, Backdrop: "article", Setup: pop})
+	add(Scenario{Name: "data-chip-toast-light", Page: "chrome/index.html", W: 1280, H: 800, State: dsWarn, Backdrop: "article",
+		Setup: `SW.chrome.toast({text:"You have used 70% of your 100 MB this month. 22 MB left.",kind:"info",action:{label:"Switch to Text first",type:"data.setLevel",payload:{level:"strict"}}});`})
+	add(Scenario{Name: "data-chip-toast-dark", Page: "chrome/index.html", W: 1280, H: 800, State: dsWarn2, Backdrop: "article",
+		Setup: `SW.chrome.toast({text:"About 7 MB left this month. It resets in 19 days.",kind:"warn"});`})
+	add(Scenario{Name: "data-chip-exhausted", Page: "chrome/index.html", W: 1280, H: 800, State: dsOut, Backdrop: "article",
+		Setup: `SW.chrome.toast({text:"You have used your 100 MB this month. It resets in 19 days.",kind:"warn",action:{label:"Raise limit",type:"tab.new",payload:{url:"sweef://settings#data"}}});`})
+	add(Scenario{Name: "data-settings-light", Page: "settings/index.html", Query: "?s=data", W: 1280, H: 2000, State: dsLight})
+	add(Scenario{Name: "data-settings-dark", Page: "settings/index.html", Query: "?s=data", W: 1280, H: 2000, State: dsDark})
+	add(Scenario{Name: "data-settings-incognito", Page: "settings/index.html", Query: "?s=data", W: 1280, H: 2000, State: dsInc})
+	add(Scenario{Name: "data-settings-nolimit", Page: "settings/index.html", Query: "?s=data", W: 1280, H: 2000, State: with(dsFree, "data.available", true)})
+	add(Scenario{Name: "data-newtab-light", Page: "newtab/index.html", W: 1280, H: 800, State: with(dsLight, "url", "sweef://newtab")})
+	add(Scenario{Name: "data-newtab-dark-warn", Page: "newtab/index.html", W: 1280, H: 800, State: with(dsWarn2, "theme", "dark")})
+	add(Scenario{Name: "data-newtab-incognito", Page: "newtab/index.html", W: 1280, H: 800, State: dsInc})
+	add(Scenario{Name: "data-stop-light", Page: "datastop/index.html", Query: "?url=https%3A%2F%2Fgrocer.example.com%2Fstore%2Fpower-sporting-goods", W: 1280, H: 800, State: dsOut})
+	add(Scenario{Name: "data-stop-dark", Page: "datastop/index.html", Query: "?url=https%3A%2F%2Fgrocer.example.com%2Fstore%2Fpower-sporting-goods", W: 1280, H: 800, State: with(dark, "data", dataState(1.04, "strict")), Setup: `document.querySelectorAll(".acts .btn")[1].click();`})
+	add(Scenario{Name: "data-stop-incognito", Page: "datastop/index.html", Query: "?url=https%3A%2F%2Fgrocer.example.com%2F", W: 1280, H: 800, State: with(inc, "data", dataState(1.04, "strict"))})
+	add(Scenario{Name: "data-sidekick-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "data", dataState(0.394, "standard")), Backdrop: "article",
+		Setup: `SW.sk.send("Compare the three best-reviewed trail shoes under $120");` + ev("action", "id", "a1", "label", "Searched the web", "detail", "best trail shoes under $120", "status", "ok", "ms", 842) + ev("action", "id", "a2", "label", "Read runnersworld.com", "status", "ok", "ms", 311) + ev("text", "text", "I compared three well-reviewed pairs: the **Speedgoat 5** at $119, the **Peregrine 13** at $110 and the **Challenger 7** at $104. The Challenger is the best all-rounder at the lowest price.") + ev("done", "ttft", 388, "tps", 82, "data", M{"bytes": 421_888, "savedEstimated": 1_310_720, "skipped": 41, "lite": true, "available": true})})
+	add(Scenario{Name: "data-sidekick-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "data", dataState(0.394, "standard")), Backdrop: "article",
+		Setup: `SW.sk.send("Summarise the pricing page");` + ev("text", "text", "The **Team** plan is $12 per seat per month, billed yearly.") + ev("done", "ttft", 402, "tps", 77, "data", M{"bytes": 96_256, "skipped": 6, "lite": true, "available": true})})
 	add(Scenario{Name: "error-dns", Page: "error/index.html", Query: "?kind=dns&url=https%3A%2F%2Fexample-typo.test%2Fhello", W: 1280, H: 800, State: light})
 	add(Scenario{Name: "error-cert-dark", Page: "error/index.html", Query: "?kind=cert&url=https%3A%2F%2Fexpired.example.com%2F&detail=certificate+expired+2026-03-01&open=1", W: 1280, H: 800, State: dark})
 	add(Scenario{Name: "error-offline", Page: "error/index.html", Query: "?kind=offline&url=https%3A%2F%2Fwww.wsj.com%2F", W: 1280, H: 800, State: light})
 	add(Scenario{Name: "error-crash", Page: "error/index.html", Query: "?kind=crash&url=https%3A%2F%2Fheavy.example.com%2F", W: 1280, H: 800, State: light})
 	return out
+}
+
+// dataState is state.data for a 100 MB monthly budget with pct of it used.
+func dataState(pct float64, level string) M {
+	used := int64(pct * 100 * (1 << 20))
+	left := int64(100*(1<<20)) - used
+	if left < 0 {
+		left = 0
+	}
+	return M{
+		"level": level, "levelSetting": level, "available": true, "used": used, "usedToday": 4_300_000, "agentLite": true, "showMeter": true, "incognito": false,
+		"budget": M{"enabled": true, "limitMB": 100, "period": "month", "resetDay": 1, "warnAt": []int{70, 90}, "hardStop": pct > 1,
+			"usedMB": float64(used) / (1 << 20), "leftMB": float64(left) / (1 << 20), "pct": pct * 100, "resetsInDays": 19, "resetsOn": "2026-11-01", "exhausted": pct >= 1, "usedBytes": used, "limitBytes": 100 * (1 << 20)},
+		"top":   []M{{"origin": "https://www.wsj.com", "bytes": 11_200_000}, {"origin": "https://grocer.example.com", "bytes": 8_400_000}, {"origin": "https://en.wikipedia.org", "bytes": 5_100_000}, {"origin": "https://github.com", "bytes": 3_300_000}, {"origin": "https://news.ycombinator.com", "bytes": 1_200_000}},
+		"saved": M{"measured": 6_100_000, "estimated": 21_400_000},
+		"tab": M{"used": 655_360, "origin": "https://www.wsj.com", "bySrc": []M{{"origin": "https://www.wsj.com", "bytes": 412_000}, {"origin": "https://cdn.wsj.net", "bytes": 201_000}}, "skipped": 23, "skippedBy": M{"image": 18, "font": 3, "frame": 2},
+			"saved": M{"measured": 317_440, "estimated": 1_992_294}, "approx": true, "rule": "", "once": false, "canLoad": 12},
+		"kinds": M{"document": 61_000, "style": 88_000, "script": 190_000, "image": 281_000, "font": 0, "xhr": 35_000},
+		"sites": M{"https://news.example.org": "lite", "https://maps.example.com": "full"},
+	}
+}
+
+// dataFree is state.data with a saver level but no budget (unlimited).
+func dataFree() M {
+	d := dataState(0.394, "standard")
+	d["budget"] = M{"enabled": false, "limitMB": 100, "period": "month", "resetDay": 1, "warnAt": []int{70, 90}, "hardStop": false, "usedMB": 41.3, "leftMB": 0, "pct": 0, "resetsInDays": 19, "resetsOn": "2026-11-01", "exhausted": false, "usedBytes": 43_300_000, "limitBytes": 0}
+	d["used"] = 43_300_000
+	return d
 }

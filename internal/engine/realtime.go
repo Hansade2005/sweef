@@ -280,7 +280,7 @@ func (j *jsVM) workerCreate(rawurl, src, typ string) (int64, error) {
 		if err != nil {
 			return nil, err
 		}
-		body, status, err := t.fetchResource(u)
+		body, status, err := t.fetchResourceKind(u, KindScript)
 		if err != nil {
 			return nil, err
 		}
@@ -307,7 +307,7 @@ func (j *jsVM) workerCreate(rawurl, src, typ string) (int64, error) {
 		return 0, fmt.Errorf("worker prelude: %w", err)
 	}
 	if src == "" {
-		body, status, err := t.fetchResource(rawurl)
+		body, status, err := t.fetchResourceKind(rawurl, KindScript)
 		if err != nil {
 			vm.Close()
 			return 0, err
@@ -331,7 +331,7 @@ func (j *jsVM) workerCreate(rawurl, src, typ string) (int64, error) {
 		var err error
 		if typ == "module" {
 			vm.SetModuleLoader(func(_ *quickjs.VM, name string) (string, error) {
-				b, _, err := t.fetchResource(name)
+				b, _, err := t.fetchResourceKind(name, KindScript)
 				return b, err
 			}, func(_ *quickjs.VM, base, name string) (string, error) {
 				if strings.Contains(name, "://") {

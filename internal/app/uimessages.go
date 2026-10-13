@@ -308,6 +308,9 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 			Delta int `json:"delta"`
 		}](raw).Delta)
 	default:
+		if strings.HasPrefix(typ, "data.") && a.onDataMessage(typ, raw, tabFor("")) {
+			return
+		}
 		a.logf("ui: unknown message %q", typ)
 	}
 }
@@ -361,6 +364,8 @@ func (a *App) onSetting(key string, v any) {
 		}
 	case "zoom.default":
 		a.applyZoom()
+	case "data.level", "data.budget", "data.sites", "data.agentLite", "data.showMeter":
+		a.onDataSetting(key)
 	}
 	a.markState()
 }

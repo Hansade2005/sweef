@@ -21,10 +21,15 @@ var refRe = regexp.MustCompile(`(?:src|href)="([^"#]+\.(?:js|css))"`)
 
 const (
 	// Budgets (uncompressed bytes). The chrome page is parsed on every start, so its eager set
-	// (what chrome/index.html references) is held to the 150 KB aim; the sidebar and palette
-	// load lazily. Other pages load on demand. The total is a ceiling on everything embedded.
+	// (what chrome/index.html references) is held to the 150 KB aim; the sidebar, palette and the
+	// data popover load lazily. Other pages load on demand. The total is a ceiling on everything embedded.
+	//
+	// The total was raised from 245 KB to 295 KB on purpose for the Data Saver UI (popover, Settings ->
+	// Data with its plain-language level cards, the hard-stop page, the onboarding step, about 46 KB, of
+	// which about 9 KB are copy in strings.js). The chrome page's eager set went from about 122 KB to
+	// about 134 KB: the meter chip is eager (tiny), the popover is lazy, and the copy deck is shared.
 	budgetPage  = 150 * 1024
-	budgetTotal = 245 * 1024
+	budgetTotal = 295 * 1024
 )
 
 // pageWeight sums the JS and CSS an HTML page loads eagerly.
@@ -199,6 +204,25 @@ func (r *rig) open(name string) *preview.Session {
 	}
 	r.t.Fatalf("no scenario %q", name)
 	return nil
+}
+
+// openSet opens a scenario and also runs its Setup, like the preview does (open alone skips it).
+func (r *rig) openSet(name string) *preview.Session {
+	r.t.Helper()
+	s := r.open(name)
+	for _, sc := range preview.Scenarios() {
+		if sc.Name == name {
+			if sc.Setup != "" {
+				s.Run(sc.Setup)
+				s.Settle()
+			}
+			if sc.Then != "" {
+				s.Run(sc.Then)
+				s.Settle()
+			}
+		}
+	}
+	return s
 }
 
 func (r *rig) run(s *preview.Session, js string) {
@@ -601,7 +625,7 @@ func TestNewTabOnboardingSettingsOverlay(t *testing.T) {
 	if p := post(o, "agent.setKey"); p == nil || p["key"] != "sk-ant-api03-abcdefghijklmnop" {
 		t.Errorf("agent.setKey: %v", o.Posts())
 	}
-	r.run(o, `__send('onboarding.step',{n:3});document.querySelectorAll('.ch')[1].click()`)
+	r.run(o, `__send('onboarding.step',{n:4});document.querySelectorAll('.ch')[1].click()`) // step 3 is the data plan, step 4 privacy
 	if p := post(o, "settings.set"); p == nil || p["key"] != "privacy.trackers" || p["value"] != "strict" {
 		t.Errorf("privacy choice: %v", o.Posts())
 	}
@@ -680,5 +704,249 @@ func TestErrorPageActions(t *testing.T) {
 	}
 	if p := post(s, "agent.send"); p == nil || p["source"] != "error" || !strings.Contains(fmt.Sprint(p["text"]), "DNS_NOT_FOUND") {
 		t.Errorf("Ask to fix: %v", s.Posts())
+	}
+}
+
+// ---- Data Saver ------------------------------------------------------------------------
+
+func TestDataPopoverTalksToGo(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.openSet("data-popover-light")
+	// the measured and estimated numbers are visibly different things
+	rows := evalS(t, s, `Array.prototype.map.call(document.querySelectorAll('.dpop .drow'), function(r){var p=r.querySelector('.dpill');return p.className+'|'+p.textContent+'|'+r.querySelector('.dv').textContent})`).([]any)
+	if len(rows) != 3 || !strings.HasPrefix(rows[0].(string), "dpill m|Measured|640 KB") || !strings.HasPrefix(rows[1].(string), "dpill m|Measured|310 KB") || !strings.HasPrefix(rows[2].(string), "dpill e|Estimate|about 1.9 MB") {
+		t.Fatalf("rows: %v", rows)
+	}
+	if n := evalS(t, s, `document.querySelectorAll('.dpop .tsite').length`).(float64); n != 5 {
+		t.Errorf("top five sites, got %v", n)
+	}
+	r.run(s, `document.querySelectorAll('.dpop .dacts .btn')[0].click()`)
+	if p := post(s, "data.loadSkipped"); p == nil {
+		t.Errorf("Load images must post data.loadSkipped, got %v", s.Posts())
+	}
+	s.ClearPosts()
+	r.run(s, `document.querySelectorAll('.dpop .dseg')[1].querySelectorAll('button')[1].click()`) // Always full
+	if p := post(s, "data.siteRule"); p == nil || p["rule"] != "full" || p["origin"] != "https://www.wsj.com" {
+		t.Errorf("site rule post: %v", s.Posts())
+	}
+	s.ClearPosts()
+	r.run(s, `document.querySelectorAll('.dpop .dseg')[0].querySelectorAll('button')[2].click()`) // Text first
+	if p := post(s, "data.setLevel"); p == nil || p["level"] != "strict" {
+		t.Errorf("level post: %v", s.Posts())
+	}
+	s.ClearPosts()
+	r.run(s, `document.querySelectorAll('.dpop .dacts .btn')[1].click()`)
+	if post(s, "data.loadFully") == nil {
+		t.Errorf("Load fully, once must post data.loadFully, got %v", s.Posts())
+	}
+	if e := s.Errors(); len(e) > 0 {
+		t.Errorf("errors: %v", e)
+	}
+	// a private window never lists the sites seen in normal ones
+	p := r.openSet("data-popover-incognito")
+	if n := evalS(t, p, `document.querySelectorAll('.dpop .tsite').length`).(float64); n != 0 {
+		t.Errorf("private popover lists sites: %v", n)
+	}
+}
+
+func TestDataChipToneIsCalmUntilWarned(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	cls := func(name string) string {
+		s := r.openSet(name)
+		return evalS(t, s, `document.getElementById('databtn').className+'|'+document.getElementById('databtn').textContent`).(string)
+	}
+	if c := cls("data-popover-light"); strings.Contains(c, " w1") || strings.Contains(c, " w2") || strings.Contains(c, " x") || !strings.Contains(c, "39 MB / 100 MB") {
+		t.Errorf("39%%: %q", c)
+	}
+	if c := cls("data-popover-warn"); !strings.Contains(c, " w1") || strings.Contains(c, " x") {
+		t.Errorf("78%%: %q", c)
+	}
+	if c := cls("data-popover-exhausted"); !strings.Contains(c, " x") {
+		t.Errorf("exhausted: %q", c)
+	}
+	// no budget: only what was used, no limit and no fill
+	if c := cls("data-popover-nolimit"); strings.Contains(c, "/") || !strings.Contains(c, "datachip") {
+		t.Errorf("unlimited: %q", c)
+	}
+	// the chip hides when the meter is switched off or counting is unavailable
+	s := r.openSet("data-popover-light")
+	r.run(s, `__send('state.patch',{data:{showMeter:false}})`)
+	if v := evalS(t, s, `document.getElementById('databtn').classList.contains('hide')`); v != true {
+		t.Errorf("showMeter=false should hide the chip")
+	}
+	r.run(s, `__send('state.patch',{data:{showMeter:true,available:false}})`)
+	if v := evalS(t, s, `document.getElementById('databtn').classList.contains('hide')`); v != true {
+		t.Errorf("counting unavailable should hide the chip (no fake zeros)")
+	}
+}
+
+func TestDataSettingsControls(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.openSet("data-settings-light")
+	if n := evalS(t, s, `document.querySelectorAll('.lvl').length`).(float64); n != 3 {
+		t.Fatalf("level cards: %v", n)
+	}
+	text := evalS(t, s, `document.body.innerText`).(string)
+	for _, want := range []string{"Counts the data you use", "Does not send pages through another company's servers", "Pauses background tabs", "Shows no images until you tap them", "What it does not do", "Never added", "Measured", "Estimate", "Reset counter", "maps.example.com"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("settings lacks %q", want)
+		}
+	}
+	click := func(js string) { s.ClearPosts(); r.run(s, js) }
+	click(`document.querySelectorAll('.pchip')[1].click()`)
+	if p := post(s, "data.setBudget"); p == nil || p["limitMB"] != float64(500) || p["enabled"] != true {
+		t.Errorf("500 MB preset: %v", s.Posts())
+	}
+	click(`document.querySelectorAll('.pchip')[2].click()`)
+	if p := post(s, "data.setBudget"); p == nil || p["limitMB"] != float64(1024) {
+		t.Errorf("1 GB preset: %v", s.Posts())
+	}
+	click(`document.querySelectorAll('.pchip')[3].click()`)
+	if p := post(s, "data.setBudget"); p == nil || p["enabled"] != false {
+		t.Errorf("No limit: %v", s.Posts())
+	}
+	click(`document.querySelectorAll('.lvl')[2].click()`)
+	if p := post(s, "data.setLevel"); p == nil || p["level"] != "strict" {
+		t.Errorf("level card: %v", s.Posts())
+	}
+	// period, reset day and hard stop
+	r2 := r.openSet("data-settings-light")
+	r.run(r2, `__send('state.patch',{data:{budget:{enabled:true}}})`)
+	r2.ClearPosts()
+	r.run(r2, `Array.prototype.filter.call(document.querySelectorAll('.seg button'), function(b){return b.textContent==='Week'})[0].click()`)
+	if p := post(r2, "data.setBudget"); p == nil || p["period"] != "week" {
+		t.Errorf("period: %v", r2.Posts())
+	}
+	if v := evalS(t, r2, `document.querySelector('select.field').options[1].textContent`); v != "Monday" {
+		t.Errorf("week reset day should be a weekday, got %v", v)
+	}
+	r2.ClearPosts()
+	r.run(r2, `document.querySelector('.switch[aria-disabled]') ? 0 : 0; var sw=document.querySelectorAll('.srow .switch')[0]; sw.click()`)
+	if p := post(r2, "data.setBudget"); p == nil || p["hardStop"] != true {
+		t.Errorf("hard stop: %v", r2.Posts())
+	}
+	// reset asks first
+	r2.ClearPosts()
+	r.run(r2, `Array.prototype.filter.call(document.querySelectorAll('button'), function(b){return b.textContent==='Reset counter'})[0].click()`)
+	if post(r2, "data.reset") != nil {
+		t.Errorf("reset must ask for confirmation first")
+	}
+	r.run(r2, `Array.prototype.filter.call(document.querySelectorAll('button'), function(b){return b.textContent==='Yes, reset'})[0].click()`)
+	if post(r2, "data.reset") == nil {
+		t.Errorf("confirmed reset should post data.reset")
+	}
+	// forgetting a site rule
+	r2.ClearPosts()
+	r.run(r2, `Array.prototype.filter.call(document.querySelectorAll('button'), function(b){return b.textContent==='Forget'})[0].click()`)
+	if p := post(r2, "data.siteRule"); p == nil || p["rule"] != "" {
+		t.Errorf("forget: %v", r2.Posts())
+	}
+	for _, x := range []*preview.Session{s, r2} {
+		if e := x.Errors(); len(e) > 0 {
+			t.Errorf("errors: %v", e)
+		}
+	}
+}
+
+func TestDataStopPage(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.openSet("data-stop-light")
+	text := evalS(t, s, `document.body.innerText`).(string)
+	for _, want := range []string{"You have used your 100 MB this month", "resets in 19 days", "grocer.example.com", "Load this page once", "Raise limit", "Wait until reset"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("stop page lacks %q in %q", want, text)
+		}
+	}
+	for _, bad := range []string{"!", "warning", "careful", "stop"} {
+		if strings.Contains(strings.ToLower(text), bad) && bad != "stop" {
+			t.Errorf("copy should stay calm, found %q", bad)
+		}
+	}
+	s.ClearPosts()
+	r.run(s, `document.querySelectorAll('.acts .btn')[0].click()`)
+	if p := post(s, "data.loadOnce"); p == nil || !strings.HasPrefix(fmt.Sprint(p["url"]), "https://grocer.example.com") {
+		t.Errorf("load once: %v", s.Posts())
+	}
+	s.ClearPosts()
+	r.run(s, `document.querySelectorAll('.acts .btn')[2].click()`)
+	if post(s, "data.wait") == nil {
+		t.Errorf("wait: %v", s.Posts())
+	}
+	// raise limit: presets above the current limit, then raise and reload
+	s.ClearPosts()
+	r.run(s, `document.querySelectorAll('.acts .btn')[1].click()`)
+	if n := evalS(t, s, `document.querySelectorAll('.raise .pchip').length`).(float64); n < 2 {
+		t.Fatalf("raise presets: %v", n)
+	}
+	r.run(s, `document.querySelector('.raise .btn.primary').click()`)
+	if p := post(s, "data.setBudget"); p == nil || p["limitMB"] != float64(250) {
+		t.Errorf("raise: %v", s.Posts())
+	}
+	if post(s, "nav.reload") == nil {
+		t.Errorf("raising the limit should reload the page: %v", s.Posts())
+	}
+	if e := s.Errors(); len(e) > 0 {
+		t.Errorf("errors: %v", e)
+	}
+}
+
+func TestOnboardingDataPlanStep(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.openSet("onboarding-3-data-picked")
+	if n := evalS(t, s, `document.querySelectorAll('.plan').length`).(float64); n != 4 {
+		t.Fatalf("plans: %v", n)
+	}
+	var seenBudget, seenLevel bool
+	for _, p := range s.Posts() {
+		if p[0] == "data.setBudget" && p[1].(map[string]any)["limitMB"] == float64(100) {
+			seenBudget = true
+		}
+		if p[0] == "data.setLevel" && p[1].(map[string]any)["level"] == "strict" {
+			seenLevel = true
+		}
+	}
+	if !seenBudget || !seenLevel {
+		t.Errorf("a 100 MB plan should set the budget and start in Text first: %v", s.Posts())
+	}
+	if v := evalS(t, s, `document.getElementById('dots').children.length`); v != float64(4) {
+		t.Errorf("onboarding should have 4 steps, got %v", v)
+	}
+	if v := evalS(t, s, `document.querySelector('.plannote').textContent`).(string); !strings.Contains(v, "Starting with Text first") {
+		t.Errorf("confirmation line: %q", v)
+	}
+	if e := s.Errors(); len(e) > 0 {
+		t.Errorf("errors: %v", e)
+	}
+}
+
+func TestNewTabDataLineAndSidekickResearchLine(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	nt := r.openSet("data-newtab-light")
+	if v := evalS(t, nt, `document.getElementById('dataline').textContent`); v != "61 MB left this month" {
+		t.Errorf("new tab line: %q", v)
+	}
+	r.run(nt, `__send('state.patch',{data:{budget:{enabled:false}}})`)
+	if v := evalS(t, nt, `document.getElementById('dataline').classList.contains('hide')`); v != true {
+		t.Errorf("no budget: the line must disappear")
+	}
+	sk := r.openSet("data-sidekick-light")
+	if v := evalS(t, sk, `(document.querySelector('.amdata')||{textContent:''}).textContent`).(string); !strings.Contains(v, "Research used 412 KB") || !strings.Contains(v, "About 1.3 MB not loaded (estimate)") {
+		t.Errorf("sidekick line: %q", v)
+	}
+	// when the engine could not count, no line is invented
+	r.run(sk, `SW.sk.send("again");__send("agent.event",{runId:"r9",kind:"text",text:"ok"});__send("agent.event",{runId:"r9",kind:"done",ttft:300,data:{bytes:0,available:false}})`)
+	if n := evalS(t, sk, `document.querySelectorAll('.amdata').length`).(float64); n != 1 {
+		t.Errorf("unavailable counting must not add a line, have %v", n)
+	}
+	for _, x := range []*preview.Session{nt, sk} {
+		if e := x.Errors(); len(e) > 0 {
+			t.Errorf("errors: %v", e)
+		}
 	}
 }

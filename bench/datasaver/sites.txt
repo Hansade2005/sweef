@@ -1,0 +1,28 @@
+# Data Saver benchmark site list. FROZEN: chosen by hand before any measurement run, never tuned afterwards.
+# Format: URL | one-line reason.  Lines starting with # are comments.
+# A site that fails in ANY mode (HTTP status >= 400 on the main document, navigation error, load timeout) is excluded
+# for ALL modes by the tool and listed as excluded in the report; entries here are never edited to fix that.
+# Integrity: sites.txt.sha256 holds the hash of the non-comment lines; the tool refuses to run if it does not match.
+https://en.wikipedia.org/wiki/Web_browser | reference article, long text with many thumbnails, server-rendered
+https://en.wikivoyage.org/wiki/Lisbon | travel guide article on a MediaWiki site, maps and photos
+https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching | MDN reference page, modern docs site with JS
+https://docs.python.org/3/library/asyncio.html | static documentation page (Sphinx), almost no third parties
+https://go.dev/doc/effective_go | long single-page doc, light CSS and JS
+https://news.ycombinator.com/ | Hacker News front page, tiny HTML, no images
+https://www.joelonsoftware.com/2000/04/06/things-you-should-never-do-part-i/ | classic blog post that is routinely linked from Hacker News, WordPress theme
+https://github.com/golang/go | GitHub repository page, heavy JS app with server-rendered file list
+https://stackoverflow.com/questions/927358/how-do-i-undo-the-most-recent-local-commits-in-git | Stack Overflow question with answers, ads and trackers
+https://www.bbc.com/news | news front page, many images and scripts
+https://www.theguardian.com/environment/2019/may/06/human-society-under-urgent-threat-loss-of-earth-natural-life-un-report | news article with hero image, related links, ads
+https://www.npr.org/ | news front page, image-heavy cards
+https://arstechnica.com/ | tech news front page, ads and trackers
+https://www.theverge.com/ | script-heavy news front page
+https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276 | shopping category page, product grid with many images
+https://www.newegg.com/p/pl?d=laptop | second shopping category page, listing grid
+https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606 | long Discourse forum thread, JS app
+https://www.allrecipes.com/recipe/10813/best-chocolate-chip-cookies/ | recipe blog page, ad-heavy
+https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-74.0071 | weather forecast page, government site, light
+https://www.lonelyplanet.com/japan | travel destination guide, image-heavy marketing page
+https://pypi.org/project/requests/ | package index page, light server-rendered
+https://www.gov.uk/browse/driving | government text page, near-zero JS, plain baseline
+https://dev.to/ | developer blog front page, feed of cards with images

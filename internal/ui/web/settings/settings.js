@@ -2,7 +2,7 @@
 (function () {
   var SW = window.SW, S = window.S, h = SW.h, icon = SW.icon, post = SW.post, $ = function (id) { return document.getElementById(id); };
   var cur = (SW.query("s") || (location.hash || "").slice(1) || "general").split("/")[0], q = "";
-  var SECS = [["general", "globe", S.set.nav.general], ["search", "search", S.set.nav.search], ["privacy", "shield", S.set.nav.privacy], ["agent", "spark", S.f(S.set.nav.agent)], ["appearance", "brush", S.set.nav.appearance], ["downloads", "download", S.set.nav.downloads], ["about", "info", S.f(S.set.nav.about)]];
+  var SECS = [["general", "globe", S.set.nav.general], ["search", "search", S.set.nav.search], ["privacy", "shield", S.set.nav.privacy], ["data", "drop", S.data.set.nav], ["agent", "spark", S.f(S.set.nav.agent)], ["appearance", "brush", S.set.nav.appearance], ["downloads", "download", S.set.nav.downloads], ["about", "info", S.f(S.set.nav.about)]];
   $("ttl").textContent = S.set.title; $("sic").appendChild(icon("search", 16)); $("sq").setAttribute("placeholder", S.set.search); $("sq").setAttribute("aria-label", S.set.search);
   var val = function (k, d) { return SW.setting(k, d); };
   function toggle(key, def) {
@@ -38,6 +38,7 @@
         group(g.gTrack, [row(g.track, g.trackD, seg("privacy.trackers", [["standard", g.std], ["strict", g.strict], ["off", g.off]], "standard")), row(g.gpc, g.gpcD, toggle("privacy.gpc", true)), row(g.https, g.httpsD, toggle("privacy.httpsUpgrade", true))]),
         group(g.gData, [row(g.clearExit, g.clearExitD, toggle("privacy.clearOnExit", false)), row(g.clearNow, g.clearNowD, btn(g.clearBtn, function () { post("data.clear"); })), row(g.site, g.siteD, btn(g.open, function () { post("tab.new", { url: "sweef://settings#site" }); }))])];
     },
+    data: function () { return SW.dataSet({ row: row, group: group, btn: btn, toggle: toggle }); },
     agent: function () {
       var g = T.agent, ag = SW.state.agent || {}, hasKey = ag.hasKey !== false, key = h("input.field.w", { type: "password", placeholder: S.ob.keyPlaceholder, "aria-label": g.key, autocomplete: "off" }), sites = (ag.sites || []).slice(0, 8);
       return [h("h2", F(T.nav.agent)), h("p.lead", F(g.lead)),

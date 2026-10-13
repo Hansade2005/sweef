@@ -263,6 +263,7 @@ func (h *Host) Send(text, mode string, pc app.PageContext) <-chan app.AgentEvent
 	h.cur = r
 	h.mu.Unlock()
 
+	be.a.AgentDataBegin() // start measuring what this run loads (shown as "Research used ..." when it ends)
 	// the page the user is on is the agent's starting tab
 	be.setActive("")
 	if pc.TabID != "" {

@@ -226,6 +226,10 @@ func (p *painter) paintReplaced(b *lbox) {
 		return
 	}
 	rad := shrinkRadii(p.radii(b), [4]float64{b.bor[0] + b.pad[0], b.bor[1] + b.pad[1], b.bor[2] + b.pad[2], b.bor[3] + b.pad[3]})
+	if r.lite != "" {
+		p.paintLite(b, r, cr)
+		return
+	}
 	if r.bitmap || r.kind == "canvas" || r.kind == "video" {
 		if r.img != nil || r.bitmap {
 			fit := b.st.ObjectFit
@@ -239,6 +243,7 @@ func (p *painter) paintReplaced(b *lbox) {
 	}
 	if r.img == nil {
 		if r.kind == "img" && r.url != "" {
+			p.hintImage(r.url, cr)
 			p.paintSVGImg(b, r, cr, rad)
 		}
 		return

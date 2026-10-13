@@ -87,3 +87,6 @@
 .sendbtn { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--ink-text); display: inline-flex; align-items: center; justify-content: center; flex: none; transition: transform var(--dur-1) var(--ease), background var(--dur-2); }
 :root[data-theme="dark"] .sendbtn, :root[data-theme="incognito"] .sendbtn { background: var(--accent); color: var(--accent-ink); }
 .sendbtn:hover { transform: scale(1.06); } .sendbtn:active { transform: scale(.94); } .sendbtn.off { opacity: .28; pointer-events: none; } .sendbtn.stop { background: var(--danger); color: #fff; }
+
+.amdata { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: var(--fs-sm); color: var(--text-3); }
+.amdata .ic { color: var(--accent); } .amdata b { color: var(--text-2); font-weight: 600; } .amdata .est { flex-basis: 100%; padding-left: 19px; margin-top: -2px; color: var(--text-3); font-size: 11.5px; }

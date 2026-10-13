@@ -67,6 +67,12 @@ html, body { background: transparent; height: 100%; overflow: hidden; user-selec
 .agentbtn.working { background: var(--ink); color: var(--ink-text); box-shadow: 0 0 0 1.5px var(--mint); }
 .agentbtn.working .ic { color: var(--mint); }
 .agentbtn.waiting { box-shadow: inset 0 0 0 1.5px var(--warn); }
+/* data meter chip: the pill itself fills left to right as the budget is used (calm, no ring that could look like a spinner) */
+.datachip { --fill: var(--accent-soft); --tint: var(--accent); display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 9px; margin-left: 6px; border-radius: var(--r-pill); font-size: var(--fs-sm); font-weight: 650; color: var(--text-2); background: linear-gradient(90deg, var(--fill) var(--p, 0%), var(--glass) var(--p, 0%)); box-shadow: inset 0 0 0 1px var(--line); flex: none; font-variant-numeric: tabular-nums; transition: color var(--dur-1); }
+.datachip:hover, .datachip[aria-expanded="true"] { color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
+.datachip .ic { color: var(--tint); }
+.datachip.w1, .datachip.w2 { --fill: var(--warn-soft); --tint: var(--warn); color: var(--warn); } .datachip.w2 { box-shadow: inset 0 0 0 1px var(--warn); }
+.datachip.x { --fill: var(--warn-soft); --tint: var(--warn); color: var(--warn); box-shadow: inset 0 0 0 1.5px var(--warn); }  /* used up: firm amber, not an error red */
 #dlbtn { position: relative; }
 #dlbtn svg.ring { position: absolute; inset: 0; }
 #dlbtn.active { color: var(--accent); }

@@ -69,7 +69,7 @@ func (n *netSource) get(idx int64) ([]byte, error) {
 	if end >= n.size && n.size > 0 {
 		end = n.size - 1
 	}
-	r, err := n.j.tab.httpForScript("GET", n.url, map[string]string{"Range": fmt.Sprintf("bytes=%d-%d", start, end)}, "")
+	r, err := n.j.tab.httpForScriptKind(KindMedia, "GET", n.url, map[string]string{"Range": fmt.Sprintf("bytes=%d-%d", start, end)}, "")
 	if err != nil {
 		return nil, err
 	}
@@ -288,6 +288,13 @@ func (m *mediaHost) fns() map[string]hostFn {
 		hj, _ := json.Marshal(r["headers"])
 		return map[string]any{"status": r["status"], "statusText": r["statusText"], "url": r["url"], "headers": string(hj), "b64": base64.StdEncoding.EncodeToString([]byte(body))}, nil
 	}
+	// Data Saver: true when media must not preload or autoplay (the page's play() still loads it)
+	f["mediaLite"] = func(a []any) (any, error) {
+		if m.j.tab == nil {
+			return false, nil
+		}
+		return m.j.tab.policy().BlockMediaLoad, nil
+	}
 	f["mediaCanPlay"] = func(a []any) (any, error) { return media.CanPlayType(argS(a, 0)), nil }
 	f["mediaIsTypeSupported"] = func(a []any) (any, error) { return media.IsTypeSupportedMSE(argS(a, 0)), nil }
 	f["mediaFFmpeg"] = func(a []any) (any, error) { return media.FFmpegPath() != "", nil }
@@ -308,7 +315,7 @@ func (m *mediaHost) fns() map[string]hostFn {
 			return m.openSource(media.BytesSource(b), nil)
 		}
 		ns := &netSource{j: m.j, url: abs, chunks: map[int64][]byte{}, size: 1 << 40}
-		r, err := m.j.tab.httpForScript("GET", abs, map[string]string{"Range": "bytes=0-" + strconv.Itoa(mediaChunk-1)}, "")
+		r, err := m.j.tab.httpForScriptKind(KindMedia, "GET", abs, map[string]string{"Range": "bytes=0-" + strconv.Itoa(mediaChunk-1)}, "")
 		if err != nil {
 			return map[string]any{"ok": false, "error": "network", "message": err.Error()}, nil
 		}
@@ -415,16 +422,22 @@ func (m *mediaHost) fns() map[string]hostFn {
 		var data []byte
 		if strings.HasPrefix(abs, "data:") {
 			data, err = mediaDataURL(abs)
+		} else if pol := m.j.tab.policy(); pol.NoImages {
+			// strict: the poster is an image like any other
+			m.j.tab.noteSkipped(KindImage, abs, -1, -1, "poster", 0)
+			return false, nil
 		} else {
-			var r map[string]any
-			r, err = m.j.tab.httpForScript("GET", abs, nil, "")
-			if err == nil {
-				if st, _ := r["status"].(int); st != 200 {
-					err = fmt.Errorf("status %d", st)
-				}
-				s, _ := r["body"].(string)
-				data = []byte(s)
+			var body string
+			var status int
+			o := fetchOpts{kind: KindImage}
+			if pol.ImageMaxBytes > 0 {
+				o.maxBody = int64(pol.ImageMaxBytes)
 			}
+			body, status, err = m.j.tab.fetchRes(abs, o)
+			if err == nil && status != 200 {
+				err = fmt.Errorf("status %d", status)
+			}
+			data = []byte(body)
 		}
 		if err != nil {
 			return false, nil

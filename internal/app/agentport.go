@@ -101,6 +101,7 @@ func (a *App) AgentRunOnTab(tabID string, f func(t *engine.Tab) error) error {
 	if e == nil {
 		return errors.New("no such tab")
 	}
+	a.post(func() { a.agentTouch(tabID) })
 	ch := make(chan error, 1)
 	if !e.w.do(func() {
 		err := f(e.t)
@@ -149,7 +150,11 @@ func (a *App) AgentNavigate(ctx context.Context, tabID, raw string) error {
 		return errors.New("no such tab")
 	}
 	e.loadErr.Store("")
-	if err := a.onLoop(ctx, func() { a.loadURL(tabID, raw, modePush, false) }); err != nil {
+	if err := a.onLoop(ctx, func() {
+		e.agentLoad.Store(true) // the agent never needs images, fonts or media (data.agentLite)
+		a.agentTouch(tabID)
+		a.loadURL(tabID, raw, modePush, false)
+	}); err != nil {
 		return err
 	}
 	if err := a.AgentSync(ctx, tabID); err != nil {
@@ -194,7 +199,7 @@ func (a *App) AgentTraverse(ctx context.Context, tabID string, delta int) error 
 // AgentOpenTab opens and activates a new tab and waits for its load.
 func (a *App) AgentOpenTab(ctx context.Context, raw string) (string, error) {
 	var id string
-	if err := a.onLoop(ctx, func() { id = a.newTab(raw, false, true) }); err != nil {
+	if err := a.onLoop(ctx, func() { id = a.openTab(openOpts{URL: raw, Activate: true, Agent: true}); a.agentTouch(id) }); err != nil {
 		return "", err
 	}
 	if id == "" {

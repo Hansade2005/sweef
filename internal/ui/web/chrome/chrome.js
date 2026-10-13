@@ -2,7 +2,7 @@
 (function () {
   var SW = window.SW, S = window.S, h = SW.h, icon = SW.icon, post = SW.post;
   var $ = function (id) { return document.getElementById(id); };
-  var E = { tabs: $("tabs"), wrap: $("tabs-wrap"), strip: $("strip"), url: $("url"), omni: $("omni"), urlview: $("urlview"), secbtn: $("secbtn"), star: $("star"), reload: $("reload"), back: $("back"), fwd: $("fwd"), sb: $("sbtoggle"), agent: $("agentbtn"), dl: $("dlbtn"), menu: $("menubtn"), progress: $("progress"), compat: $("compat"), layer: $("layer"), viewport: $("viewport"), toasts: $("toasts"), find: $("find"), bm: $("bmbar") };
+  var E = { tabs: $("tabs"), wrap: $("tabs-wrap"), strip: $("strip"), url: $("url"), omni: $("omni"), urlview: $("urlview"), secbtn: $("secbtn"), star: $("star"), reload: $("reload"), back: $("back"), fwd: $("fwd"), sb: $("sbtoggle"), agent: $("agentbtn"), dl: $("dlbtn"), data: $("databtn"), menu: $("menubtn"), progress: $("progress"), compat: $("compat"), layer: $("layer"), viewport: $("viewport"), toasts: $("toasts"), find: $("find"), bm: $("bmbar") };
   var ui = { sb: null, dismissed: {}, lastVp: "", zoom: 100 };
   var st = function () { return SW.state; };
   function activeTab() { var s = st(), a = s.tabs || []; for (var i = 0; i < a.length; i++) if (a[i].id === s.active) return a[i]; return a[0] || {}; }
@@ -211,8 +211,23 @@
     var disp = /^sweef:\/\/newtab/.test(url) ? "" : url;
     if (!focus && lastUrl !== disp) { lastUrl = disp; E.url.value = disp; if (omni) omni.typed = disp; renderUrlView(disp); }
     var open = sbOpen(); E.sb.setAttribute("aria-pressed", open ? "true" : "false"); E.sb.classList.toggle("on", open);
-    renderAgentBtn(open); renderDl(); renderProgress(loading); renderCompat(); renderBmBar();
+    renderAgentBtn(open); renderDl(); renderData(); renderProgress(loading); renderCompat(); renderBmBar();
   }
+  /* Data meter chip: a calm pill (ring + used / limit). It shows only when the meter is on, counting works, and a budget or a saver level is set.
+     The popover (ring, this page, top sites) loads on first click. */
+  function renderData() {
+    var d = st().data || {}, b = d.budget || {}, el = E.data, T = S.data, on = d.showMeter !== false && d.available !== false && (b.enabled || (d.level && d.level !== "off"));
+    el.classList.toggle("hide", !on); if (!on) { el._k = ""; return; }
+    var used = d.used || 0, free = !b.enabled, lim = free ? 0 : (b.limitMB || 0), pct = free ? 0 : (b.pct || 0), tone = SW.dataTone(b);
+    var limT = lim >= 1024 && lim % 1024 === 0 ? (lim / 1024) + " GB" : lim + " MB", usedT = SW.fmtBytes(used), per = T.period[b.period] || T.period.month;
+    var k = [used, lim, tone, Math.round(pct * 2)].join("|"); if (el._k === k) return; el._k = k;
+    SW.clear(el); el.className = "datachip" + (tone ? " " + tone : "");
+    var fill = free ? 0 : Math.max(0, Math.min(100, pct)); el.style.setProperty("--p", fill.toFixed(1) + "%");  /* the pill fills as the budget is used */
+    el.appendChild(icon("drop", 14)); el.appendChild(h("span.dt", { text: free ? usedT : usedT + " / " + limT }));
+    label(el, free ? S.f(T.chipAriaFree, { period: per, used: usedT }) : S.f(T.chipAria, { period: per, used: usedT, limit: limT }));
+    el.setAttribute("title", free ? S.f(T.chipTipFree, { period: per, used: usedT }) : S.f(T.chipTip, { period: per, used: usedT, limit: limT }));
+  }
+  E.data.addEventListener("click", function () { SW.lazy(["/shared/datasaver.css", "/chrome/data.css", "/shared/datasaver.js", "/chrome/data.js"], function () { if (SW.dataPop) SW.dataPop.open(E.data); }); });
   function renderUrlView(u) {
     SW.clear(E.urlview);
     if (!u) { E.urlview.appendChild(h("em", { text: S.f(S.omni.placeholder) })); return; }

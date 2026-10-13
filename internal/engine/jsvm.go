@@ -19,8 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -30,7 +28,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	fnet "github.com/sweefbrowser/sweef/internal/net"
 	"modernc.org/quickjs"
@@ -499,9 +496,15 @@ func (j *jsVM) pump(budget time.Duration) bool {
 		j.drainScripts()
 		j.jobs()
 		delivered := j.drainAsync()
-		next := j.runTimers()
-		if wn := j.pumpWorkers(); wn >= 0 && (next < 0 || wn < next) {
-			next = wn
+		next := float64(-1)
+		if j.tab == nil || !j.tab.suspended() {
+			// A background tab under the Data Saver runs no timers (no polling, no
+			// animation frames) and no workers; promise jobs and results already
+			// delivered still flow, so an explicit evaluate does not hang.
+			next = j.runTimers()
+			if wn := j.pumpWorkers(); wn >= 0 && (next < 0 || wn < next) {
+				next = wn
+			}
 		}
 		if j.drainAsync() {
 			delivered = true
@@ -749,7 +752,7 @@ func (j *jsVM) installModuleLoader(docURL string) {
 		if !strings.HasPrefix(name, "http://") && !strings.HasPrefix(name, "https://") {
 			return "", fmt.Errorf("cannot resolve bare module specifier %q", name)
 		}
-		body, status, err := j.tab.fetchResource(name)
+		body, status, err := j.tab.fetchResourceKind(name, KindScript)
 		if err != nil {
 			return "", err
 		}
@@ -1217,145 +1220,6 @@ func (j *jsVM) queueFormSubmit(formID int64) {
 		return
 	}
 	j.pendingNav = "form://" + strconv.FormatInt(formID, 10)
-}
-
-// httpForScript performs fetch/XHR on behalf of page code: cookies, UA,
-// extra headers, route interception and the network ring all apply.
-func (t *Tab) httpForScript(method, rawurl string, headers map[string]string, body string) (map[string]any, error) {
-	if method == "" {
-		method = "GET"
-	}
-	abs, err := resolveURL(t.URL(), rawurl)
-	if err != nil {
-		return nil, err
-	}
-	if t.IsOfflineMode() {
-		return nil, fmt.Errorf("TypeError: Failed to fetch (offline)")
-	}
-	synth, m2, target, hdrs2, body2, rerr := t.routedRequest(strings.ToUpper(method), abs, headers, body)
-	if rerr != nil {
-		return nil, fmt.Errorf("TypeError: Failed to fetch (%s)", rerr.Error())
-	}
-	if synth != nil {
-		rb, _ := io.ReadAll(synth.Body)
-		h := map[string]any{}
-		for k, v := range synth.Header {
-			h[strings.ToLower(k)] = strings.Join(v, ", ")
-		}
-		t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: fnet.RequestRecord{Method: m2, URL: abs, FinalURL: abs, Status: synth.StatusCode, Headers: map[string]string{"x-sweef-route": "fulfill"}}})
-		return map[string]any{"status": synth.StatusCode, "statusText": http.StatusText(synth.StatusCode), "headers": h, "body": string(rb), "url": abs}, nil
-	}
-	abs, method, headers, body = target, m2, hdrs2, body2
-	t.touchNet()
-	var rdr io.Reader
-	if body != "" {
-		rdr = strings.NewReader(body)
-	}
-	req, err := http.NewRequestWithContext(t.eng.ctx, strings.ToUpper(method), abs, rdr)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", t.UserAgent())
-	req.Header.Set("Accept", "*/*")
-	for k, v := range t.ExtraHeaders() {
-		req.Header.Set(k, v)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	if ck := t.Context().JarRef().ForURL(abs); ck != "" {
-		req.Header.Set("Cookie", ck)
-	}
-	rec := fnet.RequestRecord{Method: req.Method, URL: abs, Headers: flattenHeaders(req.Header)}
-	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
-	start := time.Now()
-	res, err := t.eng.clientFor(t.Context()).Do(req)
-	if err != nil {
-		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": abs, "error": err.Error()}})
-		return nil, fmt.Errorf("TypeError: Failed to fetch (%s)", err.Error())
-	}
-	defer res.Body.Close()
-	data, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
-	for _, sc := range res.Header.Values("Set-Cookie") {
-		if c := parseCookie(sc, t.eng.now()); c != nil {
-			if c.Domain == "" {
-				c.Domain = res.Request.URL.Hostname()
-			}
-			t.Context().JarRef().Set(c)
-		}
-	}
-	rec.Status = res.StatusCode
-	rec.FinalURL = res.Request.URL.String()
-	rec.DurationMs = time.Since(start).Milliseconds()
-	rec.ResponseHeaders = flattenHeaders(res.Header)
-	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
-	hdr := map[string]any{}
-	for k, v := range res.Header {
-		hdr[strings.ToLower(k)] = strings.Join(v, ", ")
-	}
-	out := map[string]any{"status": res.StatusCode, "statusText": http.StatusText(res.StatusCode), "headers": hdr, "body": string(data), "url": rec.FinalURL}
-	if !utf8.Valid(data) {
-		// binary payload: the text form above is lossy, so also hand over the exact bytes
-		out["b64"] = base64.StdEncoding.EncodeToString(data)
-	}
-	return out, nil
-}
-
-// fetchResource GETs a sub-resource (script, module) as text through the
-// engine's HTTP cache: fresh hits cost nothing, stale ones are revalidated.
-func (t *Tab) fetchResource(rawurl string) (string, int, error) {
-	abs, err := resolveURL(t.URL(), rawurl)
-	if err != nil {
-		return "", 0, err
-	}
-	now := time.Now()
-	var hdr map[string]string
-	if e := t.eng.res.get(abs); e != nil {
-		if !e.expires.IsZero() && now.Before(e.expires) && !t.IsOfflineMode() {
-			t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: now, Data: fnet.RequestRecord{Method: "GET", URL: abs, FinalURL: abs, Status: e.status, Headers: map[string]string{"x-sweef-cache": "hit"}}})
-			return e.body, e.status, nil
-		}
-		hdr = map[string]string{}
-		if e.etag != "" {
-			hdr["If-None-Match"] = e.etag
-		}
-		if e.lastMod != "" {
-			hdr["If-Modified-Since"] = e.lastMod
-		}
-	}
-	r, err := t.httpForScript("GET", abs, hdr, "")
-	if err != nil {
-		return "", 0, err
-	}
-	status, _ := r["status"].(int)
-	body, _ := r["body"].(string)
-	h, _ := r["headers"].(map[string]any)
-	hv := func(k string) string { s, _ := h[k].(string); return s }
-	if status == http.StatusNotModified {
-		if e := t.eng.res.get(abs); e != nil {
-			hh := http.Header{}
-			hh.Set("Cache-Control", hv("cache-control"))
-			hh.Set("Expires", hv("expires"))
-			e.expires = freshness(hh, now)
-			return e.body, e.status, nil
-		}
-	}
-	if status == http.StatusOK {
-		hh := http.Header{}
-		for k := range h {
-			hh.Set(k, hv(k))
-		}
-		if cacheable(hh) {
-			exp := freshness(hh, now)
-			if exp.IsZero() {
-				// Memory-cache window: a resource fetched for this navigation
-				// (e.g. by the parallel prefetch) is reused by the loader.
-				exp = now.Add(5 * time.Second)
-			}
-			t.eng.res.put(abs, &resEntry{body: body, status: status, etag: hv("etag"), lastMod: hv("last-modified"), expires: exp, storedAt: now})
-		}
-	}
-	return body, status, nil
 }
 
 func (t *Tab) origin() string {

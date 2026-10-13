@@ -44,6 +44,18 @@
     var m = S.nt.statsLine.split(/(\{mem\}|\{tabs\}|\{brand\})/);
     m.forEach(function (p) { if (p === "{mem}") el.appendChild(h("b", { text: st.memMB >= 1024 ? (st.memMB / 1024).toFixed(1) + " GB" : Math.round(st.memMB) + " MB" })); else if (p === "{tabs}") el.appendChild(h("b", { text: String(st.tabs) })); else el.appendChild(document.createTextNode(S.f(p))); });
   }
+  /* "61 MB left this month": one calm line under the pill, only when a budget is set */
+  function dataline() {
+    var d = SW.state.data || {}, b = d.budget || {}, el = $("dataline"), T = S.data;
+    if (!b.enabled || d.available === false) { el.classList.add("hide"); el._k = ""; return; }
+    var left = Math.max(0, (b.limitMB || 0) * 1048576 - (b.usedBytes != null ? b.usedBytes : d.used || 0)), per = T.period[b.period] || T.period.month, n = b.resetsInDays || 1;
+    var lim = b.limitMB >= 1024 && b.limitMB % 1024 === 0 ? (b.limitMB / 1024) + " GB" : b.limitMB + " MB";
+    var text = b.exhausted ? S.f(T.nt.used, { limit: lim, period: per, when: n <= 1 ? T.nt.tomorrow : S.f(T.nt.inDays, { n: n }) }) : S.f(T.nt.left, { n: SW.fmtBytes(left), period: per });
+    var tone = SW.dataTone(b), k = text + tone; if (el._k === k) return; el._k = k;
+    el.classList.remove("hide"); el.className = "dataline" + (tone ? " " + tone : ""); el.id = "dataline"; SW.clear(el);
+    el.appendChild(icon("drop", 15)); el.appendChild(h("span", { text: text }));
+  }
+  $("dataline").addEventListener("click", function () { post("tab.new", { url: "sweef://settings#data" }); });
   function brand(inc) {
     var key = inc ? "i" : "n"; if (built === key) return; built = key; var b = $("brand"); SW.clear(b);
     if (inc) { b.appendChild(h("div.hat", icon("hat", 40))); } else b.appendChild(SW.wordmark(44, "ntw"));
@@ -54,6 +66,6 @@
       box.appendChild(h("div.cols", col([[S.nt.incNotSaved, S.nt.incNotSavedBody], [S.nt.incAgent, S.nt.incAgentBody]]), col([[S.nt.incNotPrivate, S.nt.incNotPrivateBody], [S.nt.incDownloads, S.nt.incDownloadsBody]])));
     }
   }
-  SW.on("render", function () { var inc = !!SW.state.incognito || forceInc; if (forceInc) document.documentElement.setAttribute("data-theme", "incognito"); brand(inc); sites(); stats(); });
+  SW.on("render", function () { var inc = !!SW.state.incognito || forceInc; if (forceInc) document.documentElement.setAttribute("data-theme", "incognito"); brand(inc); sites(); stats(); dataline(); });
   rows(); brand(forceInc); SW.ready("newtab");
 })();
