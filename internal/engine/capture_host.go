@@ -54,7 +54,7 @@ type MediaBroker interface {
 	// OpenDisplay returns a video source for a display source id and the surface's native size.
 	OpenDisplay(t *Tab, sourceID string) (capture.VideoSource, DisplayInfo, error)
 	// IDSalt is the secret mixed into the per-origin device ids. It must be stable across restarts.
-	IDSalt() string
+	IDSalt(t *Tab) string
 	// MediaChanged reports the live capture sessions of a tab after every change (may be called from any goroutine).
 	MediaChanged(t *Tab, act MediaActivity)
 }
@@ -361,7 +361,7 @@ func (h *capHost) closeAll() {
 
 func (h *capHost) salt() string {
 	if b := h.tab().broker(); b != nil {
-		if s := b.IDSalt(); s != "" {
+		if s := b.IDSalt(h.tab()); s != "" {
 			return s
 		}
 	}

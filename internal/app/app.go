@@ -154,6 +154,7 @@ type App struct {
 	fullscreen          bool
 	ovl                 overlayState
 	dat                 dataSaver
+	media               *appMedia // camera, microphone and screen-share permissions (media.go)
 }
 
 type rect struct{ X, Y, W, H float64 }
@@ -257,6 +258,7 @@ func New(cfg Config) (*App, error) {
 	if at, ok := cfg.Agent.(AgentAttacher); ok {
 		at.AttachApp(a)
 	}
+	a.media = newAppMedia(a)
 	a.startChrome()
 	return a, nil
 }

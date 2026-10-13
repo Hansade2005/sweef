@@ -36,6 +36,7 @@ func (a *App) buildState() map[string]any {
 	}
 	snap["agent"] = a.agentState(act, hasAct)
 	snap["data"] = a.dataState()
+	snap["media"] = a.mediaState(act, hasAct)
 	return snap
 }
 

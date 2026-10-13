@@ -56,7 +56,7 @@ func (b *testBroker) OpenDisplay(_ *Tab, id string) (capture.VideoSource, Displa
 	return cam, DisplayInfo{Label: "Tab: Test page", Surface: "browser", W: 1280, H: 720}, nil
 }
 
-func (b *testBroker) IDSalt() string { return "test-salt" }
+func (b *testBroker) IDSalt(*Tab) string { return "test-salt" }
 
 func (b *testBroker) MediaChanged(_ *Tab, a MediaActivity) {
 	b.mu.Lock()
