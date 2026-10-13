@@ -270,3 +270,26 @@ baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=
 [247/345] sweef-strict       run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold=  361626 warm=   55849 req= 34 ready= 1454ms ok
 [248/345] chromium           run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265150 warm=  163650 req=113 ready= 6191ms ok
 [249/345] chromium-savedata  run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265147 warm=  163740 req=113 ready= 6064ms ok
+[250/345] sweef-off          run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1327702 warm=   63260 req= 55 ready= 7776ms ok
+[251/345] sweef-strict       run 3 https://discuss.python.org/t/pep-703-making-the-global-inte… cold=  361904 warm=   55963 req= 34 ready= 1539ms ok
+[252/345] chromium           run 3 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265023 warm=  163653 req=113 ready= 6151ms ok
+[253/345] chromium-savedata  run 3 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2272152 warm=   57668 req=113 ready= 5803ms ok
+[254/345] sweef-off          run 3 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1350242 warm=   63402 req= 55 ready= 7878ms ok
+[255/345] sweef-standard     run 3 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1337744 warm=   89794 req= 47 ready= 7392ms ok
+[256/345] sweef-off          run 1 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold=  444990 warm=       0 req=  2 ready=  780ms FAIL main document HTTP 403
+[257/345] sweef-standard     run 1 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold=  444355 warm=       0 req=  2 ready=  907ms FAIL main document HTTP 403
+[258/345] sweef-strict       run 1 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold=  452450 warm=       0 req=  2 ready= 1230ms FAIL main document HTTP 403
+[259/345] chromium           run 1 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold= 4201649 warm= 2122848 req=200 ready= 3042ms ok
+[260/345] chromium-savedata  run 1 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold= 7350737 warm= 1431187 req=410 ready= 1827ms ok
+[261/345] sweef-standard     run 2 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[262/345] sweef-strict       run 2 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[263/345] chromium           run 2 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold= 1791536 warm=       0 req= 12 ready=  858ms FAIL main document HTTP 403
+[264/345] chromium-savedata  run 2 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold= 6475274 warm= 1057156 req=340 ready= 4092ms ok
+[265/345] sweef-off          run 2 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[266/345] sweef-strict       run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[267/345] chromium           run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[268/345] chromium-savedata  run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold= 4145040 warm= 1836808 req=203 ready= 2889ms ok
+[269/345] sweef-off          run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[270/345] sweef-standard     run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[271/345] sweef-off          run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 2008856 warm=  251243 req= 37 ready= 9246ms ok
+[272/345] sweef-standard     run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1732019 warm=    7835 req= 28 ready= 6534ms ok
