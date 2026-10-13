@@ -238,3 +238,21 @@ the completion value is JSON-serialised: the prelude exports
 sweefRef}`, functions into `"function"`, errors into `{name, message, stack}`,
 Maps/Sets into arrays, cycles into `"[Circular]"`, and caps depth at 8.
 Promises are awaited by Go through `.Then` plus the job pump.
+
+## Platform layer host functions
+
+`platformjs/boot.js` (registered as the `platform` prelude, see `platform.go`) adds three host
+functions and one lazy accessor per newer web API; the implementation of an API is fetched and
+evaluated on first use.
+
+| call | returns | notes |
+|---|---|---|
+| `platformSrc(name)` | module source or `""` | `platformjs/<name>.js`, evaluated as `function (g, H)`; `h` is the shared helper module |
+| `codec(op, ...)` | map | CompressionStream / DecompressionStream engine: `new(format, decompress)`, `push(id, b64)`, `pull(id)`, `end(id)`, `close(id)`; replies `{d: base64, more?: bool, err?: string}` |
+| `opfs(op, path, ...)` | varies | Origin Private File System store for the tab's origin: `stat`, `get`, `list`, `remove`, `read`, `write`, `move`, `usage`; errors are `"Name: message"` and become DOMExceptions |
+
+The prelude also exports `__swHistory` (the document's session-history entry list, used by the
+Navigation API) and `__swHooks.formData` (called by `FormData(form)` so form-associated custom
+elements can contribute values). Host functions may append to `jsVM.closers` to release goroutines
+and handles when the VM closes.
+

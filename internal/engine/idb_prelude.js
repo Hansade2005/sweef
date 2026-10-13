@@ -1161,13 +1161,19 @@
   defMethods(StorageManager.prototype, {
     estimate: function () {
       return new Promise(function (resolve) {
-        var e = H.storageEstimate();
-        resolve({ usage: e.usage, quota: e.quota, usageDetails: { indexedDB: e.indexedDB, caches: e.caches, serviceWorkerRegistrations: e.serviceWorkers } });
+        var e = H.storageEstimate(), opfs = typeof global.__swOpfsUsage === 'function' ? global.__swOpfsUsage() : 0;
+        resolve({ usage: e.usage + opfs, quota: e.quota, usageDetails: { indexedDB: e.indexedDB, caches: e.caches, serviceWorkerRegistrations: e.serviceWorkers } });
       });
     },
     persist: function () { return new Promise(function (resolve) { resolve(!!H.storagePersist()); }); },
     persisted: function () { return new Promise(function (resolve) { resolve(!!H.storagePersisted()); }); },
-    getDirectory: function () { return Promise.reject(mkErr('NotSupportedError', 'The Origin Private File System is not supported.')); }
+    // the Origin Private File System lives in the platform layer (platformjs/opfs.js); reading the lazy global loads it
+    getDirectory: function () {
+      return new Promise(function (resolve, reject) {
+        if (global.FileSystemDirectoryHandle && typeof global.__swOpfsRoot === 'function') resolve(global.__swOpfsRoot());
+        else reject(mkErr('NotSupportedError', 'The Origin Private File System is not supported.'));
+      });
+    }
   });
   tag(StorageManager, 'StorageManager');
   exportClass(StorageManager, 'StorageManager');

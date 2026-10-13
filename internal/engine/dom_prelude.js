@@ -2001,7 +2001,7 @@
   LOC_PARTS.forEach(function (part) {
     def(Location.prototype, part, {
       get: function () { try { return new global.URL(currentURL())[part]; } catch (e) { return ''; } },
-      set: function (v) { if (part === 'origin') return; var u = new global.URL(currentURL()); u[part] = v; if (part === 'hash') { var old = currentURL(); urlOverride = u.href; fire(global, 'hashchange', { oldURL: old, newURL: u.href }); fire(global, 'popstate', { state: historyState }); } else sw.navigate(u.href); },
+      set: function (v) { if (part === 'origin') return; var u = new global.URL(currentURL()); u[part] = v; if (part === 'hash') { var old = currentURL(); if (u.href === old) return; urlOverride = u.href; histRecord('push', u.href, null); historyState = null; fire(global, 'hashchange', { oldURL: old, newURL: u.href }); fire(global, 'popstate', { state: null }); } else sw.navigate(u.href); },
       enumerable: true
     });
   });
@@ -2019,26 +2019,74 @@
   def(global, 'location', { get: function () { return locationObj; }, set: function (v) { locationObj.assign(String(v)); }, enumerable: true });
 
   // ---- History
-  var historyState = null, historyLength = 1;
+  // Session history of this document: pushState/replaceState/hash changes add or replace entries,
+  // back/forward/go move between them (asynchronously, as in a browser) and fire popstate/hashchange.
+  // Entries before the first or after the last one belong to other documents (Go owns those).
+  var historyState = null, histEntries = [], histIdx = 0, histSeq = 0, histHooks = [];
+  function hist() {
+    if (!histEntries.length) histEntries.push({ url: currentURL(), state: null, key: 'k' + (++histSeq), id: 'i' + histSeq });
+    return histEntries;
+  }
+  function histNotify(kind, entry, prev, info) { histHooks.slice().forEach(function (h) { try { h(kind, entry, prev, info); } catch (e) { /* observers must not break history */ } }); }
+  function histRecord(kind, url, state) {
+    var es = hist(), prev = es[histIdx];
+    if (kind === 'push') {
+      es.length = histIdx + 1;
+      var e = { url: url, state: state, key: 'k' + (++histSeq), id: 'i' + histSeq };
+      es.push(e); histIdx = es.length - 1;
+      histNotify('push', e, prev);
+    } else {
+      prev.url = url; prev.state = state;
+      histNotify('replace', prev, prev);
+    }
+  }
+  function histTraverse(delta, then) {
+    var es = hist(), target = histIdx + delta;
+    if (target < 0 || target >= es.length || delta === 0) return false;
+    setTimeoutImpl(function () {
+      var cur = hist(), from = cur[histIdx], to = cur[target];
+      if (!to || target >= cur.length) return;
+      histIdx = target;
+      historyState = to.state;
+      urlOverride = to.url;
+      if (host('setUrl')) { try { sw.setUrl(to.url); } catch (e) { /* ignore */ } }
+      histNotify('traverse', to, from, { delta: delta });
+      fire(global, 'popstate', { state: to.state });
+      var fa = from.url.split('#'), ta = to.url.split('#');
+      if (fa[0] === ta[0] && from.url !== to.url) fire(global, 'hashchange', { oldURL: from.url, newURL: to.url });
+      if (then) then();
+    }, [], 0, false);
+    return true;
+  }
+  Object.defineProperty(global, '__swHistory', { value: {
+    entries: function () { return hist(); }, index: function () { hist(); return histIdx; }, hooks: histHooks,
+    record: histRecord, traverse: histTraverse, get state() { return historyState; }
+  } });
   function History() { illegal(); }
-  getters(History.prototype, { length: { get: function () { return historyLength; } }, state: { get: function () { return historyState; } }, scrollRestoration: { get: function () { return 'auto'; }, set: function () { } } });
+  getters(History.prototype, { length: { get: function () { return hist().length; } }, state: { get: function () { return historyState; } }, scrollRestoration: { get: function () { return 'auto'; }, set: function () { } } });
   function historyUpdate(state, url, push) {
-    historyState = state === undefined ? null : state;
+    var target = null;
     if (url !== undefined && url !== null) {
       var u = new global.URL(String(url), currentURL());
       if (u.origin !== originOf(currentURL())) throw DOMException("Failed to execute '" + (push ? 'pushState' : 'replaceState') + "' on 'History': A history state object with URL '" + u.href + "' cannot be created in a document with origin '" + originOf(currentURL()) + "'.", 'SecurityError');
-      urlOverride = u.href;
-      if (host('setUrl')) { try { sw.setUrl(u.href); } catch (e) { /* ignore */ } }
+      target = u.href;
+    }
+    state = state === undefined ? null : state;
+    if (target === null) target = currentURL();
+    historyState = state;
+    if (target !== currentURL() || url !== undefined && url !== null) {
+      urlOverride = target;
+      if (host('setUrl')) { try { sw.setUrl(target); } catch (e) { /* ignore */ } }
       hostMutation(push ? 'pushState' : 'replaceState', 0);
     }
-    if (push) historyLength++;
+    histRecord(push ? 'push' : 'replace', target, state);
   }
   methods(History.prototype, {
     pushState: function (state, title, url) { historyUpdate(state, url, true); },
     replaceState: function (state, title, url) { historyUpdate(state, url, false); },
-    back: function () { fire(global, 'popstate', { state: null }); },
-    forward: function () { fire(global, 'popstate', { state: null }); },
-    go: function (n) { if (!n) { sw.navigate(currentURL()); return; } fire(global, 'popstate', { state: null }); }
+    back: function () { if (!histTraverse(-1)) fire(global, 'popstate', { state: null }); },
+    forward: function () { if (!histTraverse(1)) fire(global, 'popstate', { state: null }); },
+    go: function (n) { n = Math.trunc(+n) || 0; if (!n) { sw.navigate(currentURL()); return; } if (!histTraverse(n)) fire(global, 'popstate', { state: null }); }
   });
   setTag(History, 'History'); global.History = History;
   var historyObj = Object.create(History.prototype);
@@ -2671,8 +2719,8 @@
     (parts || []).forEach(function (p) { var b = p instanceof Blob ? p._bytes : toBytes(typeof p === 'string' || p instanceof ArrayBuffer || ArrayBuffer.isView(p) ? p : String(p)); chunks.push(b); total += b.length; });
     var bytes = new Uint8Array(total), off = 0;
     chunks.forEach(function (c) { bytes.set(c, off); off += c.length; });
-    Object.defineProperty(this, '_bytes', { value: bytes });
-    Object.defineProperty(this, 'size', { value: total, enumerable: true });
+    Object.defineProperty(this, '_bytes', { value: bytes, configurable: true });
+    Object.defineProperty(this, 'size', { value: total, enumerable: true, configurable: true });
     Object.defineProperty(this, 'type', { value: String((opts && opts.type) || '').toLowerCase(), enumerable: true });
   }
   Blob.prototype = {
@@ -2699,16 +2747,13 @@
   defineHandlerProps(FileReader.prototype, ['load', 'loadstart', 'loadend', 'progress', 'error', 'abort']);
   constant(FileReader, 'EMPTY', 0); constant(FileReader, 'LOADING', 1); constant(FileReader, 'DONE', 2);
   setTag(FileReader, 'FileReader'); global.FileReader = FileReader;
-  function bytesStream(bytes) {
-    var done = false;
-    var reader = { read: function () { if (done) return Promise.resolve({ done: true, value: undefined }); done = true; return Promise.resolve({ done: false, value: bytes }); }, cancel: function () { done = true; return Promise.resolve(); }, releaseLock: function () { }, closed: Promise.resolve() };
-    return { locked: false, getReader: function () { return reader; }, cancel: function () { done = true; return Promise.resolve(); }, pipeTo: function () { return Promise.resolve(); }, tee: function () { return [bytesStream(bytes), bytesStream(bytes)]; }, [Symbol.asyncIterator]: function () { return { next: function () { return reader.read(); } }; } };
-  }
-  global.ReadableStream = function ReadableStream(src) { var chunks = []; var ctrl = { enqueue: function (c) { chunks.push(c); }, close: function () { }, error: function () { } }; if (src && src.start) src.start(ctrl); var i = 0; this.locked = false; this.getReader = function () { return { read: function () { if (src && src.pull && i >= chunks.length) src.pull(ctrl); return Promise.resolve(i < chunks.length ? { done: false, value: chunks[i++] } : { done: true, value: undefined }); }, cancel: function () { return Promise.resolve(); }, releaseLock: function () { }, closed: Promise.resolve() }; }; this.cancel = function () { return Promise.resolve(); }; };
-  global.WritableStream = function WritableStream(sink) { this.locked = false; this.getWriter = function () { return { write: function (c) { if (sink && sink.write) sink.write(c); return Promise.resolve(); }, close: function () { if (sink && sink.close) sink.close(); return Promise.resolve(); }, abort: function () { return Promise.resolve(); }, releaseLock: function () { }, ready: Promise.resolve(), closed: Promise.resolve() }; }; };
-  global.TransformStream = function TransformStream() { var chunks = []; this.readable = new global.ReadableStream({ start: function (c) { chunks.push(c); } }); this.writable = new global.WritableStream({ write: function (v) { chunks[0].enqueue(v); } }); };
+  // Real streams live in platformjs/streams.js and load on first use.
+  function bytesStream(bytes) { return new global.ReadableStream({ start: function (c) { if (bytes.length) c.enqueue(bytes); c.close(); } }); }
 
   // ---- FormData
+  // Extension hooks for the platform layer (platformjs/*.js).
+  var swHooks = {};
+  Object.defineProperty(global, '__swHooks', { value: swHooks });
   function FormData(form) {
     if (!(this instanceof FormData)) throw new TypeError("Failed to construct 'FormData': Please use the 'new' operator");
     Object.defineProperty(this, '_list', { value: [], writable: true });
@@ -2721,6 +2766,7 @@
         else if (tag === 'select') { itemsOf(c.options).forEach(function (o) { if (o.selected) self._list.push([name, o.value]); }); }
         else if (tag === 'textarea') self._list.push([name, c.value]);
       });
+      if (swHooks.formData) swHooks.formData(form, self._list);
     }
   }
   function fdValue(v, filename) { if (v instanceof Blob) { if (v instanceof File && filename === undefined) return v; return new File([v], filename === undefined ? 'blob' : String(filename), { type: v.type }); } return String(v); }
@@ -3177,7 +3223,7 @@
     // reset everything per-navigation: wrappers, timers, listeners, observers, focus, history override
     timers.length = 0; runningTimer = null;
     observers.length = 0; pendingObservers.length = 0; moFlushScheduled = false;
-    activeElement = null; currentScript = null; urlOverride = null; historyState = null;
+    activeElement = null; currentScript = null; urlOverride = null; historyState = null; histEntries.length = 0; histIdx = 0;
     perfMarks = []; perfMeasures = []; timeOrigin = Date.now();
     ceDefinitions.clear(); ceWhenDefined.clear();
     blobURLs.clear();
