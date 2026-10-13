@@ -7,7 +7,6 @@ import (
 
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v4"
 	"github.com/thesyncim/gopus"
 
 	"github.com/sweefbrowser/sweef/internal/capture"
@@ -40,7 +39,6 @@ type AudioSendStats struct {
 // and sends it. Capture timing is decoupled from RTP timing by a small FIFO that a 20 ms clock drains.
 type AudioSender struct {
 	track *LocalTrack
-	rs    *webrtc.RTPSender
 
 	mu      sync.Mutex
 	src     capture.AudioSource
@@ -69,11 +67,10 @@ type AudioSender struct {
 	done chan struct{}
 	wake chan struct{}
 	wg   sync.WaitGroup
-	rwg  sync.WaitGroup
 }
 
 // NewAudioSender starts the audio send machinery for a track.
-func NewAudioSender(track *LocalTrack, rs *webrtc.RTPSender) (*AudioSender, error) {
+func NewAudioSender(track *LocalTrack) (*AudioSender, error) {
 	enc, err := gopus.NewEncoder(gopus.EncoderConfig{SampleRate: opusRate, Channels: 1, Application: gopus.ApplicationVoIP})
 	if err != nil {
 		return nil, err
@@ -82,12 +79,10 @@ func NewAudioSender(track *LocalTrack, rs *webrtc.RTPSender) (*AudioSender, erro
 	enc.SetFEC(true)
 	_ = enc.SetPacketLoss(5)
 	_ = enc.SetComplexity(5)
-	a := &AudioSender{track: track, rs: rs, enc: enc, enabled: true, active: true, bitrate: audioBitrate,
+	a := &AudioSender{track: track, enc: enc, enabled: true, active: true, bitrate: audioBitrate,
 		done: make(chan struct{}), wake: make(chan struct{}, 1), seq: uint16(randUint32()), ts: randUint32(), marker: true}
 	a.wg.Add(1)
 	go func() { defer a.wg.Done(); a.run() }()
-	a.rwg.Add(1)
-	go func() { defer a.rwg.Done(); a.readRTCP() }()
 	return a, nil
 }
 
@@ -157,9 +152,6 @@ func (a *AudioSender) Close() {
 	a.wg.Wait()
 }
 
-// Wait blocks until the RTCP reader has ended (after the peer connection was closed).
-func (a *AudioSender) Wait() { a.rwg.Wait() }
-
 // Stats returns a snapshot.
 func (a *AudioSender) Stats() AudioSendStats {
 	a.mu.Lock()
@@ -169,36 +161,32 @@ func (a *AudioSender) Stats() AudioSendStats {
 	return s
 }
 
-func (a *AudioSender) readRTCP() {
-	for {
-		pkts, _, err := a.rs.ReadRTCP()
-		if err != nil {
-			return
+// HandleRTCP processes RTCP read from the RTPSender: receiver reports give the round trip time and
+// the loss that sets the encoder's packet loss expectation (and with it the in-band FEC).
+func (a *AudioSender) HandleRTCP(pkts []rtcp.Packet) {
+	for _, p := range pkts {
+		rr, ok := p.(*rtcp.ReceiverReport)
+		if !ok {
+			continue
 		}
-		for _, p := range pkts {
-			rr, ok := p.(*rtcp.ReceiverReport)
-			if !ok {
+		for _, r := range rr.Reports {
+			if r.SSRC != a.track.Negotiated().SSRC {
 				continue
 			}
-			for _, r := range rr.Reports {
-				if r.SSRC != a.track.Negotiated().SSRC {
-					continue
+			frac := float64(r.FractionLost) / 256
+			a.mu.Lock()
+			a.st.FractionLost = frac
+			if r.LastSenderReport != 0 {
+				if d := ntpMid32(time.Now()) - r.LastSenderReport - r.Delay; d < 0x80000000 {
+					a.st.RTT = float64(d) / 65536
 				}
-				frac := float64(r.FractionLost) / 256
-				a.mu.Lock()
-				a.st.FractionLost = frac
-				if r.LastSenderReport != 0 {
-					if d := ntpMid32(time.Now()) - r.LastSenderReport - r.Delay; d < 0x80000000 {
-						a.st.RTT = float64(d) / 65536
-					}
-				}
-				pct := int(math.Min(25, frac*100*1.5+3))
-				if pct != a.lossPct {
-					a.lossPct = pct
-					_ = a.enc.SetPacketLoss(pct)
-				}
-				a.mu.Unlock()
 			}
+			pct := int(math.Min(25, frac*100*1.5+3))
+			if pct != a.lossPct {
+				a.lossPct = pct
+				_ = a.enc.SetPacketLoss(pct)
+			}
+			a.mu.Unlock()
 		}
 	}
 }

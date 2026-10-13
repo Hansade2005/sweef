@@ -51,10 +51,11 @@ func TestAudioLoopback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	as, err := NewAudioSender(lt, rs)
+	as, err := NewAudioSender(lt)
 	if err != nil {
 		t.Fatal(err)
 	}
+	go RunRTCP(rs, as.HandleRTCP)
 	defer as.Close()
 	tone := testsrc.NewTone(440)
 	tone.Rate = 44100 // exercises the resampler
@@ -65,7 +66,7 @@ func TestAudioLoopback(t *testing.T) {
 	var ar *AudioReceiver
 	got := make(chan struct{})
 	p.b.OnTrack(func(tr *webrtc.TrackRemote, rcv *webrtc.RTPReceiver) {
-		ar, _ = NewAudioReceiver(tr, rcv, sink)
+		ar, _ = NewAudioReceiver(tr, rcv, sink, nil)
 		close(got)
 	})
 	p.connect(t)

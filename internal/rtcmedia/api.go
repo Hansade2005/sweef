@@ -19,6 +19,7 @@ import (
 	"github.com/pion/interceptor/pkg/gcc"
 	"github.com/pion/interceptor/pkg/nack"
 	"github.com/pion/logging"
+	"github.com/pion/rtcp"
 	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
 	"time"
@@ -148,4 +149,26 @@ func NewAPI(se webrtc.SettingEngine, quiet bool) (*API, error) {
 		return nil, errors.New("rtcmedia: no API")
 	}
 	return &API{API: api, Estimator: est, me: me}, nil
+}
+
+// RunRTCP reads the RTCP of an RTPSender until it ends and passes it to h (nil: just drain it, which
+// the interceptors need to see feedback). Run it in a goroutine.
+func RunRTCP(rs *webrtc.RTPSender, h func([]rtcp.Packet)) {
+	for {
+		pkts, _, err := rs.ReadRTCP()
+		if err != nil {
+			return
+		}
+		if h != nil {
+			h(pkts)
+		}
+	}
+}
+
+// HeaderExtensions lists the header extension URIs offered for a kind.
+func HeaderExtensions(kind webrtc.RTPCodecType) []string {
+	if kind == webrtc.RTPCodecTypeAudio {
+		return []string{ExtMid, ExtAbsSendTime, ExtAudioLevel, ExtTransportCC}
+	}
+	return []string{ExtMid, ExtRID, ExtRepairedRID, ExtAbsSendTime, ExtTransportCC, ExtVideoOrient}
 }

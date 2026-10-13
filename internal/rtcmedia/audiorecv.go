@@ -71,12 +71,12 @@ type AudioReceiver struct {
 	rwg  sync.WaitGroup
 	once sync.Once
 
-	// OnMute is called when packets stop or resume (from a receiver goroutine).
-	OnMute func(muted bool)
+	onMute func(muted bool)
 }
 
 // NewAudioReceiver starts receiving a remote audio track into sink (nil: discard).
-func NewAudioReceiver(track *webrtc.TrackRemote, rcv *webrtc.RTPReceiver, sink AudioSink) (*AudioReceiver, error) {
+// onMute is called when packets stop or resume (from a receiver goroutine).
+func NewAudioReceiver(track *webrtc.TrackRemote, rcv *webrtc.RTPReceiver, sink AudioSink, onMute func(muted bool)) (*AudioReceiver, error) {
 	dec, err := gopus.NewDecoder(gopus.DefaultDecoderConfig(opusRate, 2))
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func NewAudioReceiver(track *webrtc.TrackRemote, rcv *webrtc.RTPReceiver, sink A
 		sink = NullSink{}
 	}
 	a := &AudioReceiver{track: track, rcv: rcv, ssrc: uint32(track.SSRC()), sink: sink, pkts: map[uint32]*apkt{}, dec: dec,
-		done: make(chan struct{}), target: 3, muted: true, t0: time.Now()}
+		done: make(chan struct{}), target: 3, muted: true, t0: time.Now(), onMute: onMute}
 	a.st.SSRC = a.ssrc
 	a.st.Muted = true
 	a.pcm = make([]int16, 5760*2)
@@ -165,7 +165,7 @@ func (a *AudioReceiver) setMuted(m bool) {
 		return
 	}
 	a.muted = m
-	if f := a.OnMute; f != nil {
+	if f := a.onMute; f != nil {
 		go f(m)
 	}
 }

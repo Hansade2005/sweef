@@ -120,19 +120,23 @@ type VideoReceiver struct {
 	rwg  sync.WaitGroup // readers; they end when the transport closes
 	once sync.Once
 
-	// Callbacks (called from receiver goroutines; keep them quick).
+	cb VideoCallbacks
+}
+
+// VideoCallbacks are called from receiver goroutines; keep them quick.
+type VideoCallbacks struct {
 	OnResize func(w, h int)
-	OnMute   func(muted bool)
-	OnFrame  func() // after a frame was pushed to the sinks
+	OnMute   func(muted bool) // true when packets stop arriving, false when they (re)start
+	OnFrame  func()           // after a frame was pushed to the sinks
 }
 
 // NewVideoReceiver starts receiving the remote track. writeRTCP sends RTCP to the remote (PLI).
-func NewVideoReceiver(track *webrtc.TrackRemote, rcv *webrtc.RTPReceiver, writeRTCP func([]rtcp.Packet) error) *VideoReceiver {
+func NewVideoReceiver(track *webrtc.TrackRemote, rcv *webrtc.RTPReceiver, writeRTCP func([]rtcp.Packet) error, cb VideoCallbacks) *VideoReceiver {
 	r := &VideoReceiver{
 		track: track, rcv: rcv, writeRTCP: writeRTCP, ssrc: uint32(track.SSRC()),
 		pkts: map[uint32]*vpkt{}, dec: vp8.NewDecoder(), muted: true, needKey: true,
 		deliverSig: make(chan struct{}, 1), outSig: make(chan struct{}, 1), done: make(chan struct{}),
-		delay: 0.03,
+		delay: 0.03, cb: cb,
 	}
 	r.st.SSRC = r.ssrc
 	r.st.Muted = true
@@ -238,7 +242,7 @@ func (r *VideoReceiver) setMuted(m bool) {
 		return
 	}
 	r.muted = m
-	if f := r.OnMute; f != nil {
+	if f := r.cb.OnMute; f != nil {
 		go f(m)
 	}
 }
@@ -590,14 +594,14 @@ func (r *VideoReceiver) playLoop() {
 		}
 		r.mu.Unlock()
 		if due != nil {
-			if resize && r.OnResize != nil {
-				r.OnResize(due.img.Bounds().Dx(), due.img.Bounds().Dy())
+			if resize && r.cb.OnResize != nil {
+				r.cb.OnResize(due.img.Bounds().Dx(), due.img.Bounds().Dy())
 			}
 			for _, s := range sinks {
 				s.PushFrame(due.img)
 			}
-			if r.OnFrame != nil {
-				r.OnFrame()
+			if r.cb.OnFrame != nil {
+				r.cb.OnFrame()
 			}
 			continue
 		}

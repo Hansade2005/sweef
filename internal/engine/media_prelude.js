@@ -288,6 +288,7 @@
     return false;
   }
   function closeRes(s) {
+    if (s.rtcDetach) { try { s.rtcDetach(); } catch (e) { /* ignore */ } } // WebRTC stream playback (webrtc_prelude.js)
     if (s.h) { try { sw.mediaClose(s.h); } catch (e) { /* ignore */ } }
     s.h = 0; s.info = null; s.bufCache = null;
     if (s.mse) { s.mse.detach(); s.mse = null; }
@@ -420,6 +421,10 @@
       if (res.ok) { s.h = res.h; s.info = res.info; s.streamLike = false; s.frameMode = res.frameMode; return onMetadata(el, s, id); }
       s.error = makeError(4, 'MEDIA_ELEMENT_ERROR: Format error'); s.net = 3; ev(el, 'error'); return;
     }
+    // WebRTC (webrtc_prelude.js): a stream with received video becomes ready with its first frame
+    var rtcDeferred = false;
+    try { rtcDeferred = !!(global.__swStreamAttach && global.__swStreamAttach(el, ms, { state: s, setReady: setReady, ev: ev })); } catch (e) { reportErr(e); }
+    if (rtcDeferred) { s.net = 1; return; }
     ev(el, 'durationchange');
     s.ready = 1; ev(el, 'loadedmetadata');
     s.net = 1;

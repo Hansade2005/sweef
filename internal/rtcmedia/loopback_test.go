@@ -152,7 +152,8 @@ func TestVideoLoopback(t *testing.T) {
 		t.Fatal(err)
 	}
 	est := <-p.apiA.Estimator
-	vs := NewVideoSender(lt, rs, est)
+	vs := NewVideoSender(lt, est)
+	go RunRTCP(rs, vs.HandleRTCP)
 	defer vs.Close()
 	src := testsrc.NewVideo(640, 360, 30)
 	src.Keep = 200
@@ -163,7 +164,7 @@ func TestVideoLoopback(t *testing.T) {
 	var vr *VideoReceiver
 	gotTrack := make(chan struct{})
 	p.b.OnTrack(func(tr *webrtc.TrackRemote, rcv *webrtc.RTPReceiver) {
-		vr = NewVideoReceiver(tr, rcv, func(pk []rtcp.Packet) error { return p.b.WriteRTCP(pk) })
+		vr = NewVideoReceiver(tr, rcv, func(pk []rtcp.Packet) error { return p.b.WriteRTCP(pk) }, VideoCallbacks{})
 		vr.AddSink(rec)
 		close(gotTrack)
 	})

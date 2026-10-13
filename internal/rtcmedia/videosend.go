@@ -9,7 +9,6 @@ import (
 	"github.com/pion/interceptor/pkg/cc"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v4"
 
 	"github.com/sweefbrowser/sweef/internal/capture"
 	"github.com/sweefbrowser/sweef/internal/media/vp8enc"
@@ -70,7 +69,6 @@ type VideoSendStats struct {
 // allows and sends them as RTP through a LocalTrack.
 type VideoSender struct {
 	track *LocalTrack
-	rs    *webrtc.RTPSender
 	est   cc.BandwidthEstimator
 
 	mu       sync.Mutex
@@ -97,7 +95,6 @@ type VideoSender struct {
 	wake    chan struct{}
 	done    chan struct{}
 	wg      sync.WaitGroup
-	rwg     sync.WaitGroup // RTCP reader: ends when the transport closes
 	keyReq  atomic.Bool
 	lastKey time.Time
 	remb    atomic.Int64
@@ -131,11 +128,11 @@ type paced struct {
 	frame bool
 }
 
-// NewVideoSender starts the send machinery for a track. rs is the RTPSender the track is attached to
-// (its RTCP is read here); est may be nil.
-func NewVideoSender(track *LocalTrack, rs *webrtc.RTPSender, est cc.BandwidthEstimator) *VideoSender {
+// NewVideoSender starts the send machinery for a track; est may be nil. The RTCP read from the
+// RTPSender is passed to HandleRTCP (see RunRTCP).
+func NewVideoSender(track *LocalTrack, est cc.BandwidthEstimator) *VideoSender {
 	s := &VideoSender{
-		track: track, rs: rs, est: est,
+		track: track, est: est,
 		enabled: true, params: DefaultSendParams(),
 		wake: make(chan struct{}, 1), done: make(chan struct{}),
 		durs: map[string]float64{"none": 0, "cpu": 0, "bandwidth": 0, "other": 0},
@@ -150,8 +147,6 @@ func NewVideoSender(track *LocalTrack, rs *webrtc.RTPSender, est cc.BandwidthEst
 	s.wg.Add(2)
 	go func() { defer s.wg.Done(); s.run() }()
 	go func() { defer s.wg.Done(); s.pace() }()
-	s.rwg.Add(1)
-	go func() { defer s.rwg.Done(); s.readRTCP() }()
 	return s
 }
 
@@ -233,9 +228,6 @@ func (s *VideoSender) Close() {
 	}
 	s.wg.Wait()
 }
-
-// Wait blocks until the RTCP reader has ended (after the peer connection was closed).
-func (s *VideoSender) Wait() { s.rwg.Wait() }
 
 // ---- main loop ----------------------------------------------------------------------------
 
@@ -513,39 +505,35 @@ func (s *VideoSender) pace() {
 
 // ---- feedback ----------------------------------------------------------------------------------
 
-func (s *VideoSender) readRTCP() {
-	for {
-		pkts, _, err := s.rs.ReadRTCP()
-		if err != nil {
-			return
-		}
-		for _, p := range pkts {
-			switch r := p.(type) {
-			case *rtcp.PictureLossIndication:
-				s.mu.Lock()
-				s.st.PLICount++
-				s.mu.Unlock()
-				s.RequestKeyFrame()
-			case *rtcp.FullIntraRequest:
-				s.mu.Lock()
-				s.st.FIRCount++
-				s.mu.Unlock()
-				s.RequestKeyFrame()
-			case *rtcp.ReceiverEstimatedMaximumBitrate:
-				s.remb.Store(int64(r.Bitrate))
-			case *rtcp.TransportLayerNack:
-				s.mu.Lock()
-				for _, n := range r.Nacks {
-					s.st.NACKCount += uint32(len(n.PacketList()))
+// HandleRTCP processes RTCP read from the RTPSender: PLI and FIR request a key frame, REMB and receiver
+// reports feed the bandwidth decision and the round trip time.
+func (s *VideoSender) HandleRTCP(pkts []rtcp.Packet) {
+	for _, p := range pkts {
+		switch r := p.(type) {
+		case *rtcp.PictureLossIndication:
+			s.mu.Lock()
+			s.st.PLICount++
+			s.mu.Unlock()
+			s.RequestKeyFrame()
+		case *rtcp.FullIntraRequest:
+			s.mu.Lock()
+			s.st.FIRCount++
+			s.mu.Unlock()
+			s.RequestKeyFrame()
+		case *rtcp.ReceiverEstimatedMaximumBitrate:
+			s.remb.Store(int64(r.Bitrate))
+		case *rtcp.TransportLayerNack:
+			s.mu.Lock()
+			for _, n := range r.Nacks {
+				s.st.NACKCount += uint32(len(n.PacketList()))
+			}
+			s.mu.Unlock()
+		case *rtcp.ReceiverReport:
+			for _, rr := range r.Reports {
+				if rr.SSRC != s.track.Negotiated().SSRC {
+					continue
 				}
-				s.mu.Unlock()
-			case *rtcp.ReceiverReport:
-				for _, rr := range r.Reports {
-					if rr.SSRC != s.track.Negotiated().SSRC {
-						continue
-					}
-					s.onReport(rr)
-				}
+				s.onReport(rr)
 			}
 		}
 	}
