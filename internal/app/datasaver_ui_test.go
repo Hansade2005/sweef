@@ -163,14 +163,10 @@ func TestRealUIOnboardingPlanAndNewTabLine(t *testing.T) {
 	r.waitFor("100 MB chosen", func() bool {
 		return r.app.prof.Settings.Budget().Enabled && r.app.prof.Settings.Budget().LimitMB == 100
 	})
-	if got := r.app.prof.Settings.DataLevel(); got != "strict" {
-		t.Fatalf("a 100 MB plan should start in Text first, got %s", got)
-	}
+	r.waitFor("a 100 MB plan starts in Text first", func() bool { return r.app.prof.Settings.DataLevel() == "strict" })
 	r.pageEval(`document.querySelectorAll(".plan")[3].click(); 1`, nil) // no limit
 	r.waitFor("no limit", func() bool { return !r.app.prof.Settings.Budget().Enabled })
-	if got := r.app.prof.Settings.DataLevel(); got != "off" {
-		t.Fatalf("no limit should leave the saver off, got %s", got)
-	}
+	r.waitFor("no limit leaves the saver off", func() bool { return r.app.prof.Settings.DataLevel() == "off" })
 	// "I am not sure" changes nothing it did not own: back to auto
 	r.pageEval(`document.querySelector(".plannote").nextSibling.querySelector("button").click(); 1`, nil)
 	r.waitFor("auto", func() bool { return r.app.prof.Settings.Str("data.level") == "auto" })

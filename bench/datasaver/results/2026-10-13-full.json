@@ -53504,6 +53504,520 @@
     "browser_out": -1,
     "doc_bytes": 0
    }
+  },
+  {
+   "site": "https://www.bbc.com/news",
+   "mode": "sweef-off",
+   "run": 1,
+   "attempts": 2,
+   "cold": {
+    "ok": false,
+    "fail": "navigation not finished within 1m0s",
+    "status": 0,
+    "wire_in": 2476746,
+    "wire_out": 89304,
+    "conns": 29,
+    "handshake_in": 1131,
+    "handshake_out": 3179,
+    "requests": 0,
+    "cache_served": 0,
+    "ready_ms": 60000,
+    "browser_in": -1,
+    "browser_out": -1,
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "static.files.bbci.co.uk",
+      "conns": 5,
+      "in": 714708,
+      "out": 20471
+     },
+     {
+      "host": "ichef.bbci.co.uk",
+      "conns": 1,
+      "in": 300106,
+      "out": 4603
+     },
+     {
+      "host": "securepubads.g.doubleclick.net",
+      "conns": 1,
+      "in": 291581,
+      "out": 5328
+     },
+     {
+      "host": "cdn.permutive.com",
+      "conns": 1,
+      "in": 244918,
+      "out": 4579
+     },
+     {
+      "host": "cdn.tinypass.com",
+      "conns": 1,
+      "in": 151789,
+      "out": 3566
+     },
+     {
+      "host": "cdn.privacy-mgmt.com",
+      "conns": 1,
+      "in": 132486,
+      "out": 4870
+     },
+     {
+      "host": "scripts.webcontentassessor.com",
+      "conns": 1,
+      "in": 120427,
+      "out": 3229
+     },
+     {
+      "host": "cdn.optimizely.com",
+      "conns": 1,
+      "in": 112745,
+      "out": 3152
+     },
+     {
+      "host": "gn-web-assets.api.bbc.com",
+      "conns": 1,
+      "in": 101944,
+      "out": 3982
+     },
+     {
+      "host": "www.bbc.com",
+      "conns": 1,
+      "in": 72306,
+      "out": 2621
+     },
+     {
+      "host": "emp.bbci.co.uk",
+      "conns": 1,
+      "in": 49223,
+      "out": 2331
+     },
+     {
+      "host": "pub.doubleverify.com",
+      "conns": 1,
+      "in": 39516,
+      "out": 2787
+     },
+     {
+      "host": "pagead2.googlesyndication.com",
+      "conns": 1,
+      "in": 37498,
+      "out": 2267
+     },
+     {
+      "host": "static.bbci.co.uk",
+      "conns": 1,
+      "in": 16292,
+      "out": 2022
+     },
+     {
+      "host": "cdn.speedcurve.com",
+      "conns": 1,
+      "in": 15181,
+      "out": 2040
+     },
+     {
+      "host": "sb.scorecardresearch.com",
+      "conns": 1,
+      "in": 14587,
+      "out": 1940
+     },
+     {
+      "host": "cdn.cxense.com",
+      "conns": 1,
+      "in": 12560,
+      "out": 1839
+     },
+     {
+      "host": "web-cdn.api.bbci.co.uk",
+      "conns": 1,
+      "in": 9409,
+      "out": 1874
+     },
+     {
+      "host": "www.bbc.co.uk",
+      "conns": 1,
+      "in": 8998,
+      "out": 1873
+     },
+     {
+      "host": "api.permutive.com",
+      "conns": 1,
+      "in": 7974,
+      "out": 2521
+     },
+     {
+      "host": "logx.optimizely.com",
+      "conns": 1,
+      "in": 4752,
+      "out": 2652
+     },
+     {
+      "host": "federated-id.live.api.bbc.co.uk",
+      "conns": 1,
+      "in": 4767,
+      "out": 2159
+     },
+     {
+      "host": "secure-us.imrworldwide.com",
+      "conns": 1,
+      "in": 4588,
+      "out": 2316
+     },
+     {
+      "host": "csi.gstatic.com",
+      "conns": 1,
+      "in": 4263,
+      "out": 2117
+     },
+     {
+      "host": "vtrk.dv.tech",
+      "conns": 1,
+      "in": 4128,
+      "out": 2165
+     }
+    ],
+    "engine": {
+     "wire_in": 2477877,
+     "wire_out": 92483,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://www.bbc.com/news",
+   "mode": "sweef-standard",
+   "run": 1,
+   "attempts": 2,
+   "cold": {
+    "ok": false,
+    "fail": "navigation not finished within 1m0s",
+    "status": 0,
+    "wire_in": 2011934,
+    "wire_out": 73336,
+    "conns": 24,
+    "handshake_in": 936,
+    "handshake_out": 2622,
+    "requests": 0,
+    "cache_served": 0,
+    "ready_ms": 60000,
+    "browser_in": -1,
+    "browser_out": -1,
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "static.files.bbci.co.uk",
+      "conns": 3,
+      "in": 699577,
+      "out": 17220
+     },
+     {
+      "host": "securepubads.g.doubleclick.net",
+      "conns": 1,
+      "in": 267532,
+      "out": 3957
+     },
+     {
+      "host": "cdn.permutive.com",
+      "conns": 1,
+      "in": 180656,
+      "out": 3155
+     },
+     {
+      "host": "cdn.tinypass.com",
+      "conns": 1,
+      "in": 150232,
+      "out": 2958
+     },
+     {
+      "host": "scripts.webcontentassessor.com",
+      "conns": 1,
+      "in": 120428,
+      "out": 3245
+     },
+     {
+      "host": "cdn.privacy-mgmt.com",
+      "conns": 1,
+      "in": 114279,
+      "out": 4377
+     },
+     {
+      "host": "cdn.optimizely.com",
+      "conns": 1,
+      "in": 112756,
+      "out": 3169
+     },
+     {
+      "host": "gn-web-assets.api.bbc.com",
+      "conns": 1,
+      "in": 101999,
+      "out": 4077
+     },
+     {
+      "host": "www.bbc.com",
+      "conns": 1,
+      "in": 72300,
+      "out": 2589
+     },
+     {
+      "host": "emp.bbci.co.uk",
+      "conns": 1,
+      "in": 49223,
+      "out": 2347
+     },
+     {
+      "host": "pub.doubleverify.com",
+      "conns": 1,
+      "in": 39987,
+      "out": 2661
+     },
+     {
+      "host": "static.bbci.co.uk",
+      "conns": 1,
+      "in": 16291,
+      "out": 2038
+     },
+     {
+      "host": "cdn.speedcurve.com",
+      "conns": 1,
+      "in": 16003,
+      "out": 2056
+     },
+     {
+      "host": "sb.scorecardresearch.com",
+      "conns": 1,
+      "in": 14585,
+      "out": 1956
+     },
+     {
+      "host": "cdn.cxense.com",
+      "conns": 1,
+      "in": 12560,
+      "out": 1858
+     },
+     {
+      "host": "web-cdn.api.bbci.co.uk",
+      "conns": 1,
+      "in": 9377,
+      "out": 1890
+     },
+     {
+      "host": "www.bbc.co.uk",
+      "conns": 1,
+      "in": 9027,
+      "out": 1889
+     },
+     {
+      "host": "api.permutive.com",
+      "conns": 1,
+      "in": 6886,
+      "out": 2537
+     },
+     {
+      "host": "logx.optimizely.com",
+      "conns": 1,
+      "in": 4752,
+      "out": 2668
+     },
+     {
+      "host": "federated-id.live.api.bbc.co.uk",
+      "conns": 1,
+      "in": 4767,
+      "out": 2175
+     },
+     {
+      "host": "secure-us.imrworldwide.com",
+      "conns": 1,
+      "in": 4588,
+      "out": 2332
+     },
+     {
+      "host": "vtrk.dv.tech",
+      "conns": 1,
+      "in": 4129,
+      "out": 2182
+     }
+    ],
+    "engine": {
+     "wire_in": 2012870,
+     "wire_out": 75958,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://www.bbc.com/news",
+   "mode": "sweef-strict",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 190216,
+    "wire_out": 10045,
+    "conns": 4,
+    "handshake_in": 156,
+    "handshake_out": 408,
+    "requests": 9,
+    "cache_served": 0,
+    "ready_ms": 4946.33,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 5,
+     "XHR": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "gn-web-assets.api.bbc.com",
+      "conns": 1,
+      "in": 102031,
+      "out": 3089
+     },
+     {
+      "host": "www.bbc.com",
+      "conns": 1,
+      "in": 72302,
+      "out": 2565
+     },
+     {
+      "host": "www.bbc.co.uk",
+      "conns": 1,
+      "in": 8997,
+      "out": 1865
+     },
+     {
+      "host": "api.permutive.com",
+      "conns": 1,
+      "in": 6886,
+      "out": 2526
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://www.bbc.com/news",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://gn-web-assets.api.bbc.com/ngas/latest/dotcom-bootstrap.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.bbc.co.uk/userinfo",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://gn-web-assets.api.bbc.com/ngas/latest/dotcom-ads.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://api.permutive.com/ctx/v1/segment?k=1bb84885-9325-4fef-adda-a208032b2715",
+      "type": "XHR",
+      "status": 200,
+      "encoded": 1988
+     },
+     {
+      "url": "https://gn-web-assets.api.bbc.com/ngas/latest/dotcom-preroll.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://gn-web-assets.api.bbc.com/ngas/latest/dotcom-analytics.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://gn-web-assets.api.bbc.com/ngas/vendor/edr/edr.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 190372,
+     "wire_out": 10453,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped": {
+      "script": 56
+     },
+     "skipped_estimate": 1674075,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 88203,
+    "wire_out": 7072,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 289,
+    "requests": 9,
+    "cache_served": 5,
+    "ready_ms": 2840.857,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 5,
+     "XHR": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "www.bbc.com",
+      "conns": 1,
+      "in": 72309,
+      "out": 2681
+     },
+     {
+      "host": "www.bbc.co.uk",
+      "conns": 1,
+      "in": 9008,
+      "out": 1865
+     },
+     {
+      "host": "api.permutive.com",
+      "conns": 1,
+      "in": 6886,
+      "out": 2526
+     }
+    ],
+    "engine": {
+     "wire_in": 88320,
+     "wire_out": 7361,
+     "cache_hit_bytes": 95345,
+     "aborted_bytes": 0,
+     "skipped": {
+      "script": 56
+     },
+     "skipped_estimate": 857080,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
   }
  ],
  "baselines": [
