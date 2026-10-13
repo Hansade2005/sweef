@@ -239,6 +239,8 @@ func (t *Tab) swDocumentCommitted(finalURL string) {
 	}
 	c := &swClient{id: id, tab: t, url: finalURL, reg: reg}
 	m.mu.Lock()
+	m.nextC++
+	c.seq = m.nextC
 	m.clients[id] = c
 	m.mu.Unlock()
 	t.sw.cmu.Lock()

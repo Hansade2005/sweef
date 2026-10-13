@@ -100,7 +100,7 @@ func (m *swManager) clientsOfLocked(origin string) []*swClient {
 			out = append(out, c)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].id < out[j].id })
+	sort.Slice(out, func(i, j int) bool { return out[i].seq < out[j].seq })
 	return out
 }
 
