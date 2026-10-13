@@ -1,8 +1,10 @@
 package raster
 
 import (
+	"fmt"
 	"image"
 	"math"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -39,6 +41,7 @@ type ListInfo struct {
 	Bounds []IRect  // device bounds (a group's bounds for push ops)
 	Pair   []int32  // push -> matching pop index (and pop -> push), else -1
 	Wide   []bool   // damage touching this op / group must grow to its bounds
+	Desc   []string // op type names (SWEEF_NARROW_DEBUG)
 	Exact  []bool   // painting the op under a horizontal clip gives the same pixels as unclipped (see narrow)
 	Pre    []uint64 // Pre[i] hashes Key[:i]: equal prefixes paint equal intermediate surfaces
 	Surf   IRect
@@ -182,7 +185,7 @@ func hasRect(r render.Rect) bool { return r.W > 0 && r.H > 0 }
 // Analyze builds the ListInfo of list for a w x h device-pixel surface.
 func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 	n := len(list)
-	in := &ListInfo{Key: make([]uint64, n), Bounds: make([]IRect, n), Pair: make([]int32, n), Wide: make([]bool, n), Exact: make([]bool, n), Pre: make([]uint64, n+1), Surf: IRect{0, 0, w, h}}
+	in := &ListInfo{Key: make([]uint64, n), Bounds: make([]IRect, n), Pair: make([]int32, n), Wide: make([]bool, n), Exact: make([]bool, n), Desc: descs(list), Pre: make([]uint64, n+1), Surf: IRect{0, 0, w, h}}
 	ctm := Scale(dpr, dpr)
 	var ctx uint64
 	var stack []groupRec
@@ -246,8 +249,12 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 			leaf(o.Dst, false)
 		case render.Gradient:
 			leaf(o.Rect, false)
+			in.Exact[i] = o.Radii.IsZero() && ctm[1] == 0 && ctm[2] == 0
 		case render.BoxShadow:
 			leaf(shadowBounds(o), false)
+			// without blur and corners it is built from rectangles only (a
+			// window-sized 1px inset frame is the usual case)
+			in.Exact[i] = o.Radii.IsZero() && o.Blur == 0 && ctm[1] == 0 && ctm[2] == 0
 		case render.Scrollbar:
 			leaf(o.Rect, false)
 		case render.ScrollCorner:
@@ -773,10 +780,32 @@ func narrow(info *ListInfo, b Band, surf IRect) IRect {
 			}
 			if (bo.X0 < x0 && bo.X1 > x0) || (bo.X0 < x1 && bo.X1 > x1) {
 				nx0, nx1 := min(x0, bo.X0), max(x1, bo.X1)
-				x0, x1 = max(nx0, surf.X0), min(nx1, surf.X1)
-				changed = true
+				if dbgNarrow {
+					println("narrow: op", i, info.Desc[i], "widens", x0, x1, "to", nx0, nx1, "band", b.Y0, b.Y1)
+				}
+				nx0, nx1 = max(nx0, surf.X0), min(nx1, surf.X1)
+				if nx0 != x0 || nx1 != x1 {
+					x0, x1 = nx0, nx1
+					changed = true
+				}
 			}
 		}
 	}
 	return IRect{x0, b.Y0, x1, b.Y1}
+}
+
+var dbgNarrow = os.Getenv("SWEEF_NARROW_DEBUG") != ""
+
+func descs(list []render.Op) []string {
+	if !dbgNarrow {
+		return make([]string, len(list))
+	}
+	out := make([]string, len(list))
+	for i, o := range list {
+		out[i] = fmt.Sprintf("%T %+v", o, o)
+		if len(out[i]) > 700 {
+			out[i] = out[i][:700]
+		}
+	}
+	return out
 }

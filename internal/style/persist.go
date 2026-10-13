@@ -322,7 +322,7 @@ func (p *Persist) NodeKey(n *html.Node) (anc, own uint64, ok bool) {
 // HashString and HashMix expose the cache's hashing to callers that derive
 // keys from NodeKey.
 func HashString(h uint64, s string) uint64 { return hashStr(h, s) }
-func HashMix(h, v uint64) uint64            { return hashMix(h, v) }
+func HashMix(h, v uint64) uint64           { return hashMix(h, v) }
 
 // FNVOffset is the starting value for HashString chains.
 const FNVOffset = fnvOff
