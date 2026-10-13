@@ -1,4 +1,4 @@
-//go:build linux || darwin || windows || freebsd || netbsd || openbsd || dragonfly || solaris
+//go:build windows || darwin
 
 package audioout
 

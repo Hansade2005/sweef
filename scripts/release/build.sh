@@ -83,6 +83,13 @@ build_one() { # os arch outdir
     ( cd "$ROOT" && GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags "$lf" -o "$out/Sweef$ext" ./packaging/tools/launcher ) \
       || die "launcher build failed for $os/$arch"
   fi
+  # Sweef is one static binary: no libc, no dynamic loader (it must run on Alpine/musl and in scratch containers).
+  # A dependency that loads libraries with dlopen (purego's Linux shim) would add NEEDED entries and an INTERP.
+  if [ "$os" = linux ] && command -v readelf >/dev/null 2>&1; then
+    if readelf -lW "$out/sweef$ext" 2>/dev/null | grep -q 'INTERP' || readelf -dW "$out/sweef$ext" 2>/dev/null | grep -q 'NEEDED'; then
+      die "$os/$arch binary is dynamically linked (INTERP/NEEDED present); Linux builds must be static"
+    fi
+  fi
   local size; size="$(wc -c < "$out/sweef$ext" | tr -d ' ')"
   printf '    %-14s %10s bytes (%s MiB)\n' "$os/$arch" "$size" "$((size / 1048576))" >&2
   if [ "$size" -gt "$MAX_BYTES" ]; then

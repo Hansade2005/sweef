@@ -19,15 +19,26 @@ const protocolVersion = 13
 
 // Commands (pulsecore/native-common.h).
 const (
-	cmdError              = 0
-	cmdReply              = 2
-	cmdCreateRecordStream = 5
-	cmdDeleteRecordStream = 6
-	cmdAuth               = 8
-	cmdSetClientName      = 9
-	cmdGetServerInfo      = 20
-	cmdGetSourceInfoList  = 24
-	cmdRecordStreamKilled = 65
+	cmdError                = 0
+	cmdReply                = 2
+	cmdCreatePlaybackStream = 3
+	cmdDeletePlaybackStream = 4
+	cmdCreateRecordStream   = 5
+	cmdDeleteRecordStream   = 6
+	cmdAuth                 = 8
+	cmdSetClientName        = 9
+	cmdDrainPlaybackStream  = 12
+	cmdGetPlaybackLatency   = 14
+	cmdGetServerInfo        = 20
+	cmdGetSourceInfoList    = 24
+	cmdSetSinkInputVolume   = 37
+	cmdCorkPlaybackStream   = 41
+	cmdFlushPlaybackStream  = 42
+	cmdRequest              = 61
+	cmdOverflow             = 62
+	cmdUnderflow            = 63
+	cmdPlaybackStreamKilled = 64
+	cmdRecordStreamKilled   = 65
 )
 
 // Tags of the tagged-struct encoding (pulsecore/tagstruct.h).
@@ -56,7 +67,8 @@ const invalidIndex = 0xFFFFFFFF
 
 // Sample formats (pa_sample_format_t).
 const (
-	sampleS16LE = 3
+	sampleS16LE     = 3
+	sampleFloat32LE = 5
 )
 
 // Channel positions (pa_channel_position_t).
@@ -137,6 +149,17 @@ func (w *tagWriter) proplist(kv ...string) {
 		w.arbitrary(v)
 	}
 	w.nullStr()
+}
+
+func (w *tagWriter) cvolume(channels int, vol uint32) {
+	w.b = append(w.b, tagCVolume, byte(channels))
+	for i := 0; i < channels; i++ {
+		w.b = append(w.b, byte(vol>>24), byte(vol>>16), byte(vol>>8), byte(vol))
+	}
+}
+
+func (w *tagWriter) timeval(sec, usec uint32) {
+	w.b = append(w.b, tagTimeval, byte(sec>>24), byte(sec>>16), byte(sec>>8), byte(sec), byte(usec>>24), byte(usec>>16), byte(usec>>8), byte(usec))
 }
 
 // ---- reader ---------------------------------------------------------------------------------------------------
@@ -226,6 +249,43 @@ func (r *tagReader) str() string {
 
 func (r *tagReader) usec() uint64 {
 	if !r.tag(tagUsec) {
+		return 0
+	}
+	if len(r.b) < 8 {
+		r.fail()
+		return 0
+	}
+	v := binary.BigEndian.Uint64(r.b)
+	r.b = r.b[8:]
+	return v
+}
+
+func (r *tagReader) timeval() {
+	if !r.tag(tagTimeval) {
+		return
+	}
+	if len(r.b) < 8 {
+		r.fail()
+		return
+	}
+	r.b = r.b[8:]
+}
+
+func (r *tagReader) s64() int64 {
+	if !r.tag(tagS64) {
+		return 0
+	}
+	if len(r.b) < 8 {
+		r.fail()
+		return 0
+	}
+	v := int64(binary.BigEndian.Uint64(r.b))
+	r.b = r.b[8:]
+	return v
+}
+
+func (r *tagReader) u64() uint64 {
+	if !r.tag(tagU64) {
 		return 0
 	}
 	if len(r.b) < 8 {

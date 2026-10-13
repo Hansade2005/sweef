@@ -32,6 +32,20 @@ type fakeServer struct {
 	deleted int // record streams deleted
 	rate    uint32
 	pktSize int // bytes per data packet (deliberately not sample aligned to 10 ms)
+
+	// playback
+	play fakePlay
+}
+
+// fakePlay is what the fake server saw of playback streams.
+type fakePlay struct {
+	created, deleted, flushes, drains int
+	corked                            bool
+	volume                            uint32
+	tlen                              uint32
+	playData                          []byte
+	killOnWrite                       bool
+	sinkUsec                          uint64
 }
 
 type fakeSource struct {
@@ -150,6 +164,25 @@ func (f *fakeServer) serve(nc net.Conn) {
 			return
 		}
 		if ch != controlChan {
+			// stream data: keep it, and ask for as much again so the stream never starves
+			f.mu.Lock()
+			f.play.playData = append(f.play.playData, p...)
+			kill := f.play.killOnWrite
+			f.mu.Unlock()
+			if kill {
+				var w tagWriter
+				w.u32(cmdPlaybackStreamKilled)
+				w.u32(0xFFFFFFFF)
+				w.u32(ch)
+				c.send(controlChan, w.b)
+				continue
+			}
+			var w tagWriter
+			w.u32(cmdRequest)
+			w.u32(0xFFFFFFFF)
+			w.u32(ch)
+			w.u32(uint32(len(p)))
+			c.send(controlChan, w.b)
 			continue
 		}
 		r := &tagReader{b: p}
@@ -258,6 +291,66 @@ func (f *fakeServer) serve(nc net.Conn) {
 			}))
 			stop = make(chan struct{})
 			go f.feed(c, chn, rate, chans, stop)
+		case cmdCreatePlaybackStream:
+			f.handleCreatePlayback(c, r, tag)
+		case cmdDeletePlaybackStream:
+			f.mu.Lock()
+			f.play.deleted++
+			f.mu.Unlock()
+			c.send(controlChan, okReply(tag, nil))
+		case cmdCorkPlaybackStream:
+			r.u32()
+			cork := r.boolean()
+			f.mu.Lock()
+			f.play.corked = cork
+			f.mu.Unlock()
+			c.send(controlChan, okReply(tag, nil))
+		case cmdFlushPlaybackStream:
+			f.mu.Lock()
+			f.play.flushes++
+			f.mu.Unlock()
+			c.send(controlChan, okReply(tag, nil))
+		case cmdDrainPlaybackStream:
+			f.mu.Lock()
+			f.play.drains++
+			f.mu.Unlock()
+			c.send(controlChan, okReply(tag, nil))
+		case cmdSetSinkInputVolume:
+			idx := r.u32()
+			if !r.tag(tagCVolume) || len(r.b) < 5 || idx != 4242 {
+				c.send(controlChan, errReply(tag, 3))
+				continue
+			}
+			f.mu.Lock()
+			f.play.volume = binary.BigEndian.Uint32(r.b[1:])
+			f.mu.Unlock()
+			c.send(controlChan, okReply(tag, nil))
+		case cmdGetPlaybackLatency:
+			chn := r.u32()
+			r.timeval()
+			if r.err != nil || len(r.b) != 0 {
+				f.t.Errorf("GET_PLAYBACK_LATENCY layout: err=%v leftover=%d", r.err, len(r.b))
+				c.send(controlChan, errReply(tag, 3))
+				continue
+			}
+			_ = chn
+			f.mu.Lock()
+			written := int64(len(f.play.playData))
+			usec := f.play.sinkUsec
+			f.mu.Unlock()
+			c.send(controlChan, okReply(tag, func(w *tagWriter) {
+				w.b = append(w.b, tagUsec)
+				w.b = binary.BigEndian.AppendUint64(w.b, usec)     // sink latency
+				w.b = append(w.b, tagUsec, 0, 0, 0, 0, 0, 0, 0, 0) // source latency
+				w.boolean(true)
+				w.timeval(1, 2)
+				w.timeval(3, 4)
+				w.b = append(w.b, tagS64)
+				w.b = binary.BigEndian.AppendUint64(w.b, uint64(written))
+				w.b = append(w.b, tagS64)
+				w.b = binary.BigEndian.AppendUint64(w.b, uint64(written/2)) // read index: half of it is still queued
+				w.b = append(w.b, tagU64, 0, 0, 0, 0, 0, 0, 0, 0, tagU64, 0, 0, 0, 0, 0, 0, 0, 0)
+			}))
 		case cmdDeleteRecordStream:
 			f.mu.Lock()
 			f.deleted++
@@ -672,4 +765,61 @@ func shortTempDir(t *testing.T) (string, error) {
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	return filepath.EvalSymlinks(dir)
+}
+
+// handleCreatePlayback parses CREATE_PLAYBACK_STREAM the way a version-13 server does, strictly.
+func (f *fakeServer) handleCreatePlayback(c *fconn, r *tagReader, tag uint32) {
+	ss := r.sampleSpec()
+	cm := r.channelMap()
+	sinkIdx := r.u32()
+	sinkName := r.str()
+	maxlen := r.u32()
+	corked := r.boolean()
+	tlen, prebuf, minreq, syncID := r.u32(), r.u32(), r.u32(), r.u32()
+	if !r.tag(tagCVolume) || len(r.b) < 1 {
+		f.t.Errorf("CREATE_PLAYBACK_STREAM: no volume (err=%v)", r.err)
+		c.send(controlChan, errReply(tag, 3))
+		return
+	}
+	n := int(r.b[0])
+	r.b = r.b[1+4*n:]
+	for i := 0; i < 7; i++ {
+		r.boolean()
+	}
+	r.boolean() // muted
+	adjust := r.boolean()
+	props := r.proplist()
+	if r.err != nil || len(r.b) != 0 {
+		f.t.Errorf("CREATE_PLAYBACK_STREAM layout: err=%v leftover=%d bytes", r.err, len(r.b))
+		c.send(controlChan, errReply(tag, 3))
+		return
+	}
+	if ss.Format != sampleFloat32LE || len(cm) != int(ss.Channels) || sinkIdx != invalidIndex || sinkName != "" ||
+		maxlen != invalidIndex || corked || tlen == 0 || prebuf != 0 || minreq == 0 || syncID != 0 || n != int(ss.Channels) ||
+		!adjust || props["media.name"] == "" {
+		f.t.Errorf("CREATE_PLAYBACK_STREAM contents: spec=%+v map=%v sink=%x/%q max=%x tlen=%d prebuf=%d minreq=%d adjust=%v props=%v",
+			ss, cm, sinkIdx, sinkName, maxlen, tlen, prebuf, minreq, adjust, props)
+		c.send(controlChan, errReply(tag, 3))
+		return
+	}
+	f.mu.Lock()
+	f.play.created++
+	f.play.tlen = tlen
+	f.mu.Unlock()
+	chn := uint32(7)
+	c.send(controlChan, okReply(tag, func(w *tagWriter) {
+		w.u32(chn)
+		w.u32(4242) // sink input index
+		w.u32(tlen) // requested bytes
+		w.u32(tlen * 4)
+		w.u32(tlen)
+		w.u32(0)
+		w.u32(minreq)
+		w.sampleSpec(sampleFloat32LE, byte(ss.Channels), ss.Rate)
+		w.channelMap(cm)
+		w.u32(1)
+		w.str("alsa_output.pci.analog-stereo")
+		w.boolean(false)
+		w.b = append(w.b, tagUsec, 0, 0, 0, 0, 0, 0, 0x4e, 0x20) // 20 ms
+	}))
 }
