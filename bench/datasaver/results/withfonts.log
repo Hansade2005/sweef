@@ -52,3 +52,24 @@ engine data policy API: present (building with -tags datasaver_engine)-tags data
 [38/230] chromium           run 2 https://docs.python.org/3/library/asyncio.html               cold=   53977 warm=   11922 req= 20 ready= 1222ms ok
 === attempt 1 2026-10-13T12:59:19Z resuming bench/datasaver/results/2026-10-13-withfonts.json
 engine data policy API: present (building with -tags datasaver_engine)-tags datasaver_engine
+[39/230] chromium-savedata  run 2 https://docs.python.org/3/library/asyncio.html               cold=   53986 warm=   12211 req= 20 ready= 1712ms ok
+[40/230] sweef-off          run 2 https://docs.python.org/3/library/asyncio.html               cold=  110552 warm=   27887 req= 22 ready= 4006ms ok
+[41/230] sweef-off          run 1 https://go.dev/doc/effective_go                              cold=  747953 warm=  218339 req= 36 ready= 5269ms ok
+[42/230] sweef-standard     run 1 https://go.dev/doc/effective_go                              cold=  731347 warm=  200859 req= 23 ready= 4926ms ok
+[43/230] sweef-strict       run 1 https://go.dev/doc/effective_go                              cold=  175706 warm=  169119 req= 13 ready= 2752ms ok
+[44/230] chromium           run 1 https://go.dev/doc/effective_go                              cold=  800029 warm=  229711 req= 38 ready= 4261ms ok
+[45/230] chromium-savedata  run 1 https://go.dev/doc/effective_go                              cold=  797561 warm=  231277 req= 38 ready= 3079ms ok
+[46/230] sweef-standard     run 2 https://go.dev/doc/effective_go                              cold=  738763 warm=  199621 req= 23 ready= 8746ms ok
+[47/230] sweef-strict       run 2 https://go.dev/doc/effective_go                              cold=  176406 warm=  168437 req= 13 ready= 1969ms ok
+[48/230] chromium           run 2 https://go.dev/doc/effective_go                              cold=  794058 warm=  236279 req= 38 ready= 4199ms ok
+[49/230] chromium-savedata  run 2 https://go.dev/doc/effective_go                              cold=  792648 warm=  239172 req= 38 ready= 3656ms ok
+[50/230] sweef-off          run 2 https://go.dev/doc/effective_go                              cold=  751771 warm=  216161 req= 36 ready= 6055ms ok
+[51/230] sweef-off          run 1 https://news.ycombinator.com/                                cold=   18299 warm=   13836 req=  3 ready= 1104ms ok
+[52/230] sweef-standard     run 1 https://news.ycombinator.com/                                cold=   18312 warm=   13823 req=  3 ready=  558ms ok
+[53/230] sweef-strict       run 1 https://news.ycombinator.com/                                cold=   25762 warm=   13847 req=  3 ready= 1034ms ok
+[54/230] chromium           run 1 https://news.ycombinator.com/                                cold=   19905 warm=   15519 req=  7 ready=  953ms ok
+[55/230] chromium-savedata  run 1 https://news.ycombinator.com/                                cold=   19958 warm=   13984 req=  7 ready=  941ms ok
+[56/230] sweef-standard     run 2 https://news.ycombinator.com/                                cold=   18311 warm=   13824 req=  3 ready=  885ms ok
+[57/230] sweef-strict       run 2 https://news.ycombinator.com/                                cold=   25761 warm=   13825 req=  3 ready=  949ms ok
+[58/230] chromium           run 2 https://news.ycombinator.com/                                cold=   19942 warm=   13961 req=  7 ready=  776ms ok
+[59/230] chromium-savedata  run 2 https://news.ycombinator.com/                                cold=   19947 warm=   13973 req=  7 ready= 1339ms ok
