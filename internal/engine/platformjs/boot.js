@@ -108,6 +108,11 @@
   names('css', 'AbstractRange Highlight HighlightRegistry CSSPropertyRule ContentVisibilityAutoStateChangeEvent');
   names('css', 'CSSRule', g, false, true);
   names('css', 'highlights registerProperty registeredProperty', g.CSS, true);
+  names('devices', 'ScreenOrientation DeviceOrientationEvent DeviceMotionEvent DeviceMotionEventAcceleration DeviceMotionEventRotationRate Gamepad GamepadButton GamepadEvent WakeLockSentinel WakeLock MediaMetadata MediaSession Credential PasswordCredential FederatedCredential PublicKeyCredential CredentialsContainer PaymentRequest PaymentResponse PaymentRequestUpdateEvent TrustedHTML TrustedScript TrustedScriptURL TrustedTypePolicy TrustedTypePolicyFactory trustedTypes PictureInPictureWindow PictureInPictureEvent');
+  names('devices', 'getGamepads wakeLock mediaSession credentials', g.Navigator.prototype, true);
+  names('devices', 'orientation', g.Screen.prototype, true);
+  names('devices', 'hasStorageAccess requestStorageAccess pictureInPictureEnabled pictureInPictureElement exitPictureInPicture', g.Document.prototype, true);
+  if (g.HTMLVideoElement) names('devices', 'requestPictureInPicture disablePictureInPicture', g.HTMLVideoElement.prototype, true);
   names('es', 'fromAsync', Array, false, true);
   names('es', 'dispose asyncDispose', Symbol, false, true);
   names('es', 'DisposableStack AsyncDisposableStack SuppressedError', g, false, true);
