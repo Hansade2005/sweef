@@ -941,7 +941,7 @@ func (s *cstate) apply(name, v, l string) bool {
 	case "font":
 		return s.fontShorthand(v, l)
 	case "font-family":
-		fam := parseFamilies(v)
+		fam := s.eng.scopeFamilies(parseFamilies(v))
 		if len(fam) == 0 {
 			return false
 		}
@@ -2024,7 +2024,7 @@ func (s *cstate) fontShorthand(v, l string) bool {
 	if i >= len(toks) {
 		return false
 	}
-	fam := parseFamilies(strings.Join(toks[i:], " "))
+	fam := s.eng.scopeFamilies(parseFamilies(strings.Join(toks[i:], " ")))
 	if len(fam) == 0 {
 		return false
 	}

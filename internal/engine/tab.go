@@ -157,15 +157,17 @@ type Tab struct {
 
 	ds tabDS // Data Saver state (datasaver.go)
 
-	asyncImg atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
-	imgSem   chan struct{}             // images fetched at once
-	imgTimer atomic.Bool               // a relayout request for newly arrived images is scheduled
-	onUpdate atomic.Pointer[func()]    // the window's "repaint me" callback (SetUpdateHook)
-	pl       atomic.Pointer[progLoad]  // load work still pending after NavigateProgressive (progload.go)
-	plMu     sync.Mutex                // one LoadStep at a time
-	progMode atomic.Bool               // the current navigation is progressive: page-initiated navigations are too
-	tr       atomic.Pointer[loadTrace] // timeline of the current navigation (loadtrace.go)
-	traceNet atomic.Bool               // record DNS/connect/TLS/first byte of every request
+	asyncImg   atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
+	imgSem     chan struct{}             // images fetched at once
+	preloadSem chan struct{}             // requests the preload scanner has in flight
+	imgTimer   atomic.Bool               // a relayout request for newly arrived images is scheduled
+	onUpdate   atomic.Pointer[func()]    // the window's "repaint me" callback (SetUpdateHook)
+	onWake     atomic.Pointer[func()]    // the window's "give the event loop a slice" callback (SetWakeHook)
+	pl         atomic.Pointer[progLoad]  // load work still pending after NavigateProgressive (progload.go)
+	plMu       sync.Mutex                // one LoadStep at a time
+	progMode   atomic.Bool               // the current navigation is progressive: page-initiated navigations are too
+	tr         atomic.Pointer[loadTrace] // timeline of the current navigation (loadtrace.go)
+	traceNet   atomic.Bool               // record DNS/connect/TLS/first byte of every request
 }
 
 func newTab(e *Engine, id string) *Tab {
@@ -181,6 +183,7 @@ func newTab(e *Engine, id string) *Tab {
 		vpH:         e.opts.ViewportHeight,
 		dsf:         1,
 		imgSem:      make(chan struct{}, 8),
+		preloadSem:  make(chan struct{}, prefetchConns),
 	}
 	if t.vpW == 0 {
 		t.vpW = 1280
@@ -202,6 +205,9 @@ func (t *Tab) Context() *BrowserContext {
 func (t *Tab) close() {
 	if t.closed.CompareAndSwap(false, true) {
 		dropBitmapSources(t.ID)
+		if env := t.ds.env.Load(); env != nil {
+			env.fonts.close() // releases the document's web font set
+		}
 		t.mu.Lock()
 		j := t.js
 		t.js = nil
@@ -366,7 +372,16 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	defer res.Body.Close()
 	var body []byte
 	limit := int64(8 << 20) // 8 MiB per doc — protects 50 MB machines
-	b, err := io.ReadAll(io.LimitReader(res.Body, limit))
+	var b []byte
+	if isHTMLResponse(res.Header) && !t.IsOfflineMode() {
+		finalURL := target
+		if res.Request != nil && res.Request.URL != nil {
+			finalURL = res.Request.URL.String()
+		}
+		b, err = readWithPreloadScan(t, io.LimitReader(res.Body, limit), finalURL)
+	} else {
+		b, err = io.ReadAll(io.LimitReader(res.Body, limit))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1100,4 +1115,35 @@ func (t *Tab) Bindings() []string {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return append([]string(nil), t.bindings...)
+}
+
+func isHTMLResponse(h http.Header) bool {
+	ct := strings.ToLower(h.Get("Content-Type"))
+	return ct == "" || strings.Contains(ct, "html")
+}
+
+// readWithPreloadScan reads the document body and lets the preload scanner see it as it arrives.
+func readWithPreloadScan(t *Tab, r io.Reader, finalURL string) ([]byte, error) {
+	sc := t.startPreloadScan(finalURL)
+	var buf bytes.Buffer
+	chunk := make([]byte, 16<<10)
+	var rerr error
+	for {
+		n, err := r.Read(chunk)
+		if n > 0 {
+			buf.Write(chunk[:n])
+			sc.Write(chunk[:n])
+		}
+		if err != nil {
+			if err != io.EOF {
+				rerr = err
+			}
+			break
+		}
+	}
+	sc.Close()
+	if rerr != nil {
+		return nil, rerr
+	}
+	return buf.Bytes(), nil
 }

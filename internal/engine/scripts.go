@@ -77,13 +77,15 @@ func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {
 	}
 	_, _ = j.call("__swSetCurrentScript", s.ID)
 	te := time.Now()
+	bc := "module"
 	if s.Module {
 		_ = j.runModule(src, name)
 		j.jobs()
 	} else {
 		_, _ = j.runCached(src, name)
+		bc = j.bcState
 	}
-	t.tspan("script.exec", name+" "+itoa(len(src))+"B", te)
+	t.tspan("script.exec", name+" "+itoa(len(src))+"B bytecode:"+bc, te)
 	_, _ = j.call("__swSetCurrentScript", 0)
 	if s.Src != "" {
 		j.dispatch(s.ID, "load", nil)

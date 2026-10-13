@@ -220,7 +220,10 @@ var (
 )
 
 func resolveFaces(fams []string, weight int, italic bool) *faceSet {
-	key := strings.Join(fams, "\x00") + "|" + strconv.Itoa(weight) + "|" + strconv.FormatBool(italic)
+	key := strings.Join(fams, "\x01") + "|" + strconv.Itoa(weight) + "|" + strconv.FormatBool(italic)
+	if font.HasScoped(fams) {
+		key += "|" + strconv.FormatUint(font.WebGen(), 10) // faces of web fonts come and go
+	}
 	fsMu.Lock()
 	defer fsMu.Unlock()
 	if fs, ok := fsCache[key]; ok {
@@ -229,7 +232,9 @@ func resolveFaces(fams []string, weight int, italic bool) *faceSet {
 	st := font.Style{Weight: weight, Italic: italic}
 	fs := &faceSet{fams: fams, st: st}
 	for _, f := range fams {
-		if face := font.Lookup(f, st); face != nil {
+		if strings.IndexByte(f, 0) >= 0 {
+			fs.faces = append(fs.faces, font.LookupAll(f, st)...) // one face per unicode-range subset
+		} else if face := font.Lookup(f, st); face != nil {
 			fs.faces = append(fs.faces, face)
 		}
 	}

@@ -41,6 +41,8 @@ type tabEnv struct {
 	// sty carries computed styles from one layout pass to the next (a document's
 	// layout provider runs one pass at a time, under Doc's layout lock)
 	sty *render.Session
+	// fonts is the document's @font-face state (webfonts.go)
+	fonts *webFonts
 }
 
 func (e *tabEnv) source(n *html.Node) BitmapSource {
@@ -85,6 +87,37 @@ func (e *tabEnv) Image(u string) image.Image {
 	e.imgs[u] = im
 	e.mu.Unlock()
 	return im
+}
+
+// prefetchDocImages fetches the document's <img> images in parallel before a layout that would otherwise
+// ask for them one at a time (the headless commands wait for every image). Windows load images in the
+// background instead, and a Data Saver policy decides image by image, so both skip it.
+func (e *tabEnv) prefetchDocImages() {
+	if e.t.asyncImg.Load() || e.t.policy() != (DataPolicy{}) || e.t.IsOfflineMode() {
+		return
+	}
+	base := e.doc.BaseURL()
+	var urls []string
+	seen := map[string]bool{}
+	walkNodes(e.doc.Root, func(n *html.Node) {
+		if n.Type != html.ElementNode || n.Data != "img" {
+			return
+		}
+		u := imgURL(base, n)
+		if u == "" || seen[u] || strings.HasPrefix(u, "data:") {
+			return
+		}
+		seen[u] = true
+		e.mu.Lock()
+		_, have := e.imgs[u]
+		e.mu.Unlock()
+		if !have {
+			urls = append(urls, u)
+		}
+	})
+	if len(urls) > 1 {
+		e.prefetch(urls)
+	}
 }
 
 // asyncOK: the window shows the page while it loads (Tab.SetAsyncImages) and no
@@ -286,7 +319,10 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 	if !noStyleCache {
 		env.sty = render.NewSession()
 	}
-	t.ds.env.Store(env)
+	env.fonts = newWebFonts(t, doc)
+	if old := t.ds.env.Swap(env); old != nil {
+		old.fonts.close()
+	}
 	doc.SetLayoutProvider(func(width int) *fnet.Layout {
 		_, vh, dsf, _, _ := t.Viewport()
 		if vh <= 0 {
@@ -302,20 +338,35 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 			t.layoutNs.Add(int64(time.Since(tl0)))
 			t.tspan("layout", "", tl0)
 		}()
+		env.prefetchDocImages()
+		fontRounds := 0
 		for round := 0; ; round++ {
 			env.lz.resetHints()
+			sheets := env.pageSheets()
 			opts := render.Options{
 				Width: float64(width), Height: float64(vh), DPR: dsf,
 				ColorScheme: t.ColorSchemeName(), BaseURL: doc.BaseURL(),
-				Sheets: env.pageSheets(), Env: env, Session: env.sty,
+				Sheets: sheets, Env: env, Session: env.sty,
+				Fonts: env.fonts.sync(sheets, float64(width), float64(vh), dsf, t.ColorSchemeName()),
 			}
+			fgen := opts.Fonts.Gen()
 			res = render.Layout(doc.Root, opts)
 			if layoutCheck && env.sty != nil {
 				// SWEEF_LAYOUT_CHECK: the cached pass must equal a from-scratch one
 				opts.Session = nil
-				if d := render.DiffResults(res, render.Layout(doc.Root, opts)); d != "" {
-					panic("SWEEF_LAYOUT_CHECK: incremental layout differs from a full layout: " + d)
+				full := render.Layout(doc.Root, opts)
+				if opts.Fonts.Gen() == fgen { // a font finishing in between changes the text
+					if d := render.DiffResults(res, full); d != "" {
+						panic("SWEEF_LAYOUT_CHECK: incremental layout differs from a full layout: " + d)
+					}
 				}
+			}
+			// Without a window the fonts the layout asked for are waited for, so the
+			// result does not depend on how fast the network is (webfonts.go)
+			if fontRounds < maxFontRounds && !t.asyncImg.Load() && env.fonts.settle(opts.Fonts) {
+				fontRounds++
+				round--
+				continue
 			}
 			// Data Saver: admit images that came into range, put placeholders
 			// on withheld ones, then lay out again (no-op without a policy)

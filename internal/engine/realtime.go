@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -42,11 +43,12 @@ type asyncEvent struct {
 
 // realtime holds a page VM's sockets, workers and their pending events.
 type realtime struct {
-	mu      sync.Mutex
-	queue   []asyncEvent
-	nextID  int64
-	sockets map[int64]*websocket.Conn
-	workers map[int64]*workerVM
+	imgPending atomic.Int32 // detached image requests in flight (imgload.go)
+	mu         sync.Mutex
+	queue      []asyncEvent
+	nextID     int64
+	sockets    map[int64]*websocket.Conn
+	workers    map[int64]*workerVM
 }
 
 func (j *jsVM) rt() *realtime {
@@ -450,6 +452,10 @@ func (j *jsVM) drainAsync() bool {
 			if _, err := j.call("__swWorkerEvent", e.id, e.typ, e.data); err != nil {
 				j.tab.LogConsole("error", jsErrorText(err, "worker "+e.typ))
 			}
+		case "img":
+			if _, err := j.call("__swImgEvent", e.id, e.typ, e.code, atoiSafe(e.data)); err != nil {
+				j.tab.LogConsole("error", jsErrorText(err, "image "+e.typ))
+			}
 		}
 	}
 	return len(evs) > 0
@@ -461,6 +467,9 @@ func (j *jsVM) hasLiveWork() bool {
 		return false
 	}
 	r := j.realtime
+	if r.imgPending.Load() > 0 {
+		return true // a detached image is on its way: the settle waits for its load or error event
+	}
 	r.mu.Lock()
 	if len(r.queue) > 0 {
 		r.mu.Unlock()
@@ -483,3 +492,14 @@ func (j *jsVM) hasLiveWork() bool {
 }
 
 var _ = url.Parse
+
+func atoiSafe(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
+}

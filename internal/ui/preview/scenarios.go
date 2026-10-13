@@ -115,6 +115,10 @@ func Scenarios() []Scenario {
 	omniItems := `[{"type":"history","title":"sweef/sweef: a fast, light browser written in Go","url":"https://github.com/sweefbrowser/sweef"},{"type":"history","title":"GitHub: Let's build from here","url":"https://github.com/"},{"type":"bookmark","title":"Pro Git book","url":"https://git-scm.com/book/en/v2"},{"type":"tab","title":"Lo-fi beats to refactor to","url":"https://www.youtube.com/watch?v=abc","tab":"t3"},{"type":"search","text":"git rebase vs merge"},{"type":"search","text":"git stash pop"}]`
 	add(Scenario{Name: "chrome-omnibox", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false), Backdrop: "article",
 		Setup: `var u=document.getElementById('url');u.focus();u.value='git';u.setSelectionRange(3,3);u.dispatchEvent(new Event('input',{bubbles:true}));__send('omni.suggestions',{id:SW.omniSeq,items:` + omniItems + `});`})
+	// typed text with spaces: the input draws every space as one space (it once showed two of them for each
+	// press, while the dropdown row collapsed the extra one and looked right)
+	add(Scenario{Name: "chrome-omnibox-spaces", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false), Backdrop: "article",
+		Setup: `var u=document.getElementById('url');u.focus();u.value='the quick brown fox jumps over the lazy dog';u.setSelectionRange(u.value.length,u.value.length);u.dispatchEvent(new Event('input',{bubbles:true}));__send('omni.suggestions',{id:SW.omniSeq,items:[{"type":"search","text":"the quick brown fox jumps over the lazy dog"},{"type":"search","text":"the quick brown fox"}]});`})
 	add(Scenario{Name: "chrome-siteinfo", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false), Backdrop: "article",
 		Setup: `document.getElementById('secbtn').click();document.querySelector('.pop .mi').click();`})
 	add(Scenario{Name: "chrome-menu-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "sidebar.open", false), Backdrop: "article", Setup: `document.getElementById('menubtn').click();`})

@@ -4,6 +4,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/net/html"
+
+	"github.com/sweefbrowser/sweef/internal/font"
 )
 
 // persist.go: computed styles that survive from one layout pass to the next.
@@ -38,6 +40,9 @@ type Persist struct {
 	quirks bool
 	sheets []SheetIn
 
+	web    *font.WebSet // the document's web fonts; part of the cache key (see SetWebFonts)
+	webGen uint64       // web.DeclGen() the engine was built for
+
 	usable bool // false: the engine may be reused but styles are not cached
 	bad    bool // a container-type was seen: stop caching with this engine
 	rel    map[string]struct{}
@@ -69,6 +74,12 @@ type pent struct {
 	epoch  uint32
 }
 
+// SetWebFonts says which web font set the next passes resolve family names
+// against. Computed styles hold the scoped family names of the set (see
+// Engine.scopeFamilies), so the cache is dropped whenever the set or the
+// families it declares change; a font merely finishing loading does not.
+func (p *Persist) SetWebFonts(w *font.WebSet) { p.web = w }
+
 // NewPersist returns an empty cache. It is used by one document's layout
 // provider, which runs one pass at a time.
 func NewPersist() *Persist { return &Persist{} }
@@ -94,7 +105,12 @@ func sheetsEqual(a, b []SheetIn) bool {
 // starts the pass. The engine is the previous one when the inputs are the
 // same. Its Compute answers from the cache when it can.
 func (p *Persist) Acquire(env *Env, sheets []SheetIn, quirks bool) *Engine {
-	if p.eng != nil && !p.bad && !p.eng.hasCQ && p.quirks == quirks && p.env == *env && sheetsEqual(p.sheets, sheets) && len(p.eng.share) < 60000 {
+	var wg uint64
+	if p.web != nil {
+		wg = p.web.DeclGen()
+	}
+	if p.eng != nil && !p.bad && !p.eng.hasCQ && p.quirks == quirks && p.env == *env && sheetsEqual(p.sheets, sheets) && len(p.eng.share) < 60000 &&
+		p.eng.web == p.web && p.webGen == wg {
 		p.beginPass()
 		return p.eng
 	}
@@ -103,6 +119,7 @@ func (p *Persist) Acquire(env *Env, sheets []SheetIn, quirks bool) *Engine {
 	p.sheets = append(p.sheets[:0:0], sheets...)
 	p.bad = false
 	e := NewEngineQ(&p.env, p.sheets, quirks)
+	e.web, p.webGen = p.web, wg
 	p.eng = e
 	p.analyze(e)
 	p.ents = map[*html.Node]*pent{}

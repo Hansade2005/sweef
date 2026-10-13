@@ -66,6 +66,7 @@ type etab struct {
 	paintW        atomic.Int32 // overlay: painted extent (CSS px)
 	paintH        atomic.Int32 // overlay: painted height (CSS px)
 	lastActive    atomic.Int64
+	wakeQueued    atomic.Bool  // an event-loop slice for async results (detached images) is queued
 	driving       atomic.Bool  // a worker op chain is stepping a progressive load of this tab (driveLoad)
 	loadErr       atomic.Value // string: error of the last load started by loadURL ("" = ok); read by the agent host
 	restoreScroll atomic.Int32
@@ -90,6 +91,7 @@ func (a *App) newEtab(kind, id string, t *engine.Tab, incog bool) *etab {
 		e.t.SetAsyncImages(true)
 		e.t.SetProgressiveNav(true)
 		e.t.SetUpdateHook(func() { e.requestPaint(false) })
+		e.t.SetWakeHook(e.wakePump)
 	}
 	return e
 }
@@ -236,6 +238,22 @@ func (e *etab) pump(d time.Duration) {
 	if e.kind == "page" && e.t.LoadPending() {
 		// page code navigated and the new document is loading progressively: nobody else steps it
 		e.driveLoad(e.navSeq.Load(), nil)
+	}
+}
+
+// wakePump gives the page's event loop a slice because an asynchronous result is waiting for it (the load
+// event of a detached image). Any goroutine.
+func (e *etab) wakePump() {
+	if e.closed.Load() || !e.wakeQueued.CompareAndSwap(false, true) {
+		return
+	}
+	if !e.w.tryDo(func() {
+		e.wakeQueued.Store(false)
+		e.pump(4 * time.Millisecond)
+		e.paint(false)
+		e.armPump()
+	}) {
+		e.wakeQueued.Store(false)
 	}
 }
 

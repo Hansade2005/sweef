@@ -150,12 +150,14 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 	c.quirks = isQuirks(root)
 	if o.Session != nil {
 		c.sess = o.Session
+		o.Session.Style.SetWebFonts(o.Fonts)
 		c.eng = o.Session.Style.Acquire(env, sheets, c.quirks)
 		defer func() { o.Session.Style.EndPass(); o.Session.svg.sweep() }()
 	} else {
 		c.eng = style.NewEngineQ(env, sheets, c.quirks)
 	}
 	c.eng.SysFont = "arial"
+	c.eng.SetWebFonts(o.Fonts)
 	if cq != nil {
 		c.eng.SetContainerSizes(cq)
 	}

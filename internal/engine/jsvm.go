@@ -139,13 +139,15 @@ func compiledPrelude() []byte {
 }
 
 type jsVM struct {
-	holdBG atomic.Bool // explicit waits also wait on background (media clock) timers
-	wakeMs float64     // set by pumpUntil when a slice ends with a timer pending: ms until it is due
-	mu     sync.Mutex
-	vm     *quickjs.VM
-	tab    *Tab
-	start  time.Time
-	closed bool
+	holdBG    atomic.Bool // explicit waits also wait on background (media clock) timers
+	wakeMs    float64     // set by pumpUntil when a slice ends with a timer pending: ms until it is due
+	bcState   string      // bytecode cache outcome of the last runCached (hit, miss, small), for the load timeline
+	scriptCap time.Time   // pumpUntil stops draining page-inserted scripts at this instant (zero = drain them all)
+	mu        sync.Mutex
+	vm        *quickjs.VM
+	tab       *Tab
+	start     time.Time
+	closed    bool
 
 	rtOnce   sync.Once
 	realtime *realtime // WebSockets and Workers (lazily created)
@@ -356,6 +358,7 @@ func (j *jsVM) run(src, name string) (any, error) {
 // cache: large scripts are compiled to bytecode once and replayed after that.
 func (j *jsVM) runCached(src, name string) (any, error) {
 	if len(src) < 256 {
+		j.bcState = "small"
 		return j.run(src, name)
 	}
 	key := codeKey(src)
@@ -367,6 +370,10 @@ func (j *jsVM) runCached(src, name string) (any, error) {
 	}
 	bc := cache.get(key)
 	fromCache := bc != nil
+	j.bcState = "miss"
+	if fromCache {
+		j.bcState = "hit"
+	}
 	if bc == nil {
 		var err error
 		if bc, err = j.vm.Compile(src, quickjs.EvalGlobal); err != nil {
@@ -537,11 +544,22 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		}
 		j.mu.Lock()
 		more := len(j.scriptQueue) > 0
+		if more && !j.scriptCap.IsZero() && !time.Now().Before(j.scriptCap) {
+			more = false // load must not wait for a long chain of lazily loaded scripts; the settle pump drains them
+		}
 		j.mu.Unlock()
 		sliceOver := !soft.IsZero() && !time.Now().Before(soft)
 		if more || ((delivered || j.hasLiveWork()) && time.Now().Before(deadline)) {
 			if sliceOver {
 				return false, false
+			}
+			if !more && !delivered {
+				// only waiting for something in flight (a socket frame, a worker message, a detached image)
+				if !soft.IsZero() {
+					j.wakeMs = 2
+					return false, false
+				}
+				time.Sleep(time.Millisecond)
 			}
 			continue
 		}

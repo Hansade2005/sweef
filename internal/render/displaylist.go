@@ -298,4 +298,7 @@ type Options struct {
 	// document to the next (see Session). The caller owns it and must not run
 	// two passes at once.
 	Session *Session
+	// Fonts is the document's web font set (see font.WebSet). Family names it
+	// declares resolve to its faces, which are fetched when the text needs them.
+	Fonts *font.WebSet
 }

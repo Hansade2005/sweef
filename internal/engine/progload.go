@@ -38,6 +38,12 @@ const (
 // parsing); the budget keeps a slow one from holding the frame.
 const prepaintExecBudget = 40 * time.Millisecond
 
+// scriptHold bounds how long page-inserted scripts keep the load event of a progressive load waiting.
+const scriptHold = 500 * time.Millisecond
+
+// scriptPoll is how often a progressive load looks again at a script that is still downloading.
+const scriptPoll = 8 * time.Millisecond
+
 type progLoad struct {
 	t           *Tab
 	j           *jsVM
@@ -45,6 +51,7 @@ type progLoad struct {
 	url         string
 	progressive bool
 
+	fetching              map[string]bool // external scripts this load started fetching itself (see scriptReady)
 	syncQ, asyncQ, deferQ []fnet.ScriptEl
 	stage                 loadStage
 	deadline              time.Time // end of the current pump stage
@@ -97,6 +104,33 @@ func (p *progLoad) scriptReady(s fnet.ScriptEl) bool {
 		return true // fails fast
 	}
 	return p.t.resourceReady(abs, KindScript)
+}
+
+// awaitScript decides whether the next script can run now. A window must not park its tab worker on the
+// network for a script that is still downloading (input to the tab would queue behind it): if the bytes are
+// not here the step yields and polls (the download is in flight from the preload scanner; if it is not, it is
+// started here). Headless loads wait for the script where they stand, as always. Under a script budget the
+// loader reads scripts one by one in document order (fetchres.go), so it keeps doing that.
+func (p *progLoad) awaitScript(s fnet.ScriptEl) (ready bool) {
+	if !p.progressive || s.Src == "" || p.t.policy().ScriptMaxBytes > 0 {
+		return true
+	}
+	abs, err := resolveURL(p.t.URL(), s.Src)
+	if err != nil || p.t.resourceReady(abs, KindScript) {
+		return true
+	}
+	if p.fetching == nil {
+		p.fetching = map[string]bool{}
+	}
+	if !p.fetching[abs] && !p.t.fetchInFlight(abs, KindScript) {
+		p.fetching[abs] = true
+		go func() { _, _, _ = p.t.fetchRes(abs, fetchOpts{kind: KindScript, page: p.url, prefetch: true}) }()
+		return false
+	}
+	if p.t.fetchInFlight(abs, KindScript) {
+		return false
+	}
+	return true // it finished without a usable result (an error): the loader reports it
 }
 
 // prepaint runs the leading blocking scripts that are already downloaded, within
@@ -167,6 +201,10 @@ func (p *progLoad) step(slice time.Duration) bool {
 				continue
 			}
 			s := (*q)[0]
+			if !p.awaitScript(s) {
+				p.wake = scriptPoll
+				return true
+			}
 			*q = (*q)[1:]
 			t.runScriptEl(p.j, s)
 		case stDCL:
@@ -174,6 +212,11 @@ func (p *progLoad) step(slice time.Duration) bool {
 			t.tmark("event.DOMContentLoaded", "")
 			p.stage = stPre
 			p.deadline = time.Now().Add(p.preBudget())
+			if p.progressive {
+				// scripts that page code inserts may hold the load for a while (a lazily loaded chunk the load
+				// handlers expect), but not for as long as a chain of them takes (analytics, ad tags)
+				p.j.scriptCap = time.Now().Add(scriptHold)
+			}
 		case stPre:
 			tp := time.Now()
 			fin, nav := p.pumpStage(soft)
@@ -186,6 +229,7 @@ func (p *progLoad) step(slice time.Duration) bool {
 			t.tspan("pump.pre-load", "", tp)
 			p.stage = stLoad
 		case stLoad:
+			p.j.scriptCap = time.Time{}
 			p.j.lifecycle("load")
 			t.tmark("event.load", "")
 			p.loaded = true

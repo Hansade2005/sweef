@@ -56,6 +56,16 @@ type Face struct {
 	ot     otCache
 	mOK    bool
 	mU     [5]float64
+	// ur, when set, limits the face to the code points of its @font-face
+	// unicode-range; a character outside it is treated as absent.
+	ur []URange
+	// adj is the @font-face size-adjust factor (0: none) and ovr the metric
+	// overrides, as fractions of the adjusted size; negative: not set.
+	adj                     float64
+	ovrAsc, ovrDesc, ovrGap float64
+	hasOvr                  bool
+	// vi, when set, is the variable font instance this face draws (see variation.go).
+	vi *instanceData
 }
 
 // Metrics are in pixels at the requested size.
@@ -107,13 +117,28 @@ func (f *Face) AdvanceUnits(r rune) float64 {
 		return v
 	}
 	v := -1.0
-	if gi, err := f.font.GlyphIndex(&f.buf, r); err == nil && gi != 0 {
-		if a, err := f.font.GlyphAdvance(&f.buf, gi, fixed.Int26_6(f.upm*64), xfont.HintingNone); err == nil {
-			v = float64(a) / 64
+	if f.inRange(r) {
+		if gi, err := f.font.GlyphIndex(&f.buf, r); err == nil && gi != 0 {
+			v = f.advanceGIDLocked(int(gi))
 		}
 	}
 	f.adv[r] = v
 	return v
+}
+
+// inRange reports whether r is inside the face's unicode-range.
+func (f *Face) inRange(r rune) bool { return f.ur == nil || inRanges(f.ur, r) }
+
+// advanceGIDLocked is the advance of a glyph in font units (variable fonts apply their deltas).
+func (f *Face) advanceGIDLocked(gi int) float64 {
+	if f.vi != nil {
+		return f.vi.advance(gi)
+	}
+	a, err := f.font.GlyphAdvance(&f.buf, glyphIndex(gi), fixed.Int26_6(f.upm*64), xfont.HintingNone)
+	if err != nil {
+		return 0
+	}
+	return float64(a) / 64
 }
 
 // FTSize is the font size as FreeType (and so Skia and Chromium) sees it:
@@ -261,9 +286,15 @@ func (f *Face) Metrics(size float64) Metrics {
 func (f *Face) Advance(r rune, size float64) float64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if !f.inRange(r) {
+		return -1
+	}
 	gi, err := f.font.GlyphIndex(&f.buf, r)
 	if err != nil || gi == 0 {
 		return -1
+	}
+	if f.vi != nil {
+		return f.vi.advance(int(gi)) * size / float64(f.upm)
 	}
 	adv, err := f.font.GlyphAdvance(&f.buf, gi, f.scale(size), xfont.HintingNone)
 	if err != nil {
@@ -274,6 +305,9 @@ func (f *Face) Advance(r rune, size float64) float64 {
 
 // HasGlyph reports whether the face defines r.
 func (f *Face) HasGlyph(r rune) bool {
+	if !f.inRange(r) {
+		return false
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	gi, err := f.font.GlyphIndex(&f.buf, r)
@@ -294,6 +328,9 @@ type Segment struct {
 
 // Outline returns the glyph outline for r at size, or nil when undefined.
 func (f *Face) Outline(r rune, size float64) []Segment {
+	if !f.inRange(r) {
+		return nil
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	gi, err := f.font.GlyphIndex(&f.buf, r)
@@ -303,11 +340,24 @@ func (f *Face) Outline(r rune, size float64) []Segment {
 	return f.outlineLocked(gi, size)
 }
 
-func (f *Face) outlineLocked(gi sfnt.GlyphIndex, size float64) []Segment {
+func (f *Face) outlineLocked(gi sfnt.GlyphIndex, size float64) (out []Segment) {
+	defer func() {
+		if recover() != nil {
+			out = nil // a hostile glyph must not take the browser down
+		}
+	}()
+	if f.vi != nil {
+		return f.vi.outline(int(gi), size)
+	}
 	segs, err := f.font.LoadGlyph(&f.buf, gi, f.scale(size), nil)
 	if err != nil {
 		return nil
 	}
+	return convertSegments(segs)
+}
+
+// convertSegments turns golang.org/x/image/font/sfnt segments (26.6 fixed point) into Segments in pixels.
+func convertSegments(segs sfnt.Segments) []Segment {
 	px := func(v fixed.Int26_6) float64 { return float64(v) / 64 }
 	out := make([]Segment, 0, len(segs))
 	for _, s := range segs {
@@ -334,7 +384,9 @@ type entry struct {
 	face   *Face
 	mono   bool
 	embed  []byte
-	idx    int // font index within a .ttc, -1 otherwise
+	idx    int    // font index within a .ttc, -1 otherwise
+	full   string // lower-case full font name and PostScript name (for local())
+	ps     string
 }
 
 var (
@@ -469,7 +521,9 @@ func probe(path string, idx int) *entry {
 	if p := f.PostTable(); p != nil {
 		mono = p.IsFixedPitch
 	}
-	return &entry{family: strings.ToLower(fam), style: st, path: path, mono: mono, idx: idx}
+	full, _ := f.Name(&b, sfnt.NameIDFull)
+	ps, _ := f.Name(&b, sfnt.NameIDPostScript)
+	return &entry{family: strings.ToLower(fam), style: st, path: path, mono: mono, idx: idx, full: strings.ToLower(full), ps: strings.ToLower(ps)}
 }
 
 func (e *entry) get() *Face {
@@ -555,6 +609,12 @@ func abs(a int) int {
 
 // Lookup resolves a single family name (or generic keyword) and style.
 func Lookup(family string, st Style) *Face {
+	if strings.IndexByte(family, 0) >= 0 {
+		if l := LookupAll(family, st); len(l) > 0 {
+			return l[0]
+		}
+		return nil
+	}
 	load()
 	family = strings.ToLower(strings.Trim(strings.TrimSpace(family), `"'`))
 	if st.Weight == 0 {
@@ -616,6 +676,14 @@ func isEmojiRune(r rune) bool {
 // Fallback finds a face that has a glyph for r, preferring the given list.
 func Fallback(r rune, families []string, st Style) *Face {
 	for _, f := range families {
+		if strings.IndexByte(f, 0) >= 0 {
+			for _, face := range LookupAll(f, st) {
+				if face.HasGlyph(r) {
+					return face
+				}
+			}
+			continue
+		}
 		if face := Lookup(f, st); face != nil && face.HasGlyph(r) {
 			return face
 		}
@@ -690,3 +758,32 @@ func be16(b []byte, o int) int {
 func bei16(b []byte, o int) int { return int(int16(be16(b, o))) }
 
 func glyphIndex(g int) sfnt.GlyphIndex { return sfnt.GlyphIndex(g) }
+
+// Local finds an installed font by the name a CSS local() source gives: its
+// full name or PostScript name, as browsers do, or (a convenience browsers
+// lack but fontconfig makes natural) a family name, in which case the face
+// closest to st is used. nil when no such font is installed.
+func Local(name string, st Style) *Face {
+	load()
+	key := strings.ToLower(strings.Join(strings.Fields(strings.Trim(name, `"'`)), " "))
+	if key == "" {
+		return nil
+	}
+	for _, e := range entries {
+		if e.embed == nil && (e.full == key || e.ps == key) {
+			return e.get()
+		}
+	}
+	if st.Weight == 0 {
+		st.Weight = 400
+	}
+	if e := match(entries, key, st); e != nil && e.embed == nil {
+		return e.get()
+	}
+	if a, ok := aliases[key]; ok {
+		if e := match(entries, a, st); e != nil && e.embed == nil {
+			return e.get()
+		}
+	}
+	return nil
+}

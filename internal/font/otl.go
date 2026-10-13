@@ -65,6 +65,10 @@ func findTable(data []byte, idx int, tag string) []byte {
 type otLayout struct {
 	t       otTable
 	lookups []int // lookup offsets (absolute within the table)
+
+	ligOnce  sync.Once
+	ligFirst map[int]int
+	ligMax   int
 }
 
 func newLayout(raw []byte, feats map[string]bool) *otLayout {
@@ -313,6 +317,81 @@ func (l *otLayout) ligature(gs []int) (int, int) {
 		}
 	}
 	return 0, 0
+}
+
+// firstMax returns the largest component count of a ligature that starts with glyph g (0: none).
+func (l *otLayout) firstMax(g int) int {
+	l.ligOnce.Do(l.buildLigIndex)
+	return l.ligFirst[g]
+}
+
+// maxComps is the largest component count of any ligature of the layout.
+func (l *otLayout) maxComps() int {
+	l.ligOnce.Do(l.buildLigIndex)
+	return l.ligMax
+}
+
+// buildLigIndex scans the ligature lookups once: for each first glyph the
+// longest ligature, so most text positions are rejected without looking up
+// the following glyphs.
+func (l *otLayout) buildLigIndex() {
+	t := l.t
+	l.ligFirst = map[int]int{}
+	for _, lo := range l.lookups {
+		typ, subs := l.subtables(lo)
+		if typ != 4 {
+			continue
+		}
+		for _, so := range subs {
+			nsets := t.u16(so + 4)
+			if nsets > 65535 {
+				continue
+			}
+			cov := so + t.u16(so+2)
+			for ci := 0; ci < nsets; ci++ {
+				first := t.coverageGlyphAt(cov, ci)
+				if first < 0 {
+					continue
+				}
+				ls := so + t.u16(so+6+2*ci)
+				n := t.u16(ls)
+				for i := 0; i < n; i++ {
+					lg := ls + t.u16(ls+2+2*i)
+					cc := t.u16(lg + 2)
+					if cc > maxLigRunes {
+						cc = maxLigRunes
+					}
+					if cc > l.ligFirst[first] {
+						l.ligFirst[first] = cc
+					}
+					if cc > l.ligMax {
+						l.ligMax = cc
+					}
+				}
+			}
+		}
+	}
+}
+
+// coverageGlyphAt returns the glyph with coverage index ci (-1 when unknown).
+func (t otTable) coverageGlyphAt(o, ci int) int {
+	switch t.u16(o) {
+	case 1:
+		if ci >= t.u16(o+2) {
+			return -1
+		}
+		return t.u16(o + 4 + 2*ci)
+	case 2:
+		n := t.u16(o + 2)
+		for i := 0; i < n; i++ {
+			ro := o + 4 + 6*i
+			start, end, sci := t.u16(ro), t.u16(ro+2), t.u16(ro+4)
+			if ci >= sci && ci <= sci+end-start {
+				return start + ci - sci
+			}
+		}
+	}
+	return -1
 }
 
 type otCache struct {

@@ -689,7 +689,9 @@ func TestToleratesSparseState(t *testing.T) {
 			for _, m := range s.Errors() {
 				t.Errorf("%s with sparse state #%d: %s", sc.Name, i, m)
 			}
-			s.Tab.Navigate("about:blank", nil)
+			// close the tab: every session keeps a JS VM alive, and the QuickJS binding allows only ~180 live VMs
+			// per process (one scenario more than that made this loop fail with "too many registered functions")
+			_ = r.e.CloseTab(s.Tab.ID)
 		}
 	}
 }

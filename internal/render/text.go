@@ -28,6 +28,9 @@ type fontSpec struct {
 	fallback  map[rune]*font.Face
 	rawAsc    float64
 	synthBold bool
+	web       bool           // the family list has web font families: missing glyphs may need a download
+	groups    [][]*font.Face // web only: the loaded faces of each family of the list, in list order
+	demanded  map[rune]bool
 }
 
 func round(v float64) float64 { return math.Floor(v + 0.5) }
@@ -44,9 +47,14 @@ func (c *ctx) spec(st *style.Computed) *fontSpec {
 		return fs
 	}
 	fst := font.Style{Weight: st.FontWeight, Italic: st.FontStyle != 0}
-	fs := &fontSpec{size: st.FontSize, fam: st.FontFamily, st: fst, fallback: map[rune]*font.Face{}}
+	fs := &fontSpec{size: st.FontSize, fam: st.FontFamily, st: fst, fallback: map[rune]*font.Face{}, web: font.HasScoped(st.FontFamily)}
 	for _, f := range st.FontFamily {
-		if face := font.Lookup(f, fst); face != nil {
+		if fs.web {
+			// a web font family has one face per unicode-range subset
+			g := font.LookupAll(f, fst)
+			fs.groups = append(fs.groups, g)
+			fs.faces = append(fs.faces, g...)
+		} else if face := font.Lookup(f, fst); face != nil {
 			fs.faces = append(fs.faces, face)
 		}
 	}
@@ -80,11 +88,43 @@ func (c *ctx) spec(st *style.Computed) *fontSpec {
 }
 
 func (fs *fontSpec) faceFor(r rune) *font.Face {
+	if fs.web {
+		return fs.webFaceFor(r)
+	}
 	for _, f := range fs.faces {
 		if f.HasGlyph(r) {
 			return f
 		}
 	}
+	return fs.fallbackFor(r)
+}
+
+// webFaceFor walks the family list in order. A web family without a loaded
+// face for r asks for the download (font.DemandFamily: only the first family
+// that is on its way is waited for) and the character is shown in the next
+// family meanwhile, so text is never invisible.
+func (fs *fontSpec) webFaceFor(r rune) *font.Face {
+	waiting := false
+	for i, g := range fs.groups {
+		for _, f := range g {
+			if f.HasGlyph(r) {
+				return f
+			}
+		}
+		if !waiting && i < len(fs.fam) && strings.IndexByte(fs.fam[i], 0) >= 0 && !fs.demanded[r] {
+			if font.DemandFamily(fs.fam[i], fs.st, r) {
+				waiting = true
+			}
+		}
+	}
+	if fs.demanded == nil {
+		fs.demanded = map[rune]bool{}
+	}
+	fs.demanded[r] = true
+	return fs.fallbackFor(r)
+}
+
+func (fs *fontSpec) fallbackFor(r rune) *font.Face {
 	if f, ok := fs.fallback[r]; ok {
 		return f
 	}
@@ -189,7 +229,8 @@ func (c *ctx) shapeWith(fs *fontSpec, st *style.Computed, rs []rune, prev rune, 
 			// standard ligatures (fi, fl, ...) within one face
 			if liga && i+1 < n && f.HasLigatures() && !isArabicRune(r) {
 				j := i + 1
-				for j < n && j < i+4 && sh.faces[j] == f && forms[j] != ' ' && !isZeroWidth(rs[j]) {
+				lm := f.LigMax()
+				for j < n && j < i+lm && sh.faces[j] == f && forms[j] != ' ' && !isZeroWidth(rs[j]) {
 					j++
 				}
 				if j-i >= 2 && r != ' ' {

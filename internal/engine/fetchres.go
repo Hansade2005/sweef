@@ -238,3 +238,13 @@ func (t *Tab) resourceReady(abs string, kind DataKind) bool {
 	}
 	return t.eng.res.peek(key) != nil // an earlier visit's copy: fresh, or one conditional request away
 }
+
+// fetchInFlight reports whether a request for abs of this kind is being made right now in this navigation.
+func (t *Tab) fetchInFlight(abs string, kind DataKind) bool {
+	key, _ := t.eng.res.key(t.Context(), abs, "")
+	fk := itoa(int(t.ds.epoch.Load())) + " " + string(kind) + " " + key
+	t.ds.mu.Lock()
+	_, ok := t.ds.flights[fk]
+	t.ds.mu.Unlock()
+	return ok
+}

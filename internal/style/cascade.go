@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"golang.org/x/net/html"
+
+	"github.com/sweefbrowser/sweef/internal/font"
 )
 
 // SheetIn is one author stylesheet handed to NewEngine.
@@ -37,7 +39,8 @@ type Engine struct {
 	conts     map[*html.Node]*contInfo
 	hasCQ     bool
 	curCont   *html.Node
-	persist   *Persist // cross-pass style cache (persist.go); nil: none
+	persist   *Persist     // cross-pass style cache (persist.go); nil: none
+	web       *font.WebSet // the document's web fonts: declared families get scoped names (webfonts.go)
 }
 
 var (
