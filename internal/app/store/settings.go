@@ -69,6 +69,11 @@ var Schema = []Spec{
 	{Key: "tabs.discardMinutes", Kind: KInt, Default: 30, Min: 0, Max: 1440, Group: "performance"},
 	{Key: "onboarding.done", Kind: KBool, Default: false, Group: "general"},
 
+	// Notifications, Web Push and background sync (docs/notifications.md, docs/push.md).
+	{Key: "notifications.dnd", Kind: KBool, Default: false, Group: "notifications"},
+	{Key: "notifications.default", Kind: KEnum, Default: "ask", Enum: []string{"ask", "blocked"}, Group: "notifications"},
+	{Key: "push.service", Kind: KString, Default: "", Group: "notifications"}, // autopush service URL; empty: SWEEF_PUSH_SERVICE, else none
+
 	// Data Saver (docs/data-saver.md). data.level "auto" means: standard when a
 	// budget is set, else off. The resolved level is in state.data.level.
 	{Key: "data.level", Kind: KEnum, Default: "auto", Enum: []string{"auto", "off", "standard", "strict"}, Group: "data"},

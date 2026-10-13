@@ -23,6 +23,12 @@ type SiteRule struct {
 	Agent     Visibility `json:"agent,omitempty"`
 	NoBlock   bool       `json:"noBlock,omitempty"`   // privacy exception: blocking off here
 	NoUpgrade bool       `json:"noUpgrade,omitempty"` // https upgrade off here
+
+	// Web permissions (siteperms.go). "" = not decided: the default applies, or the user is asked.
+	Notify          string `json:"notify,omitempty"`          // "granted" | "denied" for notifications and push
+	Periodic        string `json:"periodic,omitempty"`        // "granted" | "denied" overrides the bookmark rule for periodic sync
+	NotifyDismissed int    `json:"notifyDismissed,omitempty"` // prompts dismissed with "Not now" since the last decision
+	NotifyEmbargo   int64  `json:"notifyEmbargo,omitempty"`   // unix seconds: no prompt before this time
 }
 
 // Sites stores per-origin permissions with a default agent visibility.

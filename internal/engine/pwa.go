@@ -122,6 +122,9 @@ type PWAOptions struct {
 	// the SWEEF_PUSH_SERVICE environment variable; still empty: push is unavailable and subscribe() rejects
 	// with AbortError("Registration failed - push service not available").
 	PushService string
+	// PushServiceFunc, when set, is asked for the address each time (a setting that can change while the browser runs).
+	// It takes precedence over PushService; PushServiceChanged applies a change.
+	PushServiceFunc func() string
 	// PushTransport replaces the autopush client (another service, or a test double).
 	PushTransport func(h webpush.Handler, uaid string) (webpush.Transport, error)
 
@@ -247,6 +250,11 @@ func (p *PWA) Badges() map[string]Badge {
 // ClearOrigin forgets what the engine holds for origin: push subscriptions (unregistered at the service),
 // background sync registrations, the badge, shown notifications. "Clear browsing data" calls it.
 func (p *PWA) ClearOrigin(origin string) { p.st.clearOrigin(origin) }
+
+// PushServiceChanged applies a new push service address (the setting changed while the browser runs): the connection
+// to the old service is closed and, if subscriptions exist, replaced by one to the new service, which makes the
+// old subscriptions invalid (each worker gets pushsubscriptionchange).
+func (p *PWA) PushServiceChanged() { p.st.pushServiceChanged() }
 
 // PushServiceConfigured reports whether subscribe() can work.
 func (p *PWA) PushServiceConfigured() bool { return p.st.pushURL() != "" }
@@ -689,6 +697,21 @@ func (st *pwaState) allOrigins() []string {
 }
 
 func (st *pwaState) clearOrigin(origin string) {
+	if origin == "" { // every origin
+		for _, o := range st.allOrigins() {
+			st.clearOrigin(o)
+		}
+		st.mu.Lock()
+		var badged []string
+		for o := range st.badges {
+			badged = append(badged, o)
+		}
+		st.mu.Unlock()
+		for _, o := range badged {
+			st.setBadge(o, false, 0)
+		}
+		return
+	}
 	st.clearPush(origin)
 	st.clearSync(origin)
 	st.setBadge(origin, false, 0)

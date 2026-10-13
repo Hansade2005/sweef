@@ -30,6 +30,7 @@ import (
 	"github.com/sweefbrowser/sweef/internal/app/state"
 	"github.com/sweefbrowser/sweef/internal/app/store"
 	"github.com/sweefbrowser/sweef/internal/engine"
+	"github.com/sweefbrowser/sweef/internal/notify"
 	"github.com/sweefbrowser/sweef/internal/shell"
 )
 
@@ -73,6 +74,11 @@ type Config struct {
 	DataEngine DataEngine
 	// Now overrides the clock the data budget uses (tests).
 	Now func() time.Time
+	// NotifySink replaces the desktop notification service (tests pass a notify.Recorder). Nil: the platform's
+	// service, opened when the first notification is shown, and an in-window toast where there is none.
+	NotifySink notify.Sink
+	// PushService overrides the push.service setting and SWEEF_PUSH_SERVICE (tests).
+	PushService string
 }
 
 // App is the browser.
@@ -154,6 +160,7 @@ type App struct {
 	fullscreen          bool
 	ovl                 overlayState
 	dat                 dataSaver
+	pw                  *pwaApp // notifications, push and background sync (notifications.go); nil in a private window
 }
 
 type rect struct{ X, Y, W, H float64 }
@@ -252,6 +259,7 @@ func New(cfg Config) (*App, error) {
 		a.ownE = true
 	}
 	a.initDataSaver()
+	a.initPWA()
 	// the app's own HTTP clients count toward "used" like page traffic
 	if ct := a.eng.DefaultContext().CountedTransport(); ct != nil {
 		a.favicons.cli.Transport = ct
@@ -515,6 +523,9 @@ func (a *App) shutdown() error {
 		_ = a.eng.Close()
 	}
 	a.wg.Wait()
+	if a.pw != nil {
+		_ = a.pw.sink.Shutdown()
+	}
 	if a.incog != nil {
 		_ = a.incog.Close()
 	}

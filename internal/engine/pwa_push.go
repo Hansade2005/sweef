@@ -73,11 +73,17 @@ type pushSvc struct {
 	byChan  map[string]*pushSub
 	id      pushIdentity
 	loaded  bool
+	pumping bool
 	queue   chan webpush.Message
 	quit    chan struct{}
 }
 
 func (st *pwaState) pushURL() string {
+	if f := st.o.PushServiceFunc; f != nil {
+		if u := strings.TrimSpace(f()); u != "" {
+			return u
+		}
+	}
 	if st.o.PushService != "" {
 		return st.o.PushService
 	}
@@ -274,8 +280,12 @@ func (p *pushSvc) transport() (webpush.Transport, error) {
 		return old, nil
 	}
 	p.tr = tr
+	start := !p.pumping
+	p.pumping = true
 	p.mu.Unlock()
-	p.st.goJob(p.pump)
+	if start {
+		p.st.goJob(p.pump)
+	}
 	return tr, nil
 }
 
@@ -613,4 +623,24 @@ func (h *pwaHost) pushFns(f map[string]hostFn) {
 		})
 		return nil, nil
 	}
+}
+
+func (st *pwaState) pushServiceChanged() {
+	st.mu.Lock()
+	p := st.push
+	st.mu.Unlock()
+	if p == nil {
+		st.startPush()
+		return
+	}
+	p.mu.Lock()
+	tr := p.tr
+	p.tr = nil
+	p.loaded = false
+	p.byChan = map[string]*pushSub{}
+	p.mu.Unlock()
+	if tr != nil {
+		tr.Close()
+	}
+	st.startPush()
 }
