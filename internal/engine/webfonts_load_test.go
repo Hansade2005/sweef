@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -353,5 +354,82 @@ func TestCanvasTextUsesWebFonts(t *testing.T) {
 	}
 	if within(pair[0], want, 0.5) || !within(pair[1], want, 0.1) {
 		t.Fatalf("canvas widths before/after the font: %v, want the second to be %.2f", pair, want)
+	}
+}
+
+// A real OpenType/CFF font served as WOFF2 and as a plain file draws exactly like the same font installed.
+func TestRealFontAsWebFontMatchesInstalledFont(t *testing.T) {
+	const p = "/usr/share/fonts/opentype/inter/Inter-Regular.otf"
+	raw, err := os.ReadFile(p)
+	if err != nil {
+		t.Skip("Inter is not installed")
+	}
+	if font.Lookup("inter", font.Style{Weight: 400}) == nil {
+		t.Skip("Inter is not a system font here")
+	}
+	text := "Typography: AVA To office fi fl 0123456789 — “quotes” &amp; naïve café ŝ Привет"
+	shot := func(css, fam string, files map[string]fontFile) []byte {
+		s := newFontSite(t)
+		s.pages["/"] = `<!doctype html><html><head><link rel="stylesheet" href="/s.css"></head><body style="margin:8px;font-family:` + fam + `,serif;font-size:19px;line-height:1.4">
+<p>` + text + `</p><p style="font-size:30px">` + text + `</p></body></html>`
+		s.pages["/s.css"] = css
+		for k, v := range files {
+			s.files[k] = v
+		}
+		e := New(DefaultOptions())
+		defer e.Close()
+		tab, _ := e.NewTab(s.srv.URL + "/")
+		img, ok := tab.PaintRGBA(900, 200, 1, false)
+		if !ok {
+			t.Fatal("no render")
+		}
+		return append([]byte(nil), img.Pix...)
+	}
+	sys := shot(``, "Inter", nil)
+	asOTF := shot(`@font-face{font-family:WebInter;src:url(/i.otf) format("opentype")}`, "WebInter", map[string]fontFile{"/i.otf": {data: raw}})
+	asWOFF2 := shot(`@font-face{font-family:WebInter;src:url(/i.woff2) format("woff2")}`, "WebInter", map[string]fontFile{"/i.woff2": {data: fonttest.WOFF2(raw, fonttest.Options{})}})
+	asWOFF := shot(`@font-face{font-family:WebInter;src:url(/i.woff) format("woff")}`, "WebInter", map[string]fontFile{"/i.woff": {data: fonttest.WOFF(raw, true)}})
+	fb := shot(``, "NoSuchFont", nil)
+	for name, got := range map[string][]byte{"otf": asOTF, "woff2": asWOFF2, "woff": asWOFF} {
+		if !bytes.Equal(got, sys) {
+			n := 0
+			for i := range got {
+				if got[i] != sys[i] {
+					n++
+				}
+			}
+			t.Errorf("%s: %d of %d bytes differ from the installed font", name, n, len(got))
+		}
+	}
+	if bytes.Equal(sys, fb) {
+		t.Fatal("test cannot tell Inter from the fallback")
+	}
+}
+
+// Lengths in ex/ch units come from the metrics of the face in use: when the web font arrives,
+// the cached styles must be recomputed (the check in SWEEF_LAYOUT_CHECK compares with a fresh pass).
+func TestChUnitsFollowTheWebFontAfterItLoads(t *testing.T) {
+	SetLayoutCheck(true)
+	defer SetLayoutCheck(false)
+	s := newFontSite(t)
+	s.pages["/"] = `<!doctype html><html><head><link rel="stylesheet" href="/s.css"></head><body style="margin:0"><div id="d" style="display:inline-block;font-family:Boxy,serif;font-size:50px;width:10ch;height:1px">x</div></body></html>`
+	s.pages["/s.css"] = `@font-face{font-family:Boxy;src:url(/b.woff2)}`
+	s.files["/b.woff2"] = fontFile{data: fonttest.BoxesWOFF2, delay: 100 * time.Millisecond}
+	e := New(DefaultOptions())
+	defer e.Close()
+	tab, _ := e.NewTab("about:blank")
+	tab.SetAsyncImages(true)
+	nav(t, tab, s.srv.URL+"/")
+	before := spanWidth(t, tab, "#d")
+	// '0' in the Boxes font: advance Adv('0') units
+	want := 10 * float64(fonttest.Adv('0')) * 50 / 1000
+	deadline := time.Now().Add(3 * time.Second)
+	got := before
+	for time.Now().Before(deadline) && !within(got, want, 0.5) {
+		time.Sleep(30 * time.Millisecond)
+		got = spanWidth(t, tab, "#d")
+	}
+	if !within(got, want, 0.5) {
+		t.Fatalf("width %.1f before the font, %.1f after; the web font gives %.1f", before, got, want)
 	}
 }

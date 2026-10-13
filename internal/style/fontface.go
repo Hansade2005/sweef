@@ -247,6 +247,9 @@ func parseUnicodeRange(l string) ([]font.URange, bool) {
 			return nil, false
 		}
 		out = append(out, font.URange{Lo: rune(lo), Hi: rune(hi)})
+		if len(out) > 8192 {
+			return nil, false // nobody writes this; a hostile sheet could make every lookup slow
+		}
 	}
 	return out, len(out) > 0
 }

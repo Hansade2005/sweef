@@ -21,8 +21,8 @@ the vendor). Savings come from fetching less, fetching later, caching harder, an
 | Level | What it does |
 |---|---|
 | `off` | Counting and the budget still work; nothing is blocked. |
-| `standard` | Sends `Save-Data: on`; blocks ads/trackers (existing shield); no autoplay and no media preload (video/audio download only when the person presses play); images load lazily (only near the viewport) and any image whose `Content-Length` exceeds `ImageMaxBytes` (default 200 KB) is replaced by a tap-to-load placeholder; web fonts are skipped when a system fallback exists; third-party iframes are click-to-load; `prefetch`/`preload`/`prerender`/`dns-prefetch` hints and speculative loads are dropped; background tabs get no timers, polling or new network requests; the HTTP cache is extended for static assets (ignore max-age < 1 day for images/fonts/css/js with validators; always revalidate with ETag/If-Modified-Since instead of refetching); `Accept-Encoding: br, gzip` on everything. |
-| `strict` (text first) | Everything in standard plus: no images unless tapped (placeholders keep their layout size when `width`/`height` are known), no web fonts, no media, no third-party scripts, first-party scripts only up to `ScriptMaxBytes` (default 300 KB total per page), CSS kept. "Load full page" button always available. |
+| `standard` | Sends `Save-Data: on`; blocks ads/trackers (existing shield); no autoplay and no media preload (video/audio download only when the person presses play); images load lazily (only near the viewport) and any image whose `Content-Length` exceeds `ImageMaxBytes` (default 200 KB) is replaced by a tap-to-load placeholder; web fonts load only when the page's text uses them, only as WOFF2/WOFF, up to 300 KB per font and 600 KB per page (the rest show their fallback); third-party iframes are click-to-load; `prefetch`/`preload`/`prerender`/`dns-prefetch` hints and speculative loads are dropped; background tabs get no timers, polling or new network requests; the HTTP cache is extended for static assets (ignore max-age < 1 day for images/fonts/css/js with validators; always revalidate with ETag/If-Modified-Since instead of refetching); `Accept-Encoding: br, gzip` on everything. |
+| `strict` (text first) | Everything in standard plus: no images unless tapped (placeholders keep their layout size when `width`/`height` are known), no web fonts (icon fonts excepted, or the page would show words such as `arrow_back`), no media, no third-party scripts, first-party scripts only up to `ScriptMaxBytes` (default 300 KB total per page), CSS kept. "Load full page" button always available. |
 
 Per-site exceptions (`always full`, `always lite`) are stored by origin. A one-tap "Load this page fully, once" override exists.
 
@@ -37,6 +37,8 @@ type DataPolicy struct {
     ScriptMaxBytes   int   // strict: total first-party script budget per page (default 300<<10)
     LazyImages       bool  // fetch only near the viewport
     BlockFonts       bool
+    FontMaxBytes, FontTotalBytes int // additive: per-font and per-page web font caps (standard)
+    FontWOFFOnly     bool           // additive: only WOFF2/WOFF sources (standard)
     BlockMediaLoad   bool  // no preload/autoplay; fetch on play only
     ClickToLoad3PFrames bool
     DropHints        bool  // prefetch/preload/prerender/dns-prefetch

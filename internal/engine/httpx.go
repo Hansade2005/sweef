@@ -28,6 +28,9 @@ type httpOpts struct {
 	// maxBody > 0 aborts the response when its transfer size exceeds this:
 	// before reading anything when Content-Length says so, else while reading.
 	maxBody int64
+	// anonymous: send no cookies and keep none from the response (CORS requests without
+	// credentials, such as a cross-origin web font)
+	anonymous bool
 }
 
 type httpResp struct {
@@ -116,7 +119,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	if ck := t.Context().JarRef().ForURL(abs); ck != "" {
+	if ck := t.Context().JarRef().ForURL(abs); ck != "" && !o.anonymous {
 		req.Header.Set("Cookie", ck)
 	}
 	rec := fnet.RequestRecord{Method: req.Method, URL: abs, Headers: flattenHeaders(req.Header)}
@@ -161,6 +164,9 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 		}
 	}
 	for _, sc := range res.Header.Values("Set-Cookie") {
+		if o.anonymous {
+			break
+		}
 		if c := parseCookie(sc, t.eng.now()); c != nil {
 			if c.Domain == "" {
 				c.Domain = res.Request.URL.Hostname()

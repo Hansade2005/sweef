@@ -554,9 +554,8 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		return false, true
 	}
 	j.wakeMs = 0
-	start := time.Now()
 	for {
-		j.drainScripts()
+		j.drainScripts(soft)
 		j.jobs()
 		delivered := j.drainAsync()
 		next := float64(-1)
@@ -592,7 +591,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		}
 		j.mu.Unlock()
 		sliceOver := !soft.IsZero() && !time.Now().Before(soft)
-		httpWait := soft.IsZero() && j.httpInFlight() && time.Now().Before(start.Add(httpGrace))
+		httpWait := soft.IsZero() && (j.tab == nil || !j.tab.progMode.Load()) && j.httpInFlight() // a window's tab never waits on the network
 		if more || ((delivered || j.hasLiveWork()) && time.Now().Before(deadline)) || httpWait {
 			if sliceOver {
 				return false, false
@@ -1424,11 +1423,6 @@ func (t *Tab) setURLOnly(raw string) {
 	t.history = append(t.history, u)
 	t.hIdx = len(t.history) - 1
 	t.mu.Unlock()
-}
-
-// httpInFlight reports page requests (fetch, XHR) that have not been answered yet.
-func (j *jsVM) httpInFlight() bool {
-	return j.realtime != nil && j.realtime.httpPending.Load() > 0
 }
 
 // staticImportRE finds the specifiers of static imports and re-exports (not import(...) calls: those may never run).

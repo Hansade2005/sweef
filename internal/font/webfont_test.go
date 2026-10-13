@@ -264,3 +264,23 @@ func TestSizeAdjustAndMetricOverrides(t *testing.T) {
 		t.Errorf("kern %v want %v", got, want)
 	}
 }
+
+func TestFontFaceFeatureSettingsDescriptorCanTurnLigaturesOff(t *testing.T) {
+	sf, _, err := Decode(fonttest.Icons("I").SFNT(), Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	on := NewWebFace(FaceDesc{Family: "I"})
+	off := NewWebFace(FaceDesc{Family: "I", Features: `"kern" 1, "liga" 0`})
+	_ = on.SetData(sf)
+	_ = off.SetData(sf)
+	if !on.Face(400).HasLigatures() || off.Face(400).HasLigatures() {
+		t.Fatal("liga 0 in the @font-face rule must disable ligatures of that face")
+	}
+	if _, n := off.Face(400).Ligature([]rune("home")); n != 0 {
+		t.Fatal("ligature applied")
+	}
+	if gl := off.Face(400).ShapeRun([]rune("home"), 20, ShapeOptions{Liga: true}); len(gl) != 4 {
+		t.Fatalf("shaped into %d glyphs", len(gl))
+	}
+}

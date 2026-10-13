@@ -27,3 +27,12 @@ func (e *Engine) scopeFamilies(fam []string) []string {
 	}
 	return fam
 }
+
+// noteWebMetrics records that a computed length (ex, ch, cap, lh) was resolved
+// with the metrics of a web font family: such a style is out of date once a
+// face of the set loads, so the cross-pass cache must not keep it (persist.go).
+func (e *Engine) noteWebMetrics(fam []string) {
+	if e.web != nil && font.HasScoped(fam) {
+		e.usesWebMetrics = true
+	}
+}

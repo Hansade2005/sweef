@@ -41,6 +41,8 @@ type Engine struct {
 	curCont   *html.Node
 	persist   *Persist     // cross-pass style cache (persist.go); nil: none
 	web       *font.WebSet // the document's web fonts: declared families get scoped names (webfonts.go)
+	// usesWebMetrics: some length was computed from the metrics of a web font (webfonts.go)
+	usesWebMetrics bool
 }
 
 var (

@@ -8,7 +8,13 @@ import (
 	"time"
 )
 
-func TestZZRealSites(t *testing.T) {
+// TestRealSitesFontBytes loads real pages (a list of URLs in SWEEF_REAL_SITES, separated by
+// spaces; it is skipped without it) in a cold context at each Data Saver level and prints
+// what the web fonts cost: the font bytes, the faces declared and loaded and the fonts skipped.
+//
+//	SWEEF_REAL_SITES="https://go.dev/doc/effective_go https://pypi.org/project/requests" \
+//	  go test ./internal/engine -run TestRealSitesFontBytes -v
+func TestRealSitesFontBytes(t *testing.T) {
 	list := os.Getenv("SWEEF_REAL_SITES")
 	if list == "" {
 		t.Skip()

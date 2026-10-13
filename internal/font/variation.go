@@ -247,7 +247,7 @@ func (v *variation) instance(wf *WebFace, w int) *Face {
 	if err != nil {
 		return base
 	}
-	nf.ur, nf.adj, nf.hasOvr, nf.ovrAsc, nf.ovrDesc, nf.ovrGap = base.ur, base.adj, base.hasOvr, base.ovrAsc, base.ovrDesc, base.ovrGap
+	nf.ur, nf.adj, nf.hasOvr, nf.ovrAsc, nf.ovrDesc, nf.ovrGap, nf.noLiga = base.ur, base.adj, base.hasOvr, base.ovrAsc, base.ovrDesc, base.ovrGap, base.noLiga
 	nf.vi = &instanceData{v: v, f: nf, coords: coords, zero: zero, adv: map[int]float64{}, outl: map[int][][]gpt{}}
 	return nf
 }

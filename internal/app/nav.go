@@ -208,6 +208,7 @@ func (e *etab) driveLoad(seq int64, onLoad func()) {
 	e.driveSeq.Store(seq)
 	loaded := false
 	last := time.Now()
+	gap := loadPaintGap
 	gen := e.t.Generation()
 	var step func()
 	finish := func() {
@@ -237,9 +238,15 @@ func (e *etab) driveLoad(seq int64, onLoad func()) {
 				onLoad()
 			}
 		}
-		if g := e.t.Generation(); g != gen && time.Since(last) >= loadPaintGap {
+		if g := e.t.Generation(); g != gen && time.Since(last) >= gap {
+			t0 := time.Now()
 			e.paint(false)
 			gen, last = g, time.Now()
+			// repainting a big page takes long: leave at least twice that for the page's own work, so a page that
+			// keeps changing cannot spend the whole load repainting itself
+			if gap = 3 * time.Since(t0); gap < loadPaintGap {
+				gap = loadPaintGap
+			}
 		}
 		if !more {
 			finish()

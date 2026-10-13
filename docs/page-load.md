@@ -35,6 +35,22 @@ A unit of page work (one script, one timer batch) is not interrupted: a script t
 that tab's worker for that long (QuickJS has no JIT; the 5 s script timeout applies). Other tabs and the chrome have
 their own workers.
 
+## Page requests are asynchronous
+
+`fetch()`, asynchronous `XMLHttpRequest` and `sendBeacon` run on their own goroutine (`asynchttp.go`); the outcome is
+queued for the event loop like a socket frame and handed to the page's callback by the pump. Before, they were
+made in place from a host call, which parked the tab for the length of every request: a page's ten requests came one
+after the other, and one that hangs (a 30 s ad ping on MDN) froze the tab and its input for 30 s
+(`TestFetchIsAsynchronous`). Synchronous XHR still blocks, as the page asked, and requests made while a module is
+being evaluated complete in place (QuickJS awaits a module's top-level promise without an event loop).
+
+A headless load still returns a settled page: its pumps wait for requests that are in flight, but for none that is
+older than `httpGrace` (4 s), so a request that hangs does not hold the page. A window never waits: results arrive
+as the tab is woken (`SetWakeHook`).
+
+The static imports of a module are found as each source arrives and download in parallel (`prefetchModuleDeps`)
+instead of one round trip at a time from inside the evaluation.
+
 ## Fetching
 
 * One request per URL per navigation: `fetchRes` joins a request that is in flight (preload scanner, prefetch, loader,

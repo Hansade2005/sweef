@@ -72,6 +72,7 @@ func (s *cstate) setupMetrics() {
 
 // lazy font metrics for ex / ch / cap
 func (s *cstate) fontMetrics() (ex, ch, capH float64) {
+	s.eng.noteWebMetrics(s.c.FontFamily)
 	st := font.Style{Weight: s.c.FontWeight, Italic: s.c.FontStyle != 0}
 	f := font.Resolve(s.c.FontFamily, st)
 	if f == nil {
@@ -112,6 +113,7 @@ func (s *cstate) lineHeightPx() float64 {
 	case LPx:
 		v = lh.V
 	default:
+		s.eng.noteWebMetrics(s.c.FontFamily)
 		st := font.Style{Weight: s.c.FontWeight, Italic: s.c.FontStyle != 0}
 		if f := font.Resolve(s.c.FontFamily, st); f != nil {
 			m := f.Metrics(s.c.FontSize)

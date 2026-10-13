@@ -27,15 +27,20 @@ func loadProgressive(t *engine.Tab, u string, r *prog, t0 time.Time) error {
 	r.frames = 1
 	gen := t.Generation()
 	lastPaint := time.Now()
+	gap := 150 * time.Millisecond
 	for t.LoadPending() {
 		if r.loaded == 0 && t.LoadLoaded() {
 			r.loaded = time.Since(t0)
 		}
 		more, wait := t.LoadStep(30 * time.Millisecond)
-		if g := t.Generation(); g != gen && time.Since(lastPaint) > 120*time.Millisecond {
+		if g := t.Generation(); g != gen && time.Since(lastPaint) > gap {
+			t0 := time.Now()
 			t.PaintRGBA(1280, 760*3, 1, false)
 			gen, lastPaint = g, time.Now()
 			r.frames++
+			if gap = 3 * time.Since(t0); gap < 150*time.Millisecond { // the window's rule (internal/app/nav.go)
+				gap = 150 * time.Millisecond
+			}
 		}
 		if !more {
 			break

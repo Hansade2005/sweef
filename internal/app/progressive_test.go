@@ -178,7 +178,9 @@ func TestIdleAfterAProgressiveLoad(t *testing.T) {
 	if h.win.Presents() != presents {
 		t.Fatal("frames presented while idle after the load")
 	}
-	limit := 100 * time.Millisecond
+	// a busy loop or a re-arming timer costs ~2 s here; in a full run the process also carries other tests' leftovers
+	// (alone this is ~10 ms), so the bar is 300 ms
+	limit := 300 * time.Millisecond
 	if raceEnabled {
 		limit *= 4
 	}
@@ -188,3 +190,38 @@ func TestIdleAfterAProgressiveLoad(t *testing.T) {
 }
 
 func pngEncode(w io.Writer, im image.Image) error { return png.Encode(w, im) }
+
+// A request the page makes does not hold the window: the load finishes, the tab answers operations, and when the
+// response comes the page updates (the tab is woken to deliver it).
+func TestHangingPageRequestDoesNotHoldTheTab(t *testing.T) {
+	gate := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(gate) }) }
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<!doctype html><title>Api</title><body style="margin:0"><div style="height:200px;background:#2f9e44"></div>
+<script>fetch('/api').then(function (r) { return r.text(); }).then(function (t) { document.title = 'Api ' + t; });</script>`)
+	})
+	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-gate:
+		case <-time.After(20 * time.Second):
+		}
+		fmt.Fprint(w, "answered")
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	t.Cleanup(release)
+	h := newHarness(t, hopts{cfg: Config{InitialURLs: []string{srv.URL + "/"}}})
+	h.waitFor("page and load finished while the request hangs", func() bool {
+		return near(h.px(40, vpTop+50), "#2f9e44") && !h.tab().Loading && h.tab().Title == "Api"
+	})
+	t0 := time.Now()
+	var got string
+	h.pageEval(`document.title`, &got)
+	if d := time.Since(t0); d > 400*time.Millisecond {
+		t.Fatalf("an operation on the tab waited %v behind the hanging request", d)
+	}
+	release()
+	h.waitTitle("Api answered")
+}

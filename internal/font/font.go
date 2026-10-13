@@ -66,6 +66,8 @@ type Face struct {
 	hasOvr                  bool
 	// vi, when set, is the variable font instance this face draws (see variation.go).
 	vi *instanceData
+	// noLiga: the @font-face font-feature-settings turns standard ligatures off for this face.
+	noLiga bool
 }
 
 // Metrics are in pixels at the requested size.

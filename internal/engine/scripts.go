@@ -98,11 +98,12 @@ func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {
 	}
 }
 
-// drainScripts runs scripts that page code inserted into the document.
-func (j *jsVM) drainScripts() {
+// drainScripts runs scripts that page code inserted into the document, until the queue is empty or limit
+// (zero = none) has passed; the rest stays queued for the next pump.
+func (j *jsVM) drainScripts(limit time.Time) {
 	for {
 		j.mu.Lock()
-		if j.closed || len(j.scriptQueue) == 0 {
+		if j.closed || len(j.scriptQueue) == 0 || (!limit.IsZero() && !time.Now().Before(limit)) || (!j.scriptCap.IsZero() && !time.Now().Before(j.scriptCap)) {
 			j.mu.Unlock()
 			return
 		}

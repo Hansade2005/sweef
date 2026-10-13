@@ -49,6 +49,9 @@ func (f *Face) GID(r rune) int { return f.gid(r) }
 
 // HasLigatures reports whether the face has GSUB standard ligature lookups.
 func (f *Face) HasLigatures() bool {
+	if f.noLiga {
+		return false
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.loadOT().liga != nil
@@ -61,6 +64,9 @@ const maxLigRunes = 64
 // LigMax is the number of runes of the longest standard ligature of the face
 // (0 when it has none): how far text has to be scanned for one.
 func (f *Face) LigMax() int {
+	if f.noLiga {
+		return 0
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	lig := f.loadOT().liga
@@ -75,7 +81,7 @@ func (f *Face) LigMax() int {
 // the number of runes it replaces (0 when there is none). rs may be longer
 // than the ligature; at most LigMax runes are examined.
 func (f *Face) Ligature(rs []rune) (gid, n int) {
-	if len(rs) < 2 {
+	if len(rs) < 2 || f.noLiga {
 		return 0, 0
 	}
 	f.mu.Lock()
@@ -159,7 +165,7 @@ func (f *Face) ShapeRun(rs []rune, size float64, o ShapeOptions) []ShapedGlyph {
 		gids[i] = f.gid(r)
 	}
 	var lig *otLayout
-	if o.Liga {
+	if o.Liga && !f.noLiga {
 		f.mu.Lock()
 		lig = f.loadOT().liga
 		f.mu.Unlock()

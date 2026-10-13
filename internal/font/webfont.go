@@ -175,7 +175,11 @@ func (f *WebFace) Err() error {
 }
 
 // Set returns the set the face belongs to (nil before Add).
-func (f *WebFace) Set() *WebSet { return f.set }
+func (f *WebFace) Set() *WebSet {
+	wmu.Lock()
+	defer wmu.Unlock()
+	return f.set
+}
 
 // wmu guards every WebSet and WebFace: loads and lookups are short and rare
 // enough that one lock is simpler than per-set ones and cannot be raced by a
@@ -235,8 +239,11 @@ func (f *WebFace) SetFailed(err error) {
 }
 
 func (f *WebFace) touch(changed bool) {
-	if f.set != nil {
-		f.set.faceChanged(f, changed)
+	wmu.Lock()
+	s := f.set
+	wmu.Unlock()
+	if s != nil {
+		s.faceChanged(f, changed)
 	}
 }
 
@@ -904,6 +911,17 @@ func (f *WebFace) Redescribe(d FaceDesc) bool {
 	return true
 }
 
+// featureOff reports whether a font-feature-settings list switches the tag off ("liga" 0, "liga" off).
+func featureOff(list, tag string) bool {
+	for _, item := range strings.Split(list, ",") {
+		f := strings.Fields(strings.ToLower(strings.TrimSpace(item)))
+		if len(f) == 2 && strings.Trim(f[0], `"'`) == tag && (f[1] == "0" || f[1] == "off") {
+			return true
+		}
+	}
+	return false
+}
+
 // applyTo copies the descriptors that act on the drawn face: unicode-range,
 // size-adjust and the metric overrides.
 func (d *FaceDesc) applyTo(f *Face) {
@@ -913,6 +931,7 @@ func (d *FaceDesc) applyTo(f *Face) {
 	if d.SizeAdjust != 0 && d.SizeAdjust != 1 {
 		f.adj = d.SizeAdjust
 	}
+	f.noLiga = featureOff(d.Features, "liga") || featureOff(d.Features, "clig")
 	if d.Overrides != 0 {
 		f.hasOvr = true
 		f.ovrAsc, f.ovrDesc, f.ovrGap = -1, -1, -1
@@ -936,4 +955,11 @@ func (f *WebFace) Retry() {
 		f.state = Unloaded
 	}
 	wmu.Unlock()
+}
+
+// OpenSets is the number of web font sets that have not been closed (diagnostics and leak tests).
+func OpenSets() int {
+	regMu.Lock()
+	defer regMu.Unlock()
+	return len(regSets)
 }

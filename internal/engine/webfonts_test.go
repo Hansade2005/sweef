@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sweefbrowser/sweef/internal/font"
 	"github.com/sweefbrowser/sweef/internal/font/fonttest"
 )
 
@@ -482,5 +483,96 @@ func TestGoogleFontsCSSGetsABrowserUserAgent(t *testing.T) {
 	}
 	if got := fontCSSUserAgent("example.com", "Sweef/0.1"); got != "Sweef/0.1" {
 		t.Fatalf("other hosts keep the agent: %q", got)
+	}
+}
+
+func TestWebFontRequestsCarryCookiesOnlyToTheirOwnOrigin(t *testing.T) {
+	ttf := boxyTTF()
+	fonts := newFontSite(t)
+	fonts.files["/b.ttf"] = fontFile{data: ttf, header: map[string]string{"Access-Control-Allow-Origin": "*", "Set-Cookie": "tracker=1; Path=/"}}
+	var crossCookie, sameCookie string
+	fonts.srv.Config.Handler = wrapHandler(fonts.srv.Config.Handler, func(r *http.Request) { crossCookie = r.Header.Get("Cookie") })
+	page := newFontSite(t)
+	page.pages["/"] = fontPage
+	page.pages["/s.css"] = `@font-face{font-family:Boxy;src:url(` + fonts.srv.URL + `/b.ttf)}`
+	page.files["/same.ttf"] = fontFile{data: ttf}
+	page.srv.Config.Handler = wrapHandler(page.srv.Config.Handler, func(r *http.Request) {
+		if r.URL.Path == "/same.ttf" {
+			sameCookie = r.Header.Get("Cookie")
+		}
+	})
+	e := New(DefaultOptions())
+	defer e.Close()
+	tab, _ := e.NewTab("about:blank")
+	if err := tab.Context().AddCookies([]map[string]any{{"name": "sid", "value": "42", "domain": "127.0.0.1", "path": "/"}}); err != nil {
+		t.Fatal(err)
+	}
+	nav(t, tab, page.srv.URL+"/")
+	if w := spanWidth(t, tab, "#s"); !within(w, boxesWidth("Hello", 100, false), 1) {
+		t.Fatalf("cross-origin font not loaded: %.1f", w)
+	}
+	if crossCookie != "" {
+		t.Errorf("a cross-origin font request carried cookies: %q", crossCookie)
+	}
+	if got := tab.Context().JarRef().ForURL(fonts.srv.URL + "/"); strings.Contains(got, "tracker") {
+		t.Errorf("a cookie set by a cross-origin font response was stored: %q", got)
+	}
+	// same origin: credentials are sent
+	page.pages["/s.css"] = `@font-face{font-family:Boxy;src:url(/same.ttf)}`
+	nav(t, tab, page.srv.URL+"/")
+	_ = spanWidth(t, tab, "#s")
+	if !strings.Contains(sameCookie, "sid=42") {
+		t.Errorf("a same-origin font request must carry the cookies: %q", sameCookie)
+	}
+}
+
+func TestWebFontSetsAreReleasedWithTheirDocument(t *testing.T) {
+	s := newFontSite(t)
+	s.pages["/"] = fontPage
+	s.pages["/s.css"] = `@font-face{font-family:Boxy;src:url(/b.woff2)}`
+	s.pages["/plain"] = `<!doctype html><p>no fonts</p>`
+	s.files["/b.woff2"] = fontFile{data: fonttest.BoxesWOFF2}
+	before := font.OpenSets()
+	e := New(DefaultOptions())
+	tab, _ := e.NewTab("about:blank")
+	for i := 0; i < 3; i++ {
+		nav(t, tab, s.srv.URL+"/")
+		_ = spanWidth(t, tab, "#s")
+	}
+	if n := font.OpenSets() - before; n != 1 {
+		t.Fatalf("%d sets open after three navigations of one tab, want 1", n)
+	}
+	nav(t, tab, s.srv.URL+"/plain")
+	_, _ = tab.Locator("p").BoundingBox()
+	if n := font.OpenSets() - before; n != 0 {
+		t.Fatalf("%d sets open on a page without web fonts", n)
+	}
+	nav(t, tab, s.srv.URL+"/")
+	_ = spanWidth(t, tab, "#s")
+	e.Close()
+	if n := font.OpenSets() - before; n != 0 {
+		t.Fatalf("%d sets left after the engine closed", n)
+	}
+}
+
+func TestCrossOriginWebFontIsCachedWithVaryOrigin(t *testing.T) {
+	fonts := newFontSite(t)
+	page := newFontSite(t)
+	fonts.files["/b.woff2"] = fontFile{data: fonttest.BoxesWOFF2, header: map[string]string{
+		"Access-Control-Allow-Origin": page.srv.URL, "Vary": "Origin", "Cache-Control": "public, max-age=31536000, immutable"}}
+	page.pages["/"] = fontPage
+	page.pages["/s.css"] = `@font-face{font-family:Boxy;src:url(` + fonts.srv.URL + `/b.woff2) format("woff2")}`
+	e := New(DefaultOptions())
+	defer e.Close()
+	c := e.NewContext("", ContextOptions{})
+	for i := 0; i < 2; i++ {
+		tab, _ := c.NewTab("about:blank")
+		nav(t, tab, page.srv.URL+"/")
+		if w := spanWidth(t, tab, "#s"); !within(w, boxesWidth("Hello", 100, false), 1) {
+			t.Fatalf("visit %d: width %.1f", i, w)
+		}
+	}
+	if fonts.count("/b.woff2") != 1 {
+		t.Fatalf("the second visit must come from the cache: %d requests", fonts.count("/b.woff2"))
 	}
 }

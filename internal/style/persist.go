@@ -42,6 +42,9 @@ type Persist struct {
 
 	web    *font.WebSet // the document's web fonts; part of the cache key (see SetWebFonts)
 	webGen uint64       // web.DeclGen() the engine was built for
+	// webLoadGen is web.Gen() at that time; styles that used web font metrics (ex, ch, cap, lh units)
+	// are recomputed when a face has loaded since (Engine.usesWebMetrics)
+	webLoadGen uint64
 
 	usable bool // false: the engine may be reused but styles are not cached
 	bad    bool // a container-type was seen: stop caching with this engine
@@ -105,12 +108,12 @@ func sheetsEqual(a, b []SheetIn) bool {
 // starts the pass. The engine is the previous one when the inputs are the
 // same. Its Compute answers from the cache when it can.
 func (p *Persist) Acquire(env *Env, sheets []SheetIn, quirks bool) *Engine {
-	var wg uint64
+	var wg, lg uint64
 	if p.web != nil {
-		wg = p.web.DeclGen()
+		wg, lg = p.web.DeclGen(), p.web.Gen()
 	}
 	if p.eng != nil && !p.bad && !p.eng.hasCQ && p.quirks == quirks && p.env == *env && sheetsEqual(p.sheets, sheets) && len(p.eng.share) < 60000 &&
-		p.eng.web == p.web && p.webGen == wg {
+		p.eng.web == p.web && p.webGen == wg && !(p.eng.usesWebMetrics && p.webLoadGen != lg) {
 		p.beginPass()
 		return p.eng
 	}
@@ -119,7 +122,7 @@ func (p *Persist) Acquire(env *Env, sheets []SheetIn, quirks bool) *Engine {
 	p.sheets = append(p.sheets[:0:0], sheets...)
 	p.bad = false
 	e := NewEngineQ(&p.env, p.sheets, quirks)
-	e.web, p.webGen = p.web, wg
+	e.web, p.webGen, p.webLoadGen = p.web, wg, lg
 	p.eng = e
 	p.analyze(e)
 	p.ents = map[*html.Node]*pent{}

@@ -10,8 +10,8 @@ package engine
 // Navigate runs it to the end before returning (the headless contract: the page
 // is settled when the call returns). NavigateProgressive returns after the
 // prepaint step and the window then calls LoadStep between paints and input,
-// so a slow script, a late stylesheet-less image or the settle budget never
-// holds the first frame. Both drive the same machine, so the final document is
+// so a slow script, a late image or the settle budget never holds the first
+// frame. Both drive the same machine, so the final document is
 // the same; only who waits differs.
 
 import (

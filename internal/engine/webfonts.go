@@ -43,9 +43,10 @@ import (
 
 // Limits on what a page may make the engine download and decode as fonts.
 const (
-	fontMaxBytes     = 16 << 20 // one font file, transfer size, any policy
+	fontMaxBytes     = 8 << 20  // one font file, transfer size, any policy (httpDo reads at most 8 MB of a body)
 	fontPageMaxBytes = 64 << 20 // all fonts of a page
 	fontMaxFaces     = 96       // faces fetched per page
+	maxSheetFaces    = 2000     // @font-face rules taken from a document's sheets
 	fontConcurrency  = 6
 	fontFetchTimeout = 20 * time.Second
 	fontCacheBytes   = 24 << 20 // decoded fonts kept per browser context
@@ -58,11 +59,13 @@ type webFonts struct {
 	t   *Tab
 	doc *fnet.Doc
 
-	mu      sync.Mutex
-	set     *font.WebSet
-	parsed  map[string][]font.FaceDesc // sheet text + base -> faces (env independent part parsed once)
-	closed  bool
-	syncSig string // last syncNow input (see there)
+	mu        sync.Mutex
+	set       *font.WebSet
+	parsed    map[sheetKey][]font.FaceDesc // a sheet and the environment -> its faces (parsed once)
+	closed    bool
+	syncSig   string // last syncNow input (see there)
+	forced    int    // layouts forced by document.fonts.ready/status (jsfonts.go)
+	forcedGen uint64
 
 	sem      chan struct{}
 	spent    atomic.Int64 // transfer bytes of fonts fetched for this page
@@ -91,7 +94,7 @@ type fontFlight struct {
 }
 
 func newWebFonts(t *Tab, doc *fnet.Doc) *webFonts {
-	return &webFonts{t: t, doc: doc, parsed: map[string][]font.FaceDesc{}, sem: make(chan struct{}, fontConcurrency),
+	return &webFonts{t: t, doc: doc, parsed: map[sheetKey][]font.FaceDesc{}, sem: make(chan struct{}, fontConcurrency),
 		wake: make(chan struct{}, 1), flights: map[string]*fontFlight{}, js: map[int]*jsFace{}}
 }
 
@@ -165,7 +168,7 @@ func (w *webFonts) sync(sheets []render.Sheet, width, height, dpr float64, schem
 			continue
 		}
 		// @font-face rules inside @media blocks depend on the environment: the cache key has it
-		key := fmt.Sprintf("%s\x00%g,%g,%g,%s\x00%s", sh.BaseURL, width, height, dpr, scheme, sh.Text)
+		key := sheetKey{hashString(sh.Text), len(sh.Text), sh.BaseURL, fmt.Sprintf("%g,%g,%g,%s", width, height, dpr, scheme)}
 		w.mu.Lock()
 		ds, ok := w.parsed[key]
 		w.mu.Unlock()
@@ -178,12 +181,16 @@ func (w *webFonts) sync(sheets []render.Sheet, width, height, dpr float64, schem
 			}
 			w.mu.Lock()
 			if len(w.parsed) > 64 {
-				w.parsed = map[string][]font.FaceDesc{}
+				w.parsed = map[sheetKey][]font.FaceDesc{}
 			}
 			w.parsed[key] = ds
 			w.mu.Unlock()
 		}
 		descs = append(descs, ds...)
+		if len(descs) > maxSheetFaces {
+			descs = descs[:maxSheetFaces]
+			break
+		}
 	}
 	w.mu.Lock()
 	set := w.set
@@ -198,6 +205,21 @@ func (w *webFonts) sync(sheets []render.Sheet, width, height, dpr float64, schem
 	}
 	set.SetSheetFaces(descs)
 	return set
+}
+
+// sheetKey identifies a style sheet's text by its hash (a 64-bit collision could only
+// make a page's own fonts wrong) so that re-reading big sheets each pass costs no copy.
+type sheetKey struct {
+	hash uint64
+	n    int
+	base string
+	env  string
+}
+
+func hashString(s string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(s)) // the compiler avoids the copy for a []byte conversion passed to Write
+	return h.Sum64()
 }
 
 func resolveFaceSources(src []font.Source, base string) []font.Source {
@@ -718,7 +740,8 @@ func (w *webFonts) fetchNet(abs string, pol DataPolicy, maxBody, known int64, re
 	}
 	ch := make(chan res, 1)
 	go func() {
-		r, err := t.httpDo(httpOpts{method: "GET", url: abs, kind: KindFont, headers: hdr, maxBody: maxBody})
+		// credentials only for same-origin fonts, as for any anonymous CORS request
+		r, err := t.httpDo(httpOpts{method: "GET", url: abs, kind: KindFont, headers: hdr, maxBody: maxBody, anonymous: hdr["Origin"] != ""})
 		ch <- res{r, err}
 	}()
 	var r *httpResp

@@ -2,8 +2,11 @@ package font
 
 import (
 	"bytes"
+	"compress/zlib"
+	"encoding/binary"
 	"errors"
 	"math/rand"
+	"os"
 	"testing"
 
 	"github.com/sweefbrowser/sweef/internal/font/fonttest"
@@ -390,4 +393,145 @@ func TestDecodeRealBrotliFixtures(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("fixtures: boxes %d bytes, icons %d bytes", len(fonttest.BoxesWOFF2), len(fonttest.IconsWOFF2))
+}
+
+// Real fonts of the machine (TrueType with hinting instructions, composite glyphs and long
+// loca; CFF) go through every container and must come back drawing the same.
+func TestRealFontsRoundTripThroughContainers(t *testing.T) {
+	files := []string{
+		"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+		"/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+		"/usr/share/fonts/opentype/inter/Inter-Regular.otf",
+	}
+	any := false
+	for _, p := range files {
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		any = true
+		ref, err := Parse("ref", Style{Weight: 400}, raw)
+		if err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+		variants := map[string][]byte{"ttf": raw, "woff": fonttest.WOFF(raw, true)}
+		if !bytes.HasPrefix(raw, []byte("OTTO")) {
+			variants["woff2 null"] = fonttest.WOFF2(raw, fonttest.Options{})
+			variants["woff2 transform"] = fonttest.WOFF2(raw, fonttest.Options{Transform: true})
+		} else {
+			variants["woff2 null"] = fonttest.WOFF2(raw, fonttest.Options{})
+		}
+		for name, data := range variants {
+			sfnt, _, err := Decode(data, Limits{})
+			if err != nil {
+				t.Errorf("%s %s: %v", p, name, err)
+				continue
+			}
+			f, err := Parse("got", Style{Weight: 400}, sfnt)
+			if err != nil {
+				t.Errorf("%s %s: parse: %v", p, name, err)
+				continue
+			}
+			n := 0
+			for r := rune(0x20); r < 0x2200; r += 3 {
+				if ref.HasGlyph(r) != f.HasGlyph(r) {
+					t.Fatalf("%s %s U+%04X: coverage differs", p, name, r)
+				}
+				if !ref.HasGlyph(r) {
+					continue
+				}
+				n++
+				if ref.AdvanceUnits(r) != f.AdvanceUnits(r) {
+					t.Fatalf("%s %s U+%04X: advance", p, name, r)
+				}
+				a, b := ref.Outline(r, 100), f.Outline(r, 100)
+				if len(a) != len(b) {
+					t.Fatalf("%s %s U+%04X: %d vs %d segments", p, name, r, len(a), len(b))
+				}
+				for i := range a {
+					if a[i] != b[i] {
+						t.Fatalf("%s %s U+%04X seg %d: %+v vs %+v", p, name, r, i, a[i], b[i])
+					}
+				}
+			}
+			if n < 100 {
+				t.Errorf("%s %s: only %d glyphs compared", p, name, n)
+			}
+		}
+	}
+	if !any {
+		t.Skip("none of the test fonts is installed")
+	}
+}
+
+func TestDecompressionBombs(t *testing.T) {
+	s := testSFNT(t)
+	// WOFF2 whose brotli stream is longer than the directory announces
+	bomb := fonttest.WOFF2(s, fonttest.Options{Transform: true, Brotli: func(b []byte) []byte {
+		return fonttest.StoredBrotli(append(append([]byte(nil), b...), make([]byte, 6<<20)...))
+	}})
+	if _, _, err := Decode(bomb, Limits{}); err == nil || !errors.Is(err, ErrBadFont) {
+		t.Fatalf("woff2 longer than announced: %v", err)
+	}
+	// a one table WOFF whose zlib stream inflates to far more than its original length
+	var z bytes.Buffer
+	zw := zlib.NewWriter(&z)
+	zw.Write(make([]byte, 64<<20))
+	zw.Close()
+	hdr := make([]byte, 44+20)
+	copy(hdr, "wOFF")
+	binary.BigEndian.PutUint32(hdr[4:], 0x00010000)
+	binary.BigEndian.PutUint16(hdr[12:], 1)
+	copy(hdr[44:], "head")
+	binary.BigEndian.PutUint32(hdr[48:], 64)              // offset
+	binary.BigEndian.PutUint32(hdr[52:], uint32(z.Len())) // compressed length
+	binary.BigEndian.PutUint32(hdr[56:], 1<<20)           // claimed original length
+	file := append(hdr, z.Bytes()...)
+	binary.BigEndian.PutUint32(file[8:], uint32(len(file)))
+	if z.Len() >= 1<<20 {
+		t.Skipf("zlib stream is %d bytes", z.Len())
+	}
+	if _, _, err := Decode(file, Limits{}); err == nil || !errors.Is(err, ErrBadFont) {
+		t.Fatalf("woff zlib bomb: %v", err)
+	}
+	// a table directory that promises more than the limit
+	hdr2 := append([]byte(nil), hdr...)
+	binary.BigEndian.PutUint32(hdr2[56:], 1<<30)
+	file2 := append(hdr2, z.Bytes()...)
+	binary.BigEndian.PutUint32(file2[8:], uint32(len(file2)))
+	if _, _, err := Decode(file2, Limits{}); err == nil || !errors.Is(err, ErrBadFont) {
+		t.Fatalf("woff claiming a gigabyte: %v", err)
+	}
+}
+
+// FuzzDecode runs the whole path a downloaded file takes: container detection, decoding,
+// directory normalisation, sanitiser, parsing and drawing every character of the test font.
+func FuzzDecode(f *testing.F) {
+	s := testSFNT(f)
+	f.Add(s)
+	f.Add(fonttest.WOFF(s, true))
+	f.Add(fonttest.WOFF2(s, fonttest.Options{Transform: true}))
+	f.Add(fonttest.BoxesWOFF2)
+	f.Add(fonttest.IconsWOFF2)
+	f.Add(fonttest.VarBoxes("V", true).SFNT())
+	f.Fuzz(func(t *testing.T, d []byte) {
+		sfnt, _, err := Decode(d, Limits{MaxSfnt: 1 << 20})
+		if err != nil {
+			if !errors.Is(err, ErrBadFont) {
+				t.Fatalf("error does not wrap ErrBadFont: %v", err)
+			}
+			return
+		}
+		wf := NewWebFace(FaceDesc{Family: "x"})
+		if wf.SetData(sfnt) != nil {
+			return
+		}
+		face := wf.Face(400)
+		for r := rune(0x20); r < 0x80; r++ {
+			face.Outline(r, 24)
+			face.AdvanceF(r, 24)
+			face.KernF(r, 'A', 24)
+		}
+		face.ShapeRun([]rune("office home arrow_back"), 24, ShapeOptions{Kern: true, Liga: true})
+	})
 }

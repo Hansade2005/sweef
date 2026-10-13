@@ -24,9 +24,10 @@ import (
 	"time"
 )
 
-// httpGrace is how long a headless pump waits for page requests that are still in flight when its settle
-// budget is spent. A slow API answer belongs in the settled page; an ad ping that hangs does not hold it.
-var httpGrace = 6 * time.Second
+// httpGrace is how long a headless pump waits for a page request that is still in flight when its settle
+// budget is spent, counted from the request's start. A slow API answer belongs in the settled page; an ad ping
+// that hangs for 30 s does not hold it.
+var httpGrace = 4 * time.Second
 
 func init() {
 	registerHostExtension("asynchttp", func(j *jsVM) map[string]hostFn {
@@ -59,6 +60,12 @@ func (j *jsVM) hostHTTPAsync(a []any) (any, error) {
 	r := j.rt()
 	if !beacon {
 		r.httpPending.Add(1)
+		r.mu.Lock()
+		if r.httpAt == nil {
+			r.httpAt = map[int64]time.Time{}
+		}
+		r.httpAt[token] = time.Now()
+		r.mu.Unlock()
 	}
 	go func() {
 		res, err := t.httpForScript(method, raw, hdr, body)
@@ -74,6 +81,7 @@ func (j *jsVM) hostHTTPAsync(a []any) (any, error) {
 			r.http = map[int64]httpOutcome{}
 		}
 		r.http[token] = out
+		delete(r.httpAt, token)
 		r.queue = append(r.queue, asyncEvent{kind: "http", id: token})
 		r.mu.Unlock()
 		r.httpPending.Add(-1)
@@ -104,4 +112,20 @@ func (j *jsVM) hostHTTPTake(a []any) (any, error) {
 		return map[string]any{"error": strings.TrimSpace(out.err)}, nil
 	}
 	return out.res, nil
+}
+
+// httpInFlight reports whether a page request younger than httpGrace is unanswered.
+func (j *jsVM) httpInFlight() bool {
+	r := j.realtime
+	if r == nil || r.httpPending.Load() == 0 {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, at := range r.httpAt {
+		if time.Since(at) < httpGrace {
+			return true
+		}
+	}
+	return false
 }

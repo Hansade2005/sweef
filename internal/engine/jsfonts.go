@@ -23,6 +23,8 @@ func init() {
 	registerHostExtension("webfonts", func(j *jsVM) map[string]hostFn { return (&fontHost{j: j}).fns() })
 }
 
+const maxScriptFaces = 1024 // FontFace objects a document may create
+
 type fontHost struct{ j *jsVM }
 
 // jsFace is a face known to page script.
@@ -106,6 +108,12 @@ func (h *fontHost) faceNew(a []any) (any, error) {
 	src := ""
 	if len(a) > 1 && a[1] != nil {
 		src = argS(a, 1)
+	}
+	w.mu.Lock()
+	tooMany := len(w.js) >= maxScriptFaces
+	w.mu.Unlock()
+	if tooMany {
+		return map[string]any{"error": "Too many FontFace objects in this document.", "kind": "src"}, nil
 	}
 	d, err := style.NewFaceDesc(argS(a, 0), src, props)
 	if err != nil {
@@ -451,7 +459,10 @@ func (h *fontHost) synced() *font.WebSet { return h.j.tab.ds.env.Load().syncNow(
 
 // settle lays the document out (if that has not happened since the last
 // change) so that the fonts its text needs have been requested, then reports
-// how many are loading: document.fonts.ready is about those.
+// how many are loading: document.fonts.ready is about those. A document
+// without web fonts is not laid out at all, and a script that polls the
+// property while it mutates the page does not get a layout per access: at
+// most maxForcedFontLayouts per document, each only when the DOM changed.
 func (h *fontHost) settle(a []any) (any, error) {
 	t := h.j.tab
 	t.mu.RLock()
@@ -461,13 +472,26 @@ func (h *fontHost) settle(a []any) (any, error) {
 	if d == nil || w == nil {
 		return 0, nil
 	}
-	if wd, _, _, _, _ := t.Viewport(); wd > 0 {
+	set := h.synced()
+	if set == nil {
+		return 0, nil
+	}
+	gen := d.MutationGen()
+	w.mu.Lock()
+	force := w.forced < maxForcedFontLayouts && (w.forcedGen != gen || w.forced == 0)
+	if force {
+		w.forced++
+		w.forcedGen = gen
+	}
+	w.mu.Unlock()
+	if force {
+		wd, _, _, _, _ := t.Viewport()
+		if wd <= 0 {
+			wd = 1280
+		}
 		d.Layout(wd)
-	} else {
-		d.Layout(1280)
 	}
-	if set := w.webSet(); set != nil {
-		return set.Pending(), nil
-	}
-	return 0, nil
+	return set.Pending(), nil
 }
+
+const maxForcedFontLayouts = 2
