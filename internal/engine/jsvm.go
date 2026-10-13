@@ -158,6 +158,9 @@ type jsVM struct {
 	rtOnce   sync.Once
 	realtime *realtime // WebSockets and Workers (lazily created)
 
+	// closeHooks run after the QuickJS VM is closed: feature files hang their native teardown here (wasm.go).
+	closeHooks []func()
+
 	pendingNav  string
 	scriptQueue []int64        // script element ids inserted by page code
 	executed    map[int64]bool // scripts already run
@@ -339,6 +342,10 @@ func (j *jsVM) close() {
 	}
 	j.vm.SetModuleLoader(nil, nil)
 	j.vm.Close()
+	for _, h := range j.closeHooks {
+		h()
+	}
+	j.closeHooks = nil
 }
 
 func (j *jsVM) nowMs() float64 { return float64(time.Since(j.start).Microseconds()) / 1000 }

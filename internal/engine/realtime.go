@@ -229,6 +229,8 @@ type workerVM struct {
 	closed bool
 	start  time.Time
 	page   *jsVM
+
+	closeHooks []func() // run after the VM is closed (wasm.go)
 }
 
 func (w *workerVM) close() {
@@ -239,6 +241,10 @@ func (w *workerVM) close() {
 	}
 	w.closed = true
 	w.vm.Close()
+	for _, h := range w.closeHooks {
+		h()
+	}
+	w.closeHooks = nil
 }
 
 func (j *jsVM) workerCreate(rawurl, src, typ string) (int64, error) {
@@ -313,6 +319,7 @@ func (j *jsVM) workerCreate(rawurl, src, typ string) (int64, error) {
 		vm.Close()
 		return 0, fmt.Errorf("worker prelude: %w", err)
 	}
+	installWorkerWasm(vm, &w.closeHooks)
 	if src == "" {
 		body, status, err := t.fetchResourceKind(rawurl, KindScript)
 		if err != nil {
