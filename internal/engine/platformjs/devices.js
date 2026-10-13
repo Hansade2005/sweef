@@ -292,11 +292,13 @@ var PictureInPictureWindow = cls('PictureInPictureWindow', ET);
 H.attrs(PictureInPictureWindow.prototype, { width: function () { return 0; }, height: function () { return 0; } });
 H.handlers(PictureInPictureWindow.prototype, ['resize']);
 var PictureInPictureEvent = H.eventClass('PictureInPictureEvent', { pictureInPictureWindow: null }, null, 'pictureInPictureWindow');
-H.attrs(DP, { pictureInPictureEnabled: function () { return false; }, pictureInPictureElement: function () { return null; } });
-H.define(DP, 'exitPictureInPicture', function exitPictureInPicture() { return rej('InvalidStateError', 'There is no Picture-in-Picture element in this document.'); });
+// The media prelude (when present) already defines the Picture-in-Picture members, matched against Chromium;
+// these only fill in whatever is still missing.
+if (H.missing(DP, 'pictureInPictureEnabled')) H.attrs(DP, { pictureInPictureEnabled: function () { return false; }, pictureInPictureElement: function () { return null; } });
+if (H.missing(DP, 'exitPictureInPicture')) H.define(DP, 'exitPictureInPicture', function exitPictureInPicture() { return rej('InvalidStateError', 'There is no Picture-in-Picture element in this document.'); });
 if (g.HTMLVideoElement) {
-  H.define(g.HTMLVideoElement.prototype, 'requestPictureInPicture', function requestPictureInPicture() { return rej('NotSupportedError', 'Picture-in-Picture is not supported on this device.'); });
-  Object.defineProperty(g.HTMLVideoElement.prototype, 'disablePictureInPicture', {
+  if (H.missing(g.HTMLVideoElement.prototype, 'requestPictureInPicture')) H.define(g.HTMLVideoElement.prototype, 'requestPictureInPicture', function requestPictureInPicture() { return rej('NotSupportedError', 'Picture-in-Picture is not supported on this device.'); });
+  if (H.missing(g.HTMLVideoElement.prototype, 'disablePictureInPicture')) Object.defineProperty(g.HTMLVideoElement.prototype, 'disablePictureInPicture', {
     get: function () { return this.hasAttribute('disablepictureinpicture'); },
     set: function (v) { if (v) this.setAttribute('disablepictureinpicture', ''); else this.removeAttribute('disablepictureinpicture'); },
     enumerable: true, configurable: true
