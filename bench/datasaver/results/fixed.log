@@ -106,3 +106,21 @@ baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=
 [88/345] chromium-savedata  run 3 https://news.ycombinator.com/                                cold=   20059 warm=   14061 req=  7 ready=  853ms ok
 [89/345] sweef-off          run 3 https://news.ycombinator.com/                                cold=   18375 warm=   13881 req=  3 ready=  728ms ok
 [90/345] sweef-standard     run 3 https://news.ycombinator.com/                                cold=   18381 warm=   13891 req=  3 ready=  472ms ok
+[91/345] sweef-off          run 1 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1757590 warm=   43777 req= 70 ready= 7793ms ok
+[92/345] sweef-standard     run 1 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1538559 warm=   43657 req= 64 ready= 7519ms ok
+[93/345] sweef-strict       run 1 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold=  155424 warm=      24 req=  8 ready=  749ms ok
+[94/345] chromium           run 1 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 2988753 warm=  136065 req=120 ready= 3396ms ok
+[95/345] chromium-savedata  run 1 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 2780784 warm=  381640 req=121 ready= 2223ms ok
+[96/345] sweef-standard     run 2 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1536363 warm=   43589 req= 64 ready= 7075ms ok
+[97/345] sweef-strict       run 2 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold=  154523 warm=      48 req=  8 ready=  779ms ok
+[98/345] chromium           run 2 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 3009006 warm=  138366 req=120 ready= 3559ms ok
+[99/345] chromium-savedata  run 2 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 3015224 warm=  145028 req=120 ready= 3329ms ok
+[100/345] sweef-off          run 2 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1750992 warm=   42439 req= 70 ready= 8413ms ok
+[101/345] sweef-strict       run 3 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold=  154228 warm=      24 req=  8 ready=  740ms ok
+[102/345] chromium           run 3 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 3027309 warm=  134378 req=121 ready= 2104ms ok
+[103/345] chromium-savedata  run 3 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 2655350 warm=  483244 req=102 ready= 3332ms ok
+[104/345] sweef-off          run 3 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1756740 warm=   42292 req= 70 ready= 8544ms ok
+[105/345] sweef-standard     run 3 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1527962 warm=   42381 req= 64 ready= 7083ms ok
+[106/345] sweef-off          run 1 https://github.com/golang/go                                 cold= 1283242 warm=  514272 req= 38 ready= 2184ms ok
+[107/345] sweef-standard     run 1 https://github.com/golang/go                                 cold= 1284202 warm=  514225 req= 38 ready= 1829ms ok
+[108/345] sweef-strict       run 1 https://github.com/golang/go                                 cold=  418672 warm=   61245 req= 21 ready=  709ms ok
