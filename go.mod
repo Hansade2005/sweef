@@ -4,6 +4,7 @@ go 1.26.9
 
 require (
 	github.com/dsnet/compress v0.0.1
+	github.com/ebitengine/oto/v3 v3.5.1
 	github.com/ebitengine/purego v0.11.1
 	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/jfreymuth/oggvorbis v1.0.5
@@ -18,6 +19,7 @@ require (
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/jfreymuth/pulse v0.1.3 // indirect
 	github.com/jfreymuth/vorbis v1.0.2 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
