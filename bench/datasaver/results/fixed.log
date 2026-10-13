@@ -259,3 +259,13 @@ baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=
 [236/345] sweef-strict       run 3 https://www.newegg.com/p/pl?d=laptop                         cold=  514227 warm=  277335 req=  5 ready= 1511ms ok
 [237/345] chromium           run 3 https://www.newegg.com/p/pl?d=laptop                         cold= 9629677 warm=  828543 req=331 ready= 9049ms ok
 [238/345] chromium-savedata  run 3 https://www.newegg.com/p/pl?d=laptop                         cold= 9652798 warm= 1822609 req=334 ready= 9021ms ok
+[239/345] sweef-off          run 3 https://www.newegg.com/p/pl?d=laptop                         cold= 3270182 warm= 1656511 req=124 ready=30507ms ok
+[240/345] sweef-standard     run 3 https://www.newegg.com/p/pl?d=laptop                         cold= 2845195 warm= 1493588 req= 68 ready=29659ms ok
+[241/345] sweef-off          run 1 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1350470 warm=   63397 req= 55 ready= 9451ms ok
+[242/345] sweef-standard     run 1 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1315217 warm=   89941 req= 47 ready= 7390ms ok
+[243/345] sweef-strict       run 1 https://discuss.python.org/t/pep-703-making-the-global-inte… cold=  361953 warm=   55955 req= 34 ready= 1631ms ok
+[244/345] chromium           run 1 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2266983 warm=   57651 req=113 ready= 5978ms ok
+[245/345] chromium-savedata  run 1 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265311 warm=   57635 req=113 ready= 5742ms ok
+[246/345] sweef-standard     run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1322773 warm=   89846 req= 47 ready= 7466ms ok
+[247/345] sweef-strict       run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold=  361626 warm=   55849 req= 34 ready= 1454ms ok
+[248/345] chromium           run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265150 warm=  163650 req=113 ready= 6191ms ok

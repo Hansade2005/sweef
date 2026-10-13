@@ -159522,6 +159522,6363 @@
      "2 CONNECT(s) failed upstream: states.newegg.com:443: upstream proxy answered 502 Bad Gateway; px.owneriq.net:443: upstream proxy answered 502 Bad Gateway"
     ]
    }
+  },
+  {
+   "site": "https://www.newegg.com/p/pl?d=laptop",
+   "mode": "sweef-off",
+   "run": 3,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 3193025,
+    "wire_out": 77157,
+    "conns": 22,
+    "handshake_in": 858,
+    "handshake_out": 2328,
+    "requests": 124,
+    "cache_served": 0,
+    "ready_ms": 30506.659,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 10,
+     "Image": 62,
+     "Other": 4,
+     "Script": 38,
+     "Stylesheet": 2,
+     "XHR": 4
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "c1.neweggimages.com",
+      "conns": 5,
+      "in": 2433337,
+      "out": 30324
+     },
+     {
+      "host": "www.newegg.com",
+      "conns": 1,
+      "in": 207180,
+      "out": 5180
+     },
+     {
+      "host": "imk.neweggimages.com",
+      "conns": 1,
+      "in": 201320,
+      "out": 4490
+     },
+     {
+      "host": "cmp.osano.com",
+      "conns": 1,
+      "in": 85705,
+      "out": 2560
+     },
+     {
+      "host": "cdn.attn.tv",
+      "conns": 1,
+      "in": 61132,
+      "out": 2622
+     },
+     {
+      "host": "www.google.com",
+      "conns": 1,
+      "in": 52615,
+      "out": 2903
+     },
+     {
+      "host": "bzrcdn.openai.com",
+      "conns": 1,
+      "in": 32060,
+      "out": 2593
+     },
+     {
+      "host": "scripts.clarity.ms",
+      "conns": 1,
+      "in": 32102,
+      "out": 2251
+     },
+     {
+      "host": "static.cloudflareinsights.com",
+      "conns": 1,
+      "in": 14630,
+      "out": 2075
+     },
+     {
+      "host": "ep1.adtrafficquality.google",
+      "conns": 1,
+      "in": 12588,
+      "out": 2107
+     },
+     {
+      "host": "ep2.adtrafficquality.google",
+      "conns": 1,
+      "in": 12421,
+      "out": 2055
+     },
+     {
+      "host": "static.narrativ.com",
+      "conns": 1,
+      "in": 10809,
+      "out": 1963
+     },
+     {
+      "host": "b.clarity.ms",
+      "conns": 1,
+      "in": 8535,
+      "out": 4046
+     },
+     {
+      "host": "www.clarity.ms",
+      "conns": 1,
+      "in": 9551,
+      "out": 2520
+     },
+     {
+      "host": "bzr.openai.com",
+      "conns": 1,
+      "in": 5922,
+      "out": 2674
+     },
+     {
+      "host": "events.attentivemobile.com",
+      "conns": 1,
+      "in": 4293,
+      "out": 2523
+     },
+     {
+      "host": "newegg-us.attn.tv",
+      "conns": 1,
+      "in": 4327,
+      "out": 2224
+     },
+     {
+      "host": "ad.doubleclick.net",
+      "conns": 1,
+      "in": 4498,
+      "out": 2047
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://www.newegg.com/p/pl?d=laptop",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/d/dynamic-js/search/ProductList/USA/initial-json",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://static.cloudflareinsights.com/beacon.min.js/v4bc70e2c01a94c73b74392e4234840661791215815920",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/adapterScript-98ff4f2e.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/Survey/getpcodebysurvey.0.120.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/WWW/CSS/RemoteTemplate-5e4126ab6e.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/ProductList-e7e8cc2f.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/WWW/CSS/ProductList-285af1b4a0.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/polyfillEntry-c296bc8a.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/runtime~search~multiplePage-f205563c.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/MarketingChannel/processmktchannelv10.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webResource/Scripts/WWW/jquery-3.5.1.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/ShippingEstimate/shippingestimate-v.15.0.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/RequestQuote/requestquote-v8.0.0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/plp/promotion-banners-3.1.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/shopbestdeals/newegg-deals-suggestion-3.6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/TopKeywords/highlightKeywords.1.4.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/plp/computer-cases-type-left-filter-2.0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/plp/request-server-item-1.0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/SoldoutBadge/addsoldoutbadgeforess.v1.0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/plpalsolikesponsored-v1.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/AIMode/prd/ai-mode-landingpage-inject-v2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/voice/voice-search-v.1.3.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/common~search~multiplePage-f79ebda5.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/RemoteTemplate-829d5a91.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/vendor~search~multiplePage-1decf1ed.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cmp.osano.com/AzydZ7TEEX0GW2hin/3c115a66-ecfb-4dbf-929a-5d9c71025132/osano.js?v=0.2",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://imk.neweggimages.com/webresource/scripts/gatra/lib/usa/neggtm.js?negg=2\u0026id=GTM-WJ2PC5C",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://imk.neweggimages.com/webresource/scripts/plugin/inhousebiztra.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/BestSellerAndL30d/entranceOnPLPWithoutKeywords-v3.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.google.com/ccm/collect?rcb=6\u0026frm=0\u0026apvc=1\u0026ae=g\u0026auid=1893825511.1791865964\u0026dt=Laptops%20and%20Notebooks%20Computers\u0026en=page_view…",
+      "type": "Other",
+      "status": 200,
+      "encoded": 0
+     },
+     {
+      "url": "https://ad.doubleclick.net/ccm/s/collect?auid=1893825511.1791865964\u0026gtm=45He69a0h2v810635197za204zd810635197xea\u0026fmt=8",
+      "type": "Document",
+      "status": 204,
+      "encoded": 0
+     },
+     {
+      "url": "https://www.google.com/adsense/search/ads.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://bzrcdn.openai.com/sdk/oaiq.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://bzrcdn.openai.com/pixel-config/v1/CuXYJ6u3L33at1N1vgRcRS.json",
+      "type": "XHR",
+      "status": 200,
+      "encoded": 44
+     },
+     {
+      "url": "https://cdn.attn.tv/newegg/dtag.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cdn.attn.tv/tag/4-latest/unified-tag.js?v=4-latest_004375f7d01",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://static.narrativ.com/tags/narrativ-brand.1.0.0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://newegg-us.attn.tv/d?attn_vid=cb261a04e7974348b8ad14c059c768eb",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://events.attentivemobile.com/ct-ev",
+      "type": "Other",
+      "status": 401,
+      "encoded": 0
+     },
+     {
+      "url": "https://bzr.openai.com/v1/sdk/events?pid=CuXYJ6u3L33at1N1vgRcRS\u0026st=oaiq-web\u0026sv=0.1.41\u0026t=1791865967603\u0026ec=2",
+      "type": "XHR",
+      "status": 202,
+      "encoded": 21
+     },
+     {
+      "url": "https://cdn.attn.tv/growth-tag-assets/client-configs/PhM.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": 0
+     },
+     {
+      "url": "https://newegg-us.attn.tv/unrenderedCreative?v=2026.10.1\u0026r=\u0026id=cb261a04e7974348b8ad14c059c768eb\u0026pv=1\u0026l=https%3A%2F%2Fwww.newegg.com%2Fp%2Fp…",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     },
+     {
+      "url": "https://ep1.adtrafficquality.google/getconfig/sodar?sv=200\u0026tid=afs\u0026tv=1234567890\u0026st=env\u0026sjk=DHnnOOEoQ0KW0IH/eaOSEg==\u0026sde=1",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://ep2.adtrafficquality.google/sodar/sodar2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.clarity.ms/tag/l8xjy4w89j",
+      "type": "Script",
+      "status": 200,
+      "encoded": 738
+     },
+     {
+      "url": "https://www.clarity.ms/tag/l8xjy4w89j",
+      "type": "Script",
+      "status": 200,
+      "encoded": 738
+     },
+     {
+      "url": "https://scripts.clarity.ms/0.8.72/clarity.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/megabar/hd2-mi-apps.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/megabar/hd2-mi-tools.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/megabar/hd2-mi-new.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/megabar/hd2-mi-tags.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/logos/Newegg_full_color_logo_RGB.SVG",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-236-645-11.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 9764
+     },
+     {
+      "url": "https://c1.neweggimages.com/brandimage/Brand1315.gif",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2325
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-360-410-01.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 8838
+     },
+     {
+      "url": "https://c1.neweggimages.com/brandimage/Brand1146.gif",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2599
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/B0GJD2608110TBKCCDB.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 24616
+     },
+     {
+      "url": "https://c1.neweggimages.com/brandimage/Brand10418.gif",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2153
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/BPMFS2609151DCZHN29.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 15262
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-818-277-02.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 12798
+     },
+     {
+      "url": "https://c1.neweggimages.com/brandimage/Brand1186.gif",
+      "type": "Image",
+      "status": 200,
+      "encoded": 1887
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/A24GD2507150C5GQA94.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 12090
+     },
+     {
+      "url": "https://c1.neweggimages.com/brandimage/Brand1312.gif",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2128
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-236-520-11.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 12398
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/B32ZS260422156R8P84.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 14072
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/C11PS26060305AFEL70.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 12632
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/icons/D2CIcon@1x.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 390
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/AK3JS2210030WH52V26.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10508
+     },
+     {
+      "url": "https://c1.neweggimages.com/brandimage/Brand10772.gif",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2568
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/AGHSS2201140T8QEX8F.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 5620
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/C11PS2607160N49ER2B.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 11384
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/A0ZXD25090410Q09V2A.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 15080
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-360-468-09.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 13898
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/C655S26042004NL1SD1.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 12642
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/BPMFS2609151DBWD629.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 15262
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/AMRPD2607280E3PZ263.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 5806
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/C11PS2608240GNYZC39.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 18684
+     },
+     {
+      "url": "https://c1.neweggimages.com/brandimage/Brand224367.gif",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2624
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/B0GJD2608250H00SE91.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10334
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-817-336-01.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 8908
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/C8BES26092405N5NY09.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 20350
+     },
+     {
+      "url": "https://c1.neweggimages.com/brandimage/Brand212692.gif",
+      "type": "Image",
+      "status": 200,
+      "encoded": 1718
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-236-753-18.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 7826
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/AWVGS2307080K3RU272.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 9656
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/C655S2605140LT051DF.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 12012
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-360-430-01.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 17176
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-156-902-23.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 7372
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/V3JSD2504160DKI9UE4.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 7924
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/ACBWD2504241BECV34A.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 16522
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/1TS-000A-14R42-11.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 19590
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-156-677-07.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 6352
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-156-794-27.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 13648
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-156-903-26.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10636
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/BZ0YS2509050GGJSF78.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 9648
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-236-756-11.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 7536
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/A24GD2605100CA7CU62.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 17080
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/A24GD2408070C6WCK0D.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 7520
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/1TS-000A-15UR2-01.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 11266
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-840-857-03.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10708
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/34-360-455-09.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10458
+     },
+     {
+      "url": "https://c1.neweggimages.com/productimage/nb300/BVNCD25092503RYZ563.jpg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 7216
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/themes/nest/images/footer/badge-appstore.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/themes/nest/images/footer/badge-googleplay.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/themes/nest/images/footer/brand-abs.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/themes/nest/images/footer/brand-rosewill.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 31682
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/themes/nest/images/footer/brand-neb.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 29199
+     },
+     {
+      "url": "https://www.newegg.com/Nest/images/icons/ai-star.png",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/Nest/images/icons/rating_S.png",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/Nest/images/badges/medal_gold.png",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/Nest/images/logos/logo_424x210_bright.png",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/Nest/images/flag/UnitedStates.png",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/d4-star1.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/d4-star2.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/d9-shop-with-celeste.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/Nest/images/icons/hide.svg",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/Nest/images/icons/hide.svg",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/Nest/images/footer/footer-watermark.png",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://b.clarity.ms/collect",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 3193883,
+     "wire_out": 79485,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 1601773,
+    "wire_out": 54738,
+    "conns": 18,
+    "handshake_in": 702,
+    "handshake_out": 1894,
+    "requests": 124,
+    "cache_served": 93,
+    "ready_ms": 22042.034,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 6,
+     "Image": 63,
+     "Other": 6,
+     "Script": 40,
+     "Stylesheet": 2,
+     "XHR": 3
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "c1.neweggimages.com",
+      "conns": 5,
+      "in": 1088999,
+      "out": 16898
+     },
+     {
+      "host": "www.newegg.com",
+      "conns": 1,
+      "in": 198109,
+      "out": 5260
+     },
+     {
+      "host": "imk.neweggimages.com",
+      "conns": 1,
+      "in": 189612,
+      "out": 4200
+     },
+     {
+      "host": "cdn.attn.tv",
+      "conns": 1,
+      "in": 56912,
+      "out": 2542
+     },
+     {
+      "host": "ep1.adtrafficquality.google",
+      "conns": 1,
+      "in": 13836,
+      "out": 2107
+     },
+     {
+      "host": "b.clarity.ms",
+      "conns": 1,
+      "in": 8535,
+      "out": 4099
+     },
+     {
+      "host": "www.clarity.ms",
+      "conns": 1,
+      "in": 9359,
+      "out": 2611
+     },
+     {
+      "host": "static.narrativ.com",
+      "conns": 1,
+      "in": 7206,
+      "out": 2018
+     },
+     {
+      "host": "bzr.openai.com",
+      "conns": 1,
+      "in": 5921,
+      "out": 2939
+     },
+     {
+      "host": "analytics.google.com",
+      "conns": 1,
+      "in": 5550,
+      "out": 2434
+     },
+     {
+      "host": "www.google.com",
+      "conns": 1,
+      "in": 4578,
+      "out": 2761
+     },
+     {
+      "host": "stats.g.doubleclick.net",
+      "conns": 1,
+      "in": 4778,
+      "out": 2198
+     },
+     {
+      "host": "events.attentivemobile.com",
+      "conns": 1,
+      "in": 4294,
+      "out": 2523
+     },
+     {
+      "host": "newegg-us.attn.tv",
+      "conns": 1,
+      "in": 4084,
+      "out": 2148
+     }
+    ],
+    "engine": {
+     "wire_in": 1602475,
+     "wire_out": 56632,
+     "cache_hit_bytes": 1717847,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://www.newegg.com/p/pl?d=laptop",
+   "mode": "sweef-standard",
+   "run": 3,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 2755160,
+    "wire_out": 90035,
+    "conns": 31,
+    "handshake_in": 1209,
+    "handshake_out": 3281,
+    "requests": 68,
+    "cache_served": 0,
+    "ready_ms": 29659.101,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 5,
+     "Image": 7,
+     "Other": 6,
+     "Script": 40,
+     "Stylesheet": 2,
+     "XHR": 4
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "c1.neweggimages.com",
+      "conns": 10,
+      "in": 1800732,
+      "out": 32489
+     },
+     {
+      "host": "imk.neweggimages.com",
+      "conns": 1,
+      "in": 385199,
+      "out": 6642
+     },
+     {
+      "host": "www.newegg.com",
+      "conns": 3,
+      "in": 203887,
+      "out": 8526
+     },
+     {
+      "host": "cmp.osano.com",
+      "conns": 1,
+      "in": 85735,
+      "out": 2572
+     },
+     {
+      "host": "cdn.attn.tv",
+      "conns": 1,
+      "in": 61134,
+      "out": 2636
+     },
+     {
+      "host": "www.google.com",
+      "conns": 1,
+      "in": 52519,
+      "out": 3331
+     },
+     {
+      "host": "bzrcdn.openai.com",
+      "conns": 1,
+      "in": 32079,
+      "out": 2603
+     },
+     {
+      "host": "scripts.clarity.ms",
+      "conns": 1,
+      "in": 32103,
+      "out": 2215
+     },
+     {
+      "host": "static.cloudflareinsights.com",
+      "conns": 1,
+      "in": 14631,
+      "out": 2087
+     },
+     {
+      "host": "ep2.adtrafficquality.google",
+      "conns": 1,
+      "in": 13942,
+      "out": 2067
+     },
+     {
+      "host": "ep1.adtrafficquality.google",
+      "conns": 1,
+      "in": 12483,
+      "out": 2119
+     },
+     {
+      "host": "static.narrativ.com",
+      "conns": 1,
+      "in": 10809,
+      "out": 1975
+     },
+     {
+      "host": "y.clarity.ms",
+      "conns": 1,
+      "in": 8536,
+      "out": 4068
+     },
+     {
+      "host": "www.clarity.ms",
+      "conns": 1,
+      "in": 9508,
+      "out": 2519
+     },
+     {
+      "host": "analytics.google.com",
+      "conns": 1,
+      "in": 6801,
+      "out": 2453
+     },
+     {
+      "host": "bzr.openai.com",
+      "conns": 1,
+      "in": 5921,
+      "out": 2686
+     },
+     {
+      "host": "stats.g.doubleclick.net",
+      "conns": 1,
+      "in": 6026,
+      "out": 2217
+     },
+     {
+      "host": "events.attentivemobile.com",
+      "conns": 1,
+      "in": 4292,
+      "out": 2535
+     },
+     {
+      "host": "newegg-us.attn.tv",
+      "conns": 1,
+      "in": 4325,
+      "out": 2237
+     },
+     {
+      "host": "ad.doubleclick.net",
+      "conns": 1,
+      "in": 4498,
+      "out": 2058
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://www.newegg.com/p/pl?d=laptop",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/d/dynamic-js/search/ProductList/USA/initial-json",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/ShippingEstimate/shippingestimate-v.15.0.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/Survey/getpcodebysurvey.0.120.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/vendor~search~multiplePage-773704b3.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/WWW/CSS/RemoteTemplate-5e4126ab6e.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/WWW/CSS/ProductList-791c3757fd.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/RemoteTemplate-829d5a91.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/adapterScript-89d6b8a1.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/ProductList-6981a9e8.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/SoldoutBadge/addsoldoutbadgeforess.v1.0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/common~search~multiplePage-7f4d3eab.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/plpalsolikesponsored-v1.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/mobile/mobile-feedback.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/voice/voice-search-v.1.3.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/AIMode/prd/ai-mode-landingpage-inject-v2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/RequestQuote/requestquote-v8.0.0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://static.cloudflareinsights.com/beacon.min.js/v4bc70e2c01a94c73b74392e4234840661791215815920",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/TopKeywords/highlightKeywords.1.4.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/plp/computer-cases-type-left-filter-2.0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/shopbestdeals/newegg-deals-suggestion-3.6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/plp/promotion-banners-3.1.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/plp/request-server-item-1.0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/runtime~search~multiplePage-f205563c.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Scripts/WWW/polyfillEntry-c296bc8a.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/MarketingChannel/processmktchannelv10.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/webResource/Scripts/WWW/jquery-3.5.1.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cmp.osano.com/AzydZ7TEEX0GW2hin/3c115a66-ecfb-4dbf-929a-5d9c71025132/osano.js?v=0.2",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://imk.neweggimages.com/webresource/scripts/gatra/lib/usa/neggtm.js?negg=2\u0026id=GTM-WJ2PC5C",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://imk.neweggimages.com/webresource/scripts/plugin/inhousebiztra.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.google.com/ccm/collect?rcb=1\u0026frm=0\u0026apvc=1\u0026ae=g\u0026auid=605325130.1791866019\u0026dt=Laptops%20and%20Notebooks%20Computers\u0026en=page_view\u0026…",
+      "type": "Other",
+      "status": 200,
+      "encoded": 0
+     },
+     {
+      "url": "https://ad.doubleclick.net/ccm/s/collect?auid=605325130.1791866019\u0026gtm=45He69a0h2v810635197za204zd810635197xea\u0026fmt=8",
+      "type": "Document",
+      "status": 204,
+      "encoded": 0
+     },
+     {
+      "url": "https://imk.neweggimages.com/webresource/scripts/gatra/lib/usa/neggtagDestination.js?id=G-TR46GG8HLR\u0026v=1\u0026cx=c\u0026negg=2\u0026gtm=4e69a0h2",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://stats.g.doubleclick.net/g/collect?v=2\u0026tid=G-TR46GG8HLR\u0026cid=1925083942.1791866025\u0026gtm=45je6992v894488550z8810635197za20kzb810635197z…",
+      "type": "Other",
+      "status": 204,
+      "encoded": 0
+     },
+     {
+      "url": "https://c1.neweggimages.com/webresource/Scripts/Others/BestSellerAndL30d/entranceOnPLPWithoutKeywords-v3.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.google.com/adsense/search/ads.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://bzrcdn.openai.com/sdk/oaiq.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.google.com/measurement/conversion?random=1791866024790\u0026cv=11\u0026tid=G-TR46GG8HLR\u0026fst=1791866024790\u0026fmt=8\u0026en=session_start\u0026gtm=45je…",
+      "type": "Document",
+      "status": 200,
+      "encoded": 0
+     },
+     {
+      "url": "https://analytics.google.com/g/collect?v=2\u0026tid=G-TR46GG8HLR\u0026gtm=45je6992v894488550z8810635197za20kzb810635197zd810635197\u0026_p=1791866015383\u0026_…",
+      "type": "Other",
+      "status": 204,
+      "encoded": 0
+     },
+     {
+      "url": "https://bzrcdn.openai.com/pixel-config/v1/CuXYJ6u3L33at1N1vgRcRS.json",
+      "type": "XHR",
+      "status": 200,
+      "encoded": 44
+     },
+     {
+      "url": "https://bzr.openai.com/v1/sdk/events?pid=CuXYJ6u3L33at1N1vgRcRS\u0026st=oaiq-web\u0026sv=0.1.41\u0026t=1791866029729\u0026ec=2",
+      "type": "XHR",
+      "status": 202,
+      "encoded": 21
+     },
+     {
+      "url": "https://cdn.attn.tv/newegg/dtag.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cdn.attn.tv/tag/4-latest/unified-tag.js?v=4-latest_004375f7d01",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://static.narrativ.com/tags/narrativ-brand.1.0.0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://newegg-us.attn.tv/d?attn_vid=d13c365cb8c74d7daed5e96470df42f1",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://events.attentivemobile.com/ct-ev",
+      "type": "Other",
+      "status": 401,
+      "encoded": 0
+     },
+     {
+      "url": "https://cdn.attn.tv/growth-tag-assets/client-configs/PhM.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": 0
+     },
+     {
+      "url": "https://newegg-us.attn.tv/unrenderedCreative?v=2026.10.1\u0026r=\u0026id=d13c365cb8c74d7daed5e96470df42f1\u0026pv=1\u0026l=https%3A%2F%2Fwww.newegg.com%2Fp%2Fp…",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     },
+     {
+      "url": "https://ep1.adtrafficquality.google/getconfig/sodar?sv=200\u0026tid=afs\u0026tv=1234567890\u0026st=env\u0026sjk=16uv7+DCT4uELu50TiNBHA==\u0026sde=1",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://ep2.adtrafficquality.google/sodar/sodar2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.clarity.ms/tag/l8xjy4w89j",
+      "type": "Script",
+      "status": 200,
+      "encoded": 738
+     },
+     {
+      "url": "https://www.clarity.ms/tag/l8xjy4w89j",
+      "type": "Script",
+      "status": 200,
+      "encoded": 726
+     },
+     {
+      "url": "https://scripts.clarity.ms/0.8.72/clarity.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/Nest/images/logos/logo_424x210_bright.png",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/megabar/hd2-mi-tags.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/megabar/hd2-mi-tools.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/megabar/hd2-mi-apps.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/megabar/hd2-mi-new.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/d9-shop-with-celeste.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/d4-star1.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c1.neweggimages.com/WebResource/Themes/Nest/images/header/d4-star2.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.newegg.com/Nest/images/flag/UnitedStates.png",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://y.clarity.ms/collect",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 2756369,
+     "wire_out": 93316,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 1439378,
+    "wire_out": 54210,
+    "conns": 20,
+    "handshake_in": 780,
+    "handshake_out": 2054,
+    "requests": 63,
+    "cache_served": 38,
+    "ready_ms": 31381.598,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 5,
+     "Image": 7,
+     "Other": 4,
+     "Script": 38,
+     "Stylesheet": 2,
+     "XHR": 3
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "c1.neweggimages.com",
+      "conns": 5,
+      "in": 1139863,
+      "out": 16598
+     },
+     {
+      "host": "www.newegg.com",
+      "conns": 5,
+      "in": 154464,
+      "out": 12031
+     },
+     {
+      "host": "cdn.attn.tv",
+      "conns": 1,
+      "in": 56934,
+      "out": 2506
+     },
+     {
+      "host": "scripts.clarity.ms",
+      "conns": 1,
+      "in": 32541,
+      "out": 2219
+     },
+     {
+      "host": "ep1.adtrafficquality.google",
+      "conns": 1,
+      "in": 12411,
+      "out": 2118
+     },
+     {
+      "host": "y.clarity.ms",
+      "conns": 1,
+      "in": 8536,
+      "out": 4108
+     },
+     {
+      "host": "www.clarity.ms",
+      "conns": 1,
+      "in": 9357,
+      "out": 2641
+     },
+     {
+      "host": "bzr.openai.com",
+      "conns": 1,
+      "in": 5922,
+      "out": 2951
+     },
+     {
+      "host": "static.narrativ.com",
+      "conns": 1,
+      "in": 6716,
+      "out": 2030
+     },
+     {
+      "host": "events.attentivemobile.com",
+      "conns": 1,
+      "in": 4292,
+      "out": 2535
+     },
+     {
+      "host": "www.google.com",
+      "conns": 1,
+      "in": 4257,
+      "out": 2313
+     },
+     {
+      "host": "newegg-us.attn.tv",
+      "conns": 1,
+      "in": 4085,
+      "out": 2160
+     }
+    ],
+    "engine": {
+     "wire_in": 1440158,
+     "wire_out": 56264,
+     "cache_hit_bytes": 1135394,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+   "mode": "sweef-off",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 1313166,
+    "wire_out": 37304,
+    "conns": 13,
+    "handshake_in": 507,
+    "handshake_out": 1461,
+    "requests": 55,
+    "cache_served": 0,
+    "ready_ms": 9450.901,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 2,
+     "Image": 12,
+     "Script": 9,
+     "Stylesheet": 32
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "us1.discourse-cdn.com",
+      "conns": 4,
+      "in": 765266,
+      "out": 12333
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 6,
+      "in": 462703,
+      "out": 17790
+     },
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 67464,
+      "out": 2991
+     },
+     {
+      "host": "emoji.discourse-cdn.com",
+      "conns": 1,
+      "in": 10530,
+      "out": 2157
+     },
+     {
+      "host": "avatars.discourse-cdn.com",
+      "conns": 1,
+      "in": 7203,
+      "out": 2033
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 304
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-math_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-narrative-bot_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 175
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-local-dates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_light-default_-1_2_0e39d98b6f933316b31e86bc35e74f794ca7f8a5.css?__ws=d…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_2_69b34afc899fc6c17d212729f6835add4d0c8f1e.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 248
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_4_f901e89faf3a99b9d0bbafa51a4208b99501e5e6.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 357
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.py…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 316
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 509
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/theme-javascripts/8386593bf29524501840e7364025b341746ee06b.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": 685
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/c0aff8253d3095539925493b41dec04c924b4408/en/overrides.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": 941
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/0ffe7a21317d2af4f704e60d5a6802a6b9fa84f4/en/mf.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/16fc1f74c72f86d0781f1d7ba2976bdad844633d/en/main.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_dark_1_2_66189027d116a154953adf97197ad087a0e782ed.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://discuss.python.org/plugins/discourse-client-performance/javascripts/discourse-client-performance.js?v=a7b922e8787e07682fc55636ddbe9…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/automation_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/checklist_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-detect-47cf9e6d.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-update-91688f13.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/plugins/footnote_extra-95ffab71.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-chat-integration_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-data-explorer_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-details_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-github_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-lazy-videos_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-policy_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-presence_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-solved_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-templates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-topic-voting_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/discourse-fwogqfuu.digested.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/footnote_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-user-notes_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/hosted-site_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/spoiler-alert_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional/chunk-f96lzs6p.digested.js",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://emoji.discourse-cdn.com/apple/wave.png?v=15",
+      "type": "Image",
+      "status": 200,
+      "encoded": 1285
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/2X/8/88d4484552c4beac33d9a0848f523aaa66aad78c.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 695
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/3X/8/3/8354042ac932196b5fde1d1048a76b567decdcdc.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 13893
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/optimized/2X/2/2c441545dc69401836f2d6061e5ed827b2cb9fad_2_502x499.jpeg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 56354
+     },
+     {
+      "url": "https://emoji.discourse-cdn.com/apple/partying_face.png?v=12",
+      "type": "Image",
+      "status": 200,
+      "encoded": 1260
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex016/user_avatar/discuss.python.org/ambv/48/25884_2.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2608
+     },
+     {
+      "url": "https://emoji.discourse-cdn.com/apple/slight_smile.png?v=12",
+      "type": "Image",
+      "status": 200,
+      "encoded": 620
+     },
+     {
+      "url": "https://avatars.discourse-cdn.com/v4/letter/b/e9c0ed/48.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 510
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex016/user_avatar/discuss.python.org/h-vetinari/48/1220_2.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2608
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex016/user_avatar/discuss.python.org/methane/48/43_2.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2608
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/colesbury/48/28031_2.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 1644
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex016/user_avatar/discuss.python.org/jeanas/48/8115_2.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2608
+     }
+    ],
+    "engine": {
+     "wire_in": 1313673,
+     "wire_out": 38765,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 60530,
+    "wire_out": 2867,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 105,
+    "requests": 55,
+    "cache_served": 53,
+    "ready_ms": 6303.82,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 2,
+     "Image": 12,
+     "Script": 9,
+     "Stylesheet": 32
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 60530,
+      "out": 2795
+     },
+     {
+      "host": "emoji.discourse-cdn.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "us1.discourse-cdn.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 60569,
+     "wire_out": 2900,
+     "cache_hit_bytes": 1190963,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+   "mode": "sweef-standard",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 1282216,
+    "wire_out": 33001,
+    "conns": 11,
+    "handshake_in": 429,
+    "handshake_out": 1229,
+    "requests": 47,
+    "cache_served": 0,
+    "ready_ms": 7390.153,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 2,
+     "Image": 4,
+     "Script": 9,
+     "Stylesheet": 32
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "us1.discourse-cdn.com",
+      "conns": 4,
+      "in": 765519,
+      "out": 12380
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 5,
+      "in": 441240,
+      "out": 15577
+     },
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 67496,
+      "out": 3006
+     },
+     {
+      "host": "emoji.discourse-cdn.com",
+      "conns": 1,
+      "in": 7961,
+      "out": 2038
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://discuss.python.org/plugins/discourse-client-performance/javascripts/discourse-client-performance.js?v=a7b922e8787e07682fc55636ddbe9…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/footnote_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_light-default_-1_2_0e39d98b6f933316b31e86bc35e74f794ca7f8a5.css?__ws=d…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_2_69b34afc899fc6c17d212729f6835add4d0c8f1e.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 249
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-user-notes_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/hosted-site_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_dark_1_2_66189027d116a154953adf97197ad087a0e782ed.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/automation_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/checklist_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-chat-integration_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-details_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-data-explorer_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-github_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-local-dates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-lazy-videos_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-math_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-narrative-bot_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 175
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-policy_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-presence_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-detect-47cf9e6d.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-topic-voting_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-templates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-solved_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/spoiler-alert_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 304
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.py…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 316
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_4_f901e89faf3a99b9d0bbafa51a4208b99501e5e6.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 357
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 510
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/theme-javascripts/8386593bf29524501840e7364025b341746ee06b.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": 685
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/0ffe7a21317d2af4f704e60d5a6802a6b9fa84f4/en/mf.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/16fc1f74c72f86d0781f1d7ba2976bdad844633d/en/main.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/c0aff8253d3095539925493b41dec04c924b4408/en/overrides.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": 941
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-update-91688f13.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/plugins/footnote_extra-95ffab71.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/discourse-fwogqfuu.digested.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional/chunk-f96lzs6p.digested.js",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/3X/8/3/8354042ac932196b5fde1d1048a76b567decdcdc.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 13893
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/optimized/2X/2/2c441545dc69401836f2d6061e5ed827b2cb9fad_2_502x499.jpeg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 56354
+     },
+     {
+      "url": "https://emoji.discourse-cdn.com/apple/wave.png?v=15",
+      "type": "Image",
+      "status": 200,
+      "encoded": 1285
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/2X/8/88d4484552c4beac33d9a0848f523aaa66aad78c.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 695
+     }
+    ],
+    "engine": {
+     "wire_in": 1282645,
+     "wire_out": 34230,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 80877,
+    "wire_out": 9064,
+    "conns": 4,
+    "handshake_in": 156,
+    "handshake_out": 440,
+    "requests": 47,
+    "cache_served": 42,
+    "ready_ms": 6445.066,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 2,
+     "Image": 4,
+     "Script": 9,
+     "Stylesheet": 32
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 60599,
+      "out": 2857
+     },
+     {
+      "host": "us1.discourse-cdn.com",
+      "conns": 3,
+      "in": 13269,
+      "out": 4179
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 1,
+      "in": 7009,
+      "out": 2028
+     }
+    ],
+    "engine": {
+     "wire_in": 81033,
+     "wire_out": 9480,
+     "cache_hit_bytes": 1170878,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+   "mode": "sweef-strict",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 341496,
+    "wire_out": 20457,
+    "conns": 8,
+    "handshake_in": 312,
+    "handshake_out": 888,
+    "requests": 34,
+    "cache_served": 0,
+    "ready_ms": 1630.906,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 1,
+     "Stylesheet": 32
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 6,
+      "in": 275321,
+      "out": 15737
+     },
+     {
+      "host": "discuss.python.org",
+      "conns": 2,
+      "in": 66175,
+      "out": 4720
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-presence_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_light-default_-1_2_0e39d98b6f933316b31e86bc35e74f794ca7f8a5.css?__ws=d…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/spoiler-alert_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 304
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-templates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-solved_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-topic-voting_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-user-notes_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/footnote_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_dark_1_2_66189027d116a154953adf97197ad087a0e782ed.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/automation_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/checklist_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-chat-integration_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-data-explorer_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-github_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-details_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-lazy-videos_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-local-dates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-math_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-policy_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-narrative-bot_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 175
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/hosted-site_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.py…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 316
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 509
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_4_f901e89faf3a99b9d0bbafa51a4208b99501e5e6.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 357
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_2_69b34afc899fc6c17d212729f6835add4d0c8f1e.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 248
+     },
+     {
+      "url": "https://discuss.python.org/plugins/discourse-client-performance/javascripts/discourse-client-performance.js?v=a7b922e8787e07682fc55636ddbe9…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 341808,
+     "wire_out": 21345,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped": {
+      "script": 8
+     },
+     "skipped_estimate": 245760,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 53290,
+    "wire_out": 2665,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 105,
+    "requests": 34,
+    "cache_served": 33,
+    "ready_ms": 799.979,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 1,
+     "Stylesheet": 32
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "discuss.python.org",
+      "conns": 2,
+      "in": 53290,
+      "out": 2641
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 53329,
+     "wire_out": 2722,
+     "cache_hit_bytes": 256053,
+     "aborted_bytes": 0,
+     "skipped": {
+      "script": 8
+     },
+     "skipped_estimate": 245760,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+   "mode": "chromium",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 2232698,
+    "wire_out": 34285,
+    "conns": 13,
+    "internal_in": 18769,
+    "internal_out": 10324,
+    "internal_conns": 6,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 113,
+    "cache_served": 0,
+    "ready_ms": 5978.093,
+    "browser_in": 2182867,
+    "browser_out": 68316,
+    "by_type": {
+     "Document": 47213,
+     "Fetch": 0,
+     "Font": 188025,
+     "Image": 41880,
+     "Manifest": 1736,
+     "Other": 12548,
+     "Script": 1652883,
+     "Stylesheet": 238582,
+     "XHR": 0
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 1,
+     "Font": 2,
+     "Image": 9,
+     "Manifest": 1,
+     "Other": 2,
+     "Script": 63,
+     "Stylesheet": 32,
+     "XHR": 1
+    },
+    "protos": {
+     "h2": 112
+    },
+    "doc_bytes": 46346,
+    "cdp_host_in": {
+     "avatars.discourse-cdn.com": 816,
+     "discuss.python.org": 55892,
+     "emoji.discourse-cdn.com": 790,
+     "sea2.discourse-cdn.com": 684476,
+     "us1.discourse-cdn.com": 1440893
+    },
+    "hosts": [
+     {
+      "host": "us1.discourse-cdn.com",
+      "conns": 4,
+      "in": 1456499,
+      "out": 13331
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 6,
+      "in": 698744,
+      "out": 13008
+     },
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 63077,
+      "out": 3551
+     },
+     {
+      "host": "avatars.discourse-cdn.com",
+      "conns": 1,
+      "in": 7204,
+      "out": 2201
+     },
+     {
+      "host": "emoji.discourse-cdn.com",
+      "conns": 1,
+      "in": 7174,
+      "out": 2194
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-data-explorer_chunk.CSpGmw-ms1tqs33.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 14674
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-detect-47cf9e6d.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1162
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-gfdrod1s.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 825
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-hfhu6kea.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1769
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/theme-javascripts/3385ba4c017d7dc764c68865d34a1ded72e47cb3.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5083
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/automation_chunk.DvFpQj-hjp9ylx0.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 754
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-reactions_main.CkMs0a-sqppaond.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10383
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-b7zx6w88.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2795
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/stonebig/48/2796_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2811
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/c0aff8253d3095539925493b41dec04c924b4408/en/overrides.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1629
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-dl5wsie3.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 821
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/spoiler-alert_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1372
+     },
+     {
+      "url": "https://discuss.python.org/message-bus/f683f2a18fdc49e9a7baa3b5007ae6b4/poll",
+      "type": "XHR",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 0
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-lazy-videos_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3741
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_dark_1_2_66189027d116a154953adf97197ad087a0e782ed.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3581
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-omp929yd.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 764
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-user-notes_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1441
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-bf83g28c.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 93408
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_4_f901e89faf3a99b9d0bbafa51a4208b99501e5e6.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1211
+     },
+     {
+      "url": "https://discuss.python.org/manifest.webmanifest",
+      "type": "Manifest",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1736
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-math_main.BjvgOh-m2b1qbqz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7235
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-update-91688f13.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1747
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-f96lzs6p.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1131
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-o8cu9y0f.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 13878
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-eamaqmyj.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23095
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-kcscixpt.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1137
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-k76fu1yg.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1893
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-presence_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1445
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/optimized/1X/f93ff97c4f381b5e8add5a0c163b4ded29f20ed7_2_512x512.png",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10545
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-mkbfnw12.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 903
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/1X/ca0883b21b8210c5a62c9ac02353de5f24a4d6fc.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2747
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/hosted-site_main.aP57LN-sxs3awk3.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4171
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-topic-voting_main.DlDnTA-j42g4ckn.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5152
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-user-notes_main.CwaK07-mxv8y1mr.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2643
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/discourse-fwogqfuu.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 660825
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-j35j4d75.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 18326
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/svg-sprite/discuss.python.org/svg-2-f6a801b9c454182e0da24cd6fa708b53940ea1b6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 69930
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-ai_chunk.Ca6aMy-bbmi7ili.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23166
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-local-dates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1393
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-narrative-bot_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1040
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/footnote_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1475
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex016/user_avatar/discuss.python.org/ambv/48/25884_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3244
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-frmh9xgk.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4668
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/optimized/1X/9997f0605d56c4bfecd63594f52f42cdafd6b06a_2_32x32.png",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2003
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-local-dates_main.DYZuSF-debpt3nu.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10473
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-solved_main.DlUWIS-kvfpra9s.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 8387
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/16fc1f74c72f86d0781f1d7ba2976bdad844633d/en/main.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 165442
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-policy_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1876
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-solved_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2663
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/1X/c7591c98caf3b31d4d9c6f322f41ed9d80a50800.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26263
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-lazy-videos_main.CKBcYx-r1ypyn2o.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2667
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-presence_main.BIIx_U-af1zvo95.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2679
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/spoiler-alert_main.BgkUQr-qhr3itc6.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2699
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-yz2ioxql.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 46441
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-math_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1635
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-lcux5byt.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1075
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1354
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/fonts/JetBrainsMono-Bold.woff2?v=0.0.19",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 95229
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-details_main.efw4kb-geiwe1yz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1608
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/0ffe7a21317d2af4f704e60d5a6802a6b9fa84f4/en/mf.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2989
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 150358
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 19219
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/plugins/footnote_extra-95ffab71.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3887
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-chat-integration_main.CF1XId-7trv60zp.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1335
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-github_main.C1gIAx-cmhwsvwz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 870
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-chat-integration_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1732
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-github_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2020
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/poll_main.BW68Rt-c84yzql0.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 21962
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-eyt9eo8j.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 36772
+     },
+     {
+      "url": "https://discuss.python.org/plugins/discourse-client-performance/javascripts/discourse-client-performance.js?v=a7b922e8787e07682fc55636ddbe9…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 6943
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4432
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_light-default_-1_2_0e39d98b6f933316b31e86bc35e74f794ca7f8a5.css?__ws=d…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3289
+     },
+     {
+      "url": "https://discuss.python.org/srv/pv",
+      "type": "Fetch",
+      "status": 204,
+      "proto": "h2",
+      "encoded": 0,
+      "failed": "canceled"
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/footnote_main.DE1qtG-2olauttf.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3219
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-bjqbh4kz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 45557
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-6vx9t3be.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 708
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-data-explorer_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4319
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/fonts/JetBrainsMono-Regular.woff2?v=0.0.19",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 92796
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-data-explorer_main.1xNOZR-ms1tqs33.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10438
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-narrative-bot_main.CQ9-Is-hczd7o49.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 878
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/hosted-site_chunk.XtHBxd-sxs3awk3.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4211
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/automation_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2452
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2131
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.py…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1189
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_2_69b34afc899fc6c17d212729f6835add4d0c8f1e.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1127
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/photoswipe-lightbox-omiq7iv9.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4542
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-templates_main.C_2yN_-se5i1bvp.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5851
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-user-notes_chunk.Dbexa0-mxv8y1mr.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2591
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-i5a6sakk.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 158260
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/renejsum/48/2940_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1794
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/automation_main.CqvHfq-hjp9ylx0.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1162
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/theme-javascripts/8386593bf29524501840e7364025b341746ee06b.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1532
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-d5qas15v.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 43024
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-topic-voting_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1838
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-solved_chunk.DL-z0A-kvfpra9s.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 756
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/checklist_main.BehS7Y-fiy0u9lo.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7398
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-ai_main.Dby7DS-bbmi7ili.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 62451
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-templates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1593
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/hosted-site_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 11078
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1386
+     },
+     {
+      "url": "https://avatars.discourse-cdn.com/v4/letter/b/e9c0ed/48.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 816
+     },
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+      "type": "Document",
+      "status": 301,
+      "encoded": 867
+     },
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional/22606",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 46346
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-deprecation-collector_main.UsZAHM-l37s2224.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1476
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1376
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/colesbury/48/28031_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2311
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-policy_main.CRbkX8-3k2h030o.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7281
+     },
+     {
+      "url": "https://emoji.discourse-cdn.com/apple/heart.png?v=15",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 790
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-he5vdgmd.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1352
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/checklist_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1923
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-details_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1693
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1200
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/ajoino/48/6907_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1104
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 54386,
+    "wire_out": 3265,
+    "conns": 1,
+    "internal_in": 18788,
+    "internal_out": 7932,
+    "internal_conns": 6,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 112,
+    "cache_served": 108,
+    "ready_ms": 1571.546,
+    "browser_in": 47223,
+    "browser_out": 3055,
+    "by_type": {
+     "Document": 47223,
+     "Fetch": 0,
+     "Font": 0,
+     "Image": 0,
+     "Manifest": 0,
+     "Other": 0,
+     "Script": 0,
+     "Stylesheet": 0,
+     "XHR": 0
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 1,
+     "Font": 2,
+     "Image": 9,
+     "Manifest": 1,
+     "Other": 1,
+     "Script": 63,
+     "Stylesheet": 32,
+     "XHR": 1
+    },
+    "protos": {
+     "h2": 111
+    },
+    "doc_bytes": 46356,
+    "cdp_host_in": {
+     "avatars.discourse-cdn.com": 0,
+     "discuss.python.org": 47223,
+     "emoji.discourse-cdn.com": 0,
+     "sea2.discourse-cdn.com": 0,
+     "us1.discourse-cdn.com": 0
+    },
+    "hosts": [
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 54386,
+      "out": 3265
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+   "mode": "chromium-savedata",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 2232386,
+    "wire_out": 32925,
+    "conns": 11,
+    "internal_in": 21160,
+    "internal_out": 10324,
+    "internal_conns": 6,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 113,
+    "cache_served": 0,
+    "ready_ms": 5741.703,
+    "browser_in": 2182797,
+    "browser_out": 69996,
+    "by_type": {
+     "Document": 47213,
+     "Fetch": 0,
+     "Font": 188024,
+     "Image": 41889,
+     "Manifest": 1736,
+     "Other": 12551,
+     "Script": 1652768,
+     "Stylesheet": 238616,
+     "XHR": 0
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 1,
+     "Font": 2,
+     "Image": 9,
+     "Manifest": 1,
+     "Other": 2,
+     "Script": 63,
+     "Stylesheet": 32,
+     "XHR": 1
+    },
+    "protos": {
+     "h2": 112
+    },
+    "doc_bytes": 46346,
+    "cdp_host_in": {
+     "avatars.discourse-cdn.com": 816,
+     "discuss.python.org": 55892,
+     "emoji.discourse-cdn.com": 790,
+     "sea2.discourse-cdn.com": 684518,
+     "us1.discourse-cdn.com": 1440781
+    },
+    "save_data_req": 113,
+    "hosts": [
+     {
+      "host": "us1.discourse-cdn.com",
+      "conns": 4,
+      "in": 1456123,
+      "out": 13413
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 4,
+      "in": 698808,
+      "out": 11527
+     },
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 63077,
+      "out": 3566
+     },
+     {
+      "host": "avatars.discourse-cdn.com",
+      "conns": 1,
+      "in": 7204,
+      "out": 2213
+     },
+     {
+      "host": "emoji.discourse-cdn.com",
+      "conns": 1,
+      "in": 7174,
+      "out": 2206
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-user-notes_chunk.Dbexa0-mxv8y1mr.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2590
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-6vx9t3be.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 709
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-dl5wsie3.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 821
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/photoswipe-lightbox-omiq7iv9.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4542
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-policy_main.CRbkX8-3k2h030o.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7281
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/optimized/1X/9997f0605d56c4bfecd63594f52f42cdafd6b06a_2_32x32.png",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2005
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_dark_1_2_66189027d116a154953adf97197ad087a0e782ed.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3582
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-ai_main.Dby7DS-bbmi7ili.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 62441
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-data-explorer_main.1xNOZR-ms1tqs33.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10438
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/c0aff8253d3095539925493b41dec04c924b4408/en/overrides.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1629
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-eamaqmyj.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23087
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/checklist_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1924
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/automation_main.CqvHfq-hjp9ylx0.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1162
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-chat-integration_main.CF1XId-7trv60zp.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1335
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-github_main.C1gIAx-cmhwsvwz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 867
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-narrative-bot_main.CQ9-Is-hczd7o49.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 879
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/discourse-fwogqfuu.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 660816
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-d5qas15v.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 43025
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_light-default_-1_2_0e39d98b6f933316b31e86bc35e74f794ca7f8a5.css?__ws=d…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3291
+     },
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+      "type": "Document",
+      "status": 301,
+      "encoded": 867
+     },
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional/22606",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 46346
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-local-dates_main.DYZuSF-debpt3nu.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10475
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-local-dates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1394
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1378
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/poll_main.BW68Rt-c84yzql0.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 21952
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_2_69b34afc899fc6c17d212729f6835add4d0c8f1e.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1128
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/hosted-site_main.aP57LN-sxs3awk3.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4171
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/spoiler-alert_main.BgkUQr-qhr3itc6.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2699
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/automation_chunk.DvFpQj-hjp9ylx0.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 753
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-b7zx6w88.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2794
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/colesbury/48/28031_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2312
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/0ffe7a21317d2af4f704e60d5a6802a6b9fa84f4/en/mf.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2992
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-math_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1639
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2133
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/optimized/1X/f93ff97c4f381b5e8add5a0c163b4ded29f20ed7_2_512x512.png",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10546
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1199
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-kcscixpt.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1136
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-j35j4d75.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 18326
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-k76fu1yg.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1892
+     },
+     {
+      "url": "https://avatars.discourse-cdn.com/v4/letter/b/e9c0ed/48.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 816
+     },
+     {
+      "url": "https://discuss.python.org/message-bus/490b0fa4257a4c21abd2b9382d3e7410/poll",
+      "type": "XHR",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 0
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/plugins/footnote_extra-95ffab71.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3886
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-gfdrod1s.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 826
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_4_f901e89faf3a99b9d0bbafa51a4208b99501e5e6.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1212
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-reactions_main.CkMs0a-sqppaond.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10383
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/hosted-site_chunk.XtHBxd-sxs3awk3.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4210
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-yz2ioxql.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 46432
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 19219
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/hosted-site_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 11079
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/1X/ca0883b21b8210c5a62c9ac02353de5f24a4d6fc.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2755
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-eyt9eo8j.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 36763
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-topic-voting_main.DlDnTA-j42g4ckn.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5152
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex016/user_avatar/discuss.python.org/ambv/48/25884_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3245
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-f96lzs6p.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1130
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/spoiler-alert_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1374
+     },
+     {
+      "url": "https://discuss.python.org/manifest.webmanifest",
+      "type": "Manifest",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1736
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/automation_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2453
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-github_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2020
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/1X/c7591c98caf3b31d4d9c6f322f41ed9d80a50800.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26262
+     },
+     {
+      "url": "https://discuss.python.org/plugins/discourse-client-performance/javascripts/discourse-client-performance.js?v=a7b922e8787e07682fc55636ddbe9…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 6943
+     },
+     {
+      "url": "https://discuss.python.org/srv/pv",
+      "type": "Fetch",
+      "status": 204,
+      "proto": "h2",
+      "encoded": 0,
+      "failed": "canceled"
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/checklist_main.BehS7Y-fiy0u9lo.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7398
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-solved_chunk.DL-z0A-kvfpra9s.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 754
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 150359
+     },
+     {
+      "url": "https://emoji.discourse-cdn.com/apple/heart.png?v=15",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 790
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/stonebig/48/2796_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2812
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-policy_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1878
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-templates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1591
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-detect-47cf9e6d.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1161
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-frmh9xgk.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4667
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-chat-integration_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1732
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/ajoino/48/6907_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1104
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-templates_main.C_2yN_-se5i1bvp.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5852
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/theme-javascripts/8386593bf29524501840e7364025b341746ee06b.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1532
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-o8cu9y0f.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 13869
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-topic-voting_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1840
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4431
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-details_main.efw4kb-geiwe1yz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1607
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-lcux5byt.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1074
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-lazy-videos_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3742
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/renejsum/48/2940_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1793
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-lazy-videos_main.CKBcYx-r1ypyn2o.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2665
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-update-91688f13.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1747
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/theme-javascripts/3385ba4c017d7dc764c68865d34a1ded72e47cb3.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5085
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1354
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-presence_main.BIIx_U-af1zvo95.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2681
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/footnote_main.DE1qtG-2olauttf.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3217
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/16fc1f74c72f86d0781f1d7ba2976bdad844633d/en/main.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 165442
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-omp929yd.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 764
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-data-explorer_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4319
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-user-notes_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1444
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1387
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/svg-sprite/discuss.python.org/svg-2-f6a801b9c454182e0da24cd6fa708b53940ea1b6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 69932
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-user-notes_main.CwaK07-mxv8y1mr.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2643
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-bjqbh4kz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 45551
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-ai_chunk.Ca6aMy-bbmi7ili.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23156
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-data-explorer_chunk.CSpGmw-ms1tqs33.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 14665
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-i5a6sakk.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 158251
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-he5vdgmd.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1350
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/fonts/JetBrainsMono-Bold.woff2?v=0.0.19",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 95228
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-hfhu6kea.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1769
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-narrative-bot_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1043
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-solved_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2665
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/fonts/JetBrainsMono-Regular.woff2?v=0.0.19",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 92796
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-deprecation-collector_main.UsZAHM-l37s2224.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1476
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-math_main.BjvgOh-m2b1qbqz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7236
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-details_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1694
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-bf83g28c.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 93399
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-presence_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1446
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-solved_main.DlUWIS-kvfpra9s.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 8385
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-mkbfnw12.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 903
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/footnote_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1477
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.py…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1189
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 54356,
+    "wire_out": 3279,
+    "conns": 1,
+    "internal_in": 17360,
+    "internal_out": 7932,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "accounts.google.com",
+     "www.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 112,
+    "cache_served": 108,
+    "ready_ms": 1463.068,
+    "browser_in": 47215,
+    "browser_out": 3100,
+    "by_type": {
+     "Document": 47215,
+     "Fetch": 0,
+     "Font": 0,
+     "Image": 0,
+     "Manifest": 0,
+     "Other": 0,
+     "Script": 0,
+     "Stylesheet": 0,
+     "XHR": 0
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 1,
+     "Font": 2,
+     "Image": 9,
+     "Manifest": 1,
+     "Other": 1,
+     "Script": 63,
+     "Stylesheet": 32,
+     "XHR": 1
+    },
+    "protos": {
+     "h2": 111
+    },
+    "doc_bytes": 46348,
+    "cdp_host_in": {
+     "avatars.discourse-cdn.com": 0,
+     "discuss.python.org": 47215,
+     "emoji.discourse-cdn.com": 0,
+     "sea2.discourse-cdn.com": 0,
+     "us1.discourse-cdn.com": 0
+    },
+    "save_data_req": 112,
+    "hosts": [
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 54356,
+      "out": 3279
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+   "mode": "sweef-standard",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 1288176,
+    "wire_out": 34597,
+    "conns": 12,
+    "handshake_in": 468,
+    "handshake_out": 1342,
+    "requests": 47,
+    "cache_served": 0,
+    "ready_ms": 7465.602,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 2,
+     "Image": 4,
+     "Script": 9,
+     "Stylesheet": 32
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "us1.discourse-cdn.com",
+      "conns": 4,
+      "in": 765535,
+      "out": 12285
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 6,
+      "in": 447156,
+      "out": 17268
+     },
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 67524,
+      "out": 3006
+     },
+     {
+      "host": "emoji.discourse-cdn.com",
+      "conns": 1,
+      "in": 7961,
+      "out": 2038
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-detect-47cf9e6d.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/plugins/footnote_extra-95ffab71.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_2_69b34afc899fc6c17d212729f6835add4d0c8f1e.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 249
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_4_f901e89faf3a99b9d0bbafa51a4208b99501e5e6.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 357
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/footnote_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-user-notes_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/theme-javascripts/8386593bf29524501840e7364025b341746ee06b.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": 685
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_light-default_-1_2_0e39d98b6f933316b31e86bc35e74f794ca7f8a5.css?__ws=d…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_dark_1_2_66189027d116a154953adf97197ad087a0e782ed.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/16fc1f74c72f86d0781f1d7ba2976bdad844633d/en/main.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/c0aff8253d3095539925493b41dec04c924b4408/en/overrides.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": 941
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/0ffe7a21317d2af4f704e60d5a6802a6b9fa84f4/en/mf.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/automation_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/checklist_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-chat-integration_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-data-explorer_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-details_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-local-dates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-github_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-lazy-videos_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-math_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-narrative-bot_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 175
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-policy_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-presence_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-solved_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-templates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-topic-voting_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/hosted-site_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/spoiler-alert_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 304
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.py…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 316
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 510
+     },
+     {
+      "url": "https://discuss.python.org/plugins/discourse-client-performance/javascripts/discourse-client-performance.js?v=a7b922e8787e07682fc55636ddbe9…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-update-91688f13.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/discourse-fwogqfuu.digested.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional/chunk-f96lzs6p.digested.js",
+      "type": "Document",
+      "status": 404,
+      "encoded": -1
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/2X/8/88d4484552c4beac33d9a0848f523aaa66aad78c.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 695
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/optimized/2X/2/2c441545dc69401836f2d6061e5ed827b2cb9fad_2_502x499.jpeg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 56354
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/3X/8/3/8354042ac932196b5fde1d1048a76b567decdcdc.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 13893
+     },
+     {
+      "url": "https://emoji.discourse-cdn.com/apple/wave.png?v=15",
+      "type": "Image",
+      "status": 200,
+      "encoded": 1285
+     }
+    ],
+    "engine": {
+     "wire_in": 1288644,
+     "wire_out": 35939,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 80806,
+    "wire_out": 9040,
+    "conns": 4,
+    "handshake_in": 156,
+    "handshake_out": 440,
+    "requests": 47,
+    "cache_served": 42,
+    "ready_ms": 6271.76,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 2,
+     "Image": 4,
+     "Script": 9,
+     "Stylesheet": 32
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 60529,
+      "out": 2809
+     },
+     {
+      "host": "us1.discourse-cdn.com",
+      "conns": 3,
+      "in": 13269,
+      "out": 4179
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 1,
+      "in": 7008,
+      "out": 2028
+     },
+     {
+      "host": "emoji.discourse-cdn.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 80962,
+     "wire_out": 9432,
+     "cache_hit_bytes": 1170878,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+   "mode": "sweef-strict",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 341433,
+    "wire_out": 20193,
+    "conns": 8,
+    "handshake_in": 312,
+    "handshake_out": 888,
+    "requests": 34,
+    "cache_served": 0,
+    "ready_ms": 1454.028,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 1,
+     "Stylesheet": 32
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 6,
+      "in": 275255,
+      "out": 15473
+     },
+     {
+      "host": "discuss.python.org",
+      "conns": 2,
+      "in": 66178,
+      "out": 4720
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 304
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-user-notes_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_light-default_-1_2_0e39d98b6f933316b31e86bc35e74f794ca7f8a5.css?__ws=d…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/spoiler-alert_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/footnote_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/hosted-site_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-solved_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-templates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-topic-voting_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_dark_1_2_66189027d116a154953adf97197ad087a0e782ed.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/checklist_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/automation_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-chat-integration_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-data-explorer_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-github_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-details_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-local-dates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-lazy-videos_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-math_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-narrative-bot_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 175
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-policy_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-presence_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.py…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 316
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 510
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_4_f901e89faf3a99b9d0bbafa51a4208b99501e5e6.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 357
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_2_69b34afc899fc6c17d212729f6835add4d0c8f1e.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 249
+     },
+     {
+      "url": "https://discuss.python.org/plugins/discourse-client-performance/javascripts/discourse-client-performance.js?v=a7b922e8787e07682fc55636ddbe9…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 341745,
+     "wire_out": 21081,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped": {
+      "script": 8
+     },
+     "skipped_estimate": 245760,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 53256,
+    "wire_out": 2593,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 105,
+    "requests": 34,
+    "cache_served": 33,
+    "ready_ms": 614.415,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 1,
+     "Stylesheet": 32
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "discuss.python.org",
+      "conns": 2,
+      "in": 53256,
+      "out": 2593
+     }
+    ],
+    "engine": {
+     "wire_in": 53295,
+     "wire_out": 2674,
+     "cache_hit_bytes": 256055,
+     "aborted_bytes": 0,
+     "skipped": {
+      "script": 8
+     },
+     "skipped_estimate": 245760,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+   "mode": "chromium",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 2232412,
+    "wire_out": 32738,
+    "conns": 12,
+    "internal_in": 19656,
+    "internal_out": 10324,
+    "internal_conns": 6,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 113,
+    "cache_served": 0,
+    "ready_ms": 6190.513,
+    "browser_in": 2182801,
+    "browser_out": 68316,
+    "by_type": {
+     "Document": 47213,
+     "Fetch": 0,
+     "Font": 188021,
+     "Image": 41890,
+     "Manifest": 1736,
+     "Other": 12569,
+     "Script": 1652766,
+     "Stylesheet": 238606,
+     "XHR": 0
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 1,
+     "Font": 2,
+     "Image": 9,
+     "Manifest": 1,
+     "Other": 2,
+     "Script": 63,
+     "Stylesheet": 32,
+     "XHR": 1
+    },
+    "protos": {
+     "h2": 112
+    },
+    "doc_bytes": 46346,
+    "cdp_host_in": {
+     "avatars.discourse-cdn.com": 816,
+     "discuss.python.org": 55892,
+     "emoji.discourse-cdn.com": 790,
+     "sea2.discourse-cdn.com": 684496,
+     "us1.discourse-cdn.com": 1440807
+    },
+    "hosts": [
+     {
+      "host": "us1.discourse-cdn.com",
+      "conns": 4,
+      "in": 1456193,
+      "out": 11784
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 5,
+      "in": 698764,
+      "out": 13008
+     },
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 63077,
+      "out": 3551
+     },
+     {
+      "host": "avatars.discourse-cdn.com",
+      "conns": 1,
+      "in": 7204,
+      "out": 2201
+     },
+     {
+      "host": "emoji.discourse-cdn.com",
+      "conns": 1,
+      "in": 7174,
+      "out": 2194
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-detect-47cf9e6d.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1161
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-he5vdgmd.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1351
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-k76fu1yg.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1894
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/theme-javascripts/3385ba4c017d7dc764c68865d34a1ded72e47cb3.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5081
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1385
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/photoswipe-lightbox-omiq7iv9.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4543
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-bf83g28c.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 93398
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_light-default_-1_2_0e39d98b6f933316b31e86bc35e74f794ca7f8a5.css?__ws=d…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3290
+     },
+     {
+      "url": "https://discuss.python.org/srv/pv",
+      "type": "Fetch",
+      "status": 204,
+      "proto": "h2",
+      "encoded": 0,
+      "failed": "canceled"
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/fonts/JetBrainsMono-Bold.woff2?v=0.0.19",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 95227
+     },
+     {
+      "url": "https://discuss.python.org/message-bus/1c87bf0449e343f4b908151860cf02cd/poll",
+      "type": "XHR",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 0
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-policy_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1877
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-user-notes_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1443
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-f96lzs6p.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1132
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/poll_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4430
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/stonebig/48/2796_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2813
+     },
+     {
+      "url": "https://discuss.python.org/manifest.webmanifest",
+      "type": "Manifest",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1736
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-data-explorer_chunk.CSpGmw-ms1tqs33.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 14665
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-lazy-videos_main.CKBcYx-r1ypyn2o.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2666
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/discourse-fwogqfuu.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 660816
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/automation_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2452
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-data-explorer_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4318
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_4_f901e89faf3a99b9d0bbafa51a4208b99501e5e6.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1212
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-topic-voting_main.DlDnTA-j42g4ckn.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5152
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-solved_chunk.DL-z0A-kvfpra9s.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 754
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-o8cu9y0f.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 13870
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-omp929yd.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 764
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/color_definitions_dark_1_2_66189027d116a154953adf97197ad087a0e782ed.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3582
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/renejsum/48/2940_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1794
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-narrative-bot_main.CQ9-Is-hczd7o49.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 878
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/c0aff8253d3095539925493b41dec04c924b4408/en/overrides.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1629
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-math_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1637
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/fonts/JetBrainsMono-Regular.woff2?v=0.0.19",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 92794
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-kcscixpt.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1136
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-ai_main.Dby7DS-bbmi7ili.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 62440
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-deprecation-collector_main.UsZAHM-l37s2224.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1476
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/automation_chunk.DvFpQj-hjp9ylx0.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 754
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/hosted-site_chunk.XtHBxd-sxs3awk3.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4210
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1352
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-eamaqmyj.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23086
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-local-dates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1395
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/optimized/1X/9997f0605d56c4bfecd63594f52f42cdafd6b06a_2_32x32.png",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2013
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-reactions_main.CkMs0a-sqppaond.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10383
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-solved_main.DlUWIS-kvfpra9s.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 8387
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 150359
+     },
+     {
+      "url": "https://avatars.discourse-cdn.com/v4/letter/b/e9c0ed/48.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 816
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-data-explorer_main.1xNOZR-ms1tqs33.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10437
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/spoiler-alert_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1372
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-ai_chunk.Ca6aMy-bbmi7ili.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23156
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/theme-javascripts/8386593bf29524501840e7364025b341746ee06b.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1531
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-topic-voting_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1840
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/hosted-site_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 11080
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_desktop_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.py…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1189
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex016/user_avatar/discuss.python.org/ambv/48/25884_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3246
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-local-dates_main.DYZuSF-debpt3nu.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10473
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/0ffe7a21317d2af4f704e60d5a6802a6b9fa84f4/en/mf.js?__ws=discuss.python.org",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2991
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/browser-update-91688f13.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1746
+     },
+     {
+      "url": "https://discuss.python.org/plugins/discourse-client-performance/javascripts/discourse-client-performance.js?v=a7b922e8787e07682fc55636ddbe9…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 6943
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 19220
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-solved_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2664
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-presence_main.BIIx_U-af1zvo95.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2680
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-lazy-videos_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.o…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3743
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-d5qas15v.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 43023
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-6vx9t3be.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 707
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/1X/c7591c98caf3b31d4d9c6f322f41ed9d80a50800.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26262
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-gfdrod1s.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 825
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-eyt9eo8j.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 36764
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-templates_main.C_2yN_-se5i1bvp.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5852
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-user-notes_chunk.Dbexa0-mxv8y1mr.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2591
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/extra-locales/16fc1f74c72f86d0781f1d7ba2976bdad844633d/en/main.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 165442
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-j35j4d75.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 18327
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-mkbfnw12.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 902
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/ajoino/48/6907_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1103
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-math_main.BjvgOh-m2b1qbqz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7237
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-user-notes_main.CwaK07-mxv8y1mr.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2644
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/plugins/footnote_extra-95ffab71.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3887
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-dl5wsie3.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 820
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/checklist_main.BehS7Y-fiy0u9lo.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7399
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-bjqbh4kz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 45549
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-details_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1693
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-presence_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1448
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1200
+     },
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+      "type": "Document",
+      "status": 301,
+      "encoded": 867
+     },
+     {
+      "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional/22606",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 46346
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/automation_main.CqvHfq-hjp9ylx0.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1161
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/spoiler-alert_main.BgkUQr-qhr3itc6.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2699
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-i5a6sakk.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 158250
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/optimized/1X/f93ff97c4f381b5e8add5a0c163b4ded29f20ed7_2_512x512.png",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10556
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/user_avatar/discuss.python.org/colesbury/48/28031_2.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2310
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-b7zx6w88.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2794
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-lcux5byt.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1075
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-hfhu6kea.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1769
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-chat-integration_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.pyt…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1731
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/svg-sprite/discuss.python.org/svg-2-f6a801b9c454182e0da24cd6fa708b53940ea1b6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 69929
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-policy_main.CRbkX8-3k2h030o.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7281
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/footnote_main.DE1qtG-2olauttf.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3218
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-yz2ioxql.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 46433
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-templates_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1593
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-ai_mobile_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1378
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/uploads/python1/original/1X/ca0883b21b8210c5a62c9ac02353de5f24a4d6fc.png",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2756
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-details_main.efw4kb-geiwe1yz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1608
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-github_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2019
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/common_theme_2_69b34afc899fc6c17d212729f6835add4d0c8f1e.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1128
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-chat-integration_main.CF1XId-7trv60zp.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1335
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/chunk-frmh9xgk.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4668
+     },
+     {
+      "url": "https://emoji.discourse-cdn.com/apple/heart.png?v=15",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 790
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/hosted-site_main.aP57LN-sxs3awk3.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4171
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/checklist_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1925
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/discourse-github_main.C1gIAx-cmhwsvwz.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 869
+     },
+     {
+      "url": "https://us1.discourse-cdn.com/flex002/assets/br/plugins/poll_main.BW68Rt-c84yzql0.digested.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 21954
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-narrative-bot_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1043
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/discourse-reactions_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2132
+     },
+     {
+      "url": "https://sea2.discourse-cdn.com/flex002/stylesheets/footnote_7a9bdcf6239b29e49ea4e546c3bd26cdeeb38b12.css?__ws=discuss.python.org",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1476
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 153390,
+    "wire_out": 10260,
+    "conns": 7,
+    "internal_in": 17523,
+    "internal_out": 7932,
+    "internal_conns": 6,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 118,
+    "cache_served": 108,
+    "ready_ms": 1462.619,
+    "browser_in": 127249,
+    "browser_out": 6888,
+    "by_type": {
+     "Document": 47214,
+     "Fetch": 0,
+     "Font": 0,
+     "Image": 80035,
+     "Manifest": 0,
+     "Other": 0,
+     "Script": 0,
+     "Stylesheet": 0,
+     "XHR": 0
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 1,
+     "Font": 2,
+     "Image": 15,
+     "Manifest": 1,
+     "Other": 1,
+     "Script": 63,
+     "Stylesheet": 32,
+     "XHR": 1
+    },
+    "protos": {
+     "h2": 117
+    },
+    "doc_bytes": 46347,
+    "cdp_host_in": {
+     "avatars.discourse-cdn.com": 0,
+     "discuss.python.org": 47214,
+     "emoji.discourse-cdn.com": 1578,
+     "sea2.discourse-cdn.com": 5905,
+     "us1.discourse-cdn.com": 72552
+    },
+    "hosts": [
+     {
+      "host": "us1.discourse-cdn.com",
+      "conns": 3,
+      "in": 78914,
+      "out": 2472
+     },
+     {
+      "host": "discuss.python.org",
+      "conns": 1,
+      "in": 54355,
+      "out": 3264
+     },
+     {
+      "host": "sea2.discourse-cdn.com",
+      "conns": 2,
+      "in": 12159,
+      "out": 2326
+     },
+     {
+      "host": "emoji.discourse-cdn.com",
+      "conns": 1,
+      "in": 7962,
+      "out": 2198
+     }
+    ]
+   }
   }
  ],
  "baselines": [
