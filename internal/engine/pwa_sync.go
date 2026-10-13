@@ -49,19 +49,26 @@ func unixMS(t time.Time) int64 { return t.UnixNano() / int64(time.Millisecond) }
 func (st *pwaState) startSync() {
 	st.goJob(func() {
 		for _, o := range st.allOrigins() {
-			d := st.originData(o)
-			st.mu.Lock()
-			for _, r := range d.Sync {
-				r.origin = o
-				st.scheduleSyncLocked(r, time.Duration(r.NextAt-unixMS(st.clock.Now()))*time.Millisecond)
-			}
-			for _, r := range d.Periodic {
-				r.origin = o
-				st.schedulePeriodicLocked(r)
-			}
-			st.mu.Unlock()
+			st.originData(o) // loading arms the registrations (armLocked)
 		}
 	})
+}
+
+// armLocked schedules the registrations just read from disk. Before SetPWA there is no clock to arm them with;
+// SetPWA runs startSync, whose scan finds them then.
+func (st *pwaState) armLocked(origin string, d *pwaOrigin) {
+	if !st.enabled.Load() {
+		delete(st.data, origin)
+		return
+	}
+	for _, r := range d.Sync {
+		r.origin = origin
+		st.scheduleSyncLocked(r, time.Duration(r.NextAt-unixMS(st.clock.Now()))*time.Millisecond)
+	}
+	for _, r := range d.Periodic {
+		r.origin = origin
+		st.schedulePeriodicLocked(r)
+	}
 }
 
 func (st *pwaState) stopSync() {
@@ -138,6 +145,7 @@ func (st *pwaState) fireSync(r *syncReg) {
 		r.stop = nil
 	}
 	last := r.Attempts+1 >= st.pol.MaxAttempts
+	started := st.clock.Now() // waits are counted from when the attempt began, not from when it ended
 	origin, scope, tag := r.origin, r.Scope, r.Tag
 	st.mu.Unlock()
 
@@ -169,8 +177,9 @@ func (st *pwaState) fireSync(r *syncReg) {
 				st.addSyncLocked(origin, d, scope, tag)
 			}
 		} else {
-			delay := st.retryDelay(r.Attempts)
-			r.NextAt = unixMS(st.clock.Now().Add(delay))
+			due := started.Add(st.retryDelay(r.Attempts))
+			delay := due.Sub(st.clock.Now())
+			r.NextAt = unixMS(due)
 			if again {
 				r.Attempts, r.NextAt = 0, unixMS(st.clock.Now())
 				delay = 0
@@ -307,6 +316,7 @@ func (st *pwaState) firePeriodic(r *periodicReg) {
 		return
 	}
 	origin, scope, tag := r.origin, r.Scope, r.Tag
+	started := st.clock.Now()
 	st.mu.Unlock()
 
 	if st.permission(origin, PermPeriodicSync) == "granted" {
@@ -321,7 +331,7 @@ func (st *pwaState) firePeriodic(r *periodicReg) {
 	}
 	st.mu.Lock()
 	if !r.dead {
-		r.LastFired = unixMS(st.clock.Now()) // a failing or skipped event waits a full interval, too
+		r.LastFired = unixMS(started) // a failing or skipped event waits a full interval, too
 		st.saveOriginLocked(origin)
 		st.schedulePeriodicLocked(r)
 	}

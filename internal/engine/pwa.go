@@ -649,6 +649,9 @@ func (st *pwaState) originData(origin string) *pwaOrigin {
 		return cur
 	}
 	st.data[origin] = d
+	// Whoever loads an origin's data first arms its persisted registrations: the start-up scan may not have listed the
+	// origin yet (or may run after a page already asked), and a registration nobody armed would never fire.
+	st.armLocked(origin, d)
 	return d
 }
 

@@ -11,7 +11,7 @@ import (
 const syncWorkerJS = `
 let failLeft = 0, hold = null;
 self.addEventListener('activate', (e) => e.waitUntil(clients.claim()));
-const log = async (m) => { const c = await caches.open('log'); const n = (await c.keys()).length; await c.put('/log/' + String(n).padStart(4, '0'), new Response(JSON.stringify(m))); };
+const log = async (m) => { const c = await caches.open('log'); await c.put('/log/' + Date.now() + '-' + Math.random(), new Response(JSON.stringify(m))); };
 self.addEventListener('message', (e) => {
   if (typeof e.data !== 'string') return;
   if (e.data.startsWith('fail:')) failLeft = +e.data.slice(5);
