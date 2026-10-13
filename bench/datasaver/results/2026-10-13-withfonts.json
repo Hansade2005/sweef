@@ -9814,6 +9814,7002 @@
      "requests": 0
     }
    }
+  },
+  {
+   "site": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "mode": "sweef-strict",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 211300,
+    "wire_out": 13687,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 351,
+    "requests": 64,
+    "cache_served": 0,
+    "ready_ms": 12513.412,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 2,
+     "Script": 39,
+     "Stylesheet": 17,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 206896,
+      "out": 9821
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 4404,
+      "out": 3866
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-a11y-menu.5796ee87cb69f93f.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-page-layout.5a4354f33e894319.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/270.c4deb27edf934078.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-content-section.0a46cad19e719859.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9228.c46ef79d5582674d.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-left-sidebar.46e37af4d0b5c883.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-navigation.c3ebf384e65df345.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-global.11757ff5b10ffb13.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-toc.9b9bd019efd16b86.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-heading-anchor.0eec5185ab9425b7.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-layout.632d2f3884f10ca3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-footer.66072dd619a4ef50.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-article-footer.81ae18c89fc527dc.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs.87eb742f4e711dc3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-logo.aea5ff6edf1b9cfb.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs-bar.2d1bed1ab424b6b3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-menu.e2c5c8a53a8854c2.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/runtime.307d306222c5e098.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5909.489e266d049aa182.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4585.e30f706b333273cd.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1216.2fdb44f0bb574bc2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/index.8cc0df3857a564c8.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7489.cd806d2f427a883d.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3708.4a0422a33ccb46ea.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/85a9820b-5cf2-4120-9a95-df96db794b70",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8280.d23400460d00c14a.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1477.2e21275901ede190.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4249.f72e3bc533441dbe.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9204.6afe342b1a966b73.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3690.dde3c3c4604a6af2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2868.72600e71ae8128fe.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8121.0d3b90f48eb7f970.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3711.97606c6489b00a61.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9234.e2ca939eeab03c93.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3980.1b5a9384580db09a.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4920.a37ab55f7abde7d9.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5542.1e868b3ebf533fa2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9099.d5fd55aa8af08e99.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9647.28b4240dbab81568.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8926.2bd0c75389285bbf.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1996.e833c07cb4ee4327.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5196.8750081dbe089c86.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2173.fe760a50c3627b0f.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7938.07886f31308437a6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/169.43043e6e06493384.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4060.8abfad3012e87803.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1861.67943793bc26e22c.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1598.cccf04205fda6ad6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7065.068ab3b30f8d33fa.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/api/v1/whoami",
+      "type": "XHR",
+      "status": 200,
+      "encoded": 187
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1825.599c6236c8613bc0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7841.3c8f3dd895aacf3c.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-csp-js.c473b3c65ec0d1e6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hpkp-js.81e0279884fa5022.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hsts-js.680c9c315b8ed757.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-json-js.69f907cc2a904a1e.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-uri-js.dc04b0053fd9fc5e.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-http-js.4c053b808612f024.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/8c8e2549-cc42-41d7-8f4e-bd96005fbe36",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 211417,
+     "wire_out": 14038,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped": {
+      "font": 3,
+      "image": 44
+     },
+     "skipped_estimate": 1879040,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 5119,
+    "wire_out": 4057,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 129,
+    "requests": 64,
+    "cache_served": 57,
+    "ready_ms": 9173.562,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 2,
+     "Script": 39,
+     "Stylesheet": 17,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 4709,
+      "out": 3866
+     },
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 410,
+      "out": 191
+     }
+    ],
+    "engine": {
+     "wire_in": 5158,
+     "wire_out": 4162,
+     "cache_hit_bytes": 229864,
+     "aborted_bytes": 0,
+     "skipped": {
+      "font": 3,
+      "image": 44
+     },
+     "skipped_estimate": 1879040,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "mode": "chromium",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 570493,
+    "wire_out": 18272,
+    "conns": 4,
+    "internal_in": 21426,
+    "internal_out": 8809,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 88,
+    "cache_served": 0,
+    "ready_ms": 2243.76,
+    "browser_in": 550504,
+    "browser_out": 56202,
+    "by_type": {
+     "Document": 34825,
+     "Fetch": 3651,
+     "Font": 251855,
+     "Image": 98263,
+     "Manifest": 985,
+     "Other": 3561,
+     "Ping": 717,
+     "Script": 132564,
+     "Stylesheet": 24083
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 2,
+     "Font": 3,
+     "Image": 18,
+     "Manifest": 1,
+     "Other": 2,
+     "Ping": 4,
+     "Script": 39,
+     "Stylesheet": 17
+    },
+    "protos": {
+     "h2": 87
+    },
+    "doc_bytes": 34449,
+    "cdp_host_in": {
+     "developer.mozilla.org": 549787,
+     "incoming.telemetry.mozilla.org": 717
+    },
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 565176,
+      "out": 12259
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 2,
+      "in": 5317,
+      "out": 6013
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://developer.mozilla.org/static/client/5909.489e266d049aa182.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10221
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/mastodon.1a5c0fde8353f680.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1139
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-csp-js.c473b3c65ec0d1e6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1287
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-json-js.69f907cc2a904a1e.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 808
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-uri-js.dc04b0053fd9fc5e.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1185
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-footer.66072dd619a4ef50.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1303
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4585.e30f706b333273cd.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 24058
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7489.cd806d2f427a883d.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1466
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9204.6afe342b1a966b73.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2730
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3690.dde3c3c4604a6af2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1423
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8926.2bd0c75389285bbf.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1019
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1996.e833c07cb4ee4327.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2569
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/runtime.307d306222c5e098.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 9192
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-article-footer.81ae18c89fc527dc.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1034
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9099.d5fd55aa8af08e99.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1377
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/bluesky.a9421882d093c829.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 899
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-italic-latin.fd2627ec16333c05.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 116725
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hpkp-js.81e0279884fa5022.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 804
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8280.d23400460d00c14a.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1892
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/info.d40b80f84482feba.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 543
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/github.4d94e1bf436aa7ed.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 929
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1598.cccf04205fda6ad6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1216
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/d9d9e6d4-fa1a-4551-8f69-1772a30f25cf",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/pong/get",
+      "type": "Fetch",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3239
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc5MTY0LzE3OTAzNDkyMTItMTQ1NngxODBfYm90dG9tX09jdF9CYW5u…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 38669
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/dfeaf75d-48ea-49fb-a7e5-c3b8d9e1fb4a",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 489
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3711.97606c6489b00a61.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2589
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9234.e2ca939eeab03c93.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1461
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5542.1e868b3ebf533fa2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2200
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/783ca7c0-27f6-4ea6-aee9-61e3d51b1146",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/favicon-192x192.png",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2709
+     },
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+      "type": "Document",
+      "status": 301,
+      "encoded": 376
+     },
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 34449
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9228.c46ef79d5582674d.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 908
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-page-layout.5a4354f33e894319.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1028
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2868.72600e71ae8128fe.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1451
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/contrast.d86e85c43de8dee8.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 670
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/languages.dcba936080e5be86.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 872
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/rss.37214526d7308d0c.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 754
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3980.1b5a9384580db09a.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1339
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5196.8750081dbe089c86.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2898
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/graduation-cap.c7aa0f3430c53718.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 698
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1216.2fdb44f0bb574bc2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 951
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-global.11757ff5b10ffb13.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4653
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-content-section.0a46cad19e719859.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3462
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-heading-anchor.0eec5185ab9425b7.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 994
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7065.068ab3b30f8d33fa.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2266
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1477.2e21275901ede190.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1085
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7938.07886f31308437a6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2373
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/169.43043e6e06493384.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3201
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hsts-js.680c9c315b8ed757.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 667
+     },
+     {
+      "url": "https://developer.mozilla.org/manifest.json",
+      "type": "Manifest",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 985
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3708.4a0422a33ccb46ea.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1179
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2173.fe760a50c3627b0f.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2536
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-navigation.c3ebf384e65df345.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1150
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4060.8abfad3012e87803.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1796
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-down.7c923b7054da305b.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 610
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/external-link.4f3a2dc8e402cae5.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 997
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1825.599c6236c8613bc0.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 14426
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/index.8cc0df3857a564c8.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 14969
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-toc.9b9bd019efd16b86.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 831
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8121.0d3b90f48eb7f970.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 941
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/flask-conical.c16b3d71f14f31d1.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 992
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-left-sidebar.46e37af4d0b5c883.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1400
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-logo.aea5ff6edf1b9cfb.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 969
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs.87eb742f4e711dc3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 911
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9647.28b4240dbab81568.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 933
+     },
+     {
+      "url": "https://developer.mozilla.org/api/v1/whoami",
+      "type": "Fetch",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 412
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc2NDc2LzE3ODU0MTg3MzMtZ29vZ2xlLWNsb3VkLTEyOHgxMjgucG5n…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 8713
+     },
+     {
+      "url": "https://developer.mozilla.org/favicon.svg",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 852
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-latin.9a3b1bc220d426ef.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 105967
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/wrench.a3caa7312a364b47.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 930
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/b3451c01-53df-42af-ac33-d7420013ee30",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc2NDc2LzE3ODU0MjU3OTctR3JhZGllbnRfU3VwZXJfQ2xvdWRfNTAw…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 38505
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-menu.e2c5c8a53a8854c2.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1693
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs-bar.2d1bed1ab424b6b3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 977
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/filter.b77a4ccbfb57e2ef.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 706
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/x.4c7e68bf52af030a.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 778
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-http-js.4c053b808612f024.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1597
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4920.a37ab55f7abde7d9.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2836
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-right.a81fc439dd5e4839.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 859
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/270.c4deb27edf934078.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1115
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-a11y-menu.5796ee87cb69f93f.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 777
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/jetbrains-mono-latin.119994ed445212c7.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 29163
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4249.f72e3bc533441dbe.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1292
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1861.67943793bc26e22c.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1299
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7841.3c8f3dd895aacf3c.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5032
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-layout.632d2f3884f10ca3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 878
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 58807,
+    "wire_out": 8790,
+    "conns": 2,
+    "internal_in": 10662,
+    "internal_out": 7265,
+    "internal_conns": 6,
+    "internal_hosts": [
+     "accounts.google.com",
+     "www.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 87,
+    "cache_served": 78,
+    "ready_ms": 325.013,
+    "browser_in": 47148,
+    "browser_out": 8062,
+    "by_type": {
+     "Document": 0,
+     "Fetch": 3645,
+     "Font": 0,
+     "Image": 42749,
+     "Manifest": 0,
+     "Other": 0,
+     "Ping": 754,
+     "Script": 0,
+     "Stylesheet": 0
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 2,
+     "Font": 3,
+     "Image": 18,
+     "Manifest": 1,
+     "Other": 1,
+     "Ping": 4,
+     "Script": 39,
+     "Stylesheet": 17
+    },
+    "protos": {
+     "h2": 86
+    },
+    "doc_bytes": 0,
+    "cdp_host_in": {
+     "developer.mozilla.org": 46394,
+     "incoming.telemetry.mozilla.org": 754
+    },
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 1,
+      "in": 53243,
+      "out": 2776
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 5564,
+      "out": 6014
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "mode": "chromium-savedata",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 566306,
+    "wire_out": 18389,
+    "conns": 3,
+    "internal_in": 18638,
+    "internal_out": 8770,
+    "internal_conns": 4,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 88,
+    "cache_served": 0,
+    "ready_ms": 2428.291,
+    "browser_in": 545824,
+    "browser_out": 57579,
+    "by_type": {
+     "Document": 34849,
+     "Fetch": 3644,
+     "Font": 251783,
+     "Image": 93966,
+     "Manifest": 985,
+     "Other": 3561,
+     "Ping": 717,
+     "Script": 132453,
+     "Stylesheet": 23866
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 2,
+     "Font": 3,
+     "Image": 18,
+     "Manifest": 1,
+     "Other": 2,
+     "Ping": 4,
+     "Script": 39,
+     "Stylesheet": 17
+    },
+    "protos": {
+     "h2": 87
+    },
+    "doc_bytes": 34471,
+    "cdp_host_in": {
+     "developer.mozilla.org": 545107,
+     "incoming.telemetry.mozilla.org": 717
+    },
+    "save_data_req": 88,
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 560936,
+      "out": 12362
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 5370,
+      "out": 6027
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-down.7c923b7054da305b.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 648
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/wrench.a3caa7312a364b47.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 892
+     },
+     {
+      "url": "https://developer.mozilla.org/api/v1/whoami",
+      "type": "Fetch",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 401
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/02d2a6a5-c6ba-47c0-b9df-356eecf36c0f",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4249.f72e3bc533441dbe.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1281
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-http-js.4c053b808612f024.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1526
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-layout.632d2f3884f10ca3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 836
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-content-section.0a46cad19e719859.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3453
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4920.a37ab55f7abde7d9.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2882
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5196.8750081dbe089c86.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2973
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7489.cd806d2f427a883d.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1522
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2868.72600e71ae8128fe.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1417
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1598.cccf04205fda6ad6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1277
+     },
+     {
+      "url": "https://developer.mozilla.org/pong/get",
+      "type": "Fetch",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3243
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc2NDc2LzE3ODM2MTI1NDEtb3RhcmktdG9wLWJhci1sb2dvLTEucG5n…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4172
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc2NDc2LzE3ODU0MjE4NzEtR3JhZGllbnRfU3VwZXJfQ2xvdWRfNTAw…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 38585
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-a11y-menu.5796ee87cb69f93f.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 983
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4585.e30f706b333273cd.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23916
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/github.4d94e1bf436aa7ed.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1006
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-italic-latin.fd2627ec16333c05.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 116670
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-logo.aea5ff6edf1b9cfb.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 711
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5909.489e266d049aa182.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10149
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1996.e833c07cb4ee4327.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2687
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/graduation-cap.c7aa0f3430c53718.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 737
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hpkp-js.81e0279884fa5022.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 784
+     },
+     {
+      "url": "https://developer.mozilla.org/favicon.svg",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 817
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3711.97606c6489b00a61.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2619
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/flask-conical.c16b3d71f14f31d1.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 902
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7841.3c8f3dd895aacf3c.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4958
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-left-sidebar.46e37af4d0b5c883.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1408
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-page-layout.5a4354f33e894319.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 863
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-navigation.c3ebf384e65df345.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1131
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/jetbrains-mono-latin.119994ed445212c7.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 29150
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9204.6afe342b1a966b73.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2671
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9099.d5fd55aa8af08e99.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1448
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/bluesky.a9421882d093c829.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 766
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-csp-js.c473b3c65ec0d1e6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1194
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-global.11757ff5b10ffb13.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4664
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/contrast.d86e85c43de8dee8.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 708
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/x.4c7e68bf52af030a.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 890
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1861.67943793bc26e22c.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1481
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1825.599c6236c8613bc0.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 14502
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs.87eb742f4e711dc3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 905
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/runtime.307d306222c5e098.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 9211
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8121.0d3b90f48eb7f970.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 960
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8926.2bd0c75389285bbf.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1056
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/mastodon.1a5c0fde8353f680.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1154
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/rss.37214526d7308d0c.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 874
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-uri-js.dc04b0053fd9fc5e.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1166
+     },
+     {
+      "url": "https://developer.mozilla.org/favicon-192x192.png",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2744
+     },
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+      "type": "Document",
+      "status": 301,
+      "encoded": 378
+     },
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 34471
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3708.4a0422a33ccb46ea.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1164
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3690.dde3c3c4604a6af2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1465
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9234.e2ca939eeab03c93.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1433
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7938.07886f31308437a6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2267
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/external-link.4f3a2dc8e402cae5.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 885
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/info.d40b80f84482feba.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 639
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-heading-anchor.0eec5185ab9425b7.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1006
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-latin.9a3b1bc220d426ef.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 105963
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-right.a81fc439dd5e4839.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 821
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7065.068ab3b30f8d33fa.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2115
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc5MTY0LzE3OTAzNDkyMTItMTQ1NngxODBfYm90dG9tX09jdF9CYW5u…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 38706
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-json-js.69f907cc2a904a1e.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 846
+     },
+     {
+      "url": "https://developer.mozilla.org/manifest.json",
+      "type": "Manifest",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 985
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs-bar.2d1bed1ab424b6b3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1010
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1216.2fdb44f0bb574bc2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1071
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/index.8cc0df3857a564c8.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 14971
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2173.fe760a50c3627b0f.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2532
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/languages.dcba936080e5be86.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 713
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/filter.b77a4ccbfb57e2ef.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 868
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/8368ab35-483e-4bbd-ad50-cbbf953fe9ff",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/270.c4deb27edf934078.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1096
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-toc.9b9bd019efd16b86.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 798
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-article-footer.81ae18c89fc527dc.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1013
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/f76f0f4e-edae-4e82-a054-2a904e8232c9",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 489
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3980.1b5a9384580db09a.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1331
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hsts-js.680c9c315b8ed757.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 711
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/169.43043e6e06493384.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3158
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/83815ccf-80fb-4f3e-b7cc-dd059d6aa21f",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9228.c46ef79d5582674d.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 880
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-menu.e2c5c8a53a8854c2.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1719
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8280.d23400460d00c14a.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1850
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1477.2e21275901ede190.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1085
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5542.1e868b3ebf533fa2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2097
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9647.28b4240dbab81568.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 897
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4060.8abfad3012e87803.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1780
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-footer.66072dd619a4ef50.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1390
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 102558,
+    "wire_out": 10114,
+    "conns": 2,
+    "internal_in": 16253,
+    "internal_out": 7932,
+    "internal_conns": 4,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 89,
+    "cache_served": 78,
+    "ready_ms": 241.24,
+    "browser_in": 90781,
+    "browser_out": 10549,
+    "by_type": {
+     "Document": 0,
+     "Fetch": 3642,
+     "Font": 0,
+     "Image": 86150,
+     "Manifest": 0,
+     "Other": 0,
+     "Ping": 989,
+     "Script": 0,
+     "Stylesheet": 0
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 2,
+     "Font": 3,
+     "Image": 18,
+     "Manifest": 1,
+     "Other": 1,
+     "Ping": 6,
+     "Script": 39,
+     "Stylesheet": 17
+    },
+    "protos": {
+     "h2": 88
+    },
+    "doc_bytes": 0,
+    "cdp_host_in": {
+     "developer.mozilla.org": 89988,
+     "incoming.telemetry.mozilla.org": 793
+    },
+    "save_data_req": 89,
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 1,
+      "in": 96441,
+      "out": 3082
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 6117,
+      "out": 7032
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "mode": "sweef-standard",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 473464,
+    "wire_out": 15878,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 351,
+    "requests": 81,
+    "cache_served": 0,
+    "ready_ms": 13302.064,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Font": 3,
+     "Image": 14,
+     "Other": 2,
+     "Script": 39,
+     "Stylesheet": 17,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 468865,
+      "out": 12014
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 4599,
+      "out": 3864
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-heading-anchor.0eec5185ab9425b7.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs.87eb742f4e711dc3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs-bar.2d1bed1ab424b6b3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5909.489e266d049aa182.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9228.c46ef79d5582674d.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-menu.e2c5c8a53a8854c2.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/270.c4deb27edf934078.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-content-section.0a46cad19e719859.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-global.11757ff5b10ffb13.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-layout.632d2f3884f10ca3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-left-sidebar.46e37af4d0b5c883.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-a11y-menu.5796ee87cb69f93f.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-navigation.c3ebf384e65df345.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-article-footer.81ae18c89fc527dc.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-page-layout.5a4354f33e894319.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-toc.9b9bd019efd16b86.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/index.8cc0df3857a564c8.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4585.e30f706b333273cd.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-logo.aea5ff6edf1b9cfb.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1216.2fdb44f0bb574bc2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-footer.66072dd619a4ef50.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/runtime.307d306222c5e098.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/7309aafe-4613-4ee6-91f2-075c95a81a7f",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-latin.9a3b1bc220d426ef.woff2",
+      "type": "Font",
+      "status": 200,
+      "encoded": 105484
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/jetbrains-mono-latin.119994ed445212c7.woff2",
+      "type": "Font",
+      "status": 200,
+      "encoded": 28416
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-italic-latin.fd2627ec16333c05.woff2",
+      "type": "Font",
+      "status": 200,
+      "encoded": 115932
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/wrench.a3caa7312a364b47.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/graduation-cap.c7aa0f3430c53718.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-down.7c923b7054da305b.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/external-link.4f3a2dc8e402cae5.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-right.a81fc439dd5e4839.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/flask-conical.c16b3d71f14f31d1.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7489.cd806d2f427a883d.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3708.4a0422a33ccb46ea.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8280.d23400460d00c14a.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1477.2e21275901ede190.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4249.f72e3bc533441dbe.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9204.6afe342b1a966b73.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3690.dde3c3c4604a6af2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2868.72600e71ae8128fe.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8121.0d3b90f48eb7f970.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3711.97606c6489b00a61.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9234.e2ca939eeab03c93.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3980.1b5a9384580db09a.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4920.a37ab55f7abde7d9.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5542.1e868b3ebf533fa2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9099.d5fd55aa8af08e99.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9647.28b4240dbab81568.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8926.2bd0c75389285bbf.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1996.e833c07cb4ee4327.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5196.8750081dbe089c86.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2173.fe760a50c3627b0f.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7938.07886f31308437a6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/169.43043e6e06493384.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4060.8abfad3012e87803.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1861.67943793bc26e22c.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1598.cccf04205fda6ad6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7065.068ab3b30f8d33fa.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/api/v1/whoami",
+      "type": "XHR",
+      "status": 200,
+      "encoded": 187
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1825.599c6236c8613bc0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7841.3c8f3dd895aacf3c.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-csp-js.c473b3c65ec0d1e6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hpkp-js.81e0279884fa5022.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hsts-js.680c9c315b8ed757.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-json-js.69f907cc2a904a1e.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-uri-js.dc04b0053fd9fc5e.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-http-js.4c053b808612f024.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/contrast.d86e85c43de8dee8.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/users.f7e6f1f213744762.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/circle-play.6ed4ac1fb3c93a04.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chart-no-axes-combined.aee09a7064cb8b35.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/shield-check.07bdc37f20ac5cc6.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/mdn-m.70aac857e4a908d0.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/sun.1d7c3ad7bf6fc390.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/moon.74026b9da82b0694.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/9fd1a5e1-edfc-4cb7-ad87-61dd14153cf8",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 473581,
+     "wire_out": 16229,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 4749,
+    "wire_out": 4055,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 129,
+    "requests": 81,
+    "cache_served": 74,
+    "ready_ms": 9285.006,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Font": 3,
+     "Image": 14,
+     "Other": 2,
+     "Script": 39,
+     "Stylesheet": 17,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 4307,
+      "out": 3864
+     },
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 442,
+      "out": 191
+     }
+    ],
+    "engine": {
+     "wire_in": 4788,
+     "wire_out": 4160,
+     "cache_hit_bytes": 504751,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "mode": "sweef-strict",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 211227,
+    "wire_out": 13687,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 351,
+    "requests": 64,
+    "cache_served": 0,
+    "ready_ms": 12525.252,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 2,
+     "Script": 39,
+     "Stylesheet": 17,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 206669,
+      "out": 9821
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 4558,
+      "out": 3866
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-page-layout.5a4354f33e894319.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs-bar.2d1bed1ab424b6b3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-menu.e2c5c8a53a8854c2.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-toc.9b9bd019efd16b86.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9228.c46ef79d5582674d.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-footer.66072dd619a4ef50.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/270.c4deb27edf934078.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-heading-anchor.0eec5185ab9425b7.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-article-footer.81ae18c89fc527dc.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-layout.632d2f3884f10ca3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-content-section.0a46cad19e719859.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-a11y-menu.5796ee87cb69f93f.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-global.11757ff5b10ffb13.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-navigation.c3ebf384e65df345.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-left-sidebar.46e37af4d0b5c883.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-logo.aea5ff6edf1b9cfb.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs.87eb742f4e711dc3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/runtime.307d306222c5e098.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5909.489e266d049aa182.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4585.e30f706b333273cd.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1216.2fdb44f0bb574bc2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/index.8cc0df3857a564c8.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/d488ed96-d1f5-4639-ab27-1f22b2df14a8",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7489.cd806d2f427a883d.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3708.4a0422a33ccb46ea.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8280.d23400460d00c14a.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1477.2e21275901ede190.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4249.f72e3bc533441dbe.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9204.6afe342b1a966b73.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3690.dde3c3c4604a6af2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2868.72600e71ae8128fe.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8121.0d3b90f48eb7f970.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3711.97606c6489b00a61.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9234.e2ca939eeab03c93.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3980.1b5a9384580db09a.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4920.a37ab55f7abde7d9.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5542.1e868b3ebf533fa2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9099.d5fd55aa8af08e99.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9647.28b4240dbab81568.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8926.2bd0c75389285bbf.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1996.e833c07cb4ee4327.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5196.8750081dbe089c86.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2173.fe760a50c3627b0f.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7938.07886f31308437a6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/169.43043e6e06493384.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4060.8abfad3012e87803.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1861.67943793bc26e22c.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1598.cccf04205fda6ad6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7065.068ab3b30f8d33fa.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/api/v1/whoami",
+      "type": "XHR",
+      "status": 200,
+      "encoded": 187
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1825.599c6236c8613bc0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7841.3c8f3dd895aacf3c.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-csp-js.c473b3c65ec0d1e6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hpkp-js.81e0279884fa5022.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hsts-js.680c9c315b8ed757.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-json-js.69f907cc2a904a1e.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-uri-js.dc04b0053fd9fc5e.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-http-js.4c053b808612f024.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/4c388777-f85e-4253-ac04-5bdf5cb85e96",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 211344,
+     "wire_out": 14038,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped": {
+      "font": 3,
+      "image": 44
+     },
+     "skipped_estimate": 1879040,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 4957,
+    "wire_out": 4080,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 129,
+    "requests": 64,
+    "cache_served": 57,
+    "ready_ms": 9356.992,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 2,
+     "Script": 39,
+     "Stylesheet": 17,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 2,
+      "in": 4549,
+      "out": 3889
+     },
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 408,
+      "out": 191
+     }
+    ],
+    "engine": {
+     "wire_in": 4996,
+     "wire_out": 4161,
+     "cache_hit_bytes": 229805,
+     "aborted_bytes": 0,
+     "skipped": {
+      "font": 3,
+      "image": 44
+     },
+     "skipped_estimate": 1879040,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "mode": "chromium",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 562855,
+    "wire_out": 18263,
+    "conns": 4,
+    "internal_in": 18396,
+    "internal_out": 8809,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 88,
+    "cache_served": 0,
+    "ready_ms": 2510.682,
+    "browser_in": 542553,
+    "browser_out": 56400,
+    "by_type": {
+     "Document": 34828,
+     "Fetch": 3664,
+     "Font": 251818,
+     "Image": 89906,
+     "Manifest": 986,
+     "Other": 3512,
+     "Ping": 736,
+     "Script": 132787,
+     "Stylesheet": 24316
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 2,
+     "Font": 3,
+     "Image": 18,
+     "Manifest": 1,
+     "Other": 2,
+     "Ping": 4,
+     "Script": 39,
+     "Stylesheet": 17
+    },
+    "protos": {
+     "h2": 87
+    },
+    "doc_bytes": 34450,
+    "cdp_host_in": {
+     "developer.mozilla.org": 541817,
+     "incoming.telemetry.mozilla.org": 736
+    },
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 557360,
+      "out": 12250
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 2,
+      "in": 5495,
+      "out": 6013
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://developer.mozilla.org/favicon.svg",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 774
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2868.72600e71ae8128fe.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1440
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hsts-js.680c9c315b8ed757.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 688
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-json-js.69f907cc2a904a1e.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 913
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9228.c46ef79d5582674d.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 913
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-content-section.0a46cad19e719859.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3460
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-left-sidebar.46e37af4d0b5c883.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1385
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs.87eb742f4e711dc3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 878
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/f4b67cc0-3856-4d97-8eff-a10204924ffb",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5542.1e868b3ebf533fa2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2159
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/filter.b77a4ccbfb57e2ef.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 958
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/rss.37214526d7308d0c.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 662
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4060.8abfad3012e87803.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1742
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/270.c4deb27edf934078.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1097
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-latin.9a3b1bc220d426ef.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 106220
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9204.6afe342b1a966b73.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2754
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3980.1b5a9384580db09a.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1325
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/75a7840b-39e8-4673-aec8-5bc831e15a32",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc5MTY0LzE3ODgxOTc3OTEtRGVzY29wZV9pY29uMTI4X3hfMTI4X1BO…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7013
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7841.3c8f3dd895aacf3c.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4959
+     },
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+      "type": "Document",
+      "status": 301,
+      "encoded": 378
+     },
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 34450
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-toc.9b9bd019efd16b86.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1039
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1216.2fdb44f0bb574bc2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 967
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-down.7c923b7054da305b.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 628
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-article-footer.81ae18c89fc527dc.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1039
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4585.e30f706b333273cd.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 24045
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4920.a37ab55f7abde7d9.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2890
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7938.07886f31308437a6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2312
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/graduation-cap.c7aa0f3430c53718.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 948
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1861.67943793bc26e22c.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1421
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5196.8750081dbe089c86.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2895
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-http-js.4c053b808612f024.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1563
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-footer.66072dd619a4ef50.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1339
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/jetbrains-mono-latin.119994ed445212c7.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 29118
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8926.2bd0c75389285bbf.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1042
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-right.a81fc439dd5e4839.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 831
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/languages.dcba936080e5be86.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 616
+     },
+     {
+      "url": "https://developer.mozilla.org/api/v1/whoami",
+      "type": "Fetch",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 414
+     },
+     {
+      "url": "https://developer.mozilla.org/favicon-192x192.png",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2738
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1996.e833c07cb4ee4327.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2618
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/08b538f8-f68b-48e9-9456-72b67e5e419b",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 508
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-logo.aea5ff6edf1b9cfb.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 943
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-menu.e2c5c8a53a8854c2.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1753
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1477.2e21275901ede190.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1104
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8121.0d3b90f48eb7f970.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 928
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/mastodon.1a5c0fde8353f680.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1222
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1825.599c6236c8613bc0.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 14508
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/contrast.d86e85c43de8dee8.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 922
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-global.11757ff5b10ffb13.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4660
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-layout.632d2f3884f10ca3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 880
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/runtime.307d306222c5e098.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 9239
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/info.d40b80f84482feba.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 878
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/flask-conical.c16b3d71f14f31d1.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 909
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/bluesky.a9421882d093c829.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 765
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-italic-latin.fd2627ec16333c05.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 116480
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/wrench.a3caa7312a364b47.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 685
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-page-layout.5a4354f33e894319.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 848
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4249.f72e3bc533441dbe.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1320
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9234.e2ca939eeab03c93.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1490
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7065.068ab3b30f8d33fa.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2249
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc5MTY0LzE3OTAzNDkyMTItMTQ1NngxODBfYm90dG9tX09jdF9CYW5u…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 38657
+     },
+     {
+      "url": "https://developer.mozilla.org/manifest.json",
+      "type": "Manifest",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 986
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-heading-anchor.0eec5185ab9425b7.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 994
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-a11y-menu.5796ee87cb69f93f.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 963
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs-bar.2d1bed1ab424b6b3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 967
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8280.d23400460d00c14a.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1838
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-uri-js.dc04b0053fd9fc5e.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1079
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3690.dde3c3c4604a6af2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1403
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9647.28b4240dbab81568.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 917
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/external-link.4f3a2dc8e402cae5.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 672
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/github.4d94e1bf436aa7ed.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1023
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1598.cccf04205fda6ad6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1238
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-navigation.c3ebf384e65df345.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1158
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3711.97606c6489b00a61.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2560
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/c1a2d213-38a7-4a76-8858-b4d01d985f11",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-csp-js.c473b3c65ec0d1e6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1144
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7489.cd806d2f427a883d.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1512
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5909.489e266d049aa182.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10198
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/index.8cc0df3857a564c8.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 15030
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hpkp-js.81e0279884fa5022.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 809
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3708.4a0422a33ccb46ea.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1143
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9099.d5fd55aa8af08e99.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1435
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2173.fe760a50c3627b0f.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2652
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/169.43043e6e06493384.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3258
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/x.4c7e68bf52af030a.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 889
+     },
+     {
+      "url": "https://developer.mozilla.org/pong/get",
+      "type": "Fetch",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3250
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTY5MTc3LzE3NjA5ODk4NDctTUROX2FkLTAxLW1pbi5qcGc%3D.n6SSx…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 31628
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 50900,
+    "wire_out": 8782,
+    "conns": 2,
+    "internal_in": 10564,
+    "internal_out": 5713,
+    "internal_conns": 4,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 87,
+    "cache_served": 78,
+    "ready_ms": 325.14,
+    "browser_in": 39041,
+    "browser_out": 8252,
+    "by_type": {
+     "Document": 0,
+     "Fetch": 3634,
+     "Font": 0,
+     "Image": 34690,
+     "Manifest": 0,
+     "Other": 0,
+     "Ping": 717,
+     "Script": 0,
+     "Stylesheet": 0
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 2,
+     "Font": 3,
+     "Image": 18,
+     "Manifest": 1,
+     "Other": 1,
+     "Ping": 4,
+     "Script": 39,
+     "Stylesheet": 17
+    },
+    "protos": {
+     "h2": 86
+    },
+    "doc_bytes": 0,
+    "cdp_host_in": {
+     "developer.mozilla.org": 38324,
+     "incoming.telemetry.mozilla.org": 717
+    },
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 1,
+      "in": 45063,
+      "out": 2769
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 5837,
+      "out": 6013
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "mode": "chromium-savedata",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 612932,
+    "wire_out": 19902,
+    "conns": 6,
+    "internal_in": 18534,
+    "internal_out": 8770,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 88,
+    "cache_served": 0,
+    "ready_ms": 2490.611,
+    "browser_in": 592476,
+    "browser_out": 57564,
+    "by_type": {
+     "Document": 34824,
+     "Fetch": 3631,
+     "Font": 251802,
+     "Image": 140363,
+     "Manifest": 984,
+     "Other": 3572,
+     "Ping": 717,
+     "Script": 132568,
+     "Stylesheet": 24015
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 2,
+     "Font": 3,
+     "Image": 18,
+     "Manifest": 1,
+     "Other": 2,
+     "Ping": 4,
+     "Script": 39,
+     "Stylesheet": 17
+    },
+    "protos": {
+     "h2": 87
+    },
+    "doc_bytes": 34448,
+    "cdp_host_in": {
+     "developer.mozilla.org": 591759,
+     "incoming.telemetry.mozilla.org": 717
+    },
+    "save_data_req": 88,
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 607500,
+      "out": 12357
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 4,
+      "in": 5432,
+      "out": 7545
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-http-js.4c053b808612f024.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1517
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-content-section.0a46cad19e719859.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3508
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-page-layout.5a4354f33e894319.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1075
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2868.72600e71ae8128fe.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1454
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/info.d40b80f84482feba.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 673
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/295420c6-ba24-49cf-92e6-91136352a935",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9204.6afe342b1a966b73.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2717
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3690.dde3c3c4604a6af2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1451
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hpkp-js.81e0279884fa5022.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 721
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4060.8abfad3012e87803.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1740
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/graduation-cap.c7aa0f3430c53718.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 728
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1825.599c6236c8613bc0.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 14537
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-menu.e2c5c8a53a8854c2.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1713
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4249.f72e3bc533441dbe.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1320
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5196.8750081dbe089c86.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2990
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-right.a81fc439dd5e4839.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 804
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/filter.b77a4ccbfb57e2ef.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 724
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/x.4c7e68bf52af030a.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 886
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-italic-latin.fd2627ec16333c05.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 116695
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7489.cd806d2f427a883d.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1434
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3708.4a0422a33ccb46ea.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1175
+     },
+     {
+      "url": "https://developer.mozilla.org/manifest.json",
+      "type": "Manifest",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 984
+     },
+     {
+      "url": "https://developer.mozilla.org/favicon.svg",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 948
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/jetbrains-mono-latin.119994ed445212c7.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 28829
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1477.2e21275901ede190.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1058
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3711.97606c6489b00a61.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2560
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/contrast.d86e85c43de8dee8.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 700
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/rss.37214526d7308d0c.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 690
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8926.2bd0c75389285bbf.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1003
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-footer.66072dd619a4ef50.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1322
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8121.0d3b90f48eb7f970.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 928
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5542.1e868b3ebf533fa2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2222
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9647.28b4240dbab81568.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 950
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/5c4c4e32-6c93-4014-9313-c00eef1c55ea",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/favicon-192x192.png",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2624
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/external-link.4f3a2dc8e402cae5.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 868
+     },
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+      "type": "Document",
+      "status": 301,
+      "encoded": 376
+     },
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 34448
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-global.11757ff5b10ffb13.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4621
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3980.1b5a9384580db09a.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1349
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/github.4d94e1bf436aa7ed.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1020
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7065.068ab3b30f8d33fa.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2235
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc5MTY0LzE3OTAzNDkyMTItMTQ1NngxODBfYm90dG9tX09jdF9CYW5u…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 38624
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-csp-js.c473b3c65ec0d1e6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1218
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-heading-anchor.0eec5185ab9425b7.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 948
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-toc.9b9bd019efd16b86.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1033
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/wrench.a3caa7312a364b47.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 900
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9228.c46ef79d5582674d.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 924
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-navigation.c3ebf384e65df345.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1132
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-logo.aea5ff6edf1b9cfb.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 775
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-latin.9a3b1bc220d426ef.woff2",
+      "type": "Font",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 106278
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2173.fe760a50c3627b0f.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2551
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/languages.dcba936080e5be86.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 841
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/53399fd1-d311-4d93-8b4f-271169d37720",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 76
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-uri-js.dc04b0053fd9fc5e.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1154
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-layout.632d2f3884f10ca3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 845
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs.87eb742f4e711dc3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 890
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/mastodon.1a5c0fde8353f680.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1164
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1598.cccf04205fda6ad6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1248
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hsts-js.680c9c315b8ed757.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 771
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/169.43043e6e06493384.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3217
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1861.67943793bc26e22c.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1418
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7841.3c8f3dd895aacf3c.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4923
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-left-sidebar.46e37af4d0b5c883.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1383
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/index.8cc0df3857a564c8.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 15016
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7938.07886f31308437a6.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2347
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-down.7c923b7054da305b.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 628
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/bluesky.a9421882d093c829.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 768
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc5MTY0LzE3ODgxOTc3OTEtRGVzY29wZV9pY29uMTI4X3hfMTI4X1BO…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 7007
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-json-js.69f907cc2a904a1e.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 833
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1216.2fdb44f0bb574bc2.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1008
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/d8972bcc-9b82-46bd-973e-58695362430c",
+      "type": "Ping",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 489
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8280.d23400460d00c14a.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1874
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9099.d5fd55aa8af08e99.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1351
+     },
+     {
+      "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc2NDc2LzE3ODM2MTIyMzUtb3Rhcmktc2lkZWJhci5wbmc%3D.9LtXO…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 82474
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1996.e833c07cb4ee4327.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2541
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/270.c4deb27edf934078.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1134
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs-bar.2d1bed1ab424b6b3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 944
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/runtime.307d306222c5e098.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 9253
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4585.e30f706b333273cd.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23987
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4920.a37ab55f7abde7d9.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2815
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/flask-conical.c16b3d71f14f31d1.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 864
+     },
+     {
+      "url": "https://developer.mozilla.org/api/v1/whoami",
+      "type": "Fetch",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 411
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-article-footer.81ae18c89fc527dc.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 810
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-a11y-menu.5796ee87cb69f93f.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 958
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5909.489e266d049aa182.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 10185
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9234.e2ca939eeab03c93.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1497
+     },
+     {
+      "url": "https://developer.mozilla.org/pong/get",
+      "type": "Fetch",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3220
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 55784,
+    "wire_out": 8806,
+    "conns": 2,
+    "internal_in": 10528,
+    "internal_out": 5713,
+    "internal_conns": 4,
+    "internal_hosts": [
+     "accounts.google.com",
+     "www.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 87,
+    "cache_served": 78,
+    "ready_ms": 349.405,
+    "browser_in": 44074,
+    "browser_out": 8591,
+    "by_type": {
+     "Document": 0,
+     "Fetch": 3620,
+     "Font": 0,
+     "Image": 39737,
+     "Manifest": 0,
+     "Other": 0,
+     "Ping": 717,
+     "Script": 0,
+     "Stylesheet": 0
+    },
+    "by_type_count": {
+     "Document": 2,
+     "Fetch": 2,
+     "Font": 3,
+     "Image": 18,
+     "Manifest": 1,
+     "Other": 1,
+     "Ping": 4,
+     "Script": 39,
+     "Stylesheet": 17
+    },
+    "protos": {
+     "h2": 86
+    },
+    "doc_bytes": 0,
+    "cdp_host_in": {
+     "developer.mozilla.org": 43357,
+     "incoming.telemetry.mozilla.org": 717
+    },
+    "save_data_req": 87,
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 1,
+      "in": 50162,
+      "out": 2779
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 5622,
+      "out": 6027
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "mode": "sweef-off",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 570747,
+    "wire_out": 24294,
+    "conns": 7,
+    "handshake_in": 273,
+    "handshake_out": 763,
+    "requests": 90,
+    "cache_served": 0,
+    "ready_ms": 13399.973,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Font": 3,
+     "Image": 23,
+     "Other": 2,
+     "Script": 39,
+     "Stylesheet": 17,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "developer.mozilla.org",
+      "conns": 4,
+      "in": 487120,
+      "out": 15986
+     },
+     {
+      "host": "mdn.github.io",
+      "conns": 2,
+      "in": 79166,
+      "out": 4455
+     },
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 4461,
+      "out": 3853
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-article-footer.81ae18c89fc527dc.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-global.11757ff5b10ffb13.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5909.489e266d049aa182.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/index.8cc0df3857a564c8.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-footer.66072dd619a4ef50.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs.87eb742f4e711dc3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-toc.9b9bd019efd16b86.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs-bar.2d1bed1ab424b6b3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/runtime.307d306222c5e098.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/270.c4deb27edf934078.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-left-sidebar.46e37af4d0b5c883.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-page-layout.5a4354f33e894319.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-heading-anchor.0eec5185ab9425b7.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-a11y-menu.5796ee87cb69f93f.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-reference-layout.632d2f3884f10ca3.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-content-section.0a46cad19e719859.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9228.c46ef79d5582674d.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4585.e30f706b333273cd.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-navigation.c3ebf384e65df345.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-menu.e2c5c8a53a8854c2.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1216.2fdb44f0bb574bc2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/styles-logo.aea5ff6edf1b9cfb.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/0332bec5-3967-4f9b-94fc-f021b9e9fb84",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://mdn.github.io/shared-assets/images/diagrams/http/cache/type-of-cache.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://mdn.github.io/shared-assets/images/diagrams/http/cache/request-collapse.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/external-link.4f3a2dc8e402cae5.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/info.d40b80f84482feba.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/flask-conical.c16b3d71f14f31d1.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-right.a81fc439dd5e4839.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/github.4d94e1bf436aa7ed.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/bluesky.a9421882d093c829.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/x.4c7e68bf52af030a.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/jetbrains-mono-latin.119994ed445212c7.woff2",
+      "type": "Font",
+      "status": 200,
+      "encoded": 28416
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-latin.9a3b1bc220d426ef.woff2",
+      "type": "Font",
+      "status": 200,
+      "encoded": 105484
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/mastodon.1a5c0fde8353f680.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/inter-italic-latin.fd2627ec16333c05.woff2",
+      "type": "Font",
+      "status": 200,
+      "encoded": 115932
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/rss.37214526d7308d0c.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chevron-down.7c923b7054da305b.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/graduation-cap.c7aa0f3430c53718.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/wrench.a3caa7312a364b47.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7489.cd806d2f427a883d.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3708.4a0422a33ccb46ea.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8280.d23400460d00c14a.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1477.2e21275901ede190.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4249.f72e3bc533441dbe.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9204.6afe342b1a966b73.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3690.dde3c3c4604a6af2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2868.72600e71ae8128fe.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8121.0d3b90f48eb7f970.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3711.97606c6489b00a61.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9234.e2ca939eeab03c93.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/3980.1b5a9384580db09a.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4920.a37ab55f7abde7d9.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5542.1e868b3ebf533fa2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9099.d5fd55aa8af08e99.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/9647.28b4240dbab81568.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/8926.2bd0c75389285bbf.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1996.e833c07cb4ee4327.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/5196.8750081dbe089c86.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/2173.fe760a50c3627b0f.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7938.07886f31308437a6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/169.43043e6e06493384.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/4060.8abfad3012e87803.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1861.67943793bc26e22c.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1598.cccf04205fda6ad6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7065.068ab3b30f8d33fa.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/api/v1/whoami",
+      "type": "XHR",
+      "status": 200,
+      "encoded": 187
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/1825.599c6236c8613bc0.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/7841.3c8f3dd895aacf3c.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-csp-js.c473b3c65ec0d1e6.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hpkp-js.81e0279884fa5022.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-hsts-js.680c9c315b8ed757.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-json-js.69f907cc2a904a1e.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-uri-js.dc04b0053fd9fc5e.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/prism-http-js.4c053b808612f024.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/filter.b77a4ccbfb57e2ef.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/circle-play.6ed4ac1fb3c93a04.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/shield-check.07bdc37f20ac5cc6.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/mdn-m.70aac857e4a908d0.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/chart-no-axes-combined.aee09a7064cb8b35.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/client/users.f7e6f1f213744762.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/contrast.d86e85c43de8dee8.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/sun.1d7c3ad7bf6fc390.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://developer.mozilla.org/static/ssr/moon.74026b9da82b0694.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/694eb47d-620d-4cde-9b4b-31b9da458f4f",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 571020,
+     "wire_out": 25057,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 5020,
+    "wire_out": 4040,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 129,
+    "requests": 90,
+    "cache_served": 83,
+    "ready_ms": 9162.996,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Font": 3,
+     "Image": 23,
+     "Other": 2,
+     "Script": 39,
+     "Stylesheet": 17,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "incoming.telemetry.mozilla.org",
+      "conns": 1,
+      "in": 4543,
+      "out": 3851
+     },
+     {
+      "host": "developer.mozilla.org",
+      "conns": 2,
+      "in": 477,
+      "out": 189
+     }
+    ],
+    "engine": {
+     "wire_in": 5059,
+     "wire_out": 4145,
+     "cache_hit_bytes": 583790,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://docs.python.org/3/library/asyncio.html",
+   "mode": "sweef-off",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 102660,
+    "wire_out": 7812,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 307,
+    "requests": 22,
+    "cache_served": 0,
+    "ready_ms": 3589.352,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Font": 1,
+     "Image": 1,
+     "Script": 11,
+     "Stylesheet": 6,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 2,
+      "in": 94293,
+      "out": 5625
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 1,
+      "in": 8367,
+      "out": 2187
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://docs.python.org/3/library/asyncio.html",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/themetoggle.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/rtd_switcher.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/menu.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/copybutton.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/switchers.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/classic.css?v=234b1a7c",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments.css?v=b86133f3",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/search-focus.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments_dark.css?v=0fc419ee",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme_dark.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/documentation_options.js?v=0fe728b1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sphinx_highlight.js?v=dc90522c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme.css?v=48df1187",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sidebar.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/doctools.js?v=9bcbadda",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://analytics.python.org/js/script.file-downloads.outbound-links.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/basic.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/py.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/fonts/Vazirmatn-NL-VF.woff2",
+      "type": "Font",
+      "status": 200,
+      "encoded": 47972
+     },
+     {
+      "url": "https://analytics.python.org/api/event",
+      "type": "XHR",
+      "status": 400,
+      "encoded": 94
+     }
+    ],
+    "engine": {
+     "wire_in": 102777,
+     "wire_out": 8119,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 13978,
+    "wire_out": 5653,
+    "conns": 2,
+    "handshake_in": 78,
+    "handshake_out": 208,
+    "requests": 22,
+    "cache_served": 3,
+    "ready_ms": 2670.752,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Font": 1,
+     "Image": 1,
+     "Script": 11,
+     "Stylesheet": 6,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 1,
+      "in": 7476,
+      "out": 3561
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 1,
+      "in": 6502,
+      "out": 2092
+     }
+    ],
+    "engine": {
+     "wire_in": 14056,
+     "wire_out": 5861,
+     "cache_hit_bytes": 90381,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://docs.python.org/3/library/asyncio.html",
+   "mode": "sweef-standard",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 101624,
+    "wire_out": 7740,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 307,
+    "requests": 21,
+    "cache_served": 0,
+    "ready_ms": 2581.339,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Font": 1,
+     "Script": 11,
+     "Stylesheet": 6,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 2,
+      "in": 93235,
+      "out": 5540
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 1,
+      "in": 8389,
+      "out": 2200
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://docs.python.org/3/library/asyncio.html",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sidebar.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/documentation_options.js?v=0fe728b1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/doctools.js?v=9bcbadda",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/switchers.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/search-focus.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sphinx_highlight.js?v=dc90522c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/rtd_switcher.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme.css?v=48df1187",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/themetoggle.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments_dark.css?v=0fc419ee",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments.css?v=b86133f3",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/menu.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme_dark.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/copybutton.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/classic.css?v=234b1a7c",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://analytics.python.org/js/script.file-downloads.outbound-links.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/basic.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/fonts/Vazirmatn-NL-VF.woff2",
+      "type": "Font",
+      "status": 200,
+      "encoded": 47972
+     },
+     {
+      "url": "https://analytics.python.org/api/event",
+      "type": "XHR",
+      "status": 400,
+      "encoded": 94
+     }
+    ],
+    "engine": {
+     "wire_in": 101741,
+     "wire_out": 8047,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 13298,
+    "wire_out": 5002,
+    "conns": 2,
+    "handshake_in": 78,
+    "handshake_out": 208,
+    "requests": 21,
+    "cache_served": 10,
+    "ready_ms": 2654.386,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Font": 1,
+     "Script": 11,
+     "Stylesheet": 6,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 3,
+      "in": 6795,
+      "out": 2874
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 2,
+      "in": 6503,
+      "out": 2128
+     }
+    ],
+    "engine": {
+     "wire_in": 13376,
+     "wire_out": 5138,
+     "cache_hit_bytes": 88888,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://docs.python.org/3/library/asyncio.html",
+   "mode": "sweef-strict",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 58840,
+    "wire_out": 9416,
+    "conns": 4,
+    "handshake_in": 156,
+    "handshake_out": 416,
+    "requests": 20,
+    "cache_served": 0,
+    "ready_ms": 6455.986,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 11,
+     "Stylesheet": 6,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 2,
+      "in": 44290,
+      "out": 5324
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 2,
+      "in": 14550,
+      "out": 4092
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://docs.python.org/3/library/asyncio.html",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments_dark.css?v=0fc419ee",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme_dark.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/classic.css?v=234b1a7c",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme.css?v=48df1187",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments.css?v=b86133f3",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/documentation_options.js?v=0fe728b1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/doctools.js?v=9bcbadda",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sphinx_highlight.js?v=dc90522c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sidebar.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/copybutton.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/menu.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/search-focus.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/themetoggle.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/rtd_switcher.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/switchers.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://analytics.python.org/js/script.file-downloads.outbound-links.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/basic.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://analytics.python.org/api/event",
+      "type": "XHR",
+      "status": 400,
+      "encoded": 94
+     }
+    ],
+    "engine": {
+     "wire_in": 58996,
+     "wire_out": 9832,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped": {
+      "font": 1,
+      "image": 1
+     },
+     "skipped_estimate": 66560,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 19480,
+    "wire_out": 6919,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 307,
+    "requests": 20,
+    "cache_served": 9,
+    "ready_ms": 3408.392,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 11,
+     "Stylesheet": 6,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 3,
+      "in": 12976,
+      "out": 4815
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 1,
+      "in": 6504,
+      "out": 2104
+     }
+    ],
+    "engine": {
+     "wire_in": 19597,
+     "wire_out": 7202,
+     "cache_hit_bytes": 40424,
+     "aborted_bytes": 0,
+     "skipped": {
+      "font": 1,
+      "image": 1
+     },
+     "skipped_estimate": 66560,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://docs.python.org/3/library/asyncio.html",
+   "mode": "chromium",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 47882,
+    "wire_out": 5961,
+    "conns": 2,
+    "internal_in": 19812,
+    "internal_out": 8770,
+    "internal_conns": 4,
+    "internal_hosts": [
+     "accounts.google.com",
+     "www.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 20,
+    "cache_served": 0,
+    "ready_ms": 653.846,
+    "browser_in": 34580,
+    "browser_out": 10779,
+    "by_type": {
+     "Document": 5960,
+     "Image": 1096,
+     "Other": 107,
+     "Script": 13698,
+     "Stylesheet": 13719
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 1,
+     "Other": 1,
+     "Script": 11,
+     "Stylesheet": 6
+    },
+    "protos": {
+     "h2": 20
+    },
+    "doc_bytes": 5960,
+    "cdp_host_in": {
+     "analytics.python.org": 1951,
+     "docs.python.org": 32629
+    },
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 1,
+      "in": 39643,
+      "out": 3837
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 1,
+      "in": 8239,
+      "out": 2124
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://docs.python.org/3/_static/switchers.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2656
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments_dark.css?v=0fc419ee",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1152
+     },
+     {
+      "url": "https://docs.python.org/3/_static/doctools.js?v=9bcbadda",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1700
+     },
+     {
+      "url": "https://docs.python.org/3/_static/rtd_switcher.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 810
+     },
+     {
+      "url": "https://docs.python.org/3/_static/py.svg",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 107
+     },
+     {
+      "url": "https://docs.python.org/3/_static/themetoggle.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 487
+     },
+     {
+      "url": "https://docs.python.org/3/_static/classic.css?v=234b1a7c",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1606
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme.css?v=48df1187",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4871
+     },
+     {
+      "url": "https://docs.python.org/3/_static/py.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1096
+     },
+     {
+      "url": "https://docs.python.org/3/_static/basic.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3530
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme_dark.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1405
+     },
+     {
+      "url": "https://docs.python.org/3/library/asyncio.html",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5960
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sphinx_highlight.js?v=dc90522c",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2250
+     },
+     {
+      "url": "https://docs.python.org/3/_static/search-focus.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 419
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments.css?v=b86133f3",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1155
+     },
+     {
+      "url": "https://docs.python.org/3/_static/documentation_options.js?v=0fe728b1",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 377
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sidebar.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 989
+     },
+     {
+      "url": "https://analytics.python.org/js/script.file-downloads.outbound-links.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1951
+     },
+     {
+      "url": "https://docs.python.org/3/_static/copybutton.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1229
+     },
+     {
+      "url": "https://docs.python.org/3/_static/menu.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 830
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 7655,
+    "wire_out": 4613,
+    "conns": 1,
+    "internal_in": 18644,
+    "internal_out": 7932,
+    "internal_conns": 4,
+    "internal_hosts": [
+     "accounts.google.com",
+     "www.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 19,
+    "cache_served": 2,
+    "ready_ms": 902.639,
+    "browser_in": 1125,
+    "browser_out": 9907,
+    "by_type": {
+     "Document": 158,
+     "Image": 56,
+     "Script": 570,
+     "Stylesheet": 341
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 1,
+     "Script": 11,
+     "Stylesheet": 6
+    },
+    "protos": {
+     "h2": 19
+    },
+    "doc_bytes": 158,
+    "cdp_host_in": {
+     "analytics.python.org": 0,
+     "docs.python.org": 1125
+    },
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 1,
+      "in": 7655,
+      "out": 4613
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://docs.python.org/3/library/asyncio.html",
+   "mode": "chromium-savedata",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 47922,
+    "wire_out": 6002,
+    "conns": 2,
+    "internal_in": 20877,
+    "internal_out": 8809,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 20,
+    "cache_served": 0,
+    "ready_ms": 1436.503,
+    "browser_in": 34664,
+    "browser_out": 10755,
+    "by_type": {
+     "Document": 5960,
+     "Image": 1093,
+     "Other": 110,
+     "Script": 13830,
+     "Stylesheet": 13671
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 1,
+     "Other": 1,
+     "Script": 11,
+     "Stylesheet": 6
+    },
+    "protos": {
+     "h2": 20
+    },
+    "doc_bytes": 5960,
+    "cdp_host_in": {
+     "analytics.python.org": 1951,
+     "docs.python.org": 32713
+    },
+    "save_data_req": 20,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 1,
+      "in": 39661,
+      "out": 3866
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 1,
+      "in": 8261,
+      "out": 2136
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://docs.python.org/3/library/asyncio.html",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5960
+     },
+     {
+      "url": "https://analytics.python.org/js/script.file-downloads.outbound-links.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1951
+     },
+     {
+      "url": "https://docs.python.org/3/_static/rtd_switcher.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 851
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme.css?v=48df1187",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4888
+     },
+     {
+      "url": "https://docs.python.org/3/_static/documentation_options.js?v=0fe728b1",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 482
+     },
+     {
+      "url": "https://docs.python.org/3/_static/copybutton.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1235
+     },
+     {
+      "url": "https://docs.python.org/3/_static/themetoggle.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 397
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme_dark.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1446
+     },
+     {
+      "url": "https://docs.python.org/3/_static/py.svg",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 110
+     },
+     {
+      "url": "https://docs.python.org/3/_static/classic.css?v=234b1a7c",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1485
+     },
+     {
+      "url": "https://docs.python.org/3/_static/doctools.js?v=9bcbadda",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1718
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sphinx_highlight.js?v=dc90522c",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2097
+     },
+     {
+      "url": "https://docs.python.org/3/_static/switchers.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2661
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments_dark.css?v=0fc419ee",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1183
+     },
+     {
+      "url": "https://docs.python.org/3/_static/basic.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3525
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments.css?v=b86133f3",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1144
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sidebar.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1026
+     },
+     {
+      "url": "https://docs.python.org/3/_static/menu.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 970
+     },
+     {
+      "url": "https://docs.python.org/3/_static/search-focus.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 442
+     },
+     {
+      "url": "https://docs.python.org/3/_static/py.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1093
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 7738,
+    "wire_out": 4641,
+    "conns": 1,
+    "internal_in": 18791,
+    "internal_out": 7932,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 19,
+    "cache_served": 2,
+    "ready_ms": 882.87,
+    "browser_in": 1120,
+    "browser_out": 10162,
+    "by_type": {
+     "Document": 158,
+     "Image": 57,
+     "Script": 574,
+     "Stylesheet": 331
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 1,
+     "Script": 11,
+     "Stylesheet": 6
+    },
+    "protos": {
+     "h2": 19
+    },
+    "doc_bytes": 158,
+    "cdp_host_in": {
+     "analytics.python.org": 0,
+     "docs.python.org": 1120
+    },
+    "save_data_req": 19,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 1,
+      "in": 7738,
+      "out": 4641
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://docs.python.org/3/library/asyncio.html",
+   "mode": "sweef-standard",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 101621,
+    "wire_out": 7740,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 307,
+    "requests": 21,
+    "cache_served": 0,
+    "ready_ms": 5491.871,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Font": 1,
+     "Script": 11,
+     "Stylesheet": 6,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 2,
+      "in": 93232,
+      "out": 5540
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 1,
+      "in": 8389,
+      "out": 2200
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://docs.python.org/3/library/asyncio.html",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/rtd_switcher.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/doctools.js?v=9bcbadda",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/copybutton.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments.css?v=b86133f3",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments_dark.css?v=0fc419ee",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme.css?v=48df1187",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sidebar.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/documentation_options.js?v=0fe728b1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/classic.css?v=234b1a7c",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme_dark.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/menu.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sphinx_highlight.js?v=dc90522c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/themetoggle.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/search-focus.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/switchers.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://analytics.python.org/js/script.file-downloads.outbound-links.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/basic.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/fonts/Vazirmatn-NL-VF.woff2",
+      "type": "Font",
+      "status": 200,
+      "encoded": 47972
+     },
+     {
+      "url": "https://analytics.python.org/api/event",
+      "type": "XHR",
+      "status": 400,
+      "encoded": 94
+     }
+    ],
+    "engine": {
+     "wire_in": 101738,
+     "wire_out": 8047,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 13327,
+    "wire_out": 4978,
+    "conns": 2,
+    "handshake_in": 78,
+    "handshake_out": 208,
+    "requests": 21,
+    "cache_served": 10,
+    "ready_ms": 2302.991,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Font": 1,
+     "Script": 11,
+     "Stylesheet": 6,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 2,
+      "in": 6825,
+      "out": 2850
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 2,
+      "in": 6502,
+      "out": 2128
+     }
+    ],
+    "engine": {
+     "wire_in": 13405,
+     "wire_out": 5138,
+     "cache_hit_bytes": 88904,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://docs.python.org/3/library/asyncio.html",
+   "mode": "sweef-strict",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 58889,
+    "wire_out": 9381,
+    "conns": 4,
+    "handshake_in": 156,
+    "handshake_out": 416,
+    "requests": 20,
+    "cache_served": 0,
+    "ready_ms": 3730.697,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 11,
+     "Stylesheet": 6,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 2,
+      "in": 44342,
+      "out": 5289
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 2,
+      "in": 14547,
+      "out": 4092
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://docs.python.org/3/library/asyncio.html",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments_dark.css?v=0fc419ee",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments.css?v=b86133f3",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/classic.css?v=234b1a7c",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme_dark.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme.css?v=48df1187",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/documentation_options.js?v=0fe728b1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/doctools.js?v=9bcbadda",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sphinx_highlight.js?v=dc90522c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sidebar.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/copybutton.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/menu.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/search-focus.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/themetoggle.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/rtd_switcher.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/switchers.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://analytics.python.org/js/script.file-downloads.outbound-links.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://docs.python.org/3/_static/basic.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://analytics.python.org/api/event",
+      "type": "XHR",
+      "status": 400,
+      "encoded": 94
+     }
+    ],
+    "engine": {
+     "wire_in": 59045,
+     "wire_out": 9797,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped": {
+      "font": 1,
+      "image": 1
+     },
+     "skipped_estimate": 66560,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 19480,
+    "wire_out": 6895,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 307,
+    "requests": 20,
+    "cache_served": 9,
+    "ready_ms": 2967.456,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 11,
+     "Stylesheet": 6,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 2,
+      "in": 12978,
+      "out": 4791
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 1,
+      "in": 6502,
+      "out": 2104
+     }
+    ],
+    "engine": {
+     "wire_in": 19597,
+     "wire_out": 7202,
+     "cache_hit_bytes": 40407,
+     "aborted_bytes": 0,
+     "skipped": {
+      "font": 1,
+      "image": 1
+     },
+     "skipped_estimate": 66560,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://docs.python.org/3/library/asyncio.html",
+   "mode": "chromium",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 48017,
+    "wire_out": 5960,
+    "conns": 2,
+    "internal_in": 19832,
+    "internal_out": 8809,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 20,
+    "cache_served": 0,
+    "ready_ms": 1221.726,
+    "browser_in": 34671,
+    "browser_out": 10455,
+    "by_type": {
+     "Document": 5960,
+     "Image": 1093,
+     "Other": 88,
+     "Script": 13880,
+     "Stylesheet": 13650
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 1,
+     "Other": 1,
+     "Script": 11,
+     "Stylesheet": 6
+    },
+    "protos": {
+     "h2": 20
+    },
+    "doc_bytes": 5960,
+    "cdp_host_in": {
+     "analytics.python.org": 1951,
+     "docs.python.org": 32720
+    },
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 1,
+      "in": 39778,
+      "out": 3836
+     },
+     {
+      "host": "analytics.python.org",
+      "conns": 1,
+      "in": 8239,
+      "out": 2124
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://docs.python.org/3/_static/search-focus.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 449
+     },
+     {
+      "url": "https://docs.python.org/3/_static/themetoggle.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 401
+     },
+     {
+      "url": "https://docs.python.org/3/_static/basic.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3508
+     },
+     {
+      "url": "https://docs.python.org/3/_static/classic.css?v=234b1a7c",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1457
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sphinx_highlight.js?v=dc90522c",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2100
+     },
+     {
+      "url": "https://docs.python.org/3/_static/rtd_switcher.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 855
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme_dark.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1299
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments.css?v=b86133f3",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1179
+     },
+     {
+      "url": "https://docs.python.org/3/_static/doctools.js?v=9bcbadda",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1830
+     },
+     {
+      "url": "https://docs.python.org/3/_static/sidebar.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1031
+     },
+     {
+      "url": "https://docs.python.org/3/_static/py.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1093
+     },
+     {
+      "url": "https://docs.python.org/3/_static/switchers.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2703
+     },
+     {
+      "url": "https://docs.python.org/3/library/asyncio.html",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5960
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pydoctheme.css?v=48df1187",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 4878
+     },
+     {
+      "url": "https://docs.python.org/3/_static/pygments_dark.css?v=0fc419ee",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1329
+     },
+     {
+      "url": "https://docs.python.org/3/_static/py.svg",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 88
+     },
+     {
+      "url": "https://docs.python.org/3/_static/documentation_options.js?v=0fe728b1",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 349
+     },
+     {
+      "url": "https://analytics.python.org/js/script.file-downloads.outbound-links.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1951
+     },
+     {
+      "url": "https://docs.python.org/3/_static/copybutton.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1223
+     },
+     {
+      "url": "https://docs.python.org/3/_static/menu.js",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 988
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 7618,
+    "wire_out": 4304,
+    "conns": 3,
+    "internal_in": 16206,
+    "internal_out": 7932,
+    "internal_conns": 4,
+    "internal_hosts": [
+     "accounts.google.com",
+     "www.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 19,
+    "cache_served": 3,
+    "ready_ms": 888.113,
+    "browser_in": 1066,
+    "browser_out": 9911,
+    "by_type": {
+     "Document": 0,
+     "Image": 76,
+     "Script": 479,
+     "Stylesheet": 511
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 1,
+     "Script": 11,
+     "Stylesheet": 6
+    },
+    "protos": {
+     "h2": 19
+    },
+    "doc_bytes": 0,
+    "cdp_host_in": {
+     "analytics.python.org": 0,
+     "docs.python.org": 1066
+    },
+    "hosts": [
+     {
+      "host": "docs.python.org",
+      "conns": 3,
+      "in": 7618,
+      "out": 4304
+     }
+    ]
+   }
   }
  ],
  "baselines": [

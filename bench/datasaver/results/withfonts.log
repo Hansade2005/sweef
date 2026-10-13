@@ -34,3 +34,19 @@ engine data policy API: present (building with -tags datasaver_engine)-tags data
 [20/230] sweef-off          run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1669937 warm= 2067267 req=152 ready=11069ms ok
 [21/230] sweef-off          run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  595734 warm=    9111 req= 90 ready=12645ms ok
 [22/230] sweef-standard     run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  490320 warm=    9084 req= 81 ready=12543ms ok
+[23/230] sweef-strict       run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  224987 warm=    9176 req= 64 ready=12513ms ok
+[24/230] chromium           run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  588765 warm=   67597 req= 88 ready= 2244ms ok
+[25/230] chromium-savedata  run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  584695 warm=  112672 req= 88 ready= 2428ms ok
+[26/230] sweef-standard     run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  489342 warm=    8804 req= 81 ready=13302ms ok
+[27/230] sweef-strict       run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  224914 warm=    9037 req= 64 ready=12525ms ok
+[28/230] chromium           run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  581118 warm=   59682 req= 88 ready= 2511ms ok
+[29/230] chromium-savedata  run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  632834 warm=   64590 req= 88 ready= 2491ms ok
+[30/230] sweef-off          run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  595041 warm=    9060 req= 90 ready=13400ms ok
+[31/230] sweef-off          run 1 https://docs.python.org/3/library/asyncio.html               cold=  110472 warm=   19631 req= 22 ready= 3589ms ok
+[32/230] sweef-standard     run 1 https://docs.python.org/3/library/asyncio.html               cold=  109364 warm=   18300 req= 21 ready= 2581ms ok
+[33/230] sweef-strict       run 1 https://docs.python.org/3/library/asyncio.html               cold=   68256 warm=   26399 req= 20 ready= 6456ms ok
+[34/230] chromium           run 1 https://docs.python.org/3/library/asyncio.html               cold=   53843 warm=   12268 req= 20 ready=  654ms ok
+[35/230] chromium-savedata  run 1 https://docs.python.org/3/library/asyncio.html               cold=   53924 warm=   12379 req= 20 ready= 1437ms ok
+[36/230] sweef-standard     run 2 https://docs.python.org/3/library/asyncio.html               cold=  109361 warm=   18305 req= 21 ready= 5492ms ok
+[37/230] sweef-strict       run 2 https://docs.python.org/3/library/asyncio.html               cold=   68270 warm=   26375 req= 20 ready= 3731ms ok
+[38/230] chromium           run 2 https://docs.python.org/3/library/asyncio.html               cold=   53977 warm=   11922 req= 20 ready= 1222ms ok
