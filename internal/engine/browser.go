@@ -37,6 +37,7 @@ type BrowserContext struct {
 	ds         atomic.Pointer[ctxData] // Data Saver policy, counters and stats (datasaver.go)
 
 	site siteHolder // origin-scoped storage and service workers (storage_host.go)
+	pwah pwaHolder  // notifications, push, background sync, badge and locks (pwa.go)
 }
 
 type ContextOptions struct {

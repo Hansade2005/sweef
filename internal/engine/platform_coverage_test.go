@@ -35,6 +35,9 @@ var platformImplemented = []string{
 	// file system
 	"showOpenFilePicker", "showSaveFilePicker", "showDirectoryPicker", "FileSystemHandle", "FileSystemFileHandle", "FileSystemDirectoryHandle", "FileSystemWritableFileStream",
 	"StorageManager", "navigator.storage", "navigator.storage.getDirectory",
+	// notifications, push, sync, permissions (pwa.js)
+	"Notification", "NotificationEvent", "Permissions", "PermissionStatus", "navigator.permissions", "PushManager", "PushSubscription", "PushSubscriptionOptions", "PushEvent", "PushMessageData",
+	"PushSubscriptionChangeEvent", "SyncManager", "SyncEvent", "PeriodicSyncManager", "PeriodicSyncEvent", "Lock", "LockManager",
 }
 
 // platformAbsent lists names that must stay absent: hardware and sensor

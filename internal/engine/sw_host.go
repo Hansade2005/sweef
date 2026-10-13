@@ -70,7 +70,15 @@ func errToResult(token int64, err error) map[string]any {
 }
 
 func clientDesc(c *swClient) map[string]any {
-	return map[string]any{"id": c.id, "url": c.tab.URL(), "type": "window", "frameType": "top-level", "visibilityState": "visible", "focused": false}
+	visible, focused := true, false
+	if st := c.tab.Context().pwaIfStarted(); st != nil {
+		visible, focused = st.tabState(c.tab)
+	}
+	vs := "hidden"
+	if visible {
+		vs = "visible"
+	}
+	return map[string]any{"id": c.id, "url": c.tab.URL(), "type": "window", "frameType": "top-level", "visibilityState": vs, "focused": focused}
 }
 
 func (m *swManager) regByID(id string) *swReg {
