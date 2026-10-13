@@ -1,5 +1,5 @@
 /* Omnibox dropdown rows, shared by the toolbar and the new tab page. */
-.od { display: none; background: var(--surface); border-radius: var(--r-2); box-shadow: var(--sh-3); padding: var(--s-2); overflow: hidden; }
+.od { display: none; background: var(--surface); border-radius: var(--r-2); box-shadow: 0 0 0 1px var(--line), var(--sh-2); padding: var(--s-2); overflow: hidden; }
 .od.open { display: block; }
 .orow { display: flex; align-items: center; gap: var(--s-3); height: 38px; padding: 0 var(--s-3); border-radius: var(--r-1); color: var(--text); }
 .orow.sel { background: var(--accent-soft); }

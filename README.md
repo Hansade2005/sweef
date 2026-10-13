@@ -1,5 +1,10 @@
 # Sweef Browser
 
+[![ci](https://github.com/sweefbrowser/sweef/actions/workflows/ci.yml/badge.svg)](https://github.com/sweefbrowser/sweef/actions/workflows/ci.yml)
+[![security](https://github.com/sweefbrowser/sweef/actions/workflows/security.yml/badge.svg)](https://github.com/sweefbrowser/sweef/actions/workflows/security.yml)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![status](https://img.shields.io/badge/status-alpha-orange.svg)](CHANGELOG.md)
+
 **The agent browser that costs nothing to run.** Sweef is an independent browser engine written in Go: one static binary, no Chromium, a real ES2023 JavaScript engine, and a Model Context Protocol server built in. It gives AI agents a compact, readable view of a page plus reliable actions, on about 15 MB of RAM.
 
 Sweef is not a fork of Chromium. It has its own CSS layout engine, rasterizer, software WebGL and media stack, all measured against Chromium (see [Rendering fidelity](#rendering-fidelity)). It bets that agents need **semantics** (structure, roles, names, text, form state, network truth) more than they need a rasterised screen, and it spends its budget there.
@@ -325,6 +330,13 @@ Requires Go 1.26 (the `go` toolchain downloads it automatically when `GOTOOLCHAI
 - `sweef watch` live event stream
 - Playwright trace format subset for the trace viewer
 - Faster first execution of large framework bundles
+
+## Contributing
+
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) (setup, workflow, Conventional Commits, DCO),
+then [docs/development.md](docs/development.md) for the package map and contracts. Project policy: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
+[SECURITY.md](SECURITY.md) (report vulnerabilities privately), [GOVERNANCE.md](GOVERNANCE.md), [SUPPORT.md](SUPPORT.md).
+What changed and when: [CHANGELOG.md](CHANGELOG.md); how releases are cut: [docs/releasing.md](docs/releasing.md).
 
 ## License
 

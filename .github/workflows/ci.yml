@@ -34,6 +34,11 @@ jobs:
           cache: true
       - name: Build
         run: go build ./...
+      - name: Format (gofmt, our code only)
+        if: runner.os == 'Linux'
+        run: |
+          out=$(gofmt -l $(git ls-files '*.go' | grep -v '^third_party/'))
+          if [ -n "$out" ]; then echo "not gofmt-clean:"; echo "$out"; exit 1; fi
       - name: Vet
         run: go vet -composites=false ./...
       - name: Install the reference fonts (Linux)

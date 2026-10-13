@@ -1,0 +1,26 @@
+name: Site compatibility
+description: A website renders or behaves wrong in Sweef.
+labels: [compat, needs-triage]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: URL
+    validations: {required: true}
+  - type: textarea
+    id: what
+    attributes:
+      label: What is wrong?
+      description: Compare with Chromium or Firefox. Attach screenshots of both if you can.
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes:
+      label: Output of `sweef version`
+    validations: {required: true}
+  - type: checkboxes
+    id: known
+    attributes:
+      label: I checked docs/compat.md and the site does not need DRM, extensions, WebRTC or WebAssembly
+      options:
+        - label: Checked
