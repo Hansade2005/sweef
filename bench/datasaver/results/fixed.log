@@ -200,3 +200,9 @@ baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=
   retrying chromium-savedata https://www.npr.org/ run 3 after: load event not fired within 1m0s
 [178/345] chromium-savedata  run 3 https://www.npr.org/                                         cold= 5592525 warm= 1809311 req=167 ready= 4999ms ok
 [179/345] sweef-off          run 3 https://www.npr.org/                                         skipped (failed earlier)
+[180/345] sweef-standard     run 3 https://www.npr.org/                                         cold= 2927159 warm=  465125 req= 71 ready=52061ms ok
+[181/345] sweef-off          run 1 https://arstechnica.com/                                     cold= 3778475 warm=  265715 req=155 ready=16626ms ok
+[182/345] sweef-standard     run 1 https://arstechnica.com/                                     cold= 2355012 warm=  271169 req=124 ready=43706ms ok
+[183/345] sweef-strict       run 1 https://arstechnica.com/                                     cold=  103504 warm=   49204 req=  5 ready=  553ms ok
+[184/345] chromium           run 1 https://arstechnica.com/                                     cold= 7022992 warm=  572138 req=276 ready= 4909ms ok
+[185/345] chromium-savedata  run 1 https://arstechnica.com/                                     cold= 5228189 warm=  967180 req=173 ready= 8562ms ok
