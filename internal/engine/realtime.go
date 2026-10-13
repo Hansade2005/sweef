@@ -138,7 +138,7 @@ func (j *jsVM) wsOpen(rawurl, protocols string) int64 {
 			cfg.Header.Set("Cookie", ck)
 		}
 		t.touchNet()
-		conn, err := websocket.DialConfig(cfg)
+		conn, err := t.eng.dialWebSocket(t.eng.ctx, t.Context(), cfg)
 		if err != nil {
 			j.wsLog("error", rawurl, err.Error(), false)
 			r.push(asyncEvent{kind: "ws", id: id, typ: "error"})

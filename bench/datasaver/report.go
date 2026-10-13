@@ -451,7 +451,7 @@ func writeReport(res *Results, mdPath, resultsPath string) error {
 	// ---- excluded
 	w.p("## Excluded sites")
 	w.p("")
-	w.p("Rule, fixed before the run: a site is excluded from every mode if, in any mode and any run, the main document answered HTTP 400 or higher, navigation failed or timed out (one automatic retry for transport errors and timeouts, none for HTTP errors), a WebSocket made some traffic unmeasurable, or a visit did not complete. Nothing is excluded for any other reason, and the frozen list is never edited.")
+	w.p("Rule, fixed before the run: a site is excluded from every mode if, in any mode and any run, the main document answered HTTP 400 or higher, navigation failed or timed out (one automatic retry for transport errors and timeouts, none for HTTP errors), or a visit did not complete. Nothing is excluded for any other reason, and the frozen list is never edited.")
 	w.p("")
 	if len(exc) == 0 {
 		w.p("None: every listed site completed in every mode.")
@@ -497,8 +497,7 @@ func writeReport(res *Results, mdPath, resultsPath string) error {
 		"**TLS is re-terminated.** The sandbox's egress gateway terminates TLS with its own certificate chain, so handshake bytes are not exactly what the real site would send. Both browsers see the same chain, so the comparison is fair, but absolute bytes are slightly off from a direct connection. Chromium cannot use QUIC through an HTTP proxy, so it ran HTTP/2 or HTTP/1.1, as did Sweef.",
 		"**What is not counted.** TCP/IP headers, DNS lookups (resolved by the upstream proxy), and the CONNECT exchanges between browser, recorder and upstream proxy. TCP/IP headers would add a few percent to every mode alike.",
 		"**Plain http:// is not forwarded** by the recorder (the sandbox proxy only tunnels). All listed pages are https; any plain-http sub-resource a page asked for is refused and noted per run, which can make a page slightly smaller than in the wild.",
-		"**Sweef WebSockets** are dialled by the engine outside its HTTP transport, so they bypass the recorder; a run in which a page opens one is failed rather than under-counted.",
-		"**Sweef proxy routing is a harness hack.** The engine ignores `HTTPS_PROXY` and `ContextOptions.ProxyURL` today; the harness reaches the engine's HTTP transport by reflection to point it at the recorder, and a dial guard makes any bypass fail. This goes away when the engine supports a proxy.",
+		"**Sweef proxy routing.** The harness points the engine at its recorder with `ContextOptions.ProxyURL`, the same option an application uses; HTTP(S) and WebSocket traffic of the engine both go through it, so both are counted. (Earlier runs of this benchmark reached the transport by reflection and failed any page that opened a WebSocket.)",
 		"**Warm-cache definitions differ by necessity.** Chromium's warm visit is a new process on the same profile (disk cache); Sweef's is the same process and context (memory cache of scripts and styles only; documents are never cached).",
 	} {
 		w.p("* " + c)

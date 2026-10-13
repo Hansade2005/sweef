@@ -158,7 +158,7 @@ func TestWireCountersUnderTLSAndHTTP2(t *testing.T) {
 	defer srv.Close()
 
 	var w wireCounters
-	tr := newTransport(&w)
+	tr := newTransport(&w, "direct")
 	tr.TLSClientConfig = &tls.Config{RootCAs: x509Pool(srv)}
 	cl := &http.Client{Transport: &meterRT{base: tr}}
 	e := New(DefaultOptions())

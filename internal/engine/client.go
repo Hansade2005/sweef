@@ -18,7 +18,7 @@ func (e *Engine) client() *http.Client {
 	if e.httpClient == nil {
 		e.httpClient = &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: &meterRT{base: newTransport(&dc.data().wire)},
+			Transport: &meterRT{base: newTransport(&dc.data().wire, e.proxyFor(dc))},
 			Jar:       newCookieJar(),
 		}
 	}
@@ -48,7 +48,7 @@ func (e *Engine) clientFor(c *BrowserContext) *http.Client {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.httpClient == nil {
-		c.httpClient = &http.Client{Timeout: base.Timeout, Transport: &meterRT{base: newTransport(&c.data().wire)}, Jar: makeSimpleJar()}
+		c.httpClient = &http.Client{Timeout: base.Timeout, Transport: &meterRT{base: newTransport(&c.data().wire, e.proxyFor(c))}, Jar: makeSimpleJar()}
 	}
 	return c.httpClient
 }
@@ -65,4 +65,13 @@ func (c *BrowserContext) closeIdle() {
 			}
 		}
 	}
+}
+
+// proxyFor is the explicit proxy of a context: its own ContextOptions.ProxyURL, else the
+// engine-wide Options.ProxyURL, else "" (HTTPS_PROXY/HTTP_PROXY/NO_PROXY apply).
+func (e *Engine) proxyFor(c *BrowserContext) string {
+	if c != nil && c.options.ProxyURL != "" {
+		return c.options.ProxyURL
+	}
+	return e.opts.ProxyURL
 }

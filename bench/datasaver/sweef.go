@@ -6,22 +6,15 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"os"
 	"os/exec"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
-	"unsafe"
 
 	"context"
-	"net"
 
 	"github.com/sweefbrowser/sweef/internal/engine"
 	fnet "github.com/sweefbrowser/sweef/internal/net"
@@ -63,82 +56,6 @@ func sweefOptsForReport() map[string]any {
 		"UserAgent": ua, "SettleMs": o.SettleMs, "MaxCacheMiB": o.MaxCacheMiB, "ViewportWidth": o.ViewportWidth,
 		"ViewportHeight": o.ViewportHeight, "JSTimeoutMs": o.JSTimeoutMs, "DisableJS": o.DisableJS,
 	}
-}
-
-// routeEngineThroughProxy points the engine's HTTP transport at proxyAddr. The engine builds its http.Transport
-// without a Proxy func (internal/engine/client.go, wire.go) and ContextOptions.ProxyURL is not wired to anything, so
-// HTTPS_PROXY is ignored. Rather than touch engine code, the harness reaches the context's lazily built client with
-// reflect and sets Transport.Proxy. The engine's own counting dialer is kept (its DataStats must keep working) but
-// wrapped in a guard that makes any dial that is not to the recorder fail loudly, so a request can never silently
-// bypass the counter through this transport. WebSockets use a separate dialer (realtime.go) and are not covered; the
-// harness fails a visit in which a page opened one.
-func routeEngineThroughProxy(e *engine.Engine, ctx *engine.BrowserContext, proxyAddr string) (*http.Transport, error) {
-	// Force the context to build its HTTP client with a request to a throwaway local server (no external traffic).
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) }))
-	defer srv.Close()
-	if _, _, _, err := ctx.Fetch("GET", srv.URL, nil, ""); err != nil {
-		return nil, fmt.Errorf("priming engine client: %w", err)
-	}
-	// Newer engines give every non-default context its own client and transport; older ones share one per engine.
-	var tr *http.Transport
-	for _, root := range []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(e)} {
-		f := root.Elem().FieldByName("httpClient")
-		if !f.IsValid() || f.Kind() != reflect.Ptr || f.IsNil() {
-			continue
-		}
-		cl := (*http.Client)(unsafe.Pointer(f.Pointer()))
-		if t := findTransport(cl.Transport, 0); t != nil {
-			tr = t
-			break
-		}
-	}
-	if tr == nil {
-		return nil, errors.New("could not find the engine's *http.Transport (engine refactored? add a proxy option there and drop this hack)")
-	}
-	pu, _ := url.Parse("http://" + proxyAddr)
-	tr.Proxy = http.ProxyURL(pu)
-	orig := tr.DialContext // keep the engine's own counting dialer when it has one
-	var d net.Dialer
-	tr.DialContext = func(c context.Context, network, addr string) (net.Conn, error) {
-		if addr != proxyAddr {
-			return nil, fmt.Errorf("harness guard: dial to %s would bypass the recording proxy", addr)
-		}
-		if orig != nil {
-			return orig(c, network, addr)
-		}
-		return d.DialContext(c, network, addr)
-	}
-	tr.CloseIdleConnections()
-	return tr, nil
-}
-
-// findTransport digs the *http.Transport out of (possibly wrapped, possibly unexported) RoundTrippers.
-func findTransport(rt http.RoundTripper, depth int) *http.Transport {
-	if rt == nil || depth > 4 {
-		return nil
-	}
-	if t, ok := rt.(*http.Transport); ok {
-		return t
-	}
-	v := reflect.ValueOf(rt)
-	if v.Kind() != reflect.Ptr || v.IsNil() || v.Elem().Kind() != reflect.Struct {
-		return nil
-	}
-	st := v.Elem()
-	rtType := reflect.TypeOf((*http.RoundTripper)(nil)).Elem()
-	for i := 0; i < st.NumField(); i++ {
-		f := st.Field(i)
-		if !f.Type().Implements(rtType) {
-			continue
-		}
-		inner := reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem().Interface()
-		if irt, ok := inner.(http.RoundTripper); ok {
-			if t := findTransport(irt, depth+1); t != nil {
-				return t
-			}
-		}
-	}
-	return nil
 }
 
 func guessType(contentType, rawurl string) string {
@@ -259,8 +176,7 @@ func sweefVisit(e *engine.Engine, ctx *engine.BrowserContext, rec *Recorder, raw
 			}
 		}
 		if ws > 0 {
-			v.Notes = append(v.Notes, fmt.Sprintf("%d WebSocket event(s): the engine dials WebSockets outside the recording proxy, so those bytes are NOT in wire_in/out", ws))
-			v.Fail = "unmeasured traffic: page used WebSocket"
+			v.Notes = append(v.Notes, fmt.Sprintf("%d WebSocket event(s); the engine dials WebSockets through the same proxy, so their bytes are in wire_in/out", ws))
 		}
 		e.CloseTab(t.ID)
 	}
@@ -321,12 +237,9 @@ func childMain(args []string) {
 	defer os.RemoveAll(cacheDir)
 	e := engine.New(sweefEngineOptions(cacheDir))
 	defer e.Close()
-	ctx := e.NewContext("bench-"+strconv.FormatInt(time.Now().UnixNano(), 36), engine.ContextOptions{})
-	tr, err := routeEngineThroughProxy(e, ctx, rec.Addr())
-	if err != nil {
-		fail(err.Error())
-	}
-	out.Inject = "reflect: Transport.Proxy set on the engine client"
+	// Every request, WebSockets included, goes to the recorder through the engine's own proxy option.
+	ctx := e.NewContext("bench-"+strconv.FormatInt(time.Now().UnixNano(), 36), engine.ContextOptions{ProxyURL: "http://" + rec.Addr()})
+	out.Inject = "ContextOptions.ProxyURL"
 	level := strings.TrimPrefix(*mode, "sweef-")
 	if err := applyPolicy(ctx, level); err != nil {
 		fail(err.Error())
@@ -334,7 +247,7 @@ func childMain(args []string) {
 
 	out.Cold = sweefVisit(e, ctx, rec, *rawurl, *idle, *nav, *keep)
 	if *warm && out.Cold.OK {
-		tr.CloseIdleConnections() // second visit must open its own connections, as a fresh browser process would
+		closeIdle(ctx) // second visit must open its own connections, as a fresh browser process would
 		w := sweefVisit(e, ctx, rec, *rawurl, *idle, *nav, false)
 		out.Warm = &w
 	}
@@ -365,4 +278,11 @@ func runSweefCell(exe, mode, site, upstream string, idle, nav time.Duration, war
 	cell.Cold = co.Cold
 	cell.Warm = co.Warm
 	return cell, co.Inject
+}
+
+// closeIdle drops the context's idle connections so that the next visit opens its own.
+func closeIdle(ctx *engine.BrowserContext) {
+	if ci, ok := ctx.CountedTransport().(interface{ CloseIdleConnections() }); ok {
+		ci.CloseIdleConnections()
+	}
 }

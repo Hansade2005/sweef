@@ -23,11 +23,17 @@ package engine
 // decode it, and counting the compressed body bytes needs the raw stream.
 
 import (
+	"bufio"
 	"compress/gzip"
 	"context"
+	"crypto/tls"
+	"encoding/base64"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +41,7 @@ import (
 	"time"
 
 	"github.com/dsnet/compress/brotli"
+	"golang.org/x/net/websocket"
 )
 
 // wireCounters counts bytes read from and written to sockets. Counts also
@@ -77,23 +84,54 @@ func (c *countConn) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// proxyFunc resolves the proxy for a request. An explicit URL (ContextOptions.ProxyURL, then
+// Options.ProxyURL) wins; "direct" or "none" turns proxying off; with neither, HTTPS_PROXY,
+// HTTP_PROXY and NO_PROXY apply (http.ProxyFromEnvironment, which never proxies loopback). An
+// explicit URL that does not parse makes every request fail instead of silently going direct.
+func proxyFunc(explicit string) func(*http.Request) (*url.URL, error) {
+	explicit = strings.TrimSpace(explicit)
+	switch strings.ToLower(explicit) {
+	case "":
+		return http.ProxyFromEnvironment
+	case "direct", "none", "direct://":
+		return func(*http.Request) (*url.URL, error) { return nil, nil }
+	}
+	if !strings.Contains(explicit, "://") {
+		explicit = "http://" + explicit
+	}
+	u, err := url.Parse(explicit)
+	if err != nil || u.Host == "" {
+		bad := fmt.Errorf("invalid proxy %q", explicit)
+		return func(*http.Request) (*url.URL, error) { return nil, bad }
+	}
+	return http.ProxyURL(u)
+}
+
+// countedDial dials through the counting wrapper: whatever crosses the socket (a proxy
+// CONNECT, the TLS handshake and records on top of it) lands in w.
+func countedDial(w *wireCounters) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	d := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		c, err := d.DialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		return &countConn{Conn: c, w: w}, nil
+	}
+}
+
 // newTransport builds the bounded transport used for every request. Dialing
 // goes through a counting wrapper; ForceAttemptHTTP2 keeps HTTP/2 enabled,
-// which a custom DialContext would otherwise turn off.
-func newTransport(w *wireCounters) *http.Transport {
-	d := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+// which a custom DialContext would otherwise turn off. proxyURL is the explicit
+// proxy ("" = environment), see proxyFunc.
+func newTransport(w *wireCounters, proxyURL string) *http.Transport {
 	return &http.Transport{
+		Proxy:               proxyFunc(proxyURL),
 		MaxIdleConns:        16,
 		MaxIdleConnsPerHost: 4, // tiny boxes don't need Chromium's 256/host
 		IdleConnTimeout:     60 * time.Second,
 		ForceAttemptHTTP2:   true,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			c, err := d.DialContext(ctx, network, addr)
-			if err != nil {
-				return nil, err
-			}
-			return &countConn{Conn: c, w: w}, nil
-		},
+		DialContext:         countedDial(w),
 	}
 }
 
@@ -295,4 +333,108 @@ func (m *meterRT) CloseIdleConnections() {
 	if ci, ok := m.base.(interface{ CloseIdleConnections() }); ok {
 		ci.CloseIdleConnections()
 	}
+}
+
+// ---- WebSockets ---------------------------------------------------------------
+
+// dialWebSocket opens a WebSocket for a context through the same counted dialer and the same
+// proxy rules as the HTTP transport, so its bytes land in WireIn/WireOut and a proxy cannot be
+// bypassed. ws and wss go through an HTTP proxy with CONNECT, as browsers do. A socks5 proxy is
+// refused here (net/http supports it for HTTP, this small dialer does not).
+func (e *Engine) dialWebSocket(ctx context.Context, c *BrowserContext, cfg *websocket.Config) (*websocket.Conn, error) {
+	loc := cfg.Location
+	secure := loc.Scheme == "wss"
+	port := loc.Port()
+	if port == "" {
+		port = "80"
+		if secure {
+			port = "443"
+		}
+	}
+	target := net.JoinHostPort(loc.Hostname(), port)
+	w := &c.data().wire
+	dial := countedDial(w)
+
+	probe := &http.Request{URL: &url.URL{Scheme: "http", Host: loc.Host}}
+	if secure {
+		probe.URL.Scheme = "https"
+	}
+	pu, perr := proxyFunc(e.proxyFor(c))(probe)
+	if perr != nil {
+		return nil, perr
+	}
+	dctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	var conn net.Conn
+	var err error
+	if pu == nil {
+		conn, err = dial(dctx, "tcp", target)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if pu.Scheme != "http" && pu.Scheme != "https" {
+			return nil, fmt.Errorf("websocket through a %s proxy is not supported", pu.Scheme)
+		}
+		paddr := pu.Host
+		if pu.Port() == "" {
+			if pu.Scheme == "https" {
+				paddr = net.JoinHostPort(pu.Hostname(), "443")
+			} else {
+				paddr = net.JoinHostPort(pu.Hostname(), "80")
+			}
+		}
+		conn, err = dial(dctx, "tcp", paddr)
+		if err != nil {
+			return nil, err
+		}
+		if pu.Scheme == "https" {
+			tc := tls.Client(conn, &tls.Config{ServerName: pu.Hostname()})
+			if err = tc.HandshakeContext(dctx); err != nil {
+				conn.Close()
+				return nil, err
+			}
+			conn = tc
+		}
+		req := &http.Request{Method: http.MethodConnect, URL: &url.URL{Opaque: target}, Host: target, Header: http.Header{}}
+		if pu.User != nil {
+			pw, _ := pu.User.Password()
+			req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(pu.User.Username()+":"+pw)))
+		}
+		_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
+		if err = req.Write(conn); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		br := bufio.NewReader(conn)
+		resp, err := http.ReadResponse(br, req)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			conn.Close()
+			return nil, fmt.Errorf("proxy refused CONNECT: %s", resp.Status)
+		}
+		if br.Buffered() > 0 { // nothing may follow a CONNECT 200 before we speak
+			conn.Close()
+			return nil, errors.New("proxy sent data before the tunnel was used")
+		}
+	}
+	if secure {
+		tc := tls.Client(conn, &tls.Config{ServerName: loc.Hostname(), NextProtos: []string{"http/1.1"}})
+		if err = tc.HandshakeContext(dctx); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		conn = tc
+	}
+	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
+	ws, err := websocket.NewClient(cfg, conn)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	_ = conn.SetDeadline(time.Time{})
+	return ws, nil
 }
