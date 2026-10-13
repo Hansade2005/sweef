@@ -360,6 +360,7 @@
       try { sw.playerHold(node, el.hasAttribute('poster') && !s.started && !s.seekId); } catch (e) { /* ignore */ }
     }
     plVolume(el);
+    if (el.__swSourceNode) { try { sw.playerRoute(node, true); } catch (e) { /* ignore */ } }
   }
   function plClose(el, s) {
     if (s.pl) { try { sw.playerClose(s.pl.node); } catch (e) { /* ignore */ } }

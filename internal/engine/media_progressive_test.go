@@ -197,3 +197,36 @@ func TestMutedVideoAutoplaysAndAudioDoesNot(t *testing.T) {
 		t.Errorf("muted audio element: %q, want NotAllowedError", r["audio"])
 	}
 }
+
+func TestWebAudioDestinationReachesTheOutput(t *testing.T) {
+	_, sink := useRecordingSink(t)
+	tab := newMediaTab(t)
+	evalJSON(t, tab, `(function(){var b=document.createElement('button');b.id='b';b.textContent='go';document.body.appendChild(b);return 1})()`, nil)
+	if err := tab.Click("#b"); err != nil { // a real click: the page may start audio
+		t.Fatal(err)
+	}
+	evalJSON(t, tab, `(function(){
+	  window.ctx = new AudioContext();
+	  var o = ctx.createOscillator(), g = ctx.createGain();
+	  o.frequency.value = 660; g.gain.value = 0.4;
+	  o.connect(g); g.connect(ctx.destination);
+	  return ctx.resume().then(function(){ o.start(); return ctx.state; });
+	})()`, nil)
+	for i := 0; i < 40; i++ { // the graph renders as the page's timers and clock reads catch it up
+		tab.Settle(20 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
+		jsNum(t, tab, "ctx.currentTime")
+	}
+	rec := leftChannel(sink.Recorded())
+	i0 := firstSound(sink.Recorded())
+	if i0 < 0 || len(rec) < i0+24000 {
+		t.Fatalf("Web Audio produced no sound at the output (first sound %d of %d frames)", i0, len(rec))
+	}
+	if got := hzOf(rec[i0+2400:i0+24000], 48000); math.Abs(got-660) > 25 {
+		t.Errorf("heard %.0f Hz, want 660", got)
+	}
+	if pk := peakOf(rec[i0 : i0+24000]); pk < 0.3 || pk > 0.5 {
+		t.Errorf("level %.3f, want about 0.4", pk)
+	}
+	evalJSON(t, tab, "ctx.close().then(function(){return 1})", nil)
+}

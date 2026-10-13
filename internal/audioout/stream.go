@@ -392,7 +392,7 @@ func (s *Stream) mix(dst []float32, frames int, now time.Time) bool {
 			s.g.lastLoud.Store(now.UnixNano())
 		}
 	}
-	return n > 0
+	return n > 0 && pk > 0
 }
 
 func abs32(v float32) float32 {
