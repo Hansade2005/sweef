@@ -232,6 +232,7 @@ func (o *Origin) scan() {
 			o.persist.Store(meta.Persisted)
 		}
 	}
+	o.scanCaches()
 }
 
 // touch makes sure the origin's directory and meta.json exist.
