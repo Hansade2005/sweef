@@ -208,6 +208,9 @@ type wasmHost struct {
 	refs  map[string]*wref
 	fnTab map[int]*wfn
 	fnRef map[uintptr]int
+	// funcref values are runtime pointers: JavaScript only ever sees small handles into this table
+	refTab []uintptr
+	refIdx map[uintptr]uint32
 	// funcref values of imported functions (as ref.func / element segments store them) -> the JS import
 	impRefs map[uintptr]impRef
 	types   map[string]wFuncType
@@ -257,7 +260,7 @@ func newWasmHost(vm *quickjs.VM, timeout func() time.Duration) (*wasmHost, error
 		vm: vm, raw: rawOf(vm), timeout: timeout, gen: gen, ctx: ctx,
 		rt:   wazero.NewRuntimeWithConfig(ctx, cfg),
 		mods: map[int]*wmodule{}, insts: map[int]*winst{}, refs: map[string]*wref{},
-		fnTab: map[int]*wfn{}, fnRef: map[uintptr]int{}, impRefs: map[uintptr]impRef{}, types: map[string]wFuncType{},
+		fnTab: map[int]*wfn{}, fnRef: map[uintptr]int{}, refIdx: map[uintptr]uint32{}, impRefs: map[uintptr]impRef{}, types: map[string]wFuncType{},
 	}
 	wasmLive.Add(1)
 	return h, nil
@@ -1019,6 +1022,17 @@ func (h *wasmHost) tabLen(a []any) (any, error) {
 	return tv.FieldByName("References").Len(), nil
 }
 
+// refHandle returns the small handle JavaScript uses for a funcref value (1-based, stable per host).
+func (h *wasmHost) refHandle(ref uintptr) uint32 {
+	if n, ok := h.refIdx[ref]; ok {
+		return n
+	}
+	h.refTab = append(h.refTab, ref)
+	n := uint32(len(h.refTab))
+	h.refIdx[ref] = n
+	return n
+}
+
 func (h *wasmHost) funcRefValue(a []any, i int) (uintptr, error) {
 	// a[i] = "tok:funcIdx" instance function or "ref:<n>" value obtained from Table.get; "" = null
 	s := argS(a, i)
@@ -1026,11 +1040,11 @@ func (h *wasmHost) funcRefValue(a []any, i int) (uintptr, error) {
 	case s == "":
 		return 0, nil
 	case strings.HasPrefix(s, "ref:"):
-		n, err := strconv.ParseUint(s[4:], 10, 64)
-		if err != nil || n > uint64(^uintptr(0)) {
+		n, err := strconv.ParseUint(s[4:], 10, 32)
+		if err != nil || n == 0 || int(n) > len(h.refTab) {
 			return 0, errors.New("bad function reference")
 		}
-		return uintptr(n), nil
+		return h.refTab[n-1], nil
 	}
 	parts := strings.SplitN(s, ":", 2)
 	if len(parts) != 2 {
@@ -1115,11 +1129,11 @@ func (h *wasmHost) tabGet(a []any) (any, error) {
 		return nil, nil
 	}
 	if ir, ok := h.impRefs[ref]; ok { // a JS function placed in the table by an element segment
-		return map[string]any{"imp": ir.tok, "ii": ir.idx, "s": ir.sig, "r": strconv.FormatUint(uint64(ref), 10)}, nil
+		return map[string]any{"imp": ir.tok, "ii": ir.idx, "s": ir.sig, "r": strconv.FormatUint(uint64(h.refHandle(ref)), 10)}, nil
 	}
 	if id, ok := h.fnRef[ref]; ok {
 		f := h.fnTab[id]
-		return map[string]any{"id": id, "s": f.sig, "r": strconv.FormatUint(uint64(ref), 10)}, nil
+		return map[string]any{"id": id, "s": f.sig, "r": strconv.FormatUint(uint64(h.refHandle(ref)), 10)}, nil
 	}
 	for _, t := range h.types {
 		fn := lookupTableFunc(r.mod, uint32(tidx), uint32(i), valTypes(t.params), valTypes(t.results))
@@ -1137,7 +1151,7 @@ func (h *wasmHost) tabGet(a []any) (any, error) {
 		}
 		h.fnTab[id] = f
 		h.fnRef[ref] = id
-		return map[string]any{"id": id, "s": f.sig, "r": strconv.FormatUint(uint64(ref), 10)}, nil
+		return map[string]any{"id": id, "s": f.sig, "r": strconv.FormatUint(uint64(h.refHandle(ref)), 10)}, nil
 	}
 	return nil, errors.New("TypeError:table entry has a function type this runtime cannot name")
 }
