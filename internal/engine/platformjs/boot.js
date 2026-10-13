@@ -99,6 +99,15 @@
   names('xpath', 'XPathEvaluator XPathExpression XPathResult XPathNSResolver');
   names('xpath', 'evaluate createExpression createNSResolver', g.Document.prototype, true);
   names('urlpattern', 'URLPattern');
+  names('nav', 'navigation Navigation NavigationHistoryEntry NavigateEvent NavigationDestination NavigationTransition NavigationActivation NavigationCurrentEntryChangeEvent');
+  names('vt', 'ViewTransition ViewTransitionTypeSet');
+  names('vt', 'startViewTransition activeViewTransition', g.Document.prototype);
+  names('internals', 'ElementInternals CustomStateSet');
+  names('internals', 'ValidityState', g, false, true);
+  names('internals', 'attachInternals', g.Element.prototype);
+  names('css', 'AbstractRange Highlight HighlightRegistry CSSPropertyRule ContentVisibilityAutoStateChangeEvent');
+  names('css', 'CSSRule', g, false, true);
+  names('css', 'highlights registerProperty registeredProperty', g.CSS, true);
   names('es', 'fromAsync', Array, false, true);
   names('es', 'dispose asyncDispose', Symbol, false, true);
   names('es', 'DisposableStack AsyncDisposableStack SuppressedError', g, false, true);
