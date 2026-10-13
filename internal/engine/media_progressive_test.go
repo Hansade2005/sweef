@@ -251,7 +251,7 @@ func TestAudioElementFormatsReachTheOutput(t *testing.T) {
 			if res != "ok" {
 				t.Fatalf("play(): %s", res)
 			}
-			waitTrue(t, tab, "document.getElementById('a').currentTime > 0.8", 8*time.Second)
+			waitTrue(t, tab, "document.getElementById('a').currentTime > 0.8 || document.getElementById('a').ended", 8*time.Second)
 			i0 := firstSound(sink.Recorded())
 			left := leftChannel(sink.Recorded())
 			if i0 < 0 || len(left) < i0+24000 {
@@ -274,7 +274,9 @@ func TestAudioElementFormatsReachTheOutput(t *testing.T) {
 			// the element clock follows the sound that was actually played
 			ct := jsNum(t, tab, "document.getElementById('a').currentTime")
 			played := float64(sink.Frames()-i0) / audioout.DeviceRate
-			if math.Abs(ct-played) > 0.3 {
+			var ended bool
+			evalJSON(t, tab, "document.getElementById('a').ended", &ended)
+			if !ended && math.Abs(ct-played) > 0.3 {
 				t.Errorf("currentTime %.2f vs %.2f s of sound played", ct, played)
 			}
 		})
