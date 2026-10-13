@@ -251,3 +251,11 @@ baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=
 [228/345] sweef-strict       run 1 https://www.newegg.com/p/pl?d=laptop                         cold=  526012 warm=  133268 req=  5 ready= 1323ms ok
 [229/345] chromium           run 1 https://www.newegg.com/p/pl?d=laptop                         cold= 9654668 warm=  936035 req=325 ready=16969ms ok
 [230/345] chromium-savedata  run 1 https://www.newegg.com/p/pl?d=laptop                         cold= 9607092 warm= 1174863 req=332 ready= 9388ms ok
+[231/345] sweef-standard     run 2 https://www.newegg.com/p/pl?d=laptop                         cold= 2846783 warm=  295932 req= 68 ready=30860ms ok
+[232/345] sweef-strict       run 2 https://www.newegg.com/p/pl?d=laptop                         cold=  477068 warm=  132684 req=  5 ready= 1199ms ok
+[233/345] chromium           run 2 https://www.newegg.com/p/pl?d=laptop                         cold= 9650914 warm=  823731 req=333 ready= 9517ms ok
+[234/345] chromium-savedata  run 2 https://www.newegg.com/p/pl?d=laptop                         cold= 9636039 warm= 1887016 req=325 ready=15269ms ok
+[235/345] sweef-off          run 2 https://www.newegg.com/p/pl?d=laptop                         cold= 3283722 warm=  286529 req=125 ready=30373ms ok
+[236/345] sweef-strict       run 3 https://www.newegg.com/p/pl?d=laptop                         cold=  514227 warm=  277335 req=  5 ready= 1511ms ok
+[237/345] chromium           run 3 https://www.newegg.com/p/pl?d=laptop                         cold= 9629677 warm=  828543 req=331 ready= 9049ms ok
+[238/345] chromium-savedata  run 3 https://www.newegg.com/p/pl?d=laptop                         cold= 9652798 warm= 1822609 req=334 ready= 9021ms ok
