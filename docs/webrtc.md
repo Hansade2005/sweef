@@ -1,10 +1,13 @@
 # WebRTC
 
 `RTCPeerConnection` and the classes around it, built on [pion/webrtc v4](https://github.com/pion/webrtc) (MIT, pure Go, no
-cgo). Data channels and signalling are complete enough for real applications; **media is partial and says so below**.
+cgo). Data channels and signalling are complete enough for real applications; audio and video are real (VP8 + Opus, pure Go) and **the limits are listed below**.
+Call-service notes are in [webrtc-interop.md](webrtc-interop.md).
 
 Files: `internal/engine/webrtc.go` (peers, host calls, privacy policy), `webrtc_net.go` (byte metering),
-`webrtc_prelude.js` (the page-facing classes), tests in `webrtc_test.go` and `webrtc_events_test.go`.
+`webrtc_prelude.js` (the page-facing classes), `webrtc_media.go` (track pipelines, host calls for media), tests in
+`webrtc_*_test.go`. Media lives in `internal/rtcmedia` (RTP, jitter buffers, senders, receivers, congestion control) and
+`internal/media/vp8enc` (the VP8 encoder).
 
 ## How it fits the engine
 
@@ -40,23 +43,82 @@ Files: `internal/engine/webrtc.go` (peers, host calls, privacy policy), `webrtc_
 
 ## Media: what is real and what is not
 
-Be clear-eyed: the engine has no camera, microphone or screen capture, and no audio or video encoder reachable from a
-`MediaStreamTrack` (the existing `getUserMedia` returns fake tracks only when fake devices are enabled, and they carry no
-samples).
+Video is **VP8 only** and audio is **Opus only** (plus telephone-event in the SDP). The offer no longer lists G.722, PCMU,
+PCMA, VP9, H.264 or AV1, because the engine can neither encode nor decode them; a remote that offers only those gets an
+answer with the video section rejected. Everything below was exercised between two `RTCPeerConnection`s in one page over
+loopback (see Tests). **No call to a real service was made**: the build environment only has an HTTPS proxy for egress, so
+UDP, STUN, TURN and real browsers were not reachable.
 
-* **Negotiation is real.** Offers and answers contain `m=audio` / `m=video` with Opus, G.722, PCMU, PCMA, VP8, VP9, H.264
-  and AV1 (pion's default codec set); `msid` stream and track ids are carried and parsed; `track` events fire with the right
-  `receiver`, `track`, `streams` and `transceiver`; `addTrack`, `removeTrack`, `replaceTrack`, directions and
-  `currentDirection` follow the spec.
-* **Sending audio:** a live, attached audio track sends real Opus RTP packets that carry **silence** (20 ms frames,
-  50 packets/s) once the connection is up. It keeps the stream, the remote jitter buffer and the stats alive; it is not the
-  microphone. `track.stop()` and `replaceTrack(null)` stop it.
-* **Sending video:** negotiated, but **no frames are produced**.
-* **Receiving:** RTP and RTCP are accepted, read and counted (stats), then dropped. The received `MediaStreamTrack` attaches
-  to a media element (`video.srcObject = stream` works) but produces no picture or sound. The Opus decoder in
-  `internal/media` could feed Web Audio later; it is not wired.
-* Data Saver `strict` level: no silence frames are sent. A remote peer can still send media to us (it is counted and
-  dropped); to refuse it set the transceiver `direction` to `inactive`.
+* **Negotiation.** `m=audio` (Opus/48000/2 at PT 111, `minptime=10;useinbandfec=1`, telephone-event 126) and `m=video` (VP8
+  at PT 96 with RTX at PT 97), `rtcp-fb` as pion negotiates it for the registered codecs (NACK, PLI, FIR, transport-cc; no REMB); header
+  extensions mid, rtp-stream-id, repaired-rtp-stream-id, abs-send-time, transport-wide-cc, audio level, video orientation; `msid`,
+  BUNDLE and `a=simulcast:recv` answering. `setCodecPreferences` really reorders and restricts the codecs (an RTX entry
+  follows its primary); `RTCRtpSender/Receiver.getCapabilities` return what the engine implements.
+* **Sending video.** Any local track is bound to the sender for the whole life of the transceiver, so `replaceTrack`
+  only swaps the source. Sources: fake/real capture devices registered through `RegisterRTCTrackSource`, canvas
+  `captureStream()`. Frames are scaled to the target size,
+  encoded by `vp8enc`, packetised (RFC 7741), and paced. Congestion control is a Google-congestion-control style
+  estimator (pion interceptor `cc`) driving the encoder bitrate; resolution steps down when the estimate cannot carry the
+  current size. `track.enabled = false` sends black frames and silence; `removeTrack`, `transceiver.stop()`,
+  `replaceTrack(null)` and `close()` stop the pipeline. `applyConstraints` and mid-call resolution changes re-size the
+  encoder (a key frame follows). `setParameters` honours `encodings[0].active`, `maxBitrate`, `maxFramerate`,
+  `scaleResolutionDownBy`. PLI and FIR produce a key frame; a NACK is answered from a history by RTX, limited by a
+  retransmission budget (one third of the target bitrate) so a lossy path cannot spiral.
+* **Sending audio.** 48 kHz mono/stereo PCM in 20 ms frames, resampled from the source rate, Opus-encoded with in-band FEC
+  and a loss-adaptive bitrate. There is an `AudioProcessor` hook where an echo canceller could sit; **there is no echo
+  cancellation, noise suppression or auto gain**, so calls need headphones. `getSettings()` therefore does not report
+  `echoCancellation` and friends. DTMF is still a stub: tones are scheduled and reported but not sent as RFC 4733.
+* **Receiving video.** Packets are depacketised, frames assembled and played out in order by a jitter buffer with an
+  adaptive delay. Gaps are repaired with NACK (own generator: about 1.3 RTT between tries, 6 tries, 600 ms limit); when
+  a frame cannot be repaired the decoder is paused, a PLI is sent, and display freezes on the last good frame until the
+  next key frame (then `unmute` fires). Decoded frames are published to `<video srcObject>`; `videoWidth` / `videoHeight`
+  are set, `resize` fires on changes, `readyState` reaches 2+, and `mute` / `unmute` / `ended` fire on the track.
+* **Receiving audio.** Opus decode with loss concealment (PLC) and FEC, into an `AudioSink`. The default sink discards
+  samples (`NullSink`); `RecordSink` keeps them for tests. Samples reach speakers only through the audio output work (see
+  `SetRTCAudioSinkFactory`). Audio plays only while the stream is attached to a media element; the element's `volume` /
+  `muted` are not forwarded to the sink. Levels appear in `getStats()` and `getSynchronizationSources()`.
+* **Stats.** `outbound-rtp` and `inbound-rtp` for audio and video (packets, bytes, frames, frame size, fps, key frames,
+  NACK/PLI/FIR counts, jitter, loss, jitter-buffer delay, `qualityLimitationReason`, encoder times, audio level),
+  `remote-inbound-rtp` (round trip time, loss, jitter), `media-source`, `codec`, and `candidate-pair` with
+  `availableOutgoingBitrate` and `currentRoundTripTime`. pion's own report has no `outbound-rtp` or `remote-inbound-rtp`
+  for tracks we drive, so the engine adds a statistics interceptor and merges its entries.
+* **Hooks for embedders** (package `engine`): `RegisterRTCTrackSource` / `SetRTCTrackResolver` map a track to a frame
+  source (`internal/capture` providers plug in here), `SetRTCAudioSinkFactory` supplies the playback sink for remote
+  audio, `SetRTCAudioProcessorFactory` an echo canceller / noise suppressor.
+* **Simulcast.** A remote offer with `a=simulcast:send` is accepted and answered `recv`; the engine sends one layer. A
+  local `sendEncodings` with several layers sends only the first.
+* **Probes that fail.** `RTCRtpSender.createEncodedStreams`, `RTCRtpScriptTransform` and insertable streams are absent
+  (feature detection fails, pages fall back to unencrypted media; E2EE modes of call services will not work).
+  `requestVideoFrameCallback` is not driven for live streams.
+* **Data Saver** `strict` caps outgoing video at 300 kbit/s (the encoder rate target and the estimate are clamped). A
+  remote can still send to us; set the transceiver `direction` to `inactive` to refuse it.
+
+### Measured numbers
+
+Measured on the 4-core development box while other jobs were running (load average about 5), so absolute values are
+pessimistic; they are reported as measured, not tuned. The CPU numbers are process CPU time per frame (`getrusage`).
+
+| Case | Result |
+|---|---|
+| VP8 encoder, 640x360, speed auto | about 11-13 ms wall per frame |
+| VP8 encoder, 1280x720, speed auto | about 17-27 ms wall, 42-58 CPU-ms per frame |
+| Loopback call, 640x360 | 30 fps shown, 0 % frames lost, PSNR about 50 dB at the offered rate |
+| Loopback call, 1280x720 | **not real-time on this box under load**: 14-23 fps shown, encode 18-36 ms wall per frame |
+| 5 % random loss | repaired by NACK/RTX, call continues |
+| Total blackout (keyframe lost) | recovered through PLI |
+| Bandwidth cap | encoder bitrate and resolution step down to the cap |
+
+The encoder bitstream is also decoded by ffmpeg (libvpx) in `TestFFmpegDecodesOurStreams` when ffmpeg is installed; a
+side-by-side comparison with libvpx (`SWEEF_VP8_COMPARE=1`) is opt-in. The encoder has no 2-pass, no temporal layers and
+no screen-content tools, and is less efficient than libvpx at equal quality.
+
+### Known limits
+
+* The estimator has no probing: it ramps about 8 % per second from 1 Mbit/s and has a loss-controller floor of 100 kbit/s.
+  REMB is not generated; only transport-cc feedback is used.
+* No RED / ULPFEC, no real echo cancellation, DTMF not sent, no H.264 / VP9 / AV1, no simulcast or SVC sending.
+* Element layout is not re-triggered when the video size changes (untested).
+* Real services (Meet, Zoom web, Teams, Discord, Jitsi) are unverified, see [webrtc-interop.md](webrtc-interop.md).
 
 ## Privacy
 
@@ -92,14 +154,14 @@ samples).
   to a kind or origin in `DataStats` (`ByKind` / `ByOrigin`), so it appears in "used" but not in the per-kind breakdown. Test:
   a 30,000 byte message between two peers in one page moved 35.7-35.9 kB in and out in the measured runs (both ends are
   counted because both peers live in the page).
-* **Honoured:** at level `strict` the silence audio feed stops. Background tabs under the saver run no timers; the event pump
+* **Honoured:** at level `strict` outgoing video is capped at 300 kbit/s (tested). Background tabs under the saver run no timers; the event pump
   still drains the realtime queue for them, so data channel events are delivered (by construction, not covered by a test).
-* Not done: refusing incoming media at `strict`, or capping bitrate. Data channels are not restricted at any level.
+* Not done: refusing incoming media at `strict`. Data channels are not restricted at any level.
 
 ## Lifecycle
 
 Peers belong to the page's VM. `jsVM.close()` (navigation away, tab close, engine close) closes every peer connection through
-the registered closer, which also waits for the goroutines this feature started (silence pump, RTP/RTCP readers). Tests
+the registered closer, which also waits for the goroutines this feature started (media senders and receivers, RTP/RTCP readers). Tests
 cover navigation, closing a tab with live peers, explicit `close()`, and goroutine counts over repeated connect/close cycles
 (3 before, 3 after four cycles in the measured run). `close()` fires no events, rejects pending operations with
 `InvalidStateError`, and leaves `signalingState`, `connectionState` and `iceConnectionState` `closed`.
@@ -115,13 +177,12 @@ cover navigation, closing a tab with live peers, explicit `close()`, and gorouti
 * **Direction changes** (`transceiver.direction = ...`) also write a pion unexported field, because pion only accepts a
   direction when the transceiver is created. `TestWebRTCDirectionHook` and the rollback test fail loudly if a pion upgrade
   renames either field.
-* `iceCandidatePoolSize` is accepted and ignored. `rtcpMuxPolicy: "negotiate"` behaves as `require`. `setCodecPreferences`
-  is validated but the engine's own codec order is used. `setParameters` stores the values; only "all encodings inactive"
-  has an effect (the silence feed stops). `sendEncodings` / simulcast, `scaleResolutionDownBy`, `maxBitrate` have no effect.
+* `iceCandidatePoolSize` is accepted and ignored. `rtcpMuxPolicy: "negotiate"` behaves as `require`. `setParameters` applies `active`, `maxBitrate`,
+  `maxFramerate`, `scaleResolutionDownBy` of the first encoding; further `sendEncodings` are ignored (one layer is sent).
   `RTCRtpSender.setStreams` only changes what a later `addTrack` advertises.
 * `generateCertificate` ignores `expires` (pion certificates last 30 days) and supports ECDSA P-256 and RSA only.
 * One `streamId` is advertised per sent track (the first stream passed to `addTrack`).
-* No identity providers (`getIdentityAssertion` rejects), no `RTCRtpScriptTransform`, no insertable streams, no
+* No identity providers (`getIdentityAssertion` rejects), no `RTCRtpScriptTransform`, no insertable streams (probes fail gracefully), no
   `RTCPeerConnection.getDefaultIceServers`, no `icecandidateerror` events, no ICE-TCP candidates (active TCP is
   disabled).
 * `maxMessageSize` is whatever pion's SCTP transport reports; a larger `send()` throws `TypeError`.
@@ -161,3 +222,13 @@ timeouts and no timing assertions. `go test ./internal/engine -run TestWebRTC`:
   RSA certificates, the legacy callback forms, `close()` rejecting operations that are still pending.
 * Lifecycle: `DisabledAndPeersClosedOnNavigation`, `NoGoroutineLeak`. The app-level leak test
   (`go test ./internal/app -run TestNoGoroutineLeakAcrossAppLifetimes`) passes.
+
+### Media tests
+
+All offline and deterministic: a synthetic moving pattern with a drawn frame counter and a pure tone, two peers in one
+page, and a link simulator (`rtcLinkSim`) that adds loss, blackouts and a rate bottleneck to the UDP path.
+`go test ./internal/engine -run 'TestMedia|TestVideo|TestAudio|TestCaptureStream|TestStream|TestGetUserMedia'` covers
+`readyState`, PSNR, counter progress with under 5 % dropped over 5 s, resolution adaptation under a bandwidth cap, PLI
+recovery, mute/unmute, `replaceTrack`, `setParameters`, hang-up cleanup and goroutine counts, stats fields, SDP shape,
+codec preferences and simulcast answering. Package tests: `go test ./internal/rtcmedia ./internal/media/vp8enc`
+(`-short` skips the slow ones; the encoder benchmark reports encode time and CPU per frame).
