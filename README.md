@@ -45,6 +45,55 @@ Plain steps run 23x to 28x faster. The two React steps are slower (10x to open, 
 
 What makes navigation fast: pages with no scripts get no JavaScript VM at all; pages with scripts take a VM from a pre-warmed pool; framework bundles are compiled to bytecode once and the bytecode is kept on disk across daemon restarts; sub-resources go through an HTTP cache with ETag revalidation; scripts and stylesheets are prefetched in parallel; the previous page is torn down in the background.
 
+## A look at the browser
+
+Sweef draws its own interface (tabs, omnibox, sidebar, settings, first-run setup) with its own engine; there is no
+Chromium or native widget toolkit underneath. These images are not mock-ups: `go run ./internal/ui/cmd/uipreview`
+renders every screen of the real chrome pages through the engine and writes them to [`docs/design/`](docs/design/).
+
+**First-run setup.** Bring your bookmarks and history from Chrome, Edge, Firefox or Safari (nothing is uploaded), pick a
+look, and optionally make Sweef the default browser. The import cards use the real browser marks, not placeholder letters.
+
+<p align="center">
+  <img src="docs/design/onboarding-1@2x.png" alt="Sweef first-run setup: import cards for Chrome, Edge, Firefox and Safari with their real logos, default-browser and theme choices" width="880">
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/design/onboarding-2@2x.png" alt="Meet your Sidekick: a live demo of the agent next to the bring-your-own-key card"></td>
+    <td width="50%"><img src="docs/design/onboarding-4-dark@2x.png" alt="Last onboarding step, dark theme: tracker blocking and what the Sidekick may see"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Step 2: Sidekick, bring your own key (stored on your device only)</sub></td>
+    <td align="center"><sub>Last step (dark theme): tracker blocking and Sidekick access, per site</sub></td>
+  </tr>
+</table>
+
+**Browsing with the Sidekick** (light) and **Data Saver** (dark): the sidebar agent reads the page you are on and shows its
+sources and speed; the data chip in the toolbar shows measured use against your plan.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/design/chrome-light-chat@2x.png" alt="Sweef with the Sidekick sidebar summarising an article, light theme"></td>
+    <td width="50%"><img src="docs/design/data-popover-dark.png" alt="Data Saver popover in the dark theme: 39 MB used of 100 MB, measured versus estimated savings, top sites"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Sidekick sidebar</sub></td>
+    <td align="center"><sub>Data Saver: measured vs estimated, per-site rules</sub></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/design/newtab-light.png" alt="New tab page: ask-or-type box, suggestions, top sites and a usage line"></td>
+    <td width="50%"><img src="docs/design/chrome-omnibox.png" alt="Omnibox dropdown with history, bookmark and ask suggestions"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>New tab</sub></td>
+    <td align="center"><sub>Omnibox</sub></td>
+  </tr>
+</table>
+
 ## The desktop browser (alpha)
 
 `sweef gui` opens a real window. The browser UI (tabs, omnibox, Sidekick panel, new tab, settings) is HTML
