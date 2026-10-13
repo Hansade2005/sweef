@@ -178,7 +178,7 @@ func render(res *Results, srcName, notes string) string {
 func (p *rep) environment() {
 	m := p.r.Meta
 	p.f("## Environment\n\n| | |\n|---|---|\n")
-	p.f("| date | %s |\n| CPU | %s, %d logical cores |\n| RAM | %d MiB |\n| kernel | %s |\n| X server | Xvfb %s: `%s` |\n| window | %s in both browsers (no window manager: Chromium at 0,0 as requested; Sweef centres its own window; all coordinates are taken relative to the window origin read from the server) |\n| load average at start | `%s` (the harness waits up to 2 min for < 0.2 foreign cores before every iteration; it runs at nice -10 so that neighbours disturb it less) |\n| Go | %s |\n",
+	p.f("| date | %s |\n| CPU | %s, %d logical cores |\n| RAM | %d MiB |\n| kernel | %s |\n| X server | Xvfb %s: `%s` |\n| window | %s in both browsers (no window manager: Chromium at 0,0 as requested; Sweef centres its own window; all coordinates are taken relative to the window origin read from the server) |\n| load average at start | `%s` (the harness waits up to 45 s for < 0.2 foreign cores before every iteration; it runs at nice -10 so that neighbours disturb it less) |\n| Go | %s |\n",
 		m.Date, m.CPU, m.Cores, m.MemMiB, m.Kernel, m.Xvfb, m.XvfbArgs, m.Window, m.Load, m.Go)
 	for _, n := range []string{"sweef", "chromium"} {
 		b := m.Browsers[n]
@@ -233,6 +233,10 @@ func (p *rep) headline() {
 		add("load "+pg+" page, to first content frame", "ms", func(it *Iter) (float64, bool) { l, ok := it.Loads[pg]; return l.FirstMs, ok && l.OK })
 		add("load "+pg+" page, to load event", "ms", func(it *Iter) (float64, bool) { l, ok := it.Loads[pg]; return l.LoadMs, ok && l.OK })
 	}
+	for i, site := range p.r.Meta.Sites {
+		k := fmt.Sprintf("real%d", i+1)
+		add("real page "+shortSite(site)+", to visually settled", "ms", func(it *Iter) (float64, bool) { l, ok := it.Loads[k]; return l.SettleMs, ok && l.OK })
+	}
 	p.f("## Summary (lower is better in every row)\n\n| metric | Sweef median (min–max) | Chromium median (min–max) | verdict |\n|---|---|---|---|\n")
 	for _, r := range rows {
 		p.f("| %s | %s %s | %s %s | %s |\n", r.name, rng3(r.sw), r.unit, rng3(r.ch), r.unit, p.verdict(r.sw, r.ch))
@@ -273,7 +277,7 @@ func (p *rep) startup() {
 }
 
 func (p *rep) memory() {
-	p.f("## 2. Memory with UI\n\nSum of `Pss` from `/proc/PID/smaps_rollup` over every process of the browser (all processes whose environment carries the run's tag: main, zygote, GPU, renderers, utility, crashpad for Chromium; the single process for Sweef), read after a %d s settle. RSS sum is given for reference only (it double-counts shared pages). Median (min–max) over runs. 10 tabs = the same three fixture pages cycled (article, heavy, SPA).\n\n", p.r.Meta.SettleSecs)
+	p.f("## 2. Memory with UI\n\nSum of `Pss` from `/proc/PID/smaps_rollup` over every process of the browser (main, zygote, GPU, renderers, utility and crashpad processes for Chromium; the single process for Sweef), read after a %d s settle. RSS sum is given for reference only (it double-counts shared pages). Median (min–max) over runs. 10 tabs = the same three fixture pages cycled (article, heavy, SPA).\n\n", p.r.Meta.SettleSecs)
 	p.f("| tabs | browser | PSS (MiB) | RSS sum (MiB) | processes |\n|---|---|---|---|---|\n")
 	for _, tabs := range []int{1, 10} {
 		for _, n := range p.names {
@@ -383,15 +387,15 @@ func (p *rep) latency() {
 }
 
 func (p *rep) loads() {
-	p.f("## 5. Page load\n\nFrom the Enter key-down (typed URL, from `about:blank`, fresh profile and cache for every run) to: **first content frame** (the first frame in which the page area below y = 340 px (below anything the omnibox dropdown can cover) contains at least 600 non-background pixels), **load event** (local pages only: the page's `load` handler reports to the fixture server, which timestamps it; includes JS and image loading, and one request of beacon latency), **visually settled** (last pixel change in that region (same area) before a 1 s quiet period; capped at 40 s). Wire bytes: local pages by a byte counter around the fixture server's sockets (HTTP headers included, no compression offered by the server for either browser); real pages by the recording CONNECT proxy (TLS bytes as sent, from `bench/datasaver`'s recorder). Median (min–max).\n\n")
-	p.f("| page | browser | first content (ms) | load event (ms) | visually settled (ms) | bytes in | bytes out | HTTP requests |\n|---|---|---|---|---|---|---|---|\n")
+	p.f("## 5. Page load\n\nFrom the Enter key-down (typed URL, starting from a white fixture page `/blank`, fresh profile and cache for every run) to: **first content frame** (the first frame in which the page area below y = 340 px (below anything the omnibox dropdown can cover) contains at least 600 non-background pixels), **load event** (local pages only: the page's `load` handler reports to the fixture server, which timestamps it; includes JS and image loading, and one request of beacon latency), **visually settled** (the last pixel change in that region; the measurement ends when neither the pixels nor the wire have changed for 1 s, capped at 40 s), **last byte** (last time any byte moved on the wire). Wire bytes: local pages by a byte counter around the fixture server's sockets (HTTP headers included, no compression offered by the server for either browser); real pages by the recording CONNECT proxy (TLS bytes as sent, from `bench/datasaver`'s recorder). Median (min–max).\n\n")
+	p.f("| page | browser | first content (ms) | load event (ms) | visually settled (ms) | last byte (ms) | bytes in | bytes out | HTTP requests |\n|---|---|---|---|---|---|---|---|---|\n")
 	pages := []struct{ k, n string }{{"article", "local: text article (~100 KB HTML)"}, {"heavy", "local: heavy (12 images, 3 scripts, CSS)"}, {"spa", "local: SPA-like (JS renders 240 items from JSON)"}}
 	for _, pg := range pages {
 		p.loadRows(pg.k, pg.n, true)
 	}
 	if len(p.r.Meta.Sites) > 0 {
 		p.f("\n### Real public pages (through the sandbox proxy)\n\nThe first %d pages of `bench/datasaver/sites.txt`, in file order, that load in **both** browsers (one probe load each, same method; the rule is fixed and nothing is chosen by timing). The network and the sites are outside our control: these runs are noisier than the local ones. No `load` event column: a third-party page cannot report it.\n\n", len(p.r.Meta.Sites))
-		p.f("| page | browser | first content (ms) | visually settled (ms) | bytes in | bytes out | connections |\n|---|---|---|---|---|---|---|\n")
+		p.f("| page | browser | first content (ms) | visually settled (ms) | last byte (ms) | bytes in | bytes out | connections |\n|---|---|---|---|---|---|---|---|\n")
 		for i, s := range p.r.Meta.Sites {
 			p.loadRows(fmt.Sprintf("real%d", i+1), s, false)
 		}
@@ -419,6 +423,7 @@ func (p *rep) loadRows(key, name string, local bool) {
 		first := get(func(l LoadSample) float64 { return l.FirstMs })
 		load := get(func(l LoadSample) float64 { return l.LoadMs })
 		settle := get(func(l LoadSample) float64 { return l.SettleMs })
+		lastb := get(func(l LoadSample) float64 { return l.LastByteMs })
 		in := get(func(l LoadSample) float64 { return float64(l.WireIn) / 1024 })
 		out := get(func(l LoadSample) float64 { return float64(l.WireOut) / 1024 })
 		cn := get(func(l LoadSample) float64 {
@@ -428,9 +433,9 @@ func (p *rep) loadRows(key, name string, local bool) {
 			return float64(l.Conns)
 		})
 		if local {
-			p.f("| %s | %s | %s | %s | %s | %s KiB | %s KiB | %s |\n", name, n, rng3(first), rng3(load), rng3(settle), rng3(in), rng3(out), rng3(cn))
+			p.f("| %s | %s | %s | %s | %s | %s | %s KiB | %s KiB | %s |\n", name, n, rng3(first), rng3(load), rng3(settle), rng3(lastb), rng3(in), rng3(out), rng3(cn))
 		} else {
-			p.f("| %s | %s | %s | %s | %s KiB | %s KiB | %s |\n", name, n, rng3(first), rng3(settle), rng3(in), rng3(out), rng3(cn))
+			p.f("| %s | %s | %s | %s | %s | %s KiB | %s KiB | %s |\n", name, n, rng3(first), rng3(settle), rng3(lastb), rng3(in), rng3(out), rng3(cn))
 		}
 	}
 }
@@ -488,7 +493,7 @@ func (p *rep) runQuality() {
 			}
 		}
 	}
-	p.f("- iterations: %d recorded, %d flagged as run on a not-quite-idle machine (>= 0.2 foreign cores for 60 s before the iteration started).\n", total, noisy)
+	p.f("- iterations: %d recorded, %d flagged as run on a not-quite-idle machine (>= 0.2 foreign cores for 45 s before the iteration started).\n", total, noisy)
 	for _, n := range p.names {
 		var st []float64
 		for _, it := range p.iters(n) {
@@ -529,7 +534,7 @@ Everything is measured from the **outside**, the same way for both browsers, wit
 - **Observer and driver.** A small X11 client written for this harness (bench/vschrome/x11.go; same protocol approach as the XTEST/GetImage helpers in internal/shell/x11's tests) uses two connections: one injects input with the XTEST extension, one reads pixels with GetImage of the root window and listens for DAMAGE events. All timestamps come from one monotonic clock in one process.
 - **Input latency.** Timestamp taken immediately before the XTEST key-down request is written; stop at the first DAMAGE event inside the region whose read-back pixels differ from the baseline read just before the key. Before every key the harness waits for 60 ms (omnibox) / 300 ms (tab actions) without damage in the region, so a late paint of the previous key is not blamed on the next one. For the "dropdown closed" trials the key is sent right after a caret blink so a blink cannot be mistaken for the response. Keys are held 45 ms, then released; 80–230 ms between characters; the same seeded sequence of gaps for both browsers.
 - **Regions.** Omnibox plus the area its dropdown opens into (per browser, because the layouts differ: Chromium x 108–1152, Sweef x 246–1036, y 36–260 in window coordinates). Tab switch and new tab: the whole window ("first visible change"), and separately the page area.
-- **Memory.** Process tree = every process whose environment has the run's unique tag (children inherit it, including re-parented helpers). PSS and RSS from /proc/PID/smaps_rollup.
+- **Memory.** Process tree = every process in the browser's process group, every descendant of such a process, and every process still carrying the run's unique BENCH_TAG variable in its environment (Chromium's children overwrite their environment, so the tag alone is not enough). PSS and RSS from /proc/PID/smaps_rollup. The window is focused (there is no window manager, so the harness does it) in both the 1-tab and the 10-tab measurement.
 - **Idle CPU.** utime+stime from /proc/PID/stat, sampled every second for every tagged process, deltas per process.
 - **Start-up.** exec to first frame with the UI painted, from DAMAGE events on the root window plus a read-back of the top band; "new-tab page ready" = page area non-blank and unchanged for 700 ms. Cold file cache = `+"`echo 3 > /proc/sys/vm/drop_caches`"+` before the launch.
 - **Page load.** Enter key-down to first non-blank content frame / load event (a script in the fixture pages reports to the server: `+"`XMLHttpRequest`"+`, because Sweef does not fetch detached `+"`new Image()`"+` beacons) / last visual change. Wire bytes by an independent counter (fixture-socket counter for local pages, the recording proxy of bench/datasaver for real pages).
@@ -549,6 +554,8 @@ func (p *rep) caveats() {
 - **Xvfb is not a desktop.** Frames are software-composited and copied into the X server's framebuffer; no GPU, no compositor, no vsync. Chromium's GPU process runs a software GL path here, which a user with a GPU would not have, and its raster/compositing threads compete for four cores. Absolute latencies are not what a real desktop shows; only the comparison is meaningful, and even it could change with a GPU (Chromium would gain more than Sweef's CPU renderer).
 - **"First changed pixel" is not "the final frame".** Both browsers may paint an intermediate state first (Chromium can draw the omnibox text before the dropdown rows; a tab strip highlight can precede page content). The harness reports the first change in the region and, for tab switch and new tab, separately the first change in the page area. A browser that paints early and then repaints looks better here than one that paints once, completely.
 - **Regions differ per browser** (layouts differ) and were fixed from screenshots, not discovered; a change of either UI layout needs the numbers in phases.go updated.
+- **Window focus and visibility.** Chromium allocates noticeably less when its window has never been focused/visible; every memory number here is for a mapped, focused window, the state a user has.
+- **The harness competes for the CPU too.** It runs at nice -10 next to the browsers, and its own reads of the framebuffer cost the X server some time; the same for both browsers.
 - **Caret blink.** Handled by timing the key right after a toggle; if a browser's blink period is not 500 ms the guard is imperfect and a few early samples are possible.
 - **Real pages** depend on the network, on third-party content that changes, and on each browser being served different markup (user agent). Their time series are noisier and a page that animates never "settles" (capped at 40 s). They were loaded through a recording proxy that re-tunnels to the sandbox's egress proxy, which adds a constant hop for both browsers.
 - **Load event for real pages is not measured** (no beacon possible from outside); "visually settled" is a proxy, and a page that paints its final content early and then fiddles with an ad slot looks late.
@@ -570,4 +577,16 @@ Sweef is a lightweight browser with its own engine (Go, QuickJS), not a Blink/V8
 
 Where Chromium wins a row above, it is stated in the verdict column; Sweef's advantage on a row is its footprint (one process, one binary), not capability.
 `)
+}
+
+func shortSite(u string) string {
+	u = strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://")
+	if i := strings.IndexByte(u, '/'); i > 0 {
+		host, path := u[:i], u[i:]
+		if len(path) > 24 {
+			path = path[:24] + "…"
+		}
+		return host + path
+	}
+	return u
 }

@@ -128,6 +128,15 @@ type svgCascade struct {
 	idx    *style.EntryIndex
 	rank   map[*style.Rule]int // position of each rule in rules
 	memo   map[*html.Node][]style.Decl
+	// keep carries declsFor answers across passes of a session for elements
+	// whose cascade inputs are known (keyFn, from the style cache)
+	keep  map[*html.Node]*declKept
+	keyFn func(n *html.Node) (anc, own uint64, ok bool)
+}
+
+type declKept struct {
+	d        []style.Decl
+	anc, own uint64
 }
 
 func newSVGCascade(sheets []Sheet, env *style.Env, extra []string) *svgCascade {
@@ -171,10 +180,25 @@ func (sc *svgCascade) declsFor(n *html.Node) []style.Decl {
 	if d, ok := sc.memo[n]; ok {
 		return d
 	}
-	d := sc.declsForUncached(n)
 	if sc.memo == nil {
 		sc.memo = map[*html.Node][]style.Decl{}
 	}
+	if sc.keyFn != nil {
+		if anc, own, ok := sc.keyFn(n); ok {
+			if k := sc.keep[n]; k != nil && k.anc == anc && k.own == own {
+				sc.memo[n] = k.d
+				return k.d
+			}
+			d := sc.declsForUncached(n)
+			if sc.keep == nil || len(sc.keep) > 8192 {
+				sc.keep = map[*html.Node]*declKept{}
+			}
+			sc.keep[n] = &declKept{d: d, anc: anc, own: own}
+			sc.memo[n] = d
+			return d
+		}
+	}
+	d := sc.declsForUncached(n)
 	sc.memo[n] = d
 	return d
 }
@@ -189,10 +213,13 @@ func (sc *svgCascade) declsForUncached(n *html.Node) []style.Decl {
 		best uint32
 	}
 	var hits []hit
-	byRule := map[*style.Rule]int{}
+	var byRule map[*style.Rule]int
 	for _, en := range sc.idx.Candidates(n, nil) {
 		if en.Pseudo != "" || !en.Sel.Match(n, nil) {
 			continue
+		}
+		if byRule == nil {
+			byRule = map[*style.Rule]int{}
 		}
 		if i, ok := byRule[en.Rule]; ok {
 			if en.Spec > hits[i].best {
@@ -202,6 +229,9 @@ func (sc *svgCascade) declsForUncached(n *html.Node) []style.Decl {
 		}
 		byRule[en.Rule] = len(hits)
 		hits = append(hits, hit{rank: sc.rank[en.Rule], r: en.Rule, best: en.Spec})
+	}
+	if len(hits) == 0 && !hasAttr(n, "style") {
+		return nil // no rule and no inline style: callers only read the result
 	}
 	sort.Slice(hits, func(i, j int) bool { return hits[i].rank < hits[j].rank })
 	for _, h := range hits {
@@ -570,7 +600,7 @@ func (c *ctx) svgBuildLocked(n *html.Node, st *style.Computed) *SVGDoc {
 // session's, when the sheets are unchanged since the previous pass.
 func (c *ctx) newSVGCascade(env *style.Env) *svgCascade {
 	if c.sess != nil {
-		return c.sess.svg.cascade(c.opts.Sheets, env)
+		return c.sess.svg.cascade(c.opts.Sheets, env, c.sess.Style.NodeKey)
 	}
 	return newSVGCascade(c.opts.Sheets, env, nil)
 }

@@ -3,7 +3,8 @@
 #
 #   scripts/bench/vschrome.sh                      # full run: N=15 per browser, label "run-<commit>"
 #   scripts/bench/vschrome.sh -label baseline      # label prefix; the commit is appended: baseline-<commit>
-#   scripts/bench/vschrome.sh -src worktree        # build Sweef from the working tree instead of `git archive HEAD`
+#   scripts/bench/vschrome.sh -rev b99cf52        # build Sweef from that commit (default HEAD) via `git archive`
+#   scripts/bench/vschrome.sh -src worktree        # build Sweef from the working tree instead of a commit
 #   scripts/bench/vschrome.sh -quick               # smoke run (3 min): never writes docs/vs-chrome.md
 #   scripts/bench/vschrome.sh -runs 20 -idle 30    # any other flag is passed to `vschrome run`
 #
@@ -18,12 +19,14 @@ ROOT=$PWD
 
 PREFIX=run
 SRC=head
+REV=HEAD
 QUICK=0
 PASS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     -label) PREFIX=$2; shift 2 ;;
     -src) SRC=$2; shift 2 ;;
+    -rev) REV=$2; shift 2 ;;
     -quick) QUICK=1; PASS+=("-quick" "-runs" "1" "-idle" "5"); shift ;;
     *) PASS+=("$1"); shift ;;
   esac
@@ -35,16 +38,17 @@ done
 CHROMIUM=${CHROMIUM:-/opt/pw-browsers/chromium}
 [ -x "$CHROMIUM" ] || { echo "vschrome: Chromium not found at $CHROMIUM (set CHROMIUM=)" >&2; exit 1; }
 
-COMMIT=$(git rev-parse --short HEAD)
+COMMIT=$(git rev-parse --short "$REV")
+[ "$SRC" = worktree ] && COMMIT=$(git rev-parse --short HEAD)
 DIRTY=false
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/vschrome-build-XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 
 case "$SRC" in
   head)
-    # The exact committed tree: other people's uncommitted edits cannot break or change the build.
+    # The exact committed tree of $REV: other people's uncommitted edits cannot break or change the build.
     mkdir "$TMP/src"
-    git archive HEAD | tar -x -C "$TMP/src"
+    git archive "$REV" | tar -x -C "$TMP/src"
     (cd "$TMP/src" && go build -trimpath -ldflags="-s -w" -o "$TMP/sweef" ./cmd/sweef)
     ;;
   worktree)

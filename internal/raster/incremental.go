@@ -39,6 +39,7 @@ type ListInfo struct {
 	Bounds []IRect  // device bounds (a group's bounds for push ops)
 	Pair   []int32  // push -> matching pop index (and pop -> push), else -1
 	Wide   []bool   // damage touching this op / group must grow to its bounds
+	Exact  []bool   // painting the op under a horizontal clip gives the same pixels as unclipped (see narrow)
 	Pre    []uint64 // Pre[i] hashes Key[:i]: equal prefixes paint equal intermediate surfaces
 	Surf   IRect
 }
@@ -181,7 +182,7 @@ func hasRect(r render.Rect) bool { return r.W > 0 && r.H > 0 }
 // Analyze builds the ListInfo of list for a w x h device-pixel surface.
 func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 	n := len(list)
-	in := &ListInfo{Key: make([]uint64, n), Bounds: make([]IRect, n), Pair: make([]int32, n), Wide: make([]bool, n), Pre: make([]uint64, n+1), Surf: IRect{0, 0, w, h}}
+	in := &ListInfo{Key: make([]uint64, n), Bounds: make([]IRect, n), Pair: make([]int32, n), Wide: make([]bool, n), Exact: make([]bool, n), Pre: make([]uint64, n+1), Surf: IRect{0, 0, w, h}}
 	ctm := Scale(dpr, dpr)
 	var ctx uint64
 	var stack []groupRec
@@ -234,6 +235,9 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 		switch o := op.(type) {
 		case render.FillRect:
 			leaf(o.Rect, false)
+			// a plain rectangle has only vertical and horizontal edges: the scan
+			// converter treats them the same with and without a horizontal clip
+			in.Exact[i] = o.Radii.IsZero() && ctm[1] == 0 && ctm[2] == 0
 		case render.Border:
 			leaf(o.Rect, false)
 		case render.TextRun:
@@ -252,6 +256,7 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 			leaf(o.Dst, true)
 		case render.PushClip:
 			push(i, sig, o.Rect, true, false, 0, false)
+			in.Exact[i] = o.Radii.IsZero() && ctm[1] == 0 && ctm[2] == 0
 		case render.PushLayer:
 			px, fok := filterReach(o.Filter)
 			if !fok {
@@ -290,6 +295,7 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 				b = b.Intersect(g.limit)
 			}
 			in.Bounds[g.idx], in.Bounds[i] = b, b
+			in.Exact[i] = in.Exact[g.idx]
 			in.Wide[g.idx] = g.wide
 			in.Pair[g.idx], in.Pair[i] = int32(i), int32(g.idx)
 			add(b)

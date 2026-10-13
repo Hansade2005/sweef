@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sweefbrowser/sweef/internal/render"
 )
 
 // SWEEF_STAGES=1 prints one line per Tab.Evaluate and per paint to stderr with
@@ -14,6 +16,12 @@ import (
 // JavaScript). A development aid for the keystroke-latency work; off by default
 // and then costs one bool test.
 var stageTrace = os.Getenv("SWEEF_STAGES") != ""
+
+func init() {
+	if stageTrace {
+		render.StageHook = func(stage string, d time.Duration) { fmt.Fprintf(os.Stderr, "STAGE lay %s %.2fms\n", stage, ms(d)) }
+	}
+}
 
 func ms(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
 

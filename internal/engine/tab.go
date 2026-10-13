@@ -99,20 +99,21 @@ type NodeInfo struct {
 // Tab is one browsing context. Goroutine-light: no dedicated thread, just
 // state + a mutex; JS evaluation happens on demand.
 type Tab struct {
-	ID        string
-	incrMu    sync.Mutex
-	incr      *raster.Canvas // pixels of the last incremental paint (see incremental.go)
-	lastPaint atomic.Pointer[PaintInfo]
-	layoutN   atomic.Int64 // style+layout runs of the render pipeline (LayoutStats)
-	layoutNs  atomic.Int64 // their total time in nanoseconds
-	mu        sync.RWMutex
-	eng       *Engine
-	ctx       *BrowserContext // isolation context (nil = engine default)
-	title     string
-	url       *url.URL
-	html      string
-	dom       *fnet.Doc // parsed tree held by our DOM layer
-	scripts   []*CompiledScript
+	ID         string
+	incrMu     sync.Mutex
+	incr       *raster.Canvas // pixels of the last incremental paint (see incremental.go)
+	lastPaint  atomic.Pointer[PaintInfo]
+	paintedGen atomic.Uint64 // document generation of the last PaintRGBAOpts (Dirty)
+	layoutN    atomic.Int64  // style+layout runs of the render pipeline (LayoutStats)
+	layoutNs   atomic.Int64  // their total time in nanoseconds
+	mu         sync.RWMutex
+	eng        *Engine
+	ctx        *BrowserContext // isolation context (nil = engine default)
+	title      string
+	url        *url.URL
+	html       string
+	dom        *fnet.Doc // parsed tree held by our DOM layer
+	scripts    []*CompiledScript
 
 	consoleRing *Ring
 	netRing     *Ring

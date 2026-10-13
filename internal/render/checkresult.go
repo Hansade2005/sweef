@@ -36,8 +36,9 @@ func DiffResults(a, b *Result) string {
 		return fmt.Sprintf("display list length %d vs %d", len(a.List), len(b.List))
 	}
 	for i := range a.List {
-		sa, oka := OpSig(a.List[i])
-		sb, okb := OpSig(b.List[i])
+		oa, ob := normalizeRefs(a.List[i]), normalizeRefs(b.List[i])
+		sa, oka := OpSig(oa)
+		sb, okb := OpSig(ob)
 		if oka && okb {
 			if sa != sb {
 				if x, ok := a.List[i].(SVGDraw); ok {
@@ -50,9 +51,39 @@ func DiffResults(a, b *Result) string {
 			}
 			continue
 		}
-		if oka != okb || !reflect.DeepEqual(a.List[i], b.List[i]) {
+		if oka != okb || !reflect.DeepEqual(oa, ob) {
 			return fmt.Sprintf("op %d differs: %#v vs %#v", i, a.List[i], b.List[i])
 		}
 	}
 	return ""
+}
+
+// normalizeRefs replaces the per-pass key of an SVG filter reference
+// ("svgref:<seq>") by what it resolves to, so two passes that reference the
+// same filter compare equal.
+func normalizeRefs(op Op) Op {
+	l, ok := op.(PushLayer)
+	if !ok {
+		return op
+	}
+	var fs []Filter
+	for i, f := range l.Filter {
+		if !IsSVGFilterRef(f.Name) {
+			continue
+		}
+		if fs == nil {
+			fs = append([]Filter(nil), l.Filter...)
+		}
+		name := "svgref:?"
+		if ref, ok := LookupSVGFilter(f.Name); ok && ref != nil {
+			sig, _ := ref.Node.sig(0)
+			name = fmt.Sprintf("svgref:%s:%x", ref.ID, sig)
+		}
+		fs[i].Name = name
+	}
+	if fs != nil {
+		l.Filter = fs
+		return l
+	}
+	return op
 }

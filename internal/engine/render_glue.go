@@ -357,6 +357,9 @@ func (t *Tab) paintPage(width, height int, dsf float64, full bool) (*image.RGBA,
 	}), true
 }
 
+// SetLayoutCheck switches the SWEEF_LAYOUT_CHECK comparison on or off (tests).
+func SetLayoutCheck(on bool) { layoutCheck = on }
+
 // SWEEF_LAYOUT_CHECK=1 lays every document out a second time from scratch after
 // each (cached) layout and panics on the first difference in any box or
 // display-list op. SWEEF_NO_STYLE_CACHE=1 turns the cross-pass style cache off.

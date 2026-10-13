@@ -203,6 +203,10 @@ func (s *fixtureServer) build() {
 		return b.String()
 	}
 
+	// /blank: the white baseline page that every load starts from (Sweef treats a typed about:blank as a failed
+	// navigation and shows its "You are offline" page, so about:blank cannot be the baseline).
+	s.pages["/blank"] = []byte(`<!doctype html><html><head><meta charset="utf-8"><title>blank</title></head><body style="margin:0;background:#fff"></body></html>`)
+
 	// /article: a text article, ~100 KB, one stylesheet inline, a handful of links, no images.
 	var a bytes.Buffer
 	a.WriteString(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fixture article</title><style>

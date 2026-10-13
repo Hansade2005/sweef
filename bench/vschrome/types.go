@@ -83,6 +83,7 @@ type LoadSample struct {
 	LoadMs       float64        `json:"load_event_ms"` // -1 for real sites (no beacon possible)
 	RenderedMs   float64        `json:"rendered_ms,omitempty"`
 	SettleMs     float64        `json:"visually_settled_ms"`
+	LastByteMs   float64        `json:"last_byte_ms"` // last time any byte moved on the wire
 	SettledEarly bool           `json:"settle_capped,omitempty"`
 	WireIn       int64          `json:"wire_in_bytes"`
 	WireOut      int64          `json:"wire_out_bytes"`

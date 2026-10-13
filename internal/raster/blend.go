@@ -1,6 +1,7 @@
 package raster
 
 import (
+	"encoding/binary"
 	"math"
 	"strings"
 )
@@ -321,8 +322,32 @@ func blendSolidCov(dst, cov []uint8, col [4]uint8) {
 	if ca == 0 {
 		return
 	}
-	for i, cv := range cov {
+	n := len(cov)
+	opaque := ca == 255
+	px := binary.LittleEndian.Uint32(col[:])
+	i := 0
+	for i < n {
+		// eight pixels at a time: nothing to do where the coverage is 0, and a
+		// plain store where it is full and the colour is opaque (the interior of
+		// a fill, the empty area around a mask)
+		if i+8 <= n {
+			w := binary.LittleEndian.Uint64(cov[i:])
+			if w == 0 {
+				i += 8
+				continue
+			}
+			if opaque && w == ^uint64(0) {
+				d := dst[i*4 : i*4+32 : i*4+32]
+				for k := 0; k < 32; k += 4 {
+					binary.LittleEndian.PutUint32(d[k:], px)
+				}
+				i += 8
+				continue
+			}
+		}
+		cv := cov[i]
 		if cv == 0 {
+			i++
 			continue
 		}
 		sr, sg, sb, sa := cr, cg, cb, ca
@@ -331,11 +356,13 @@ func blendSolidCov(dst, cov []uint8, col [4]uint8) {
 			sr, sg, sb, sa = mul255(sr, c), mul255(sg, c), mul255(sb, c), mul255(sa, c)
 		}
 		if sa == 0 {
+			i++
 			continue
 		}
 		d := dst[i*4 : i*4+4 : i*4+4]
 		if sa == 255 {
 			d[0], d[1], d[2], d[3] = uint8(sr), uint8(sg), uint8(sb), 255
+			i++
 			continue
 		}
 		ia := 255 - sa
@@ -343,6 +370,7 @@ func blendSolidCov(dst, cov []uint8, col [4]uint8) {
 		d[1] = uint8(min(255, sg+mul255(uint32(d[1]), ia)))
 		d[2] = uint8(min(255, sb+mul255(uint32(d[2]), ia)))
 		d[3] = uint8(min(255, sa+mul255(uint32(d[3]), ia)))
+		i++
 	}
 }
 

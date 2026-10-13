@@ -62,6 +62,7 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 		o.DSF = 1
 	}
 	t0 := time.Now()
+	gen0 := doc.MutationGen()
 	l := doc.Layout(o.Width)
 	tLayout := time.Since(t0)
 	ext, _ := l.Ext.(*renderExt)
@@ -110,6 +111,7 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 	} else {
 		img = raster.Paint(list, o.Width, height, o.DSF, env)
 	}
+	t.paintedGen.Store(gen0)
 	t.lastPaint.Store(&PaintInfo{Layout: tLayout, Raster: time.Since(t1), Incremental: o.Incremental, Rect: img.Rect})
 	if stageTrace {
 		stageLog("paint", t.ID, time.Since(t0), "layout=%.2fms raster=%.2fms rect=%v", ms(tLayout), ms(time.Since(t1)), img.Rect)
@@ -147,4 +149,33 @@ func isRootScrollbar(op render.Op, vp render.Rect) bool {
 // is the number of (forced or painting) layouts it caused.
 func (t *Tab) LayoutStats() (n int64, total time.Duration) {
 	return t.layoutN.Load(), time.Duration(t.layoutNs.Load())
+}
+
+// Dirty reports whether the document changed (DOM, attributes, text, styles)
+// since the last PaintRGBAOpts, i.e. whether a paint would produce new pixels.
+// It is a cheap counter comparison. Always true before the first paint.
+func (t *Tab) Dirty() bool {
+	g := t.Generation()
+	return g == 0 || g != t.paintedGen.Load()
+}
+
+// Frame is the one call that turns the page's pending work into a frame: it
+// runs the page's timers, microtasks and animation callbacks once (settle is
+// the time budget, as for Settle), and paints only if the document changed
+// since the last paint, so a burst of updates that arrive before the frame is
+// taken (a key handler and the state patch that answers it) costs one style,
+// layout and raster. painted is false, with a nil image, when nothing changed.
+// ok is false when the render pipeline is not active for the document.
+func (t *Tab) Frame(o PaintOptions, settle time.Duration) (img *image.RGBA, painted, ok bool) {
+	if settle > 0 {
+		t.Settle(settle)
+	}
+	if !t.Dirty() {
+		t.mu.RLock()
+		has := t.dom != nil
+		t.mu.RUnlock()
+		return nil, false, has
+	}
+	img, ok = t.PaintRGBAOpts(o)
+	return img, ok, ok
 }

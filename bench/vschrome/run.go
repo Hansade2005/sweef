@@ -34,6 +34,7 @@ func cmdRun(args []string) {
 	shots := fl.String("shots", "", "debug: directory for screenshots of key moments")
 	only := fl.String("only", "", "debug: comma list of phases to run: startup,main,mem10 (default all)")
 	skipDisk := fl.Bool("skip-disk", false, "skip the disk footprint step")
+	keepLogs := fl.Bool("keep-logs", false, "keep Xvfb/browser logs under <out>/logs/<label>")
 	tabs := fl.Int("tabs", 10, "tabs for the many-tab memory measurement")
 	_ = fl.Parse(args)
 
@@ -56,7 +57,10 @@ func cmdRun(args []string) {
 	}
 	defer os.RemoveAll(work)
 	cfg.OutDir = work
-	cfg.LogDir = filepath.Join(*out, "logs", *label)
+	cfg.LogDir = filepath.Join(work, "logs") // Xvfb and browser stderr; kept only with -keep-logs
+	if *keepLogs {
+		cfg.LogDir = filepath.Join(*out, "logs", *label)
+	}
 	os.MkdirAll(cfg.LogDir, 0o755)
 
 	chrBin, _ := filepath.EvalSymlinks(*chromiumBin)
@@ -102,7 +106,7 @@ func cmdRun(args []string) {
 	}
 
 	// the machine must be quiet; record what it was
-	quiet := quietMachine(120 * time.Second)
+	quiet := quietMachine(45 * time.Second)
 	m.Load = loadAvg()
 	if !quiet {
 		res.Problems = append(res.Problems, "machine was not idle (>= 0.2 cores used by other processes) when the run started")
@@ -171,7 +175,7 @@ func cmdRun(args []string) {
 		for pos, name := range order {
 			spec := h.specs[name]
 			it := &Iter{Index: i, Position: pos, Load: loadAvg(), Startup: map[string]StartupSample{}, Lat: map[string][]float64{}, LatFail: map[string]int{}, Loads: map[string]LoadSample{}}
-			if !quietMachine(120 * time.Second) {
+			if !quietMachine(45 * time.Second) {
 				it.Noisy = true
 			}
 			logf("iteration %d/%d  %-8s load %s", i+1, *runs, name, loadAvg())

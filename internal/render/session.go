@@ -164,12 +164,14 @@ func sameSheets(a, b []Sheet) bool {
 
 // cascade returns the SVG cascade for this pass, reusing the previous one when
 // the sheets and environment are the same. Its per-pass memo is reset.
-func (s *svgSess) cascade(sheets []Sheet, env *style.Env) *svgCascade {
+func (s *svgSess) cascade(sheets []Sheet, env *style.Env, keyFn func(*html.Node) (uint64, uint64, bool)) *svgCascade {
 	if s.sc != nil && s.scSig.env == *env && sameSheets(s.scSig.sheets, sheets) {
 		s.sc.memo = nil
+		s.sc.keyFn = keyFn
 		return s.sc
 	}
 	s.sc = newSVGCascade(sheets, env, nil)
+	s.sc.keyFn = keyFn
 	s.scSig = svgSig{sheets: append([]Sheet(nil), sheets...), env: *env}
 	s.docs = nil
 	s.union = nil

@@ -136,7 +136,7 @@ func commOf(pid int) string {
 	}
 	cl, _ := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
 	typ, sub := "browser", ""
-	for _, a := range strings.Split(string(cl), "\x00") {
+	for _, a := range strings.FieldsFunc(string(cl), func(r rune) bool { return r == 0 || r == ' ' }) { // Chromium children rewrite their argv with spaces
 		switch {
 		case strings.HasPrefix(a, "--type="):
 			typ = strings.TrimPrefix(a, "--type=")

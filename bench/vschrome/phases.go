@@ -525,7 +525,7 @@ func (h *harness) idleCPU(l *launched, xs *xserver, d time.Duration) *IdleCPU {
 	return out
 }
 
-// loadPage navigates the current tab from about:blank to the URL typed into the omnibox and measures, from the
+// loadPage navigates the current tab from the white /blank page to the URL typed into the omnibox and measures, from the
 // Enter key-down: the first frame with non-blank page content, the page's own load event (local pages: beacon seen by
 // the server), and the time of the last pixel change in the top 400 px of the page area (visually settled, with a
 // 1 s quiet criterion). Bytes on the wire: local pages by the server-side socket counter, real pages by the recording
@@ -539,8 +539,8 @@ func (s *session) loadPage(h *harness, path, run string, local bool, site string
 	fail := func(f string, a ...any) LoadSample { res.Err = fmt.Sprintf(f, a...); return res }
 	// Below the area the omnibox dropdown can cover (it closes on Enter and would otherwise look like page content).
 	region := s.abs(rect{0, 340, winW, 460})
-	// 1) blank baseline in the same tab
-	if err := s.typeURL("about:blank"); err != nil {
+	// 1) blank baseline in the same tab (a white page from the fixture server)
+	if err := s.typeURL(h.pageURL("/blank", "b")); err != nil {
 		return fail("%v", err)
 	}
 	if err := s.xt.tap('\n'); err != nil {
@@ -572,29 +572,77 @@ func (s *session) loadPage(h *harness, path, run string, local bool, site string
 		return fail("%v", err)
 	}
 	time.AfterFunc(keyHold, rel)
+	if s.shots != "" {
+		logf("loadPage: Enter at unix ms %d", t0.UnixMilli())
+	}
+	if os.Getenv("VSC_POLLDEBUG") != "" {
+		go func() {
+			c, err := dialX(s.xs.display)
+			if err != nil {
+				return
+			}
+			defer c.close()
+			var last *pixbuf
+			for time.Since(t0) < 12*time.Second {
+				cur, err := c.grab(region)
+				if err != nil {
+					return
+				}
+				if last != nil && !cur.equal(last) {
+					logf("  POLL saw change at +%.0f ms (nonModal %d)", ms(time.Since(t0)), cur.nonModal())
+				}
+				last = cur
+				time.Sleep(20 * time.Millisecond)
+			}
+		}()
+	}
 	hardEnd := t0.Add(40 * time.Second)
+	netTotal := func() int64 {
+		if local {
+			return h.fix.in.Load() + h.fix.out.Load()
+		}
+		t := s.rec.Snapshot()
+		return t.In + t.Out
+	}
 	var firstAt, lastChange time.Time
+	lastNet := t0
+	prevBytes, lastPoll := netTotal(), time.Now()
 	for {
-		dl := hardEnd
+		now := time.Now()
 		if !firstAt.IsZero() {
-			if d := lastChange.Add(1000 * time.Millisecond); d.Before(dl) {
-				dl = d
+			// done when neither the pixels nor the network have changed for 1 s
+			q := lastChange
+			if lastNet.After(q) {
+				q = lastNet
+			}
+			if now.Sub(q) >= time.Second {
+				break
 			}
 		}
-		ev, ok, err := s.obs.nextEvent(dl)
-		if err != nil {
-			return fail("%v", err)
-		}
-		if !ok {
+		if !now.Before(hardEnd) {
 			if firstAt.IsZero() {
 				return fail("no page content within 40 s")
 			}
-			if !time.Now().Before(hardEnd) {
-				res.SettledEarly = true
-			}
+			res.SettledEarly = true
 			break
 		}
+		ev, ok, err := s.obs.nextEvent(now.Add(50 * time.Millisecond))
+		if err != nil {
+			return fail("%v", err)
+		}
+		if now.Sub(lastPoll) >= 100*time.Millisecond {
+			lastPoll = now
+			if b := netTotal(); b != prevBytes {
+				prevBytes, lastNet = b, time.Now()
+			}
+		}
+		if !ok {
+			continue
+		}
 		r, isD := s.dm.notify(ev.data)
+		if s.shots != "" {
+			logf("  ev type %d +%.0f ms rect %v isDamage=%v", ev.data[0], ms(ev.at.Sub(t0)), r, isD)
+		}
 		if !isD || !r.intersects(region) {
 			continue
 		}
@@ -602,21 +650,21 @@ func (s *session) loadPage(h *harness, path, run string, local bool, site string
 		if err != nil {
 			return fail("%v", err)
 		}
+		if s.shots != "" {
+			logf("  damage +%.0f ms %v changed=%v nonModal=%d", ms(ev.at.Sub(t0)), r, !cur.equal(prev), cur.nonModal())
+		}
 		if !cur.equal(prev) {
-			lastChange = ev.at
-			if firstAt.IsZero() && cur.nonModal() >= 600 {
-				firstAt = ev.at
-			}
 			if firstAt.IsZero() {
-				lastChange = time.Time{}
-				// changed but still blank: not content yet (keep prev as the new baseline)
+				if cur.nonModal() >= 600 {
+					firstAt, lastChange = ev.at, ev.at
+				}
+			} else {
+				lastChange = ev.at
 			}
 		}
 		prev = cur
-		if lastChange.IsZero() && !firstAt.IsZero() {
-			lastChange = firstAt
-		}
 	}
+	res.LastByteMs = ms(lastNet.Sub(t0))
 	res.FirstMs = ms(firstAt.Sub(t0))
 	res.SettleMs = ms(lastChange.Sub(t0))
 	time.Sleep(500 * time.Millisecond) // trailing requests
@@ -679,6 +727,16 @@ func (h *harness) runMem10(spec *browserSpec, it *Iter) error {
 		return err
 	}
 	defer l.stop()
+	// Same state as the 1-tab measurement: the window is found and given the keyboard focus (there is no window
+	// manager to do it) and an observer is connected. A Chromium window that was never focused allocates less.
+	s := &session{xs: xs, spec: spec, lay: layouts[spec.Name]}
+	if err := s.attach(); err != nil {
+		return err
+	}
+	defer s.detach()
+	if _, err := s.findWindow(30 * time.Second); err != nil {
+		return err
+	}
 	for i := range urls {
 		if _, ok := h.fix.waitBeacon(fmt.Sprintf("%s-%d", run, i), "load", 90*time.Second); !ok {
 			return fmt.Errorf("tab %d did not fire its load event", i)
