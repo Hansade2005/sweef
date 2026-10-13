@@ -155,6 +155,8 @@ type jsVM struct {
 	start     time.Time
 	closed    bool
 
+	capture *capHost // getUserMedia & co (capture_host.go)
+
 	rtOnce   sync.Once
 	realtime *realtime // WebSockets and Workers (lazily created)
 	closers  []func()  // run by close(): host extensions release goroutines and handles here
@@ -350,6 +352,9 @@ func (j *jsVM) close() {
 	runCloseHooks(j)
 	for _, f := range j.closers {
 		f()
+	}
+	if j.capture != nil {
+		j.capture.closeAll()
 	}
 	j.vm.SetModuleLoader(nil, nil)
 	j.vm.Close()

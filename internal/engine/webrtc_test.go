@@ -3,6 +3,8 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sweefbrowser/sweef/internal/capture"
+	"github.com/sweefbrowser/sweef/internal/rtcmedia/testsrc"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +33,25 @@ func rtcMode(t *testing.T, m WebRTCHostCandidates) {
 	old := WebRTCHostCandidatePolicy()
 	SetWebRTCHostCandidates(m)
 	rtcTestLoopback.Store(true)
-	t.Cleanup(func() { SetWebRTCHostCandidates(old); rtcTestLoopback.Store(false) })
+	t.Setenv("SWEEF_FAKE_DEVICES", "1") // getUserMedia hands out the synthetic camera and microphone
+	// The call tests measure picture quality against the rtcmedia test pattern (frame counter + PSNR), so the
+	// fake camera's track is replaced by that pattern at the sender; audio keeps the capture tone.
+	SetRTCTrackResolver(func(_ *Tab, d RTCTrackDesc) (RTCTrackSource, bool) {
+		if d.Kind != "video" || d.Label != "Fake Camera" {
+			return RTCTrackSource{}, false
+		}
+		return RTCTrackSource{OpenVideo: func(c capture.VideoConstraints) (capture.VideoSource, error) {
+			w, h, fps := d.Width, d.Height, d.FrameRate
+			if w <= 0 {
+				w, h = 640, 360
+			}
+			if fps <= 0 {
+				fps = 30
+			}
+			return testsrc.NewVideo(w, h, fps), nil
+		}}, true
+	})
+	t.Cleanup(func() { SetWebRTCHostCandidates(old); rtcTestLoopback.Store(false); SetRTCTrackResolver(nil) })
 }
 
 func newRTCEngine(t *testing.T) *Engine {
@@ -45,8 +65,12 @@ func newRTCEngine(t *testing.T) *Engine {
 
 func newRTCTab(t *testing.T, e *Engine, srv *httptest.Server) *Tab {
 	t.Helper()
-	tab, err := e.NewTab(srv.URL + "/")
+	tab, err := e.NewTab("about:blank")
 	if err != nil {
+		t.Fatal(err)
+	}
+	tab.SetMediaBroker(&testBroker{decide: allow}) // permission prompt answered 'allow'
+	if err := tab.Navigate(srv.URL+"/", nil); err != nil {
 		t.Fatal(err)
 	}
 	return tab

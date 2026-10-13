@@ -311,6 +311,9 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 		if strings.HasPrefix(typ, "data.") && a.onDataMessage(typ, raw, tabFor("")) {
 			return
 		}
+		if (strings.HasPrefix(typ, "media.") || typ == "site.media") && a.onMediaMessage(typ, raw) {
+			return
+		}
 		a.logf("ui: unknown message %q", typ)
 	}
 }

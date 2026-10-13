@@ -136,6 +136,10 @@ func (p *rtcPeer) resolveSource(d RTCTrackDesc) (RTCTrackSource, bool) {
 			return s, true
 		}
 	}
+	// a track from getUserMedia/getDisplayMedia: subscribe to the live capture track (internal/capture)
+	if s, ok := captureTrackSource(d.ID); ok {
+		return s, true
+	}
 	switch {
 	case d.Canvas != 0 && d.Kind == "video" && t != nil:
 		node := d.Canvas
