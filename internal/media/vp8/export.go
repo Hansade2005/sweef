@@ -46,10 +46,16 @@ type FilterParams struct {
 	Inner []bool
 }
 
-// FilterFrame applies the VP8 loop filter in place, exactly as the decoder does.
-// The planes of img start at the top-left pixel of the macroblock grid; the
-// strides may include padding.
-func FilterFrame(img *image.YCbCr, p FilterParams) {
+// LoopFilter is a prepared loop filter for one frame that can filter macroblock by macroblock,
+// so that an encoder can run it as a wavefront on several goroutines: a macroblock may be filtered
+// once its left, top and top-right neighbours are done.
+type LoopFilter struct {
+	d   *Decoder
+	img *image.YCbCr
+}
+
+// NewLoopFilter prepares the filter of img (planes starting at the top-left pixel of the macroblock grid).
+func NewLoopFilter(img *image.YCbCr, p FilterParams) *LoopFilter {
 	d := &Decoder{mbw: p.MBW, mbh: p.MBH, miStride: p.MBW + 1}
 	d.mbs = make([]mbInfo, d.miStride*(p.MBH+1))
 	d.hdr.KeyFrame = p.KeyFrame
@@ -62,5 +68,13 @@ func FilterFrame(img *image.YCbCr, p FilterParams) {
 			mi.lfInner = p.Inner[y*p.MBW+x]
 		}
 	}
-	d.frameFilter(img)
+	return &LoopFilter{d: d, img: img}
+}
+
+// MB filters one macroblock.
+func (f *LoopFilter) MB(mbx, mby int) { f.d.filterMB(f.img, mbx, mby) }
+
+// FilterFrame applies the VP8 loop filter in place, exactly as the decoder does.
+func FilterFrame(img *image.YCbCr, p FilterParams) {
+	NewLoopFilter(img, p).d.frameFilter(img)
 }

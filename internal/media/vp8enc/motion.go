@@ -32,6 +32,12 @@ func (s *searchCtx) mvCost(m mv) int {
 
 // fullPelCost is the SAD plus vector cost of a full-pel vector against ref (math.MaxInt-ish when out of range).
 func (s *searchCtx) fullPelCost(ref *plane, m mv, limit int) int {
+	return s.fullPelCostR(ref, m, limit, false)
+}
+
+// fullPelCostR is fullPelCost; coarse compares only every second row (and doubles it), which halves the cost
+// of the wide search stages.
+func (s *searchCtx) fullPelCostR(ref *plane, m mv, limit int, coarse bool) int {
 	e := s.w.e
 	px, py := s.x0+int(m.c>>3), s.y0+int(m.r>>3)
 	if !e.inBounds(px, py) || abs(int(m.r)) > maxMVPixels*8 || abs(int(m.c)) > maxMVPixels*8 {
@@ -40,6 +46,9 @@ func (s *searchCtx) fullPelCost(ref *plane, m mv, limit int) int {
 	c := s.mvCost(m)
 	if c >= limit {
 		return c
+	}
+	if coarse {
+		return c + 2*sad16h(s.srcY, s.ys, ref.pix[ref.idx(px, py):], ref.stride, (limit-c)/2)
 	}
 	return c + sad16(s.srcY, s.ys, ref.pix[ref.idx(px, py):], ref.stride, limit-c)
 }
@@ -104,15 +113,31 @@ func (w *worker) chooseInter(mbx, mby, ii int, srcY []byte, ys int, srcU, srcV [
 	sadOnly := bc - s.mvCost(bm)
 	subpel := false
 	if sadOnly > e.staticSAD {
-		// pattern search around the best candidate
+		// pattern search around the best candidate; a near-static block only gets the final one-pel refinement
 		step := e.searchStep
+		if sadOnly < e.staticSAD*3/2 {
+			step = 1
+		}
 		for ; step >= 1; step >>= 1 {
-			for iter := 0; iter < 6; iter++ {
+			iters := 3
+			if step < 4 {
+				iters = 2
+			}
+			coarse := step >= 2
+			if coarse {
+				bc = s.fullPelCostR(ref, bm, 1<<30, true)
+			} else {
+				bc = s.fullPelCost(ref, bm, 1<<30)
+			}
+			for iter := 0; iter < iters; iter++ {
 				moved := false
 				c0 := bm
-				for _, d := range [8][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}} {
+				for k, d := range [8][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}} {
+					if k >= 4 && step == 2 {
+						break
+					}
 					c := mv{int16(int(c0.r) + d[0]*step*8), int16(int(c0.c) + d[1]*step*8)}
-					if cc := s.fullPelCost(ref, c, bc); cc < bc {
+					if cc := s.fullPelCostR(ref, c, bc, coarse); cc < bc {
 						bc, bm = cc, c
 						moved = true
 					}
@@ -122,7 +147,8 @@ func (w *worker) chooseInter(mbx, mby, ii int, srcY []byte, ys int, srcU, srcV [
 				}
 			}
 		}
-		if e.speed >= 1 {
+		bc = s.fullPelCost(ref, bm, 1<<30)
+		if e.speed >= 1 && sadOnly > e.staticSAD*3/2 {
 			// sub-pel refinement: half then (speed 2) quarter
 			for _, st := range []int{4, 2} {
 				if st == 2 && e.speed < 2 {

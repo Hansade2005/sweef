@@ -134,6 +134,8 @@ type Encoder struct {
 	firstBuf      []byte
 	lastPackets   int
 	refreshGolden bool
+	lfLevel       []uint8
+	lfInner       []bool
 	nextProbs     vp8.CoeffProbs
 	haveReference bool
 }
@@ -402,7 +404,7 @@ func (e *Encoder) setQ(q int) {
 	e.qs = newQuantSet(e.q)
 	ac := int(e.qs.y1ac)
 	e.lambda = ac/6 + 1
-	e.staticSAD = clampI(8*ac, 256, 700)
+	e.staticSAD = clampI(10*ac, 384, 800)
 	e.intraCheckSAD = 3 * 256
 	e.intraBias = 20 * e.lambda
 	e.roundDC = 118
@@ -488,16 +490,43 @@ func (e *Encoder) encodeFrame(key bool) []byte {
 	return data
 }
 
+// filter runs the loop filter over the reconstruction as a wavefront on the worker goroutines.
 func (e *Encoder) filter(level int, key bool) {
 	n := e.mbw * e.mbh
-	levels := make([]uint8, n)
-	inner := make([]bool, n)
-	for i := range levels {
-		levels[i] = uint8(level)
-		inner[i] = !e.mbOut[i].skip
+	if len(e.lfLevel) != n {
+		e.lfLevel = make([]uint8, n)
+		e.lfInner = make([]bool, n)
 	}
-	img := imageOf(e.cur)
-	vp8.FilterFrame(img, vp8.FilterParams{KeyFrame: key, MBW: e.mbw, MBH: e.mbh, Level: levels, Inner: inner})
+	for i := range e.lfLevel {
+		e.lfLevel[i] = uint8(level)
+		e.lfInner[i] = !e.mbOut[i].skip
+	}
+	lf := vp8.NewLoopFilter(imageOf(e.cur), vp8.FilterParams{KeyFrame: key, MBW: e.mbw, MBH: e.mbh, Level: e.lfLevel, Inner: e.lfInner})
+	for i := range e.prog {
+		e.prog[i].Store(0)
+	}
+	e.nextRow.Store(0)
+	var wg sync.WaitGroup
+	for range e.workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				r := int(e.nextRow.Add(1)) - 1
+				if r >= e.mbh {
+					return
+				}
+				for x := 0; x < e.mbw; x++ {
+					if r > 0 {
+						e.waitRow(r-1, min(x+2, e.mbw))
+					}
+					lf.MB(x, r)
+					e.publishRow(r, x+1)
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 // commit makes the just-encoded frame the new reference state.

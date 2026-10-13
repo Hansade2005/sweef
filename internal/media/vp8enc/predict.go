@@ -229,6 +229,28 @@ func sad16(a []byte, as int, b []byte, bs int, limit int) int {
 	return sum
 }
 
+// sad16h is the SAD of the even rows of two 16x16 blocks.
+func sad16h(a []byte, as int, b []byte, bs int, limit int) int {
+	sum := 0
+	for j := 0; j < 16; j += 2 {
+		x := a[j*as : j*as+16 : j*as+16]
+		y := b[j*bs : j*bs+16 : j*bs+16]
+		s := 0
+		for i := 0; i < 16; i++ {
+			d := int(x[i]) - int(y[i])
+			if d < 0 {
+				d = -d
+			}
+			s += d
+		}
+		sum += s
+		if sum >= limit {
+			return sum
+		}
+	}
+	return sum
+}
+
 // sadBlock is the SAD of two w x h blocks.
 func sadBlock(a []byte, as int, b []byte, bs int, w, h int) int {
 	sum := 0
