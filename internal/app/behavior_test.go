@@ -115,7 +115,7 @@ func TestLastTabClosedQuits(t *testing.T) {
 	srv := pageServer(t)
 	h := newHarness(t, hopts{cfg: Config{InitialURLs: []string{srv.URL + "/"}}})
 	h.waitTitle("Home Page")
-	h.key("ctrl+w")
+	h.keyNoWait("ctrl+w") // the app quits: it may never report idle afterwards
 	select {
 	case err := <-h.done:
 		h.done <- err // let the cleanup see it too

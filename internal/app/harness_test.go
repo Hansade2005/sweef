@@ -146,6 +146,15 @@ func (h *harness) key(chord string) {
 	h.idle()
 }
 
+// keyNoWait sends a chord without waiting for the app to go idle, for chords that end the app: a quitting app
+// may never report idle, and the caller waits for h.done instead.
+func (h *harness) keyNoWait(chord string) {
+	h.t.Helper()
+	for _, e := range headless.KeyEvents(chord) {
+		h.win.Push(e)
+	}
+}
+
 func (h *harness) typeText(s string) {
 	h.t.Helper()
 	for _, e := range headless.TypeEvents(s) {
