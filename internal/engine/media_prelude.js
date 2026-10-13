@@ -1704,7 +1704,18 @@
   // (docs/media-streaming.md), power efficiency is always false (software decoding).
   (function () {
     if (!global.navigator || 'mediaCapabilities' in global.navigator) return;
-    var SMOOTH_MPX_PER_S = 28; // 720p30 in megapixels per second
+    // Megapixels per second the decoder sustains with dropped frames under about 2% on a 4-core machine, per codec
+    // (measured with TestPlaybackQuality, see docs/media-streaming.md): H.264 720p30 = 27.6, VP9 1080p30 = 62.2;
+    // AV1 and HEVC are held at 480p30-and-a-bit because their key frames cost several frame times (AV1 720p30
+    // decodes at 33 fps with a 147 ms 95th percentile) or were not measured (HEVC, VP8).
+    function smoothMpx(ct) {
+      ct = String(ct).toLowerCase();
+      if (/avc[13]|h264/.test(ct)) return 28;
+      if (/vp09|vp9/.test(ct)) return 63;
+      if (/av01|av1/.test(ct)) return 14;
+      if (/hev1|hvc1|hevc/.test(ct)) return 14;
+      return 28;
+    }
     function MediaCapabilities() { illegal(); } tag(MediaCapabilities, 'MediaCapabilities');
     var mc = Object.create(MediaCapabilities.prototype);
     function typeErr(m) { return Promise.reject(new TypeError("Failed to execute 'decodingInfo' on 'MediaCapabilities': " + m)); }
@@ -1726,7 +1737,7 @@
         if (!(v.width > 0) || !(v.height > 0) || !(v.framerate > 0) || !(v.bitrate >= 0)) return typeErr('The video configuration dictionary is missing a valid width, height, bitrate or framerate.');
         supported = supported && check(v.contentType);
         var mpx = v.width * v.height * v.framerate / 1e6;
-        smooth = smooth && mpx <= SMOOTH_MPX_PER_S;
+        smooth = smooth && mpx <= smoothMpx(v.contentType);
       }
       if (cfg.audio) {
         if (badMime(cfg.audio.contentType)) return typeErr('Failed to parse audio contentType: ' + cfg.audio.contentType);

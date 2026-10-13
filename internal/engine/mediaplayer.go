@@ -55,6 +55,10 @@ func (f fixedTracks) EOS() bool {
 // mediaFrameHook, when set (tests), is called whenever a player publishes a picture.
 var mediaFrameHook atomic.Pointer[func(node int64, pts float64, at time.Time)]
 
+// mediaLateHook, when set (tests), receives how late each published picture was: the player clock minus the
+// picture's presentation time, in milliseconds.
+var mediaLateHook atomic.Pointer[func(lateMS float64)]
+
 // PlayerStats are the counters behind getVideoPlaybackQuality().
 type PlayerStats struct {
 	Total, Dropped, Corrupted int64
@@ -569,6 +573,33 @@ func (p *mediaPlayer) audioFailed(gen int) {
 
 // ---- video --------------------------------------------------------------------------------
 
+// aheadPic is a picture decoded before its time, kept until the clock reaches it.
+type aheadPic struct {
+	s   media.Sample
+	pic media.Picture
+}
+
+const (
+	aheadMax    = 6                      // pictures decoded ahead of the clock
+	aheadWindow = 400 * time.Millisecond // how far ahead of the clock (media time at rate 1) the decoder may run
+	// A late decoder: a picture that is decoded late is still shown (video that moves, behind the sound, beats a
+	// frozen frame). Once the clock is resyncLag seconds ahead of the next sample to decode, decoding skips
+	// ahead to the first key frame due within resyncWait seconds (if there is none, it keeps going late).
+	// Pictures that were skipped count as dropped, which is what a page that adapts its quality to
+	// getVideoPlaybackQuality() needs to see.
+	resyncLag  = 0.5
+	resyncWait = 2.5
+)
+
+// videoLoop shows the picture that is due at the player's clock.
+//
+// Playing forward it decodes in decode order, one sample per step, re-reading the clock between steps:
+// pictures decoded early wait in a short queue (so a key frame that takes three frame times does not make the
+// next ones late), a picture that is already late is skipped without decoding when nothing refers to it
+// (non-reference B-frames), a late picture that is decoded anyway is still shown when it is the newest one
+// available (better than a frozen frame), and when the decoder is hopelessly behind it resynchronises on the
+// next key frame. A seek, the first picture and a configuration change decode straight through from the key
+// frame instead.
 func (p *mediaPlayer) videoLoop() {
 	defer p.wg.Done()
 	var (
@@ -578,13 +609,65 @@ func (p *mediaPlayer) videoLoop() {
 		haveDec   bool
 		shown     media.Sample
 		haveShown bool
-		lastPic   media.Picture
+		shownPic  media.Picture
+		ready     []aheadPic // decoded, not yet shown; decode order
 	)
 	nap := func(d time.Duration) {
 		select {
 		case <-p.wake:
 		case <-time.After(d):
 		}
+	}
+	sameCfg := func(a, b *media.TrackConfig) bool {
+		return a == b || (a != nil && b != nil && a.CodecName == b.CodecName && string(a.Cfg) == string(b.Cfg) && a.Width == b.Width)
+	}
+	cfgOf := func(vs *media.TrackStore, s media.Sample) *media.TrackConfig {
+		if s.Cfg != nil {
+			return s.Cfg
+		}
+		c := vs.Config()
+		return &c
+	}
+	// purge forgets pictures that will never be shown (due at or before pts).
+	purge := func(pts float64) {
+		k := 0
+		for _, e := range ready {
+			if e.s.PTS > pts {
+				ready[k] = e
+				k++
+			}
+		}
+		for i := k; i < len(ready); i++ {
+			ready[i] = aheadPic{}
+		}
+		ready = ready[:k]
+	}
+	// present publishes a picture and does the frame accounting.
+	present := func(vstore *media.TrackStore, s media.Sample, pic media.Picture, playing bool) {
+		n := int64(1)
+		again := haveShown && s.DTS == shown.DTS
+		if haveShown && s.PTS > shown.PTS {
+			// frames that fell due since the last picture and were skipped count as dropped
+			if c := vstore.CountPTS(shown.PTS, s.PTS); c > 1 {
+				n = int64(c)
+			}
+		}
+		if !again {
+			p.total.Add(n)
+			if n > 1 && playing {
+				p.dropped.Add(n - 1)
+			}
+		}
+		shown, haveShown, shownPic = s, true, pic
+		purge(s.PTS)
+		resized := p.vs.setPicture(pic)
+		if h := mediaFrameHook.Load(); h != nil {
+			(*h)(p.node, s.PTS, time.Now())
+		}
+		if h := mediaLateHook.Load(); h != nil {
+			(*h)((p.Clock() - s.PTS) * 1000)
+		}
+		p.tab.videoFrameReady(resized)
 	}
 	for !p.closed.Load() {
 		vstore := p.src.Video()
@@ -605,41 +688,106 @@ func (p *mediaPlayer) videoLoop() {
 			continue
 		}
 		forced := p.force.Swap(false)
-		if haveShown && want.DTS == shown.DTS && !forced {
-			if playing {
-				nap(3 * time.Millisecond)
-			} else {
-				nap(60 * time.Millisecond)
+
+		if playing && !forced && haveShown && haveDec {
+			// steady playback
+			best := -1
+			for i, e := range ready {
+				if e.s.PTS <= t+1e-9 && e.s.PTS > shown.PTS && (best < 0 || e.s.PTS > ready[best].s.PTS) {
+					best = i
+				}
 			}
+			if best >= 0 {
+				e := ready[best]
+				ready = append(ready[:best], ready[best+1:]...)
+				present(vstore, e.s, e.pic, playing)
+				continue
+			}
+			nxt, ok2, gap := vstore.Next(decDTS)
+			stepOK := ok2 && !gap && sameCfg(cfgOf(vstore, nxt), decCfg)
+			if want.DTS != shown.DTS && stepOK && want.DTS > decDTS {
+				lag := t - nxt.PTS
+				if lag > resyncLag {
+					// hopelessly behind: skip to the first key frame at or after the clock
+					if k, ok3 := nextKeyFrom(vstore, nxt, t); ok3 && k.DTS != nxt.DTS && k.PTS-t <= resyncWait {
+						dec.Reset()
+						ready = ready[:0]
+						nxt = k
+					}
+				}
+				data, err := nxt.Bytes()
+				if err == nil && lag > 0 && nxt.DTS != want.DTS && dec.Disposable(data) {
+					decDTS = nxt.DTS // late and nothing refers to it: not decoded, counted as dropped when the next picture shows
+					continue
+				}
+				var pc media.Picture
+				if err == nil {
+					pc, err = dec.Decode(data)
+				}
+				decDTS = nxt.DTS
+				if err != nil {
+					p.corrupted.Add(1)
+				} else if pc.Valid() && nxt.PTS > shown.PTS {
+					ready = append(ready, aheadPic{nxt, pc})
+				}
+				continue
+			}
+			if want.DTS == shown.DTS {
+				// nothing new is due: decode ahead
+				if len(ready) < aheadMax && stepOK && nxt.PTS-t < aheadWindow.Seconds()*p.rate {
+					data, err := nxt.Bytes()
+					var pc media.Picture
+					if err == nil {
+						pc, err = dec.Decode(data)
+					}
+					decDTS = nxt.DTS
+					if err != nil {
+						p.corrupted.Add(1)
+					} else if pc.Valid() && nxt.PTS > shown.PTS {
+						ready = append(ready, aheadPic{nxt, pc})
+					}
+					continue
+				}
+				nap(3 * time.Millisecond)
+				continue
+			}
+			// anything else (a gap, a configuration change, a jump backwards) takes the full path below
+		} else if haveShown && want.DTS == shown.DTS && !forced {
+			nap(60 * time.Millisecond)
 			continue
 		}
+
 		key, hasKey := vstore.KeyAtOrBefore(want.DTS)
 		if !hasKey {
 			nap(10 * time.Millisecond)
 			continue
 		}
-		cfg := want.Cfg
-		if cfg == nil {
-			c := vstore.Config()
-			cfg = &c
-		}
-		cfgChanged := dec == nil || decCfg == nil || (decCfg != cfg && !(decCfg.CodecName == cfg.CodecName && string(decCfg.Cfg) == string(cfg.Cfg) && decCfg.Width == cfg.Width))
-		from := key
-		cont := false
-		same := false
-		if haveDec && !cfgChanged && want.DTS >= decDTS-1e-9 {
-			if want.DTS-decDTS < 1e-9 {
-				same = true // the decoder is already at the wanted sample: reuse its picture
-			} else if nxt, ok2, gap := vstore.Next(decDTS); ok2 && !gap && (key.DTS <= decDTS+1e-9 || key.DTS-decDTS < lateJumpSecs) {
-				from, cont = nxt, true
-			}
-		}
+		cfg := cfgOf(vstore, want)
+		cfgChanged := dec == nil || decCfg == nil || !sameCfg(decCfg, cfg)
 		var pic media.Picture
 		failed := false
-		if same {
-			pic = lastPic
+		got := false
+		if haveShown && want.DTS == shown.DTS {
+			pic, got = shownPic, true // shown again (forced): no decoding
 		} else {
+			for i, e := range ready {
+				if e.s.DTS == want.DTS {
+					pic, got = e.pic, true
+					ready = append(ready[:i], ready[i+1:]...)
+					break
+				}
+			}
+		}
+		if !got {
+			from := key
+			cont := false
+			if haveDec && !cfgChanged && want.DTS > decDTS+1e-9 {
+				if nxt, ok2, gap := vstore.Next(decDTS); ok2 && !gap && (key.DTS <= decDTS+1e-9 || key.DTS-decDTS < lateJumpSecs) {
+					from, cont = nxt, true
+				}
+			}
 			if !cont {
+				ready = ready[:0]
 				if cfgChanged {
 					d, err := media.NewVideoDecoder(*cfg)
 					if err != nil {
@@ -666,6 +814,8 @@ func (p *mediaPlayer) videoLoop() {
 					}
 				} else if s.DTS == want.DTS {
 					pic = pc
+				} else if pc.Valid() && s.PTS > want.PTS {
+					ready = append(ready, aheadPic{s, pc}) // displays after the wanted picture (B-frame reordering)
 				}
 				decDTS = s.DTS
 				if s.DTS >= want.DTS-1e-9 || p.closed.Load() {
@@ -682,24 +832,27 @@ func (p *mediaPlayer) videoLoop() {
 			return
 		}
 		if pic.Valid() && !failed {
-			lastPic = pic
-			// frames that fell due since the last picture and were skipped count as dropped
-			n := int64(1)
-			if haveShown && want.PTS > shown.PTS {
-				if c := vstore.CountPTS(shown.PTS, want.PTS); c > 1 {
-					n = int64(c)
-				}
-			}
-			p.total.Add(n)
-			if n > 1 && playing {
-				p.dropped.Add(n - 1)
-			}
-			resized := p.vs.setPicture(pic)
-			if h := mediaFrameHook.Load(); h != nil {
-				(*h)(p.node, want.PTS, time.Now())
-			}
-			p.tab.videoFrameReady(resized)
+			present(vstore, want, pic, playing)
+		} else {
+			purge(want.PTS)
+			shown, haveShown = want, true
 		}
-		shown, haveShown = want, true
 	}
+}
+
+// nextKeyFrom returns the first sync sample at or after the clock (a little before it counts), searching on
+// from from in decode order.
+func nextKeyFrom(vs *media.TrackStore, from media.Sample, clock float64) (media.Sample, bool) {
+	s := from
+	for i := 0; i < 2000; i++ {
+		if s.Key && s.PTS >= clock-0.05 {
+			return s, true
+		}
+		nx, ok, gap := vs.Next(s.DTS)
+		if !ok || gap {
+			return media.Sample{}, false
+		}
+		s = nx
+	}
+	return media.Sample{}, false
 }
