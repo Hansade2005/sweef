@@ -37,6 +37,7 @@ func (a *App) incogContext() *engine.BrowserContext {
 	defer a.mu.Unlock()
 	if a.incogCtx == nil {
 		a.incogCtx = a.eng.NewContext("incognito", engine.ContextOptions{})
+		a.applyCookiePolicy(a.incogCtx)
 		a.dat.eng.SetContextPolicy(a.incogCtx, a.dataLevel()) // private windows save data too
 	}
 	return a.incogCtx
@@ -161,6 +162,7 @@ func (a *App) closeTab(id string) {
 	if !ok {
 		return
 	}
+	a.dropPromptsOfTab(id)
 	next, _ := a.model.CloseTab(id)
 	a.mu.Lock()
 	e := a.pages[id]

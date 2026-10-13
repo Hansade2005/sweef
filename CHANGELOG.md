@@ -9,7 +9,37 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ## [Unreleased]
 
+### Security
+- State is partitioned by top-level site: cookies, `localStorage`, IndexedDB, Cache Storage, the Origin Private File System, service
+  worker registrations, `BroadcastChannel`/`SharedWorker`/Web Locks namespaces and the HTTP cache are keyed by (origin, top-level site)
+  in a third-party context. Third-party cookies are neither sent nor stored unpartitioned; `Partitioned` and `SameSite` are honoured;
+  the Storage Access API is wired to the policy ([docs/storage-partitioning.md](docs/storage-partitioning.md)).
+- `document.cookie` no longer exposes `HttpOnly` cookies; `ClearCookies("")` clears all cookies; the Origin Private File System is no
+  longer shared between a private window and the normal one.
+
 ### Added
+- Dedicated Workers run on a full script VM of their own goroutine: IndexedDB, Cache Storage, `navigator.storage`, the Origin Private
+  File System with `FileSystemSyncAccessHandle`, `fetch`, WebAssembly and nested workers work inside them; real
+  `SharedWorker`, `BroadcastChannel` and `navigator.locks`; structured clone with transferred `MessagePort`s and `ArrayBuffer`s.
+- `<iframe>` documents are loaded as nested browsing contexts: separate origin, window and VM, `postMessage` with origin checks,
+  `parent`/`top`/`frameElement`, same-origin `contentWindow`/`contentDocument`, `sandbox`, `srcdoc`, `X-Frame-Options` and CSP
+  `frame-ancestors`. Frames are not painted or given input yet ([docs/storage-partitioning.md](docs/storage-partitioning.md)).
+- `BrowserContext.SetPartitionPolicy`, `GrantThirdPartyCookies`, `engine.SetHostMap` (resolver override), `Options.DisableFrames`.
+- Real camera, microphone and tab/window capture for `getUserMedia`, `getDisplayMedia` and `enumerateDevices`: V4L2 cameras and PulseAudio/PipeWire microphones on Linux (pure Go), a permission prompt with per-site choices and in-use indicators, `SWEEF_FAKE_DEVICES=1` test devices and `capdemo`; Windows and macOS backends are included but unverified on hardware (`docs/capture.md`).
+
+- Notifications: `Notification`, `showNotification`/`getNotifications`, `notificationclick`/`notificationclose`,
+  `clients.openWindow`, `WindowClient.focus/navigate`, per-site permission with a prompt next to the address bar (quiet UI
+  without a gesture, pause after three dismissals), a site info entry, Do not disturb, Permissions API for notifications
+  and push. Delivery through `org.freedesktop.Notifications` on Linux (tested against a real `dbus-daemon`), balloon
+  notifications on Windows and `NSUserNotification` on macOS (compiled only), and an in-window toast otherwise
+  ([docs/notifications.md](docs/notifications.md)).
+- Web Push: `PushManager`, `PushSubscription`, `push` and `pushsubscriptionchange` events, RFC 8291 decryption and
+  RFC 8292 VAPID (checked against the RFC test vectors), an autopush client, and `sweef pushd`, a self-hostable push
+  relay. No push service is built in: set `SWEEF_PUSH_SERVICE` or the `push.service` setting
+  ([docs/push.md](docs/push.md)).
+- Background Sync (retry 5 min then 15 min, three attempts, `lastChance`), Periodic Background Sync (12 hour floor,
+  granted to bookmarked sites), `navigator.setAppBadge`, Web Locks across tabs and workers
+  ([docs/background-sync.md](docs/background-sync.md)).
 - Apache-2.0 `LICENSE` and `NOTICE`.
 - Contribution and project health files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `SUPPORT.md`,
   `GOVERNANCE.md`, `CODEOWNERS`, issue forms, pull request template, `Makefile`, `.editorconfig`.
@@ -21,8 +51,21 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   and the audio clock driving `<video>`/`<audio>` and Web Audio (`docs/audio-output.md`).
 - Adaptive streaming: MSE rebuilt on parsed coded frames with a native player, decode-ahead and late-frame handling,
   measured decode and dropped-frame numbers, and a per-site status table (`docs/media-streaming.md`); EME/DRM is not supported.
+- WebRTC on pion (pure Go): `RTCPeerConnection`, data channels, transceivers, stats; local IPs hidden behind mDNS by
+  default, no STUN unless the page configures it ([docs/webrtc.md](docs/webrtc.md)).
+- WebAssembly JavaScript API on wazero (pure Go): `Module`, `Instance`, `Memory` (an ArrayBuffer over the live linear memory), `Table`, `Global`, `validate`/`compile`/`instantiate` and the streaming variants, in pages and Web Workers; no threads, `Tag` or `externref` ([docs/webassembly.md](docs/webassembly.md)).
+- IndexedDB, `navigator.storage` and Cache Storage, persisted per origin under the profile's `storage` directory (append-only logs, response bodies on disk, quota, wiped by "Clear browsing data", memory-only in private windows); see docs/storage.md.
+- Service workers: `navigator.serviceWorker`, the install/activate/fetch/message lifecycle, real interception of navigations, `fetch()`, XHR and sub-resource loads, registrations that survive a restart; see docs/service-workers.md.
+- Web platform layer (see `docs/web-platform.md`): real Streams plus Compression/Decompression and TextEncoder/TextDecoder streams, XPath, URLPattern, the Navigation API, ElementInternals, View Transitions, the CSS Highlight and `@property` registries, `Array.fromAsync`, `scheduler`, the Origin Private File System and honest stand-ins for device, credential, payment and Picture-in-Picture APIs, all loaded lazily.
+- WebRTC video and audio: a pure Go VP8 encoder, VP8 and Opus send and receive with jitter buffers, NACK/PLI and bandwidth estimation, `getStats` media entries ([docs/webrtc.md](docs/webrtc.md), [docs/webrtc-interop.md](docs/webrtc-interop.md)).
+
+- Quota management for site storage: a global budget (60% of the profile volume's available space, at most 64 GiB) with at most 20% per origin, exact usage accounting across IndexedDB, Cache Storage, the origin private file system and service worker scripts, `QuotaExceededError` on writes over the cap, eviction of whole least-recently-used best-effort origins under pressure (open connections get `close`), a working `navigator.storage.persist()` decided by the application (bookmarked sites, or a prompt the embedder installs), `estimate()` with real usage and quota, and a per-site storage list with a "Clear" button in Settings > Data. `engine.Options.StorageBudgetMiB`; see docs/storage.md.
+- ADR 0002 (the ordered store, with measurements) and `tools/kvbench`, the harness behind it.
 
 ### Changed
+- The release binary-size budget is 40 MiB (was 32 MiB): WebRTC (pion), WebAssembly (wazero) and the web platform layer add about 12 MiB. The stripped linux/amd64 build is about 34.7 MiB.
+- IndexedDB, Cache Storage and the origin private file system are stored in one disk-resident ordered key-value store per origin (goleveldb) instead of an append-only log replayed into memory: memory no longer depends on database size (a 1 GB database opens in 44 ms and reads at about 30 MB resident), cursors stream, transactions commit as one atomic batch, `clear()` and `deleteDatabase` are O(1), values and cache bodies above 64 KiB are files, and a crash or kill leaves each transaction whole or absent. The origin private file system now persists across restarts and is no longer limited to 256 MiB of memory.
+- `navigator.storage.persist()` no longer always succeeds in a persistent context: it asks the application's policy and answers no without one. `StorageQuotaMiB` is now a cap per origin that overrides the derived one (0 = derived), not a fixed 1 GiB.
 - README shows the real browser UI (first-run setup with the real browser logos, Sidekick, Data Saver, new tab, omnibox), rendered by `uipreview`.
 - The omnibox dropdown uses a lighter shadow (the `--sh-2` token plus a 1 px ring instead of `--sh-3`).
 
@@ -35,6 +78,7 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - Updated `golang.org/x/net` from v0.17.0 to v0.61.0 (HTML parser denial-of-service and XSS-class advisories GO-2024-3333, GO-2025-3595, GO-2026-4440, GO-2026-5025 to 5030, HTTP/2 GO-2024-2687, GO-2026-4918, IDNA GO-2026-5026) and the Go toolchain to 1.26.9 (about 30 standard library advisories in `net/http`, `crypto/tls`, `crypto/x509`, `net/url`, ...). `govulncheck ./...` now reports no vulnerabilities; it runs weekly and on every PR.
 
 ### Removed
+- The append-only log format of IndexedDB and Cache Storage. It never shipped; leftover `idb/` and `caches/` directories are deleted when found, and a store in an unknown or unrecoverable format is kept as `kv.bak` while a new one starts.
 - A 32 MB `appbench` binary that had been committed by mistake (it stays in git history).
 
 ## [0.1.0-alpha] - 2026-10-13 (not yet tagged)

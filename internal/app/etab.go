@@ -92,6 +92,7 @@ func (a *App) newEtab(kind, id string, t *engine.Tab, incog bool) *etab {
 		e.t.SetProgressiveNav(true)
 		e.t.SetUpdateHook(func() { e.requestPaint(false) })
 		e.t.SetWakeHook(e.wakePump)
+		e.t.SetMediaBroker(a.media)
 	}
 	return e
 }

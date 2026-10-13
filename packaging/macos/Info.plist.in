@@ -16,6 +16,9 @@
   <key>LSMinimumSystemVersion</key><string>@MIN_OS@</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>NSHighResolutionCapable</key><true/>
+  <!-- Camera, microphone: macOS terminates a process that touches them without these strings (see internal/capture/avf). -->
+  <key>NSCameraUsageDescription</key><string>Sites you allow can use your camera, for example for video calls. Sweef asks you every time unless you choose to always allow a site.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Sites you allow can use your microphone, for example for calls and voice messages. Sweef asks you every time unless you choose to always allow a site.</string>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
   <!-- Dark mode: the app follows the system appearance (do not set NSRequiresAquaSystemAppearance). -->
   <key>NSRequiresAquaSystemAppearance</key><false/>

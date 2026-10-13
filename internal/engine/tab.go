@@ -134,6 +134,8 @@ type Tab struct {
 	userAgent   string
 	geo         *[2]float64
 	permissions map[string]bool
+	mediaBroker atomic.Pointer[MediaBroker] // permission/display handler of the embedding app (capture_host.go)
+	docPolicy   atomic.Value                // string: the document's Permissions-Policy header
 	offline     bool
 	colorScheme string
 	extraHdrs   map[string]string
@@ -155,7 +157,16 @@ type Tab struct {
 	bindingRing    *Ring
 	downloads      []Download
 
-	ds tabDS // Data Saver state (datasaver.go)
+	ds tabDS  // Data Saver state (datasaver.go)
+	sw tabSW  // service worker control of the document (sw_intercept.go)
+	pw pwaTab // user activation, for the permission and window rules of pwa.go
+
+	bc    *browsingCtx // nested browsing context or worker tab: its place in the tree and its partition (partition.go)
+	winID int64        // identity of this tab's window for cross-window references (frames.go)
+	wk    *bgWorker    // set on the hidden tab of a worker (workers.go)
+	fr    frameSet     // child frames of the document and, for a frame, its pump (frames.go)
+
+	navSite atomic.Pointer[string] // schemeful site of the document being loaded (partition.go)
 
 	asyncImg   atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
 	imgSem     chan struct{}             // images fetched at once
@@ -173,6 +184,7 @@ type Tab struct {
 
 func newTab(e *Engine, id string) *Tab {
 	t := &Tab{
+		winID:       winSeq.Add(1),
 		ID:          id,
 		eng:         e,
 		consoleRing: NewRing(e.opts.ConsoleRingSize),
@@ -192,6 +204,7 @@ func newTab(e *Engine, id string) *Tab {
 	if t.vpH == 0 {
 		t.vpH = 720
 	}
+	winReg.Store(t.winID, t)
 	return t
 }
 
@@ -205,6 +218,9 @@ func (t *Tab) Context() *BrowserContext {
 
 func (t *Tab) close() {
 	if t.closed.CompareAndSwap(false, true) {
+		t.closeFrames()
+		winReg.Delete(t.winID)
+		t.swDocumentGone()
 		dropBitmapSources(t.ID)
 		t.closeAudio()
 		if env := t.ds.env.Load(); env != nil {
@@ -240,6 +256,9 @@ func (t *Tab) Title() string {
 }
 
 func (t *Tab) emit(kind EventKind, data any) {
+	if t.bc != nil {
+		return // frames and workers are not tabs of the engine: their events belong to the page that owns them
+	}
 	t.eng.bus.Publish(Event{Tab: t.ID, Kind: kind, At: time.Now(), Data: data})
 }
 
@@ -263,6 +282,9 @@ func (t *Tab) NavigateProgressive(rawurl string, headers map[string]string) erro
 }
 
 func (t *Tab) navigate(rawurl string, headers map[string]string, progressive bool) error {
+	if t.sw.noNav {
+		return fmt.Errorf("navigation is not available here")
+	}
 	u, err := url.Parse(rawurl)
 	if err != nil {
 		return fmt.Errorf("bad url %q: %w", rawurl, err)
@@ -278,6 +300,10 @@ func (t *Tab) navigate(rawurl string, headers map[string]string, progressive boo
 	t.resetDataForNavigation()
 	t.resetTrace()
 	t0 := time.Now()
+	if t.bc == nil {
+		t.setNavSite(u.String())
+		defer t.setNavSite("") // however it ends, the document's own URL is the page again
+	}
 	res, err := t.fetch(u, headers)
 	t.tspan("doc.fetch", u.String(), t0)
 	if errors.Is(err, errDownloaded) {
@@ -287,6 +313,16 @@ func (t *Tab) navigate(rawurl string, headers map[string]string, progressive boo
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": rawurl, "error": err.Error()}})
 		t.emit(EvFailure, map[string]any{"url": rawurl, "error": err.Error()})
 		return err
+	}
+	if t.isFrame() {
+		if blocked, why := t.frameAncestorsBlocked(res.header, res.finalURL); blocked {
+			t.LogConsole("error", fmt.Sprintf("Refused to display '%s' in a frame because it set '%s'.", res.finalURL, why))
+			t.fr.blocked.Store(true)
+			t.fr.opaque.Store(true)
+			t.setDocument("<!doctype html><html><head></head><body></body></html>", "about:blank", false)
+			return nil
+		}
+		t.fr.blocked.Store(false)
 	}
 	t.setDocument(res.body, res.finalURL, progressive)
 	t.mu.Lock()
@@ -306,6 +342,7 @@ type fetchResult struct {
 	finalURL string
 	status   int
 	har      fnet.RequestRecord
+	header   http.Header // response headers (frame checks)
 }
 
 func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error) {
@@ -326,10 +363,21 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		}
 		return &fetchResult{body: string(data), finalURL: u.String(), status: 200}, nil
 	}
+	t.swPrepareNavigation(u.String())
 	synth, method, target, hdrs, _, err := t.routedRequest("GET", u.String(), headers, "")
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": u.String(), "error": err.Error()}})
 		return nil, err
+	}
+	if synth == nil && method == "GET" { // a service worker may answer the navigation
+		sres, handled, serr := t.swNavigation(target, hdrs)
+		if handled {
+			if serr != nil {
+				t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": target, "error": serr.Error()}})
+				return nil, serr
+			}
+			synth = sres
+		}
 	}
 	rec := fnet.RequestRecord{Method: method, URL: target}
 	start := time.Now()
@@ -344,23 +392,19 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 			return nil, err
 		}
 		req.Header.Set("User-Agent", t.UserAgent())
-		t.setBrowserHeaders(req.Header, req.URL, KindDocument, true)
+		t.setDocumentHeaders(req.Header, req.URL)
 		for k, v := range t.ExtraHeaders() {
 			req.Header.Set(k, v)
 		}
 		for k, v := range hdrs {
 			req.Header.Set(k, v)
 		}
-		// context cookie jar takes precedence over the shared transport jar
-		if ck := t.Context().JarRef().ForURL(target); ck != "" {
-			req.Header.Set("Cookie", ck)
-		}
 		pol := t.policy()
 		rec.Headers = flattenHeaders(req.Header)
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 		t.emit(EvRequest, rec)
 		t.touchNet()
-		mreq, mi := withMeter(req, t.Context(), t, KindDocument, pol)
+		mreq, mi := withMeter(req, t.Context(), t, t.documentKind(), pol)
 		if res, err = t.eng.clientFor(t.Context()).Do(mreq); err != nil {
 			return nil, err
 		}
@@ -380,6 +424,9 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		if res.Request != nil && res.Request.URL != nil {
 			finalURL = res.Request.URL.String()
 		}
+		if t.bc == nil {
+			t.setNavSite(finalURL) // a redirect may have moved the document to another site
+		}
 		b, err = readWithPreloadScan(t, io.LimitReader(res.Body, limit), finalURL)
 	} else {
 		b, err = io.ReadAll(io.LimitReader(res.Body, limit))
@@ -388,15 +435,6 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		return nil, err
 	}
 	body = b
-	// persist Set-Cookie into the tab's context jar
-	for _, sc := range res.Header.Values("Set-Cookie") {
-		if c := parseCookie(sc, t.eng.now()); c != nil {
-			if c.Domain == "" {
-				c.Domain = hostOf(target)
-			}
-			t.Context().JarRef().Set(c)
-		}
-	}
 	rec.Status = res.StatusCode
 	rec.FinalURL = target
 	if res.Request != nil && res.Request.URL != nil {
@@ -404,6 +442,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	}
 	rec.DurationMs = time.Since(start).Milliseconds()
 	rec.ResponseHeaders = flattenHeaders(res.Header)
+	t.setDocPolicy(res.Header.Get("Permissions-Policy"), res.Header.Get("Feature-Policy"))
 	if docMI != nil {
 		if st := docMI.cacheState(); st != "" {
 			h := make(map[string]string, len(rec.Headers)+1)
@@ -417,7 +456,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
 	t.emit(EvResponse, rec)
 	status, text := res.StatusCode, string(body)
-	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec}, nil
+	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec, header: res.Header}, nil
 }
 
 func flattenHeaders(h map[string][]string) map[string]string {
@@ -445,6 +484,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	doc.SetMutationListener(func(m fnet.Mutation) {
 		t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(), Data: m})
 		t.emit(EvDomMutated, m)
+		t.frameMutation(m)
 	})
 	if w, _, _, _, _ := t.Viewport(); w > 0 {
 		doc.SetLayoutWidth(w)
@@ -454,6 +494,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	ts := time.Now()
 	t.applyStyles(doc)
 	t.tspan("styles.ready", "", ts)
+	t.closeFrames() // the frames of the document that is being replaced
 	t.mu.Lock()
 	t.html = htmlSrc
 	t.dom = doc
@@ -465,6 +506,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	old := t.js
 	t.js = nil
 	t.mu.Unlock()
+	t.swDocumentCommitted(finalURL)
 	// Freeing every object the previous page allocated takes milliseconds;
 	// nothing can reach the old VM any more, so do it off the critical path.
 	if old != nil {
@@ -474,7 +516,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	// Pages with no scripts, no inline handlers and no init scripts get no
 	// VM at all: there is nothing to run, and a navigation stays at the cost
 	// of a fetch and a parse. A VM is created on demand by Evaluate.
-	if !t.eng.opts.DisableJS && (len(initScripts) > 0 || doc.NeedsScript()) {
+	if !t.eng.opts.DisableJS && t.scriptsAllowed() && (len(initScripts) > 0 || doc.NeedsScript()) {
 		j := newJSVM(t, doc, finalURL)
 		t.mu.Lock()
 		t.js = j
@@ -485,6 +527,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 			for _, s := range initScripts {
 				_, _ = j.run(s.Source, s.Name)
 			}
+			t.scanFrames() // the document is parsed: its frames start loading while its scripts run
 			pl := newProgLoad(t, j, doc, finalURL, progressive)
 			t.pl.Store(pl)
 			if progressive {
@@ -499,6 +542,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 			return
 		}
 	}
+	t.scanFrames()
 	t.finishLoad(finalURL)
 }
 
@@ -642,6 +686,9 @@ func (t *Tab) ensureJS() (*jsVM, error) {
 	if t.eng.opts.DisableJS {
 		return nil, fmt.Errorf("javascript is disabled (--no-js)")
 	}
+	if !t.scriptsAllowed() {
+		return nil, fmt.Errorf("scripts are blocked by the frame's sandbox")
+	}
 	if d == nil {
 		return nil, fmt.Errorf("no document loaded")
 	}
@@ -759,9 +806,6 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	for k, v := range t.ExtraHeaders() {
 		req.Header.Set(k, v)
 	}
-	if ck := t.Context().JarRef().ForURL(rawurl); ck != "" {
-		req.Header.Set("Cookie", ck)
-	}
 	rec := fnet.RequestRecord{Method: "POST", URL: rawurl, Headers: flattenHeaders(req.Header)}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 	start := time.Now()
@@ -773,14 +817,6 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
-	for _, sc := range res.Header.Values("Set-Cookie") {
-		if c := parseCookie(sc, t.eng.now()); c != nil {
-			if c.Domain == "" {
-				c.Domain = res.Request.URL.Hostname()
-			}
-			t.Context().JarRef().Set(c)
-		}
-	}
 	rec.Status = res.StatusCode
 	rec.FinalURL = res.Request.URL.String()
 	rec.DurationMs = time.Since(start).Milliseconds()

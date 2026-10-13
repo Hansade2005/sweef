@@ -30,6 +30,7 @@ import (
 	"github.com/sweefbrowser/sweef/internal/app/state"
 	"github.com/sweefbrowser/sweef/internal/app/store"
 	"github.com/sweefbrowser/sweef/internal/engine"
+	"github.com/sweefbrowser/sweef/internal/notify"
 	"github.com/sweefbrowser/sweef/internal/shell"
 )
 
@@ -73,6 +74,11 @@ type Config struct {
 	DataEngine DataEngine
 	// Now overrides the clock the data budget uses (tests).
 	Now func() time.Time
+	// NotifySink replaces the desktop notification service (tests pass a notify.Recorder). Nil: the platform's
+	// service, opened when the first notification is shown, and an in-window toast where there is none.
+	NotifySink notify.Sink
+	// PushService overrides the push.service setting and SWEEF_PUSH_SERVICE (tests).
+	PushService string
 }
 
 // App is the browser.
@@ -84,6 +90,7 @@ type App struct {
 
 	prof     *store.Profile
 	incog    *store.Profile // lazily created in-memory profile for incognito tabs
+	sprompt  storagePrompt  // asks the person whether a site may keep its storage (siteusage.go)
 	model    *state.Model
 	winID    int
 	comp     *compositor.Compositor
@@ -154,6 +161,8 @@ type App struct {
 	fullscreen          bool
 	ovl                 overlayState
 	dat                 dataSaver
+	media               *appMedia // camera, microphone and screen-share permissions (media.go)
+	pw                  *pwaApp   // notifications, push and background sync (notifications.go); nil in a private window
 }
 
 type rect struct{ X, Y, W, H float64 }
@@ -242,13 +251,20 @@ func New(cfg Config) (*App, error) {
 		o.DefaultUserAgent = userAgent(cfg.UserAgent)
 		if a.prof.Dir != "" {
 			o.CacheDir = filepath.Join(a.prof.Dir, "cache")
+			// IndexedDB, Cache Storage and service workers of the normal window; private windows run in
+			// their own engine context without a directory, so they never reach the disk
+			o.StorageDir = filepath.Join(a.prof.Dir, "storage")
 		} else {
 			o.CacheDir = "off"
 		}
 		a.eng = engine.New(o)
 		a.ownE = true
 	}
+	// navigator.storage.persist(): bookmarked sites and sites the person agrees to; everyone else is refused
+	a.eng.DefaultContext().SiteStorage().SetPersistPolicy(a.storagePersistPolicy)
 	a.initDataSaver()
+	a.applyCookiePolicy(a.eng.DefaultContext())
+	a.initPWA()
 	// the app's own HTTP clients count toward "used" like page traffic
 	if ct := a.eng.DefaultContext().CountedTransport(); ct != nil {
 		a.favicons.cli.Transport = ct
@@ -257,6 +273,7 @@ func New(cfg Config) (*App, error) {
 	if at, ok := cfg.Agent.(AgentAttacher); ok {
 		at.AttachApp(a)
 	}
+	a.media = newAppMedia(a)
 	a.startChrome()
 	return a, nil
 }
@@ -512,6 +529,9 @@ func (a *App) shutdown() error {
 		_ = a.eng.Close()
 	}
 	a.wg.Wait()
+	if a.pw != nil {
+		_ = a.pw.sink.Shutdown()
+	}
 	if a.incog != nil {
 		_ = a.incog.Close()
 	}

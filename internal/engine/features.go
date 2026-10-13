@@ -183,11 +183,15 @@ var errRouteAbort = errors.New("net::ERR_FAILED (aborted by route)")
 func (t *Tab) routedRequest(method, rawurl string, headers map[string]string, body string) (resp *http.Response, outMethod, outURL string, outHeaders map[string]string, outBody string, err error) {
 	outMethod, outURL, outHeaders, outBody = method, rawurl, headers, body
 	t.recordRequestBody(method, rawurl, body)
-	r := t.matchRoute(method, rawurl, body)
+	rt := t // a frame's requests are routed by the page it is in
+	if t.isFrame() && t.bc.top != nil {
+		rt = t.bc.top
+	}
+	r := rt.matchRoute(method, rawurl, body)
 	if r == nil {
 		// legacy GET-only rules installed through Tab.Route
 		if method == "GET" {
-			if code, rbody, matched := t.interceptGet(rawurl); matched {
+			if code, rbody, matched := rt.interceptGet(rawurl); matched {
 				if code == 0 {
 					return nil, "", "", nil, "", errRouteAbort
 				}
@@ -454,9 +458,6 @@ func (t *Tab) DownloadURL(rawurl, name string) (Download, error) {
 		}
 		for k, v := range hdrs {
 			req.Header.Set(k, v)
-		}
-		if ck := t.Context().JarRef().ForURL(outURL); ck != "" {
-			req.Header.Set("Cookie", ck)
 		}
 		t.touchNet()
 		req, _ = withMeter(req, t.Context(), t, KindOther, t.policy())

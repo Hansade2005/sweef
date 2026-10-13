@@ -43,6 +43,8 @@ type httpResp struct {
 	aborted  bool  // the size cap tripped; body is empty
 	synth    bool
 
+	statusText string // reason phrase to report instead of the standard one (service worker responses)
+
 	fromCache  bool   // answered by the HTTP cache (hit, 304 revalidation or stale-if-error)
 	cachedXfer int64  // what the stored response cost when it was downloaded (for budgets and savings)
 	cacheState string // see meterInfo.cacheState
@@ -86,6 +88,9 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	if err != nil {
 		return nil, err
 	}
+	if r, handled, err := t.swFetch(o, abs, kind); handled { // a service worker controls the document
+		return r, err
+	}
 	if t.IsOfflineMode() {
 		return nil, fmt.Errorf("TypeError: Failed to fetch (offline)")
 	}
@@ -119,20 +124,13 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	if ck := t.Context().JarRef().ForURL(abs); ck != "" && !o.anonymous {
-		req.Header.Set("Cookie", ck)
-	}
 	rec := fnet.RequestRecord{Method: req.Method, URL: abs, Headers: flattenHeaders(req.Header)}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 	start := time.Now()
 	req, mi := withMeter(req, t.Context(), t, kind, t.policy())
 	mi.maxBody = o.maxBody
+	mi.noCreds = o.anonymous
 	cl := t.eng.clientFor(t.Context())
-	if o.anonymous { // the client's own cookie jar must not add or keep cookies either
-		c2 := *cl
-		c2.Jar = nil
-		cl = &c2
-	}
 	res, err := cl.Do(req)
 	defer func() { t.tspan("http."+string(kind), abs, start) }()
 	if err != nil {
@@ -167,17 +165,6 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 		}
 		if rerr != nil {
 			break
-		}
-	}
-	for _, sc := range res.Header.Values("Set-Cookie") {
-		if o.anonymous {
-			break
-		}
-		if c := parseCookie(sc, t.eng.now()); c != nil {
-			if c.Domain == "" {
-				c.Domain = res.Request.URL.Hostname()
-			}
-			t.Context().JarRef().Set(c)
 		}
 	}
 	out.body = data
@@ -220,7 +207,11 @@ func (t *Tab) httpForScriptKind(kind DataKind, method, rawurl string, headers ma
 	for k, v := range r.header {
 		hdr[strings.ToLower(k)] = strings.Join(v, ", ")
 	}
-	out := map[string]any{"status": r.status, "statusText": http.StatusText(r.status), "headers": hdr, "body": string(r.body), "url": r.finalURL}
+	statusText := http.StatusText(r.status)
+	if r.statusText != "" {
+		statusText = r.statusText
+	}
+	out := map[string]any{"status": r.status, "statusText": statusText, "headers": hdr, "body": string(r.body), "url": r.finalURL}
 	if !r.synth && !utf8.Valid(r.body) {
 		// binary payload: the text form above is lossy, so also hand over the exact bytes
 		out["b64"] = base64.StdEncoding.EncodeToString(r.body)

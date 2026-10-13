@@ -50,6 +50,10 @@ type Options struct {
 	WarmVMs          int    // JS VMs kept pre-built so navigations skip prelude setup (default 1)
 	DownloadsDir     string // where downloads are saved (default $TMPDIR/sweef-downloads)
 	CacheDir         string // on-disk bytecode cache ("" = $SWEEF_CACHE_DIR or user cache dir; "off" disables)
+	StorageDir       string // profile storage root of the default context: IndexedDB, Cache Storage, service workers ("" = memory only; other contexts: ContextOptions.StorageDir)
+	StorageQuotaMiB  int    // hard cap per origin for all site storage in MiB (0 = 20% of the budget)
+	StorageBudgetMiB int    // global budget of all origins in MiB (0 = 60% of the profile volume's free space, at most 64 GiB); see docs/storage.md
+	DisableFrames    bool   // do not load <iframe> documents (frames.go): pages see no content window, as before frames existed
 }
 
 func DefaultOptions() Options {
@@ -351,6 +355,9 @@ func (e *Engine) Close() error {
 	e.mu.Unlock()
 	for _, t := range tabs {
 		t.close()
+	}
+	for _, c := range ctxs {
+		c.siteClose()
 	}
 	e.cancel()
 	e.vms.close()

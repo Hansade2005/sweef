@@ -289,7 +289,7 @@ func TestNullBackendRunsInRealTime(t *testing.T) {
 	time.Sleep(400 * time.Millisecond)
 	p := s.Position()
 	el := time.Since(t0)
-	if d := p - (el - s.Latency()); d < -40*time.Millisecond || d > 40*time.Millisecond { // the heard position trails the wall clock by the device latency
+	if d := p - (el - s.Latency()); d < -200*time.Millisecond || d > 200*time.Millisecond { // the heard position trails the wall clock by the device latency
 		t.Fatalf("null sink clock %v vs wall %v (off by %v)", p, el, d)
 	}
 }

@@ -2,6 +2,7 @@ package audioout
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"strings"
@@ -299,7 +300,12 @@ func Default() *Output {
 		defOut = mustOutput(NewNullBackend())
 		return defOut
 	}
-	if b, err := newDeviceBackend(); err == nil {
+	// CI runners have no sound card (and probing one can be slow): the null sink is used without trying
+	if os.Getenv("CI") != "" && os.Getenv("SWEEF_AUDIO") == "" {
+		defOut = mustOutput(NewNullBackend())
+		return defOut
+	}
+	if b, err := openDeviceBackend(deviceOpenTimeout); err == nil {
 		if o, err := NewOutput(b); err == nil {
 			defOut = o
 			return o
@@ -307,6 +313,34 @@ func Default() *Output {
 	}
 	defOut = mustOutput(NewNullBackend())
 	return defOut
+}
+
+// deviceOpenTimeout bounds how long Default waits for the platform audio API; a driver that hangs must not hang
+// the browser (the null sink takes over and playback timing is unaffected).
+const deviceOpenTimeout = 2 * time.Second
+
+// openDeviceBackend runs newDeviceBackend on its own goroutine and gives up after limit.
+func openDeviceBackend(limit time.Duration) (Backend, error) {
+	type res struct {
+		b   Backend
+		err error
+	}
+	ch := make(chan res, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- res{nil, fmt.Errorf("audio device: %v", r)}
+			}
+		}()
+		b, err := newDeviceBackend()
+		ch <- res{b, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.b, r.err
+	case <-time.After(limit):
+		return nil, errors.New("audio device did not open in time")
+	}
 }
 
 // SetDefault replaces the process-wide output (tests install a TestSink).

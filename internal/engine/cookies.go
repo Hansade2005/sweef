@@ -3,6 +3,7 @@ package engine
 import (
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -20,18 +21,24 @@ type Cookie struct {
 	Secure   bool   `json:"secure"`
 	SameSite int8   `json:"sameSite"` // 0 default,1 strict,2 lax,3 none
 	Creation int64  `json:"creation"`
+	// Partitioned is the Partitioned attribute (CHIPS): the cookie is keyed by the top-level site it was set under.
+	Partitioned bool `json:"partitioned,omitempty"`
+	// Partition is the top-level site ("https://example.com") the cookie is double-keyed with; "" = the unpartitioned
+	// jar. Third-party contexts keep their cookies here (partition.go).
+	Partition string `json:"partitionKey,omitempty"`
 }
 
 // Jar is a small RFC-6265-flavoured cookie store shared by one BrowserContext.
-// Capped at 1024 entries with coarse LRU eviction — bounded memory again.
+// Capped at 1024 entries with coarse LRU eviction — bounded memory again. The unpartitioned jar and one jar per
+// top-level site (the partitions) live side by side; a request reads the ones its context allows (see Header).
 type Jar struct {
 	mu  sync.Mutex
-	m   map[string]map[string]*Cookie // host -> name -> cookie
+	m   map[string]map[string]map[string]*Cookie // partition ("" = none) -> host -> name -> cookie
 	n   int
 	cap int
 }
 
-func NewJar() *Jar { return &Jar{m: map[string]map[string]*Cookie{}, cap: 1024} }
+func NewJar() *Jar { return &Jar{m: map[string]map[string]map[string]*Cookie{}, cap: 1024} }
 
 func jarHost(u string) string {
 	if pu, err := url.Parse(u); err == nil {
@@ -48,34 +55,69 @@ func (j *Jar) Set(c *Cookie) {
 	if host == "" {
 		return
 	}
-	bag, ok := j.m[host]
+	hosts, ok := j.m[c.Partition]
+	if !ok {
+		hosts = map[string]map[string]*Cookie{}
+		j.m[c.Partition] = hosts
+	}
+	bag, ok := hosts[host]
 	if !ok {
 		bag = map[string]*Cookie{}
-		j.m[host] = bag
+		hosts[host] = bag
 	}
-	if _, exists := bag[c.Name]; !exists && j.n >= j.cap {
-		j.evictLocked()
+	if _, exists := bag[c.Name]; !exists {
+		if j.n >= j.cap {
+			j.evictLocked()
+		}
+		j.n++
 	}
 	cc := *c
 	bag[c.Name] = &cc
-	j.n++
 }
 
 func (j *Jar) evictLocked() {
-	for host, bag := range j.m {
+	// partitioned cookies go first: the unpartitioned jar holds what the person signed in with
+	for pk, hosts := range j.m {
+		if pk == "" {
+			continue
+		}
+		if j.evictFromLocked(pk, hosts) {
+			return
+		}
+	}
+	j.evictFromLocked("", j.m[""])
+}
+
+func (j *Jar) evictFromLocked(pk string, hosts map[string]map[string]*Cookie) bool {
+	for host, bag := range hosts {
 		for name := range bag {
 			delete(bag, name)
 			j.n--
 			if len(bag) == 0 {
-				delete(j.m, host)
+				delete(hosts, host)
 			}
-			return
+			if len(hosts) == 0 {
+				delete(j.m, pk)
+			}
+			return true
 		}
 	}
+	return false
 }
 
-// ForURL renders the Cookie header for a request URL ("" if none).
-func (j *Jar) ForURL(rawurl string) string {
+// cookieQuery says which cookies a read may see.
+type cookieQuery struct {
+	Unpart    bool   // include the unpartitioned jar
+	Partition string // include this partition ("" = none)
+	Script    bool   // a script's view (document.cookie): no HttpOnly cookies
+	Cross     bool   // a cross-site context: only SameSite=None cookies are available
+}
+
+// ForURL renders the Cookie header for a request URL from the unpartitioned jar ("" if none).
+func (j *Jar) ForURL(rawurl string) string { return j.Header(rawurl, cookieQuery{Unpart: true}) }
+
+// Header renders the Cookie header for a request URL from the jars the query allows.
+func (j *Jar) Header(rawurl string, q cookieQuery) string {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	pu, err := url.Parse(rawurl)
@@ -84,33 +126,60 @@ func (j *Jar) ForURL(rawurl string) string {
 	}
 	host := strings.TrimPrefix(pu.Hostname(), "www.")
 	now := time.Now().Unix()
-	var parts []string
-	for h, bag := range j.m {
-		if h != host && !strings.HasSuffix(host, "."+h) {
-			continue
-		}
-		for _, c := range bag {
-			if c.Expires > 0 && c.Expires < now {
+	secureOK := pu.Scheme == "https" || loopbackHost(pu.Hostname())
+	var picked []*Cookie
+	scan := func(pk string) {
+		for h, bag := range j.m[pk] {
+			if h != host && !strings.HasSuffix(host, "."+h) {
 				continue
 			}
-			if c.Secure && pu.Scheme != "https" {
-				continue
+			for _, c := range bag {
+				if c.Expires > 0 && c.Expires < now {
+					continue
+				}
+				if c.Secure && !secureOK {
+					continue
+				}
+				if q.Script && c.HttpOnly {
+					continue
+				}
+				if q.Cross && c.SameSite != 3 {
+					continue
+				}
+				picked = append(picked, c)
 			}
-			parts = append(parts, c.Name+"="+c.Value)
 		}
+	}
+	if q.Unpart {
+		scan("")
+	}
+	if q.Partition != "" {
+		scan(q.Partition)
+	}
+	sort.Slice(picked, func(a, b int) bool {
+		if picked[a].Creation != picked[b].Creation {
+			return picked[a].Creation < picked[b].Creation
+		}
+		return picked[a].Name < picked[b].Name
+	})
+	parts := make([]string, 0, len(picked))
+	for _, c := range picked {
+		parts = append(parts, c.Name+"="+c.Value)
 	}
 	return strings.Join(parts, "; ")
 }
 
-// All returns every stored cookie (unsorted).
+// All returns every stored cookie of every partition (unsorted).
 func (j *Jar) All(_ string) []*Cookie {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	var out []*Cookie
-	for _, bag := range j.m {
-		for _, c := range bag {
-			cc := *c
-			out = append(out, &cc)
+	for _, hosts := range j.m {
+		for _, bag := range hosts {
+			for _, c := range bag {
+				cc := *c
+				out = append(out, &cc)
+			}
 		}
 	}
 	return out
@@ -119,14 +188,12 @@ func (j *Jar) All(_ string) []*Cookie {
 // Replace swaps in a new cookie list (used by ClearCookies).
 func (j *Jar) Replace(list []*Cookie) {
 	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.m = map[string]map[string]*Cookie{}
+	j.m = map[string]map[string]map[string]*Cookie{}
 	j.n = 0
 	j.mu.Unlock()
 	for _, c := range list {
 		j.Set(c)
 	}
-	j.mu.Lock()
 }
 
 // Attach installs the jar onto an http.Client via a transport RoundTrip hook,
@@ -179,6 +246,8 @@ func ParseSetCookie(h string, ctx *url.URL) *Cookie {
 			c.HttpOnly = true
 		case lp == "secure":
 			c.Secure = true
+		case lp == "partitioned":
+			c.Partitioned = true
 		case strings.HasPrefix(lp, "domain="):
 			c.Domain = strings.TrimPrefix(strings.TrimPrefix(p[7:], "."), "www.")
 		case strings.HasPrefix(lp, "path="):

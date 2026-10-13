@@ -376,6 +376,7 @@
 
   function closeRes(s) {
     if (s.pl) { plClose(s.el, s); }
+    if (s.rtcDetach) { try { s.rtcDetach(); } catch (e) { /* ignore */ } } // WebRTC stream playback (webrtc_prelude.js)
     if (s.h) { try { sw.mediaClose(s.h); } catch (e) { /* ignore */ } }
     s.h = 0; s.info = null; s.bufCache = null;
     if (s.mse) { s.mse.detach(); s.mse = null; }
@@ -394,6 +395,7 @@
     s.loadId++;
     s.evGen = (s.evGen || 0) + 1;
     var id = s.loadId;
+    if (s.capPrev) { s.capPrev = false; try { sw.capUnbindPreview(s.node); } catch (e) { /* ignore */ } }
     s.adopted = true;
     if (s.timer) { _clearTimeout(s.timer); s.timer = null; }
     if (s.net === 1 || s.net === 2) ev(el, 'abort');
@@ -507,6 +509,17 @@
       var res = sw.mediaOpenBytes(b64OfBytes(ms._bytes || new Uint8Array(0)));
       if (res.ok) { s.h = res.h; s.info = res.info; s.streamLike = false; s.frameMode = res.frameMode; return onMetadata(el, s, id); }
       s.error = makeError(4, 'MEDIA_ELEMENT_ERROR: Format error'); s.net = 3; ev(el, 'error'); return;
+    }
+    // WebRTC (webrtc_prelude.js): a stream with received video becomes ready with its first frame
+    var rtcDeferred = false;
+    try { rtcDeferred = !!(global.__swStreamAttach && global.__swStreamAttach(el, ms, { state: s, setReady: setReady, ev: ev })); } catch (e) { reportErr(e); }
+    if (rtcDeferred) { s.net = 1; return; }
+    if (ms instanceof global.MediaStream && isVideo(el)) { // a live camera or screen track: show its frames
+      var vt = ms.getVideoTracks().filter(function (t) { return t._t.cap && t._t.ready === 'live'; })[0];
+      if (vt) {
+        s.videoW = vt._t.settings.width || 0; s.videoH = vt._t.settings.height || 0; s.fps = vt._t.settings.frameRate || 30;
+        try { bindFrames(el, 0); s.capPrev = !!sw.capBindPreview(s.node, vt._t.id); } catch (e) { /* ignore */ }
+      }
     }
     ev(el, 'durationchange');
     s.ready = 1; ev(el, 'loadedmetadata');
@@ -1182,26 +1195,61 @@
   function uuid() { try { return global.crypto.randomUUID(); } catch (e) { return String(Math.random()).slice(2) + String(Date.now()); } }
   function MediaStreamTrack() { illegal(); }
   derive(MediaStreamTrack, EventTarget); tag(MediaStreamTrack, 'MediaStreamTrack');
+  // Tracks made by getUserMedia / getDisplayMedia carry _t.cap = true and live in Go (capture_host.go): their
+  // settings and capabilities are what the device really delivers, and stop()/enabled/applyConstraints reach it.
+  var capTracks = {};
   global.__swMakeTrack = function (kind, label, extra) {
     var t = Object.create(MediaStreamTrack.prototype); EventTarget.call(t);
-    Object.defineProperty(t, '_t', { value: { kind: kind, label: label || '', id: uuid(), enabled: true, ready: 'live', extra: extra || {}, hint: '' } });
+    Object.defineProperty(t, '_t', { value: { kind: kind, label: label || '', id: uuid(), enabled: true, ready: 'live', extra: extra || {}, hint: '', cons: {} } });
     return t;
   };
+  function capTrack(info, cons) {
+    var t = Object.create(MediaStreamTrack.prototype); EventTarget.call(t);
+    Object.defineProperty(t, '_t', { value: { kind: info.kind, label: info.label || '', id: info.id, enabled: true, ready: 'live', cap: true, settings: info.settings || {}, caps: info.capabilities || {}, extra: {}, hint: '', cons: cons || {}, source: info.source } });
+    capTracks[info.id] = t;
+    return t;
+  }
+  function endTrack(t, fire) {
+    if (t._t.ready === 'ended') return;
+    t._t.ready = 'ended'; delete capTracks[t._t.id];
+    if (fire) { var ev = new Event('ended'); t.dispatchEvent(ev); }
+  }
+  function copyJSON(o) { try { return JSON.parse(JSON.stringify(o)); } catch (e) { return {}; } }
   [['kind', 'kind'], ['label', 'label'], ['id', 'id'], ['readyState', 'ready']].forEach(function (p) { defGetter(MediaStreamTrack.prototype, p[0], function () { return this._t[p[1]]; }); });
-  defGetter(MediaStreamTrack.prototype, 'enabled', function () { return this._t.enabled; }, function (v) { this._t.enabled = !!v; });
+  defGetter(MediaStreamTrack.prototype, 'enabled', function () { return this._t.enabled; }, function (v) { v = !!v; this._t.enabled = v; if (this._t.cap && this._t.ready === 'live') { try { sw.capEnable(this._t.id, v); } catch (e) { /* ignore */ } } });
   defGetter(MediaStreamTrack.prototype, 'muted', function () { return false; });
   defGetter(MediaStreamTrack.prototype, 'contentHint', function () { return this._t.hint; }, function (v) { this._t.hint = String(v); });
   defGetter(MediaStreamTrack.prototype, 'isolated', function () { return false; });
-  defMethod(MediaStreamTrack.prototype, 'stop', function () { this._t.ready = 'ended'; });
-  defMethod(MediaStreamTrack.prototype, 'clone', function () { var c = global.__swMakeTrack(this._t.kind, this._t.label, this._t.extra); c._t.enabled = this._t.enabled; return c; });
+  defMethod(MediaStreamTrack.prototype, 'stop', function () {
+    var t = this._t; if (t.ready === 'ended') return;
+    t.ready = 'ended';
+    if (t.cap) { delete capTracks[t.id]; try { sw.capStop(t.id); } catch (e) { /* ignore */ } }
+  });
+  defMethod(MediaStreamTrack.prototype, 'clone', function () {
+    var t = this._t;
+    if (t.cap) {
+      var info = t.ready === 'live' ? sw.capClone(t.id) : null;
+      if (!info) { var dead = global.__swMakeTrack(t.kind, t.label, {}); dead._t.ready = 'ended'; return dead; }
+      var c = capTrack(info, copyJSON(t.cons)); c._t.enabled = t.enabled; return c;
+    }
+    var c2 = global.__swMakeTrack(t.kind, t.label, t.extra); c2._t.enabled = t.enabled; return c2;
+  });
   defMethod(MediaStreamTrack.prototype, 'getSettings', function () {
     var t = this._t;
+    if (t.cap) return copyJSON(t.settings);
     if (t.kind === 'audio') return { deviceId: t.extra.deviceId || '', groupId: '', sampleRate: 48000, channelCount: 1, echoCancellation: true, autoGainControl: true, noiseSuppression: true, latency: 0.01, sampleSize: 16 };
     return { deviceId: t.extra.deviceId || '', groupId: '', width: t.extra.width || 640, height: t.extra.height || 480, frameRate: t.extra.frameRate || 30, aspectRatio: (t.extra.width || 640) / (t.extra.height || 480), facingMode: 'user', resizeMode: 'none' };
   });
-  defMethod(MediaStreamTrack.prototype, 'getCapabilities', function () { return {}; });
-  defMethod(MediaStreamTrack.prototype, 'getConstraints', function () { return {}; });
-  defMethod(MediaStreamTrack.prototype, 'applyConstraints', function () { return Promise.resolve(); });
+  defMethod(MediaStreamTrack.prototype, 'getCapabilities', function () { return this._t.cap ? copyJSON(this._t.caps) : {}; });
+  defMethod(MediaStreamTrack.prototype, 'getConstraints', function () { return copyJSON(this._t.cons); });
+  defMethod(MediaStreamTrack.prototype, 'applyConstraints', function (c) {
+    var t = this._t, self = this;
+    if (c !== undefined && (c === null || typeof c !== 'object')) return Promise.reject(new TypeError("Failed to execute 'applyConstraints' on 'MediaStreamTrack': The provided value is not of type 'MediaTrackConstraints'."));
+    c = c || {};
+    if (!t.cap) { t.cons = copyJSON(c); return Promise.resolve(); }
+    if (t.ready !== 'live') return Promise.reject(dex('The track has ended', 'InvalidStateError'));
+    return capCall('apply', { id: t.id, constraints: c }).then(function (r) { t.settings = r.settings; t.cons = copyJSON(c); });
+  });
   ['ended', 'mute', 'unmute'].forEach(function (n) { defGetter(MediaStreamTrack.prototype, 'on' + n, function () { return (this._h || {})[n] || null; }, function (v) { if (!this._h) Object.defineProperty(this, '_h', { value: {} }); var self = this; if (!this._h['r' + n]) { this._h['r' + n] = 1; this.addEventListener(n, function (e) { var f = self._h[n]; if (typeof f === 'function') f.call(self, e); }); } this._h[n] = v; }); });
   global.MediaStreamTrack = MediaStreamTrack;
 
@@ -1227,29 +1275,97 @@
   ['addtrack', 'removetrack', 'active', 'inactive'].forEach(function (n) { defGetter(MediaStream.prototype, 'on' + n, function () { return (this._h || {})[n] || null; }, function (v) { if (!this._h) Object.defineProperty(this, '_h', { value: {} }); var self = this; if (!this._h['r' + n]) { this._h['r' + n] = 1; this.addEventListener(n, function (e) { var f = self._h[n]; if (typeof f === 'function') f.call(self, e); }); } this._h[n] = v; }); });
   global.MediaStream = MediaStream;
 
-  // ======================= mediaDevices / EME / recorder / speech ================================
-  var fake = false; try { fake = !!sw.mediaFakeDevices(); } catch (e) { fake = false; }
-  function fakeMode() { return fake || global.__swFakeMediaDevices === true; }
-  var devices = (function () {
+  // ======================= mediaDevices / permissions / EME / recorder / speech ==================
+  // Requests go to Go (capture_host.go) and come back as __swCapEvent. Promises wait in capWait.
+  var capSeq = 0, capWait = {};
+  function capCall(kind, payload) {
+    return new Promise(function (resolve, reject) {
+      var tok = ++capSeq; capWait[tok] = { resolve: resolve, reject: reject };
+      try { sw.capRequest(tok, kind, JSON.stringify(payload)); } catch (e) { delete capWait[tok]; reject(dex(String(e && e.message || e), 'NotReadableError')); }
+    });
+  }
+  function OverconstrainedError(constraint, message) {
+    if (!(this instanceof OverconstrainedError)) throw new TypeError("Failed to construct 'OverconstrainedError': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+    var e = dex(message === undefined ? '' : String(message), 'OverconstrainedError');
+    Object.setPrototypeOf(e, OverconstrainedError.prototype);
+    Object.defineProperty(e, 'constraint', { value: String(constraint), enumerable: true, configurable: true });
+    return e;
+  }
+  OverconstrainedError.prototype = Object.create(global.DOMException.prototype, { constructor: { value: OverconstrainedError, writable: true, configurable: true } });
+  tag(OverconstrainedError, 'OverconstrainedError');
+  global.OverconstrainedError = OverconstrainedError;
+  function capError(d) {
+    if (d.name === 'OverconstrainedError') return new OverconstrainedError(d.constraint, d.message);
+    if (d.name === 'TypeError') return new TypeError(d.message);
+    return dex(d.message, d.name);
+  }
+  var devices;
+  global.__swCapEvent = function (id, type, data) {
+    var d = data ? JSON.parse(data) : null;
+    if (type === 'ok' || type === 'err') {
+      var w = capWait[id]; delete capWait[id]; if (!w) return;
+      if (type === 'ok') w.resolve(d); else w.reject(capError(d));
+    } else if (type === 'end') {
+      var t = capTracks[d.id]; if (t) endTrack(t, d.reason !== 'stopped');
+    } else if (type === 'devicechange') {
+      if (devices) devices.dispatchEvent(new Event('devicechange'));
+    } else if (type === 'perm') {
+      permRefresh();
+    }
+  };
+
+  function MediaDeviceInfo() { illegal(); } tag(MediaDeviceInfo, 'MediaDeviceInfo');
+  ['deviceId', 'kind', 'label', 'groupId'].forEach(function (n) { defGetter(MediaDeviceInfo.prototype, n, function () { return this._d[n]; }); });
+  defMethod(MediaDeviceInfo.prototype, 'toJSON', function () { return { deviceId: this.deviceId, kind: this.kind, label: this.label, groupId: this.groupId }; });
+  function InputDeviceInfo() { illegal(); } derive(InputDeviceInfo, MediaDeviceInfo); tag(InputDeviceInfo, 'InputDeviceInfo');
+  defMethod(InputDeviceInfo.prototype, 'getCapabilities', function () { return {}; });
+  global.MediaDeviceInfo = MediaDeviceInfo; global.InputDeviceInfo = InputDeviceInfo;
+  function deviceInfo(d) {
+    var o = Object.create(d.kind === 'audiooutput' ? MediaDeviceInfo.prototype : InputDeviceInfo.prototype);
+    Object.defineProperty(o, '_d', { value: d });
+    return o;
+  }
+
+  function streamOf(r) {
+    var ms = new MediaStream();
+    r.tracks.forEach(function (info) { ms.addTrack(capTrack(info, {})); });
+    return ms;
+  }
+  function wantsAny(c) { return c && (c.audio || c.video); }
+  function constraintsArg(c, fn) {
+    if (c === undefined || c === null || typeof c !== 'object') throw new TypeError("Failed to execute '" + fn + "' on 'MediaDevices': The provided value is not of type 'MediaStreamConstraints'.");
+  }
+  function surfaceHint(v) {
+    if (!v || typeof v !== 'object') return '';
+    var s = v.displaySurface; if (s && typeof s === 'object') s = s.exact || s.ideal;
+    if (Array.isArray(s)) s = s[0];
+    return typeof s === 'string' ? s : '';
+  }
+  devices = (function () {
     var d = Object.create(EventTarget.prototype); EventTarget.call(d);
     defMethod(d, 'enumerateDevices', function () {
-      if (!fakeMode()) return Promise.resolve([]);
-      return Promise.resolve([
-        { deviceId: 'fake-mic', kind: 'audioinput', label: 'Fake Microphone', groupId: 'fake', toJSON: function () { return this; } },
-        { deviceId: 'fake-cam', kind: 'videoinput', label: 'Fake Camera', groupId: 'fake', toJSON: function () { return this; } },
-        { deviceId: 'default', kind: 'audiooutput', label: 'Fake Speaker', groupId: 'fake', toJSON: function () { return this; } }]);
+      try { return Promise.resolve(JSON.parse(sw.capEnumerate()).map(deviceInfo)); } catch (e) { return Promise.resolve([]); }
     });
-    defMethod(d, 'getSupportedConstraints', function () { return { aspectRatio: true, autoGainControl: true, channelCount: true, deviceId: true, echoCancellation: true, facingMode: true, frameRate: true, groupId: true, height: true, noiseSuppression: true, sampleRate: true, sampleSize: true, width: true }; });
+    defMethod(d, 'getSupportedConstraints', function () { return { aspectRatio: true, autoGainControl: true, channelCount: true, deviceId: true, displaySurface: true, echoCancellation: true, facingMode: true, frameRate: true, groupId: true, height: true, latency: true, noiseSuppression: true, resizeMode: true, sampleRate: true, sampleSize: true, width: true }; });
     defMethod(d, 'getUserMedia', function (c) {
-      if (!c || (!c.audio && !c.video)) return Promise.reject(new TypeError("Failed to execute 'getUserMedia' on 'MediaDevices': At least one of audio and video must be requested"));
-      if (!fakeMode()) return Promise.reject(dex('Requested device not found', 'NotFoundError'));
-      var ms = new MediaStream();
-      if (c.audio) ms.addTrack(global.__swMakeTrack('audio', 'Fake Microphone', { deviceId: 'fake-mic' }));
-      if (c.video) { var vc = typeof c.video === 'object' ? c.video : {}; var num = function (v, d2) { return typeof v === 'number' ? v : (v && (v.ideal || v.exact)) || d2; }; ms.addTrack(global.__swMakeTrack('video', 'Fake Camera', { deviceId: 'fake-cam', width: num(vc.width, 640), height: num(vc.height, 480), frameRate: num(vc.frameRate, 30) })); }
-      return Promise.resolve(ms);
+      try { constraintsArg(c, 'getUserMedia'); } catch (e) { return Promise.reject(e); }
+      if (!wantsAny(c)) return Promise.reject(new TypeError("Failed to execute 'getUserMedia' on 'MediaDevices': At least one of audio and video must be requested"));
+      return capCall('gum', { audio: c.audio === undefined ? false : c.audio, video: c.video === undefined ? false : c.video }).then(streamOf);
     });
-    defMethod(d, 'getDisplayMedia', function () { return Promise.reject(dex('Permission denied', 'NotAllowedError')); });
-    defGetter(d, 'ondevicechange', function () { return null; }, function () { });
+    defMethod(d, 'getDisplayMedia', function (c) {
+      c = c === undefined ? { video: true } : c;
+      try { constraintsArg(c, 'getDisplayMedia'); } catch (e) { return Promise.reject(e); }
+      var v = c.video === undefined ? true : c.video;
+      if (v === false || v === null) return Promise.reject(new TypeError("Failed to execute 'getDisplayMedia' on 'MediaDevices': Audio only requests are not supported"));
+      return capCall('gdm', { video: v, audio: c.audio === undefined ? false : c.audio, preferCurrentTab: !!c.preferCurrentTab, surface: surfaceHint(v) }).then(streamOf);
+    });
+    var handler = null, wired = false;
+    defGetter(d, 'ondevicechange', function () { return handler; }, function (f) {
+      handler = typeof f === 'function' ? f : null;
+      if (!wired) { wired = true; d.addEventListener('devicechange', function (e) { if (handler) handler.call(d, e); }); }
+    });
+    var add = d.addEventListener;
+    defMethod(d, 'addEventListener', function (type) { add.apply(this, arguments); if (type === 'devicechange') { try { sw.capWatch(true); } catch (e) { /* ignore */ } } });
     return d;
   })();
   function MediaDevices() { illegal(); }
@@ -1257,6 +1373,18 @@
   Object.setPrototypeOf(MediaDevices.prototype, EventTarget.prototype);
   ['enumerateDevices', 'getSupportedConstraints', 'getUserMedia', 'getDisplayMedia'].forEach(function (n) { Object.defineProperty(MediaDevices.prototype, n, { value: devices[n], writable: true, configurable: true, enumerable: true }); delete devices[n]; });
   global.MediaDevices = MediaDevices;
+
+  // ---- Permissions API for camera, microphone and display-capture ----------------------------------------------
+  // navigator.permissions itself lives in the platform layer (platformjs/pwa.js, which also answers notifications,
+  // push and sync); this file answers for its own names through __permHandlers and asks it to refresh live
+  // PermissionStatus objects when the user changes a decision.
+  var PERM = { camera: 1, microphone: 1, 'display-capture': 1 };
+  function permState(name) { if (!PERM[name]) return 'prompt'; try { return sw.capPerm(name) || 'prompt'; } catch (e) { return 'prompt'; } }
+  (function () {
+    if (!global.__permHandlers) Object.defineProperty(global, '__permHandlers', { value: {}, configurable: true });
+    ['camera', 'microphone', 'display-capture'].forEach(function (n) { global.__permHandlers[n] = function () { return permState(n); }; });
+  })();
+  function permRefresh() { if (typeof global.__swPermRefresh === 'function') global.__swPermRefresh(); }
   if (global.Navigator) {
     Object.defineProperty(global.Navigator.prototype, 'mediaDevices', { get: function () { return devices; }, configurable: true, enumerable: true });
     defMethod(global.Navigator.prototype, 'requestMediaKeySystemAccess', function () { return Promise.reject(dex('Unsupported keySystem or supportedConfigurations.', 'NotSupportedError')); });

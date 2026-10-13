@@ -437,6 +437,7 @@
     try {
       var ev = new global.ErrorEvent('error', { message: e && e.message !== undefined ? String(e.message) : String(e), error: e, filename: (e && e.fileName) || '', lineno: (e && e.lineNumber) || 0, cancelable: true });
       dispatch(global, ev);
+      if (typeof global.__swUncaught === 'function' && !ev.defaultPrevented) global.__swUncaught(ev); // a worker forwards what it did not handle to its owner
     } catch (e2) { /* ignore */ } finally { reportingError = false; }
   }
 
@@ -1938,11 +1939,7 @@
   setTag(MessagePort, 'MessagePort'); global.MessagePort = MessagePort;
   function MessageChannel() { if (!(this instanceof MessageChannel)) throw new TypeError("Constructor MessageChannel requires 'new'"); this.port1 = new MessagePort(); this.port2 = new MessagePort(); this.port1._other = this.port2; this.port2._other = this.port1; }
   setTag(MessageChannel, 'MessageChannel'); global.MessageChannel = MessageChannel;
-  global.BroadcastChannel = function BroadcastChannel(name) { EventTarget.call(this); this.name = name; };
-  extend(global.BroadcastChannel, EventTarget);
-  methods(global.BroadcastChannel.prototype, { postMessage: function () { }, close: function () { } });
-  defineHandlerProps(global.BroadcastChannel.prototype, ['message', 'messageerror']);
-  global.postMessage = function postMessage(data) { setTimeoutImpl(function () { dispatch(global, new global.MessageEvent('message', { data: data, origin: originOf(currentURL()), source: global })); }, [], 0, false); };
+  global.postMessage = function postMessage(data) { setTimeoutImpl(function () { dispatch(global, new global.MessageEvent('message', { data: data, origin: docOriginStr(), source: global })); }, [], 0, false); };
 
   // ==== 9. Platform ========================================================
   // ---- window identity
@@ -1953,8 +1950,8 @@
   def(global, 'length', { value: 0, writable: true });
   def(global, 'closed', { value: false, writable: true });
   def(global, 'name', { value: '', writable: true });
-  def(global, 'origin', { get: function () { return originOf(currentURL()); } });
-  def(global, 'isSecureContext', { get: function () { return /^https:/.test(currentURL()); } });
+  def(global, 'origin', { get: function () { return docOriginStr(); } });
+  def(global, 'isSecureContext', { get: function () { var u = currentURL(); return /^(https|sweef):/.test(u) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]|[^/:]*\.localhost)(:|\/|$)/.test(u); } });
   def(global, 'crossOriginIsolated', { value: false });
   function Window() { illegal(); } setTag(Window, 'Window'); global.Window = Window;
   Object.setPrototypeOf(Window.prototype, EventTarget.prototype);
@@ -2023,12 +2020,14 @@
   var urlOverride = null; // set by history.pushState/replaceState (no reload)
   function currentURL() { if (urlOverride) return urlOverride; var u = ''; try { u = sw.url() || ''; } catch (e) { /* ignore */ } return u || 'about:blank'; }
   function originOf(u) { try { return new global.URL(u).origin; } catch (e) { return 'null'; } }
+  // the origin of this document: the host knows about inherited (about:blank, srcdoc) and opaque (sandboxed, data:) origins
+  function docOriginStr() { try { if (typeof sw.docOrigin === 'function') { var o = sw.docOrigin(); if (typeof o === 'string' && o) return o; } } catch (e) { /* fall through */ } return originOf(currentURL()); }
   function Location() { illegal(); }
   var LOC_PARTS = ['protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash', 'origin'];
   LOC_PARTS.forEach(function (part) {
     def(Location.prototype, part, {
-      get: function () { try { return new global.URL(currentURL())[part]; } catch (e) { return ''; } },
-      set: function (v) { if (part === 'origin') return; var u = new global.URL(currentURL()); u[part] = v; if (part === 'hash') { var old = currentURL(); urlOverride = u.href; fire(global, 'hashchange', { oldURL: old, newURL: u.href }); fire(global, 'popstate', { state: historyState }); } else sw.navigate(u.href); },
+      get: function () { if (part === 'origin') return docOriginStr(); try { return new global.URL(currentURL())[part]; } catch (e) { return ''; } },
+      set: function (v) { if (part === 'origin') return; var u = new global.URL(currentURL()); u[part] = v; if (part === 'hash') { var old = currentURL(); if (u.href === old) return; urlOverride = u.href; histRecord('push', u.href, null); historyState = null; fire(global, 'hashchange', { oldURL: old, newURL: u.href }); fire(global, 'popstate', { state: null }); } else sw.navigate(u.href); },
       enumerable: true
     });
   });
@@ -2046,26 +2045,74 @@
   def(global, 'location', { get: function () { return locationObj; }, set: function (v) { locationObj.assign(String(v)); }, enumerable: true });
 
   // ---- History
-  var historyState = null, historyLength = 1;
+  // Session history of this document: pushState/replaceState/hash changes add or replace entries,
+  // back/forward/go move between them (asynchronously, as in a browser) and fire popstate/hashchange.
+  // Entries before the first or after the last one belong to other documents (Go owns those).
+  var historyState = null, histEntries = [], histIdx = 0, histSeq = 0, histHooks = [];
+  function hist() {
+    if (!histEntries.length) histEntries.push({ url: currentURL(), state: null, key: 'k' + (++histSeq), id: 'i' + histSeq });
+    return histEntries;
+  }
+  function histNotify(kind, entry, prev, info) { histHooks.slice().forEach(function (h) { try { h(kind, entry, prev, info); } catch (e) { /* observers must not break history */ } }); }
+  function histRecord(kind, url, state) {
+    var es = hist(), prev = es[histIdx];
+    if (kind === 'push') {
+      es.length = histIdx + 1;
+      var e = { url: url, state: state, key: 'k' + (++histSeq), id: 'i' + histSeq };
+      es.push(e); histIdx = es.length - 1;
+      histNotify('push', e, prev);
+    } else {
+      prev.url = url; prev.state = state;
+      histNotify('replace', prev, prev);
+    }
+  }
+  function histTraverse(delta, then) {
+    var es = hist(), target = histIdx + delta;
+    if (target < 0 || target >= es.length || delta === 0) return false;
+    setTimeoutImpl(function () {
+      var cur = hist(), from = cur[histIdx], to = cur[target];
+      if (!to || target >= cur.length) return;
+      histIdx = target;
+      historyState = to.state;
+      urlOverride = to.url;
+      if (host('setUrl')) { try { sw.setUrl(to.url); } catch (e) { /* ignore */ } }
+      histNotify('traverse', to, from, { delta: delta });
+      fire(global, 'popstate', { state: to.state });
+      var fa = from.url.split('#'), ta = to.url.split('#');
+      if (fa[0] === ta[0] && from.url !== to.url) fire(global, 'hashchange', { oldURL: from.url, newURL: to.url });
+      if (then) then();
+    }, [], 0, false);
+    return true;
+  }
+  Object.defineProperty(global, '__swHistory', { value: {
+    entries: function () { return hist(); }, index: function () { hist(); return histIdx; }, hooks: histHooks,
+    record: histRecord, traverse: histTraverse, get state() { return historyState; }
+  } });
   function History() { illegal(); }
-  getters(History.prototype, { length: { get: function () { return historyLength; } }, state: { get: function () { return historyState; } }, scrollRestoration: { get: function () { return 'auto'; }, set: function () { } } });
+  getters(History.prototype, { length: { get: function () { return hist().length; } }, state: { get: function () { return historyState; } }, scrollRestoration: { get: function () { return 'auto'; }, set: function () { } } });
   function historyUpdate(state, url, push) {
-    historyState = state === undefined ? null : state;
+    var target = null;
     if (url !== undefined && url !== null) {
       var u = new global.URL(String(url), currentURL());
       if (u.origin !== originOf(currentURL())) throw DOMException("Failed to execute '" + (push ? 'pushState' : 'replaceState') + "' on 'History': A history state object with URL '" + u.href + "' cannot be created in a document with origin '" + originOf(currentURL()) + "'.", 'SecurityError');
-      urlOverride = u.href;
-      if (host('setUrl')) { try { sw.setUrl(u.href); } catch (e) { /* ignore */ } }
+      target = u.href;
+    }
+    state = state === undefined ? null : state;
+    if (target === null) target = currentURL();
+    historyState = state;
+    if (target !== currentURL() || url !== undefined && url !== null) {
+      urlOverride = target;
+      if (host('setUrl')) { try { sw.setUrl(target); } catch (e) { /* ignore */ } }
       hostMutation(push ? 'pushState' : 'replaceState', 0);
     }
-    if (push) historyLength++;
+    histRecord(push ? 'push' : 'replace', target, state);
   }
   methods(History.prototype, {
     pushState: function (state, title, url) { historyUpdate(state, url, true); },
     replaceState: function (state, title, url) { historyUpdate(state, url, false); },
-    back: function () { fire(global, 'popstate', { state: null }); },
-    forward: function () { fire(global, 'popstate', { state: null }); },
-    go: function (n) { if (!n) { sw.navigate(currentURL()); return; } fire(global, 'popstate', { state: null }); }
+    back: function () { if (!histTraverse(-1)) fire(global, 'popstate', { state: null }); },
+    forward: function () { if (!histTraverse(1)) fire(global, 'popstate', { state: null }); },
+    go: function (n) { n = Math.trunc(+n) || 0; if (!n) { sw.navigate(currentURL()); return; } if (!histTraverse(n)) fire(global, 'popstate', { state: null }); }
   });
   setTag(History, 'History'); global.History = History;
   var historyObj = Object.create(History.prototype);
@@ -2079,7 +2126,7 @@
     userAgent: { get: ua }, appVersion: { get: function () { return ua().replace(/^Mozilla\//, ''); } }, appName: { get: function () { return 'Netscape'; } }, appCodeName: { get: function () { return 'Mozilla'; } }, product: { get: function () { return 'Gecko'; } }, productSub: { get: function () { return '20030107'; } }, vendor: { get: function () { return ''; } }, vendorSub: { get: function () { return ''; } },
     language: { get: function () { return 'en-US'; } }, languages: { get: function () { return Object.freeze(['en-US', 'en']); } },
     platform: { get: function () { return viewport().mobile ? 'Linux armv8l' : 'Linux x86_64'; } },
-    onLine: { get: function () { return true; } }, cookieEnabled: { get: function () { return true; } }, doNotTrack: { get: function () { return null; } }, globalPrivacyControl: { get: function () { return false; } },
+    onLine: { get: function () { try { return sw.pwaOnline ? sw.pwaOnline() : true; } catch (e) { return true; } } }, cookieEnabled: { get: function () { return true; } }, doNotTrack: { get: function () { return null; } }, globalPrivacyControl: { get: function () { return false; } },
     hardwareConcurrency: { get: function () { return 1; } }, deviceMemory: { get: function () { return 1; } }, maxTouchPoints: { get: function () { return viewport().mobile ? 5 : 0; } },
     userAgentData: { get: function () { return undefined; } }, webdriver: { get: function () { return false; } }, pdfViewerEnabled: { get: function () { return false; } },
     plugins: { get: function () { var p = []; p.item = function () { return null; }; p.namedItem = function () { return null; }; p.refresh = function () { }; return p; } }, mimeTypes: { get: function () { var p = []; p.item = function () { return null; }; p.namedItem = function () { return null; }; return p; } },
@@ -2108,14 +2155,22 @@
 
   // ---- Storage
   function Storage() { illegal(); }
+  // a document without an origin of its own (sandboxed frame, data: URL) gets a SecurityError from the host
+  function storageHost(fn) {
+    try { return fn(); } catch (e) {
+      var m = e && typeof e.message === 'string' ? /^(SecurityError|QuotaExceededError): ([\s\S]*)$/.exec(e.message) : null;
+      if (m) throw DOMException(m[2], m[1]);
+      throw e;
+    }
+  }
   methods(Storage.prototype, {
-    getItem: function (k) { var v = sw.storageGet(this._kind, toStr(k)); return v === undefined || v === null ? null : String(v); },
-    setItem: function (k, v) { var key = toStr(k), val = toStr(v); var old = this.getItem(key); sw.storageSet(this._kind, key, val); storageEvent(this, key, old, val); },
-    removeItem: function (k) { var key = toStr(k); var old = this.getItem(key); sw.storageRemove(this._kind, key); if (old !== null) storageEvent(this, key, old, null); },
-    clear: function () { sw.storageClear(this._kind); storageEvent(this, null, null, null); },
-    key: function (i) { var keys = sw.storageKeys(this._kind) || []; return i >= 0 && i < keys.length ? keys[i] : null; }
+    getItem: function (k) { var key = toStr(k); var v = storageHost(function () { return sw.storageGet(this._kind, key); }.bind(this)); return v === undefined || v === null ? null : String(v); },
+    setItem: function (k, v) { var key = toStr(k), val = toStr(v); var old = this.getItem(key); var kind = this._kind; storageHost(function () { sw.storageSet(kind, key, val); }); storageEvent(this, key, old, val); },
+    removeItem: function (k) { var key = toStr(k); var old = this.getItem(key); var kind = this._kind; storageHost(function () { sw.storageRemove(kind, key); }); if (old !== null) storageEvent(this, key, old, null); },
+    clear: function () { var kind = this._kind; storageHost(function () { sw.storageClear(kind); }); storageEvent(this, null, null, null); },
+    key: function (i) { var kind = this._kind; var keys = storageHost(function () { return sw.storageKeys(kind); }) || []; return i >= 0 && i < keys.length ? keys[i] : null; }
   });
-  getter(Storage.prototype, 'length', function () { return (sw.storageKeys(this._kind) || []).length; });
+  getter(Storage.prototype, 'length', function () { var kind = this._kind; return (storageHost(function () { return sw.storageKeys(kind); }) || []).length; });
   setTag(Storage, 'Storage'); global.Storage = Storage;
   function storageEvent(area, key, oldValue, newValue) { /* same-document writes do not fire 'storage' in browsers; kept as a hook */ }
   function makeStorage(kind) {
@@ -2444,16 +2499,7 @@
   setTag(WebSocket, 'WebSocket'); global.WebSocket = WebSocket;
   global.EventSource = function EventSource(url) { EventTarget.call(this); this.url = String(url); this.readyState = 2; var self = this; setTimeoutImpl(function () { fire(self, 'error', {}); }, [], 0, false); };
   extend(global.EventSource, EventTarget); methods(global.EventSource.prototype, { close: function () { } }); defineHandlerProps(global.EventSource.prototype, ['open', 'message', 'error']);
-  global.Worker = function Worker() { throw DOMException('Web Workers are not available in Sweef', 'NotSupportedError'); };
-  global.SharedWorker = global.Worker;
-  function Notification(title, opts) { if (!(this instanceof Notification)) throw new TypeError("Constructor Notification requires 'new'"); EventTarget.call(this); this.title = String(title); Object.assign(this, { body: '', icon: '', tag: '', data: null, dir: 'auto', lang: '', silent: null }, opts || {}); }
-  extend(Notification, EventTarget);
-  methods(Notification.prototype, { close: function () { } });
-  defineHandlerProps(Notification.prototype, ['click', 'close', 'error', 'show']);
-  def(Notification, 'permission', { get: function () { return 'denied'; } });
-  Notification.requestPermission = function (cb) { if (cb) setTimeoutImpl(function () { cb('denied'); }, [], 0, false); return Promise.resolve('denied'); };
-  Notification.maxActions = 0;
-  setTag(Notification, 'Notification'); global.Notification = Notification;
+  // Notification: platformjs/pwa.js
   global.speechSynthesis = { speak: function () { }, cancel: function () { }, pause: function () { }, resume: function () { }, getVoices: function () { return []; }, speaking: false, pending: false, paused: false, addEventListener: function () { }, removeEventListener: function () { }, onvoiceschanged: null };
   global.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) { this.text = text; };
   global.CSS = { supports: function () { return false; }, escape: function (s) { return String(s).replace(/([\0-\x1f\x7f]|^-?\d)|^-$|[^\x80-￿\w-]/g, function (ch, asCode) { return asCode ? (ch === '\0' ? '�' : ch.slice(0, -1) + '\\' + ch.slice(-1).charCodeAt(0).toString(16) + ' ') : '\\' + ch; }); }, registerProperty: function () { }, px: function (v) { return v + 'px'; }, highlights: new Map() };
@@ -2659,7 +2705,7 @@
   URL.canParse = function (u, b) { try { parseURL(u, b === undefined ? undefined : String(b)); return true; } catch (e) { return false; } };
   URL.parse = function (u, b) { try { return new URL(u, b); } catch (e) { return null; } };
   var blobURLs = new Map(), blobSeq = 0;
-  URL.createObjectURL = function (blob) { var u = 'blob:' + originOf(currentURL()) + '/' + (++blobSeq) + '-' + cryptoObj.randomUUID(); blobURLs.set(u, blob); return u; };
+  URL.createObjectURL = function (blob) { var u = 'blob:' + docOriginStr() + '/' + (++blobSeq) + '-' + cryptoObj.randomUUID(); blobURLs.set(u, blob); return u; };
   URL.revokeObjectURL = function (u) { blobURLs.delete(String(u)); };
   setTag(URL, 'URL'); global.URL = URL; global.webkitURL = URL;
 
@@ -2703,8 +2749,8 @@
     (parts || []).forEach(function (p) { var b = p instanceof Blob ? p._bytes : toBytes(typeof p === 'string' || p instanceof ArrayBuffer || ArrayBuffer.isView(p) ? p : String(p)); chunks.push(b); total += b.length; });
     var bytes = new Uint8Array(total), off = 0;
     chunks.forEach(function (c) { bytes.set(c, off); off += c.length; });
-    Object.defineProperty(this, '_bytes', { value: bytes });
-    Object.defineProperty(this, 'size', { value: total, enumerable: true });
+    Object.defineProperty(this, '_bytes', { value: bytes, configurable: true });
+    Object.defineProperty(this, 'size', { value: total, enumerable: true, configurable: true });
     Object.defineProperty(this, 'type', { value: String((opts && opts.type) || '').toLowerCase(), enumerable: true });
   }
   Blob.prototype = {
@@ -2731,16 +2777,13 @@
   defineHandlerProps(FileReader.prototype, ['load', 'loadstart', 'loadend', 'progress', 'error', 'abort']);
   constant(FileReader, 'EMPTY', 0); constant(FileReader, 'LOADING', 1); constant(FileReader, 'DONE', 2);
   setTag(FileReader, 'FileReader'); global.FileReader = FileReader;
-  function bytesStream(bytes) {
-    var done = false;
-    var reader = { read: function () { if (done) return Promise.resolve({ done: true, value: undefined }); done = true; return Promise.resolve({ done: false, value: bytes }); }, cancel: function () { done = true; return Promise.resolve(); }, releaseLock: function () { }, closed: Promise.resolve() };
-    return { locked: false, getReader: function () { return reader; }, cancel: function () { done = true; return Promise.resolve(); }, pipeTo: function () { return Promise.resolve(); }, tee: function () { return [bytesStream(bytes), bytesStream(bytes)]; }, [Symbol.asyncIterator]: function () { return { next: function () { return reader.read(); } }; } };
-  }
-  global.ReadableStream = function ReadableStream(src) { var chunks = []; var ctrl = { enqueue: function (c) { chunks.push(c); }, close: function () { }, error: function () { } }; if (src && src.start) src.start(ctrl); var i = 0; this.locked = false; this.getReader = function () { return { read: function () { if (src && src.pull && i >= chunks.length) src.pull(ctrl); return Promise.resolve(i < chunks.length ? { done: false, value: chunks[i++] } : { done: true, value: undefined }); }, cancel: function () { return Promise.resolve(); }, releaseLock: function () { }, closed: Promise.resolve() }; }; this.cancel = function () { return Promise.resolve(); }; };
-  global.WritableStream = function WritableStream(sink) { this.locked = false; this.getWriter = function () { return { write: function (c) { if (sink && sink.write) sink.write(c); return Promise.resolve(); }, close: function () { if (sink && sink.close) sink.close(); return Promise.resolve(); }, abort: function () { return Promise.resolve(); }, releaseLock: function () { }, ready: Promise.resolve(), closed: Promise.resolve() }; }; };
-  global.TransformStream = function TransformStream() { var chunks = []; this.readable = new global.ReadableStream({ start: function (c) { chunks.push(c); } }); this.writable = new global.WritableStream({ write: function (v) { chunks[0].enqueue(v); } }); };
+  // Real streams live in platformjs/streams.js and load on first use.
+  function bytesStream(bytes) { return new global.ReadableStream({ start: function (c) { if (bytes.length) c.enqueue(bytes); c.close(); } }); }
 
   // ---- FormData
+  // Extension hooks for the platform layer (platformjs/*.js).
+  var swHooks = {};
+  Object.defineProperty(global, '__swHooks', { value: swHooks });
   function FormData(form) {
     if (!(this instanceof FormData)) throw new TypeError("Failed to construct 'FormData': Please use the 'new' operator");
     Object.defineProperty(this, '_list', { value: [], writable: true });
@@ -2753,6 +2796,7 @@
         else if (tag === 'select') { itemsOf(c.options).forEach(function (o) { if (o.selected) self._list.push([name, o.value]); }); }
         else if (tag === 'textarea') self._list.push([name, c.value]);
       });
+      if (swHooks.formData) swHooks.formData(form, self._list);
     }
   }
   function fdValue(v, filename) { if (v instanceof Blob) { if (v instanceof File && filename === undefined) return v; return new File([v], filename === undefined ? 'blob' : String(filename), { type: v.type }); } return String(v); }
@@ -2859,7 +2903,7 @@
     if (!(this instanceof Request)) throw new TypeError("Failed to construct 'Request': Please use the 'new' operator");
     init = init || {};
     var url, method = 'GET', headers = null, body = null, extra = {};
-    if (input instanceof Request) { url = input.url; method = input.method; headers = new Headers(input.headers); body = input._body; extra = { mode: input.mode, credentials: input.credentials, cache: input.cache, redirect: input.redirect, referrer: input.referrer, integrity: input.integrity, signal: input.signal }; }
+    if (input instanceof Request) { url = input.url; method = input.method; headers = new Headers(input.headers); body = input._body; extra = { mode: input.mode, credentials: input.credentials, cache: input.cache, redirect: input.redirect, referrer: input.referrer, integrity: input.integrity, signal: input.signal, destination: input.destination }; }
     else url = new URL(String(input), currentURL()).href;
     if (init.method !== undefined) method = String(init.method).toUpperCase() === String(init.method).toUpperCase() && /^(get|post|put|delete|head|options|patch)$/i.test(init.method) ? String(init.method).toUpperCase() : String(init.method);
     if (init.headers !== undefined) headers = new Headers(init.headers);
@@ -2874,7 +2918,7 @@
     var self = this;
     ['mode', 'credentials', 'cache', 'redirect', 'referrer', 'integrity', 'keepalive', 'priority'].forEach(function (k) { var dflt = { mode: 'cors', credentials: 'same-origin', cache: 'default', redirect: 'follow', referrer: 'about:client', integrity: '', keepalive: false, priority: 'auto' }[k]; Object.defineProperty(self, k, { value: init[k] !== undefined ? init[k] : extra[k] !== undefined ? extra[k] : dflt, enumerable: true }); });
     Object.defineProperty(this, 'signal', { value: init.signal || extra.signal || new AbortSignal(), enumerable: true });
-    Object.defineProperty(this, 'destination', { value: '', enumerable: true });
+    Object.defineProperty(this, 'destination', { value: init.__destination !== undefined ? String(init.__destination) : extra.destination || '', enumerable: true }); // __destination: set by the service worker host for the requests it hands to fetch events
     Object.defineProperty(this, 'referrerPolicy', { value: init.referrerPolicy || '', enumerable: true });
   }
   defineBody(Request.prototype);
@@ -2898,7 +2942,7 @@
   }
   defineBody(Response.prototype);
   getters(Response.prototype, { ok: { get: function () { return this.status >= 200 && this.status < 300; } } });
-  methods(Response.prototype, { clone: function () { if (this._used) throw new TypeError("Failed to execute 'clone' on 'Response': Response body is already used"); var r = new Response(this._body, { status: this.status, statusText: this.statusText, headers: this.headers, url: this.url, type: this.type, redirected: this.redirected }); if (this._rawBytes) Object.defineProperty(r, '_rawBytes', { value: this._rawBytes, writable: true }); return r; } });
+  methods(Response.prototype, { clone: function () { if (this._used) throw new TypeError("Failed to execute 'clone' on 'Response': Response body is already used"); var r = new Response(this._body, { status: this.status, statusText: this.statusText, headers: this.headers, url: this.url, type: this.type, redirected: this.redirected }); if (this._rawBytes) Object.defineProperty(r, '_rawBytes', { value: this._rawBytes, writable: true, configurable: true }); return r; } });
   Response.error = function () { var r = new Response(null, { status: 200, type: 'error' }); Object.defineProperty(r, 'status', { value: 0 }); return r; };
   Response.redirect = function (url, status) { return new Response(null, { status: status || 302, headers: { location: new URL(url, currentURL()).href } }); };
   Response.json = function (data, init) { init = Object.assign({}, init || {}); var h = new Headers(init.headers); if (!h.has('content-type')) h.set('content-type', 'application/json'); init.headers = h; return new Response(JSON.stringify(data), init); };
@@ -2953,7 +2997,7 @@
     var status = r.status | 0;
     var resp = new Response(r.body === undefined || r.body === null ? '' : r.body, { status: status >= 200 && status <= 599 ? status : 200, statusText: r.statusText || '', headers: r.headers || {} });
     if (status < 200 || status > 599) Object.defineProperty(resp, 'status', { value: status });
-    if (r.b64) Object.defineProperty(resp, '_rawBytes', { value: b64ToBytes(String(r.b64)), writable: true });
+    if (r.b64) Object.defineProperty(resp, '_rawBytes', { value: b64ToBytes(String(r.b64)), writable: true, configurable: true });
     resp.url = r.url || url;
     resp.redirected = !!r.url && r.url !== url;
     resp.type = 'basic';
@@ -3244,7 +3288,7 @@
     // reset everything per-navigation: wrappers, timers, listeners, observers, focus, history override
     timers.length = 0; runningTimer = null;
     observers.length = 0; pendingObservers.length = 0; moFlushScheduled = false;
-    activeElement = null; currentScript = null; urlOverride = null; historyState = null;
+    activeElement = null; currentScript = null; urlOverride = null; historyState = null; histEntries.length = 0; histIdx = 0;
     perfMarks = []; perfMeasures = []; timeOrigin = Date.now();
     ceDefinitions.clear(); ceWhenDefined.clear();
     blobURLs.clear();

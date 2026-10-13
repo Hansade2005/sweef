@@ -155,11 +155,16 @@ type jsVM struct {
 	start     time.Time
 	closed    bool
 
+	capture *capHost // getUserMedia & co (capture_host.go)
+
 	rtOnce   sync.Once
 	realtime *realtime // WebSockets and Workers (lazily created)
 
+	// closeHooks run after the QuickJS VM is closed: feature files hang their native teardown here (wasm.go).
+	closeHooks []func()
+
 	closerMu sync.Mutex
-	closers  []func() // run when the VM closes (media players, audio streams); they must not call into the VM
+	closers  []func() // run first when the VM closes (host extensions, media players, audio streams); they must not call into the VM
 
 	pendingNav  string
 	scriptQueue []int64        // script element ids inserted by page code
@@ -183,6 +188,11 @@ func buildVM(o Options) (*jsVM, error) {
 	}
 	vm.SetMemoryLimit(uintptr(mem) << 20)
 	vm.SetMaxStackSize(1 << 20)
+	// Loading the prelude allocates a few MiB of long-lived objects and almost no garbage, but QuickJS's
+	// cycle collector would still run several times on the way (its threshold starts at 256 KiB), each pass
+	// marking everything allocated so far. Measured: about 1.3 ms of the ~25 ms build, more as the prelude
+	// grows. Turn the collector off for the build and give it a normal pace afterwards.
+	vm.SetGCThreshold(1 << 30)
 	to := time.Duration(o.JSTimeoutMs) * time.Millisecond
 	if to <= 0 {
 		to = 5 * time.Second
@@ -213,6 +223,7 @@ func buildVM(o Options) (*jsVM, error) {
 		vm.Close()
 		return nil, fmt.Errorf("prelude did not initialise")
 	}
+	vm.SetGCThreshold(10 << 20)
 	return j, nil
 }
 
@@ -237,6 +248,9 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 		t.LogConsole("error", "sweef: __swSetDocument failed: "+err.Error())
 	}
 	j.installBindings()
+	if t.isFrame() {
+		_, _ = j.call("__swFrameInit", t.windowName())
+	}
 	return j
 }
 
@@ -347,8 +361,16 @@ func (j *jsVM) close() {
 	if j.realtime != nil {
 		j.realtime.closeAll()
 	}
+	runCloseHooks(j)
+	if j.capture != nil {
+		j.capture.closeAll()
+	}
 	j.vm.SetModuleLoader(nil, nil)
 	j.vm.Close()
+	for _, h := range j.closeHooks {
+		h()
+	}
+	j.closeHooks = nil
 }
 
 // onClose registers f to run when the VM closes.
@@ -521,6 +543,12 @@ func (j *jsVM) dispatch(id int64, typ string, init map[string]any) bool {
 	if j == nil {
 		return true
 	}
+	switch typ {
+	case "click", "mousedown", "pointerdown", "keydown", "touchstart", "input":
+		if t := j.tab; t != nil && t.bc == nil { // the person used this top-level page: its site counts as visited
+			t.Context().noteInteraction(schemefulSite(t.URL()))
+		}
+	}
 	if init == nil {
 		init = map[string]any{}
 	}
@@ -581,9 +609,6 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 			// animation frames) and no workers; promise jobs and results already
 			// delivered still flow, so an explicit evaluate does not hang.
 			next = j.runTimers()
-			if wn := j.pumpWorkers(); wn >= 0 && (next < 0 || wn < next) {
-				next = wn
-			}
 		}
 		if j.drainAsync() {
 			delivered = true
@@ -1041,6 +1066,7 @@ func (j *jsVM) registerHost() error {
 				return nil, err
 			}
 			j.noteInserted(d, c)
+			j.tab.frameInserted(d, c)
 			return c, nil
 		})},
 		{"insertBefore", doc(func(d *fnet.Doc, a []any) (any, error) {
@@ -1049,10 +1075,13 @@ func (j *jsVM) registerHost() error {
 				return nil, err
 			}
 			j.noteInserted(d, c)
+			j.tab.frameInserted(d, c)
 			return c, nil
 		})},
 		{"removeChild", doc(func(d *fnet.Doc, a []any) (any, error) {
-			return argI(a, 1), d.RemoveChild(argI(a, 0), argI(a, 1))
+			err := d.RemoveChild(argI(a, 0), argI(a, 1))
+			go j.tab.pruneFrames()
+			return argI(a, 1), err
 		})},
 		{"cloneNode", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CloneNode(argI(a, 0), argB(a, 1)), nil })},
 		{"attached", doc(func(d *fnet.Doc, a []any) (any, error) { return d.IsConnected(argI(a, 0)), nil })},
@@ -1066,10 +1095,23 @@ func (j *jsVM) registerHost() error {
 			s, err := d.InnerHTML(argI(a, 0))
 			return s, err
 		})},
-		{"setInnerHTML", doc(func(d *fnet.Doc, a []any) (any, error) { return nil, d.SetInnerHTMLCtx(argI(a, 0), argS(a, 1)) })},
+		{"setInnerHTML", doc(func(d *fnet.Doc, a []any) (any, error) {
+			err := d.SetInnerHTMLCtx(argI(a, 0), argS(a, 1))
+			if err == nil {
+				j.tab.frameInserted(d, argI(a, 0))
+			}
+			return nil, err
+		})},
 		{"outerHTML", doc(func(d *fnet.Doc, a []any) (any, error) { return d.SerializeNode(argI(a, 0)), nil })},
 		{"insertAdjacentHTML", doc(func(d *fnet.Doc, a []any) (any, error) {
-			return nil, d.InsertAdjacentHTML(argI(a, 0), argS(a, 1), argS(a, 2))
+			err := d.InsertAdjacentHTML(argI(a, 0), argS(a, 1), argS(a, 2))
+			if err == nil {
+				j.tab.frameInserted(d, argI(a, 0))
+				if p := d.ParentID(argI(a, 0)); p != 0 {
+					j.tab.frameInserted(d, p)
+				}
+			}
+			return nil, err
 		})},
 		// attributes
 		{"getAttr", doc(func(d *fnet.Doc, a []any) (any, error) {
@@ -1202,51 +1244,71 @@ func (j *jsVM) registerHost() error {
 		}},
 		{"storageGet", func(a []any) (any, error) {
 			kind, key := argS(a, 0), argS(a, 1)
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if kind == "session" {
 				if v, ok := j.session[key]; ok {
 					return v, nil
 				}
 				return nil, nil
 			}
-			if v, ok := j.tab.Context().GetStorageValue(j.tab.origin(), key); ok {
+			if v, ok := j.tab.Context().GetStorageValue(lk, key); ok {
 				return v, nil
 			}
 			return nil, nil
 		}},
 		{"storageSet", func(a []any) (any, error) {
 			kind, key, val := argS(a, 0), argS(a, 1), argS(a, 2)
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if kind == "session" {
 				j.session[key] = val
 			} else {
-				j.tab.Context().SetStorageValue(j.tab.origin(), key, val)
+				j.tab.Context().SetStorageValue(lk, key, val)
 			}
 			return nil, nil
 		}},
 		{"storageRemove", func(a []any) (any, error) {
 			kind, key := argS(a, 0), argS(a, 1)
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if kind == "session" {
 				delete(j.session, key)
 			} else {
-				j.tab.Context().RemoveStorageValue(j.tab.origin(), key)
+				j.tab.Context().RemoveStorageValue(lk, key)
 			}
 			return nil, nil
 		}},
 		{"storageClear", func(a []any) (any, error) {
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if argS(a, 0) == "session" {
 				j.session = map[string]string{}
 			} else {
-				j.tab.Context().ClearStorage(j.tab.origin())
+				j.tab.Context().ClearStorage(lk)
 			}
 			return nil, nil
 		}},
 		{"storageKeys", func(a []any) (any, error) {
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			var keys []string
 			if argS(a, 0) == "session" {
 				for k := range j.session {
 					keys = append(keys, k)
 				}
 			} else {
-				keys = j.tab.Context().StorageKeys(j.tab.origin())
+				keys = j.tab.Context().StorageKeys(lk)
 			}
 			out := make([]any, len(keys))
 			for i, k := range keys {
@@ -1254,14 +1316,9 @@ func (j *jsVM) registerHost() error {
 			}
 			return out, nil
 		}},
-		{"cookie", func(a []any) (any, error) { return j.tab.Context().JarRef().ForURL(j.tab.URL()), nil }},
+		{"cookie", func(a []any) (any, error) { return j.tab.DocumentCookie(), nil }},
 		{"setCookie", func(a []any) (any, error) {
-			if c := parseCookie(argS(a, 0), j.tab.eng.now()); c != nil {
-				if c.Domain == "" {
-					c.Domain = hostOf(j.tab.URL())
-				}
-				j.tab.Context().JarRef().Set(c)
-			}
+			j.tab.SetDocumentCookie(argS(a, 0))
 			return nil, nil
 		}},
 		{"dialog", func(a []any) (any, error) {
@@ -1279,15 +1336,21 @@ func (j *jsVM) registerHost() error {
 			return nil, nil
 		}},
 		{"mutation", func(a []any) (any, error) { return nil, nil }},
+		{"docOrigin", func(a []any) (any, error) {
+			if j.tab == nil {
+				return "", nil
+			}
+			if o := j.tab.docOrigin(); o != "" {
+				return o, nil
+			}
+			if j.tab.bc != nil { // opaque: a sandboxed frame, a data: document
+				return "null", nil
+			}
+			return "", nil
+		}},
 		{"wsOpen", func(a []any) (any, error) { return j.wsOpen(argS(a, 0), argS(a, 1)), nil }},
 		{"wsSend", func(a []any) (any, error) { return nil, j.wsSend(argI(a, 0), argS(a, 1), argB(a, 2)) }},
 		{"wsClose", func(a []any) (any, error) { j.wsClose(argI(a, 0)); return nil, nil }},
-		{"workerCreate", func(a []any) (any, error) {
-			id, err := j.workerCreate(argS(a, 0), argS(a, 1), argS(a, 2))
-			return id, err
-		}},
-		{"workerPost", func(a []any) (any, error) { j.workerPost(argI(a, 0), argS(a, 1)); return nil, nil }},
-		{"workerTerminate", func(a []any) (any, error) { j.workerTerminate(argI(a, 0)); return nil, nil }},
 		{"binding", func(a []any) (any, error) {
 			name, args := argS(a, 0), argS(a, 1)
 			if !json.Valid([]byte(args)) {

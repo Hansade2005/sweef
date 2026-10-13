@@ -111,9 +111,39 @@ func refererFor(page, target *url.URL) string {
 	return page.Scheme + "://" + page.Host + "/"
 }
 
+// setDocumentHeaders is setBrowserHeaders for the request that fetches the tab's document: a navigation of a
+// top-level tab, or the request of a frame, which relates to the page that embeds it.
+func (t *Tab) setDocumentHeaders(h http.Header, target *url.URL) {
+	if t.isFrame() {
+		if pu, err := url.Parse(t.bc.parent.URL()); err == nil && pu.Host != "" {
+			t.setBrowserHeadersFrom(h, target, KindFrame, false, pu)
+			return
+		}
+	}
+	t.setBrowserHeaders(h, target, KindDocument, true)
+}
+
+// documentKind is the Data Saver kind of the tab's document request.
+func (t *Tab) documentKind() DataKind {
+	if t.isFrame() {
+		return KindFrame
+	}
+	return KindDocument
+}
+
 // setBrowserHeaders adds the defaults to h (only the ones not already set). nav marks a top-level navigation
 // started by the person (address bar, link), page is the document making a sub-resource request.
 func (t *Tab) setBrowserHeaders(h http.Header, target *url.URL, kind DataKind, nav bool) {
+	var page *url.URL
+	if !nav {
+		if pu, err := url.Parse(t.URL()); err == nil && pu.Host != "" {
+			page = pu
+		}
+	}
+	t.setBrowserHeadersFrom(h, target, kind, nav, page)
+}
+
+func (t *Tab) setBrowserHeadersFrom(h http.Header, target *url.URL, kind DataKind, nav bool, page *url.URL) {
 	set := func(k, v string) {
 		if v != "" && h.Get(k) == "" {
 			h.Set(k, v)
@@ -121,12 +151,6 @@ func (t *Tab) setBrowserHeaders(h http.Header, target *url.URL, kind DataKind, n
 	}
 	set("Accept", acceptFor(kind))
 	set("Accept-Language", t.Context().AcceptLanguage())
-	var page *url.URL
-	if !nav {
-		if pu, err := url.Parse(t.URL()); err == nil && pu.Host != "" {
-			page = pu
-		}
-	}
 	if target != nil && trustworthy(target) {
 		set("Sec-Fetch-Dest", secFetchDest(kind))
 		switch {
