@@ -76,8 +76,9 @@ Where Chromium is ahead, and we say so:
   an "Open in system browser" action.
 
 In-process numbers on an idle machine (`go run ./internal/app/cmd/appbench`, `internal/app/BENCH.md`): typing with the
-dropdown open is 4.6 ms p50 / 7.5 ms p99 at 1x and 6.3 / 9.7 ms at 2x; the first key that opens the dropdown is 12.7 ms
-at 1x and 28 ms at 2x (not yet at our 8 ms target). A live Sidekick task (3 model turns, real API) took 3.4 s and cost
+dropdown open is 4.6 ms p50 / 7.5 ms p99 at 1x and 6.3 / 9.7 ms at 2x; the first key that opens the dropdown was 12.7 to 13 ms
+at 1x (about 11.3 ms after reusing dropdown rows instead of rebuilding them; measured in-process with
+`appbench -open-profile`, not yet re-measured against Chromium) and 28 ms at 2x. Still above our 8 ms target. A live Sidekick task (3 model turns, real API) took 3.4 s and cost
 $0.0014; provider time is about 85% of the wall clock. macOS and Windows windows, installers and signing are untested
 (CI only builds and unit-tests them). Installers: `docs/install.md`.
 
@@ -327,4 +328,5 @@ Requires Go 1.26 (the `go` toolchain downloads it automatically when `GOTOOLCHAI
 
 ## License
 
-MIT (TBD: confirm before public release).
+Apache License 2.0 (see `LICENSE` and `NOTICE`). It carries an explicit patent grant, which suits a browser engine, and
+is compatible with the BSD, MIT and Apache licensed Go modules Sweef depends on.

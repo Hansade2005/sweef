@@ -12,7 +12,7 @@
   function Omni(o) {
     this.o = o; this.input = o.input; this.list = o.list; this.ghost = o.ghost || null;
     this.remote = []; this.rows = []; this.sel = -1; this.req = {}; this.shown = 0; this.open = false;
-    this.kids = []; this.foot = null; this.tog = null; this.wait = 0; this.gI = null; this.gB = null; this.actId = "";
+    this.kids = []; this.pool = { sec: [] }; this.foot = null; this.tog = null; this.wait = 0; this.gI = null; this.gB = null; this.actId = "";
     this.typed = ""; this.completion = ""; this.noGhost = false; this.pasted = false; this.uid = "ob" + (++SW.omniSeq);
     var me = this, inp = this.input;
     inp.setAttribute("role", "combobox"); inp.setAttribute("aria-autocomplete", "both"); inp.setAttribute("aria-expanded", "false");
@@ -28,11 +28,11 @@
     this.list.addEventListener("mousedown", function (e) { e.preventDefault(); });
     this.list.addEventListener("click", function (e) {
       var r = e.target.closest ? e.target.closest(".orow") : null; if (!r) return;
-      me.commit(me.rows[+r.getAttribute("data-i")], e);
+      var k = me.kidOf(r); if (k) me.commit(me.rows[k.i], e);
     });
     this.list.addEventListener("mousemove", function (e) {
       var r = e.target.closest ? e.target.closest(".orow") : null; if (!r) return;
-      var i = +r.getAttribute("data-i"); if (i !== me.sel) me.select(i, true);
+      var k = me.kidOf(r); if (k && k.i !== me.sel) me.select(k.i, true);
     });
     SW.on("omni.suggestions", function (p) { me.onRemote(p || {}); });
   }
@@ -148,16 +148,32 @@
   }
   P.makeRow = function (r) {
     var sub = subOf(r), has = sub !== null, el = tpl(r.kind, has).cloneNode(true), otx = el.childNodes[1];
-    return { row: 1, el: el, kind: r.kind, hasSub: has, base: el.className, ot: otx.firstChild.firstChild, os: has ? otx.childNodes[1].firstChild : null, t: "", s: "", i: -1, on: false };
+    return { row: 1, el: el, kind: r.kind, hasSub: has, base: el.className, ot: otx.firstChild.firstChild, os: has ? otx.childNodes[1].firstChild : null, t: "", s: "", i: -1, idI: -1, on: false };
   };
+  /* Rows and section headings that leave the list are kept (detached) and reused: the same few kinds come back on
+     the next keystroke, and cloning plus inserting a row costs much more than patching two text nodes. */
+  P.takeRow = function (r) {
+    var has = subOf(r) !== null, a = this.pool[r.kind + (has ? 1 : 0)];
+    return a && a.length ? a.pop() : this.makeRow(r);
+  };
+  P.release = function (k) {
+    var a = k.sec ? this.pool.sec : (this.pool[k.kind + (k.hasSub ? 1 : 0)] = this.pool[k.kind + (k.hasSub ? 1 : 0)] || []);
+    if (a.length < 8) a.push(k);
+  };
+  P.kidOf = function (el) { for (var j = 0; j < this.kids.length; j++) if (this.kids[j].el === el) return this.kids[j]; return null; };
+  /* Only the selected row carries an id (aria-activedescendant points at it) and rows are found by identity, so a row
+     that moves to another position costs no attribute writes. */
   P.markRow = function (k, on) {
     if (k.on === on) return; k.on = on;
     k.el.className = on ? k.base + " sel" : k.base; k.el.setAttribute("aria-selected", on ? "true" : "false");
+    if (on) { k.el.id = this.uid + "r" + k.i; k.idI = k.i; }
+    else if (k.idI >= 0) { k.el.removeAttribute("id"); k.idI = -1; }
   };
   P.patchRow = function (k, r, i) {
     var t = str(r.title); if (k.t !== t) { k.t = t; k.ot.nodeValue = t; }
     if (k.os) { var s = str(subOf(r)); if (k.s !== s) { k.s = s; k.os.nodeValue = s; } }
-    if (k.i !== i) { k.i = i; k.el.id = this.uid + "r" + i; k.el.setAttribute("data-i", i); }
+    k.i = i;
+    if (k.on && k.idI !== i) { k.el.id = this.uid + "r" + i; k.idI = i; }
     this.markRow(k, i === this.sel);
   };
   P.render = function () {
@@ -169,9 +185,9 @@
     if (this.expanded !== show) { this.expanded = show; this.input.setAttribute("aria-expanded", show ? "true" : "false"); }
     if (!show) { if (this.actId) { this.actId = ""; this.input.removeAttribute("aria-activedescendant"); } this.toggle(false); return; }
     var j = 0;
-    function put(k) {  // k replaces whatever is at position j
+    function put(k) {  // k replaces whatever is at position j; what it replaces goes back to the pool
       var old = kids[j];
-      if (old) l.replaceChild(k.el, old.el); else l.insertBefore(k.el, me.foot);
+      if (old) { l.replaceChild(k.el, old.el); me.release(old); } else l.insertBefore(k.el, me.foot);
       kids[j] = k;
     }
     for (var i = 0; i < rows.length; i++) {
@@ -179,16 +195,16 @@
       if (i > 0 && secKey && secKey !== last) {
         var st = SEC[secKey] || ""; k = kids[j];
         if (k && k.sec) { if (k.t !== st) { k.t = st; k.tn.nodeValue = st; } }
-        else { var se = (SECTPL || (SECTPL = h("div.osec", { role: "presentation" }, ""))).cloneNode(true); se.firstChild.nodeValue = st; put({ sec: 1, t: st, el: se, tn: se.firstChild }); }
+        else { var sp = this.pool.sec.pop(); if (sp) { if (sp.t !== st) { sp.t = st; sp.tn.nodeValue = st; } put(sp); } else { var se = (SECTPL || (SECTPL = h("div.osec", { role: "presentation" }, ""))).cloneNode(true); se.firstChild.nodeValue = st; put({ sec: 1, t: st, el: se, tn: se.firstChild }); } }
         j++;
       }
       last = secKey || last;
       k = kids[j];
       if (k && k.row && k.kind === r.kind && k.hasSub === (subOf(r) !== null)) this.patchRow(k, r, i);
-      else { k = this.makeRow(r); this.patchRow(k, r, i); put(k); }
+      else { k = this.takeRow(r); this.patchRow(k, r, i); put(k); }
       j++;
     }
-    while (kids.length > j) l.removeChild(kids.pop().el);
+    while (kids.length > j) { k = kids.pop(); l.removeChild(k.el); this.release(k); }
     if (this.o.footer !== false) {
       if (!this.foot) this.foot = h("div.ofoot", h("span", { text: S.omni.hint }), h("span", { text: SW.mod === "Cmd" ? S.omni.hintAskMac : S.omni.hintAsk }));
       if (this.foot.parentNode !== l || l.lastChild !== this.foot) l.appendChild(this.foot);

@@ -49,7 +49,13 @@ func main() {
 	chromium := flag.String("chromium", "", "chromium binary for the comparison (default: auto-detect under /opt/pw-browsers)")
 	noChrome := flag.Bool("skip-chromium", false, "skip the Chromium comparison")
 	onlyChrome := flag.Bool("only-chromium", false, "run only the Chromium comparison")
+	openProf := flag.String("open-profile", "", "profile only the key that opens the omnibox dropdown; write a CPU profile to this path and exit")
+	openScale := flag.Float64("open-scale", 1, "device scale for -open-profile")
 	flag.Parse()
+	if *openProf != "" {
+		openProfile(*openProf, *openScale)
+		return
+	}
 	root := moduleRoot()
 	if *out == "" {
 		*out = filepath.Join(root, "internal", "app", "BENCH.md")
