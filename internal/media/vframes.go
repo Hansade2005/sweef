@@ -3,6 +3,7 @@ package media
 import (
 	"fmt"
 	"image"
+	"runtime"
 	"sort"
 	"sync"
 
@@ -256,7 +257,8 @@ func (n *nativeFrames) Frame(t float64) (image.Image, error) {
 }
 
 // yuvToRGBA converts a 4:2:0 picture to RGBA with the limited-range BT.601
-// (or BT.709 for HD) matrix.
+// (or BT.709 for HD) matrix. Large pictures are converted in horizontal bands
+// on several goroutines.
 func yuvToRGBA(src *image.YCbCr, bt709 bool) *image.RGBA {
 	b := src.Bounds()
 	w, h := b.Dx(), b.Dy()
@@ -268,24 +270,51 @@ func yuvToRGBA(src *image.YCbCr, bt709 bool) *image.RGBA {
 	} else {
 		cr2r, cb2g, cr2g, cb2b = 104597, 25675, 53279, 132201
 	}
-	const yscale = 76309 // 255/219 in 16.16
-	for y := 0; y < h; y++ {
-		yr := src.Y[(y+b.Min.Y-src.Rect.Min.Y)*src.YStride+(b.Min.X-src.Rect.Min.X):]
-		ci := src.COffset(b.Min.X, b.Min.Y+y)
-		d := dst.Pix[y*dst.Stride:]
-		for x := 0; x < w; x++ {
-			yy := (int32(yr[x]) - 16) * yscale
-			cb := int32(src.Cb[ci+x>>1]) - 128
-			cr := int32(src.Cr[ci+x>>1]) - 128
-			r := (yy + cr2r*cr + 32768) >> 16
-			g := (yy - cb2g*cb - cr2g*cr + 32768) >> 16
-			bl := (yy + cb2b*cb + 32768) >> 16
-			d[4*x] = clip8(r)
-			d[4*x+1] = clip8(g)
-			d[4*x+2] = clip8(bl)
-			d[4*x+3] = 255
+	band := func(y0, y1 int) {
+		const yscale = 76309 // 255/219 in 16.16
+		for y := y0; y < y1; y++ {
+			yr := src.Y[(y+b.Min.Y-src.Rect.Min.Y)*src.YStride+(b.Min.X-src.Rect.Min.X):]
+			ci := src.COffset(b.Min.X, b.Min.Y+y)
+			d := dst.Pix[y*dst.Stride : y*dst.Stride+4*w]
+			cb, cr := src.Cb[ci:], src.Cr[ci:]
+			for x := 0; x+1 < w; x += 2 {
+				// two pixels share one chroma sample
+				u := int32(cb[x>>1]) - 128
+				v := int32(cr[x>>1]) - 128
+				rc := cr2r*v + 32768
+				gc := 32768 - cb2g*u - cr2g*v
+				bc := cb2b*u + 32768
+				y0 := (int32(yr[x]) - 16) * yscale
+				y1 := (int32(yr[x+1]) - 16) * yscale
+				o := d[4*x : 4*x+8 : 4*x+8]
+				o[0], o[1], o[2], o[3] = clip8((y0+rc)>>16), clip8((y0+gc)>>16), clip8((y0+bc)>>16), 255
+				o[4], o[5], o[6], o[7] = clip8((y1+rc)>>16), clip8((y1+gc)>>16), clip8((y1+bc)>>16), 255
+			}
+			if w&1 == 1 { // odd width: the last pixel
+				x := w - 1
+				u := int32(cb[x>>1]) - 128
+				v := int32(cr[x>>1]) - 128
+				yy := (int32(yr[x]) - 16) * yscale
+				d[4*x], d[4*x+1], d[4*x+2], d[4*x+3] = clip8((yy+cr2r*v+32768)>>16), clip8((yy-cb2g*u-cr2g*v+32768)>>16), clip8((yy+cb2b*u+32768)>>16), 255
+			}
 		}
 	}
+	workers := min(runtime.GOMAXPROCS(0), 4)
+	if w*h < 320*240 || workers < 2 {
+		band(0, h)
+		return dst
+	}
+	var wg sync.WaitGroup
+	step := (h + workers - 1) / workers
+	for y := 0; y < h; y += step {
+		y1 := min(y+step, h)
+		wg.Add(1)
+		go func(y0, y1 int) {
+			defer wg.Done()
+			band(y0, y1)
+		}(y, y1)
+	}
+	wg.Wait()
 	return dst
 }
 

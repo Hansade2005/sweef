@@ -357,9 +357,13 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 			}
 			return
 		}
-		// horizontal pass into intermediate (h+7) x w
+		// horizontal pass into an intermediate block; only the rows the vertical pass reads are computed
 		var inter []uint16
 		var istride int
+		r0, r1 := 0, h+7
+		if fy == 0 {
+			r0, r1 = 3, 3+h
+		}
 		if fx == 0 {
 			inter = win[3:]
 			istride = wstride
@@ -367,13 +371,23 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 			inter = d.predTmp[:(h+7)*w]
 			istride = w
 			f := &filt[fx]
-			for r := 0; r < h+7; r++ {
-				src := win[r*wstride:]
+			f0, f1, f2, f3, f4, f5, f6, f7 := f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7]
+			maxV := d.maxV
+			for r := r0; r < r1; r++ {
+				src := win[r*wstride : r*wstride+w+7]
 				dst := inter[r*w : r*w+w]
-				for c := 0; c < w; c++ {
-					s := int32(src[c])*f[0] + int32(src[c+1])*f[1] + int32(src[c+2])*f[2] + int32(src[c+3])*f[3] +
-						int32(src[c+4])*f[4] + int32(src[c+5])*f[5] + int32(src[c+6])*f[6] + int32(src[c+7])*f[7]
-					dst[c] = d.clipPix((s + 64) >> 7)
+				for c := range dst {
+					s := int32(src[c])*f0 + int32(src[c+1])*f1 + int32(src[c+2])*f2 + int32(src[c+3])*f3 +
+						int32(src[c+4])*f4 + int32(src[c+5])*f5 + int32(src[c+6])*f6 + int32(src[c+7])*f7
+					v := (s + 64) >> 7
+					if uint32(v) > uint32(maxV) {
+						if v < 0 {
+							v = 0
+						} else {
+							v = maxV
+						}
+					}
+					dst[c] = uint16(v)
 				}
 			}
 		}
@@ -384,12 +398,30 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 			return
 		}
 		f := &filt[fy]
+		f0, f1, f2, f3, f4, f5, f6, f7 := f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7]
+		maxV := d.maxV
 		for r := 0; r < h; r++ {
-			for c := 0; c < w; c++ {
-				p := r*istride + c
-				s := int32(inter[p])*f[0] + int32(inter[p+istride])*f[1] + int32(inter[p+2*istride])*f[2] + int32(inter[p+3*istride])*f[3] +
-					int32(inter[p+4*istride])*f[4] + int32(inter[p+5*istride])*f[5] + int32(inter[p+6*istride])*f[6] + int32(inter[p+7*istride])*f[7]
-				out[r*w+c] = d.clipPix((s + 64) >> 7)
+			o := out[r*w : r*w+w]
+			p0 := inter[r*istride : r*istride+w]
+			p1 := inter[(r+1)*istride : (r+1)*istride+w]
+			p2 := inter[(r+2)*istride : (r+2)*istride+w]
+			p3 := inter[(r+3)*istride : (r+3)*istride+w]
+			p4 := inter[(r+4)*istride : (r+4)*istride+w]
+			p5 := inter[(r+5)*istride : (r+5)*istride+w]
+			p6 := inter[(r+6)*istride : (r+6)*istride+w]
+			p7 := inter[(r+7)*istride : (r+7)*istride+w]
+			for c := range o {
+				s := int32(p0[c])*f0 + int32(p1[c])*f1 + int32(p2[c])*f2 + int32(p3[c])*f3 +
+					int32(p4[c])*f4 + int32(p5[c])*f5 + int32(p6[c])*f6 + int32(p7[c])*f7
+				v := (s + 64) >> 7
+				if uint32(v) > uint32(maxV) {
+					if v < 0 {
+						v = 0
+					} else {
+						v = maxV
+					}
+				}
+				o[c] = uint16(v)
 			}
 		}
 		return
