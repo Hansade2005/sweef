@@ -15,3 +15,94 @@ baseline chromium           run 3: page in=0 out=0 conns=0; browser-internal in=
 baseline chromium-savedata  run 1: page in=0 out=0 conns=0; browser-internal in=11741 out=4198 [accounts.google.com www.google.com]
 baseline chromium-savedata  run 2: page in=0 out=0 conns=0; browser-internal in=11876 out=4198 [www.google.com accounts.google.com]
 baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=11801 out=4198 [www.google.com accounts.google.com]
+[1/345] sweef-off          run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  560038 warm=  147397 req= 41 ready= 5656ms ok
+[2/345] sweef-standard     run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  539228 warm=  147950 req= 34 ready= 3693ms ok
+[3/345] sweef-strict       run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  423174 warm=  154376 req= 14 ready= 4330ms ok
+[4/345] chromium           run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  527368 warm=  267182 req= 23 ready=  988ms ok
+[5/345] chromium-savedata  run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  532338 warm=  354143 req= 23 ready= 1169ms ok
+[6/345] sweef-standard     run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  539175 warm=  147518 req= 34 ready= 4693ms ok
+[7/345] sweef-strict       run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  421877 warm=  154489 req= 13 ready= 4185ms ok
+[8/345] chromium           run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  532269 warm=  391145 req= 23 ready= 1053ms ok
+[9/345] chromium-savedata  run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  640257 warm=  131124 req= 40 ready= 1289ms ok
+[10/345] sweef-off          run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  560058 warm=  147509 req= 41 ready= 5857ms ok
+[11/345] sweef-strict       run 3 https://en.wikipedia.org/wiki/Web_browser                    cold=  421906 warm=  154486 req= 13 ready= 3753ms ok
+[12/345] chromium           run 3 https://en.wikipedia.org/wiki/Web_browser                    cold=  527329 warm=  267199 req= 23 ready= 1041ms ok
+[13/345] chromium-savedata  run 3 https://en.wikipedia.org/wiki/Web_browser                    cold=  524250 warm=  267203 req= 23 ready= 1262ms ok
+[14/345] sweef-off          run 3 https://en.wikipedia.org/wiki/Web_browser                    cold=  559996 warm=  147948 req= 41 ready= 5626ms ok
+[15/345] sweef-standard     run 3 https://en.wikipedia.org/wiki/Web_browser                    cold=  546804 warm=  147625 req= 34 ready= 3834ms ok
+[16/345] sweef-off          run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1563568 warm=  811846 req=105 ready=11090ms ok
+[17/345] sweef-standard     run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold=  951082 warm=  491983 req= 60 ready=13375ms ok
+[18/345] sweef-strict       run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold=  301975 warm=  107072 req=  8 ready=  988ms ok
+[19/345] chromium           run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1270846 warm=  857515 req= 35 ready= 1351ms ok
+[20/345] chromium-savedata  run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1197321 warm=  593123 req= 35 ready= 1203ms ok
+[21/345] sweef-standard     run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1014956 warm=  554416 req= 60 ready=13745ms ok
+[22/345] sweef-strict       run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold=  301892 warm=  108524 req=  8 ready=  674ms ok
+[23/345] chromium           run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1271178 warm=  508049 req= 35 ready= 1233ms ok
+[24/345] chromium-savedata  run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1270577 warm=  508762 req= 35 ready= 8420ms ok
+[25/345] sweef-off          run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 2931076 warm=  806032 req=105 ready= 7259ms ok
+[26/345] sweef-strict       run 3 https://en.wikivoyage.org/wiki/Lisbon                        cold=  301902 warm=  107095 req=  8 ready= 1071ms ok
+[27/345] chromium           run 3 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1491803 warm=  338684 req= 89 ready= 1437ms ok
+[28/345] chromium-savedata  run 3 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1269645 warm=  507218 req= 35 ready= 1235ms ok
+[29/345] sweef-off          run 3 https://en.wikivoyage.org/wiki/Lisbon                        cold= 2856711 warm=  881105 req=105 ready= 7202ms ok
+[30/345] sweef-standard     run 3 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1014867 warm=  564703 req= 60 ready=12858ms ok
+[31/345] sweef-off          run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219924 warm=   98198 req= 24 ready= 1407ms ok
+[32/345] sweef-standard     run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219856 warm=   97454 req= 24 ready=  960ms ok
+[33/345] sweef-strict       run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  228569 warm=   98137 req= 24 ready= 1463ms ok
+[34/345] chromium           run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  578395 warm=  108357 req= 88 ready= 3016ms ok
+[35/345] chromium-savedata  run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  629197 warm=   92280 req= 88 ready= 2003ms ok
+[36/345] sweef-standard     run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219965 warm=   98136 req= 24 ready= 1170ms ok
+[37/345] sweef-strict       run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  227943 warm=   98398 req= 24 ready= 1658ms ok
+[38/345] chromium           run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  614447 warm=  106962 req= 88 ready= 2310ms ok
+[39/345] chromium-savedata  run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  630028 warm=   57175 req= 90 ready=  832ms ok
+[40/345] sweef-off          run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219699 warm=   98149 req= 24 ready= 1043ms ok
+[41/345] sweef-strict       run 3 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  228211 warm=   98037 req= 24 ready= 1544ms ok
+[42/345] chromium           run 3 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  629695 warm=   85432 req= 90 ready=  856ms ok
+[43/345] chromium-savedata  run 3 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  576476 warm=  108907 req= 88 ready= 2810ms ok
+[44/345] sweef-off          run 3 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219477 warm=   98215 req= 24 ready= 1452ms ok
+[45/345] sweef-standard     run 3 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219962 warm=   97143 req= 24 ready=  881ms ok
+[46/345] sweef-off          run 1 https://docs.python.org/3/library/asyncio.html               cold=   49646 warm=   16861 req= 20 ready= 2630ms ok
+[47/345] sweef-standard     run 1 https://docs.python.org/3/library/asyncio.html               cold=   48479 warm=   16912 req= 19 ready= 2811ms ok
+[48/345] sweef-strict       run 1 https://docs.python.org/3/library/asyncio.html               cold=   64352 warm=   16912 req= 19 ready= 3992ms ok
+[49/345] chromium           run 1 https://docs.python.org/3/library/asyncio.html               cold=   53592 warm=    8728 req= 20 ready=  960ms ok
+[50/345] chromium-savedata  run 1 https://docs.python.org/3/library/asyncio.html               cold=   52749 warm=    7778 req= 20 ready= 1224ms ok
+[51/345] sweef-standard     run 2 https://docs.python.org/3/library/asyncio.html               cold=   48410 warm=   16914 req= 19 ready= 3042ms ok
+[52/345] sweef-strict       run 2 https://docs.python.org/3/library/asyncio.html               cold=   64545 warm=   16958 req= 19 ready= 3440ms ok
+[53/345] chromium           run 2 https://docs.python.org/3/library/asyncio.html               cold=   52853 warm=    7778 req= 20 ready=  965ms ok
+[54/345] chromium-savedata  run 2 https://docs.python.org/3/library/asyncio.html               cold=   53819 warm=    8734 req= 20 ready= 1183ms ok
+[55/345] sweef-off          run 2 https://docs.python.org/3/library/asyncio.html               cold=   49644 warm=   16889 req= 20 ready= 2926ms ok
+[56/345] sweef-strict       run 3 https://docs.python.org/3/library/asyncio.html               cold=   64393 warm=   16937 req= 19 ready= 3810ms ok
+[57/345] chromium           run 3 https://docs.python.org/3/library/asyncio.html               cold=   53695 warm=    7778 req= 20 ready= 1199ms ok
+[58/345] chromium-savedata  run 3 https://docs.python.org/3/library/asyncio.html               cold=   53717 warm=    8734 req= 20 ready= 1676ms ok
+[59/345] sweef-off          run 3 https://docs.python.org/3/library/asyncio.html               cold=   49535 warm=   16886 req= 20 ready= 2909ms ok
+[60/345] sweef-standard     run 3 https://docs.python.org/3/library/asyncio.html               cold=   47593 warm=   16906 req= 19 ready= 2372ms ok
+[61/345] sweef-off          run 1 https://go.dev/doc/effective_go                              cold=  610270 warm=  216555 req= 33 ready=12460ms ok
+[62/345] sweef-standard     run 1 https://go.dev/doc/effective_go                              cold=  593946 warm=  201352 req= 22 ready=10832ms ok
+[63/345] sweef-strict       run 1 https://go.dev/doc/effective_go                              cold=  177162 warm=  169831 req= 13 ready= 8469ms ok
+[64/345] chromium           run 1 https://go.dev/doc/effective_go                              cold=  793123 warm=  228615 req= 38 ready= 2450ms ok
+[65/345] chromium-savedata  run 1 https://go.dev/doc/effective_go                              cold=  794876 warm=  232361 req= 38 ready= 2433ms ok
+[66/345] sweef-standard     run 2 https://go.dev/doc/effective_go                              cold=  596136 warm=  204075 req= 23 ready=11544ms ok
+[67/345] sweef-strict       run 2 https://go.dev/doc/effective_go                              cold=  176963 warm=  168475 req= 13 ready= 8615ms ok
+[68/345] chromium           run 2 https://go.dev/doc/effective_go                              cold=  799715 warm=  229092 req= 38 ready= 2272ms ok
+[69/345] chromium-savedata  run 2 https://go.dev/doc/effective_go                              cold=  797232 warm=  229412 req= 38 ready= 2274ms ok
+[70/345] sweef-off          run 2 https://go.dev/doc/effective_go                              cold=  789559 warm=  219553 req= 36 ready=12992ms ok
+[71/345] sweef-strict       run 3 https://go.dev/doc/effective_go                              cold=  176578 warm=  168788 req= 13 ready= 8746ms ok
+[72/345] chromium           run 3 https://go.dev/doc/effective_go                              cold=  805595 warm=  249216 req= 38 ready= 2210ms ok
+[73/345] chromium-savedata  run 3 https://go.dev/doc/effective_go                              cold=  797946 warm=  231414 req= 38 ready= 2379ms ok
+[74/345] sweef-off          run 3 https://go.dev/doc/effective_go                              cold=  611030 warm=  218212 req= 33 ready=12041ms ok
+[75/345] sweef-standard     run 3 https://go.dev/doc/effective_go                              cold=  596184 warm=  200897 req= 22 ready=10560ms ok
+[76/345] sweef-off          run 1 https://news.ycombinator.com/                                cold=   18384 warm=   13897 req=  3 ready=  493ms ok
+[77/345] sweef-standard     run 1 https://news.ycombinator.com/                                cold=   18397 warm=   13910 req=  3 ready=  527ms ok
+[78/345] sweef-strict       run 1 https://news.ycombinator.com/                                cold=   25849 warm=   13933 req=  3 ready=  898ms ok
+[79/345] chromium           run 1 https://news.ycombinator.com/                                cold=   20028 warm=   14057 req=  7 ready=  797ms ok
+[80/345] chromium-savedata  run 1 https://news.ycombinator.com/                                cold=   20046 warm=   14061 req=  7 ready=  913ms ok
+  retrying sweef-standard https://news.ycombinator.com/ run 2 after: navigate: Get "https://news.ycombinator.com/": EOF
+[81/345] sweef-standard     run 2 https://news.ycombinator.com/                                cold=   18388 warm=   13902 req=  3 ready=  763ms ok
+[82/345] sweef-strict       run 2 https://news.ycombinator.com/                                cold=   25841 warm=   13924 req=  3 ready=  927ms ok
+[83/345] chromium           run 2 https://news.ycombinator.com/                                cold=   20021 warm=   14049 req=  7 ready=  995ms ok
+[84/345] chromium-savedata  run 2 https://news.ycombinator.com/                                cold=   20038 warm=   14061 req=  7 ready=  718ms ok
+[85/345] sweef-off          run 2 https://news.ycombinator.com/                                cold=   18375 warm=   13889 req=  3 ready=  779ms ok
+[86/345] sweef-strict       run 3 https://news.ycombinator.com/                                cold=   25840 warm=   13926 req=  3 ready=  878ms ok
+[87/345] chromium           run 3 https://news.ycombinator.com/                                cold=   20020 warm=   14049 req=  7 ready=  856ms ok
+[88/345] chromium-savedata  run 3 https://news.ycombinator.com/                                cold=   20059 warm=   14061 req=  7 ready=  853ms ok
+[89/345] sweef-off          run 3 https://news.ycombinator.com/                                cold=   18375 warm=   13881 req=  3 ready=  728ms ok
+[90/345] sweef-standard     run 3 https://news.ycombinator.com/                                cold=   18381 warm=   13891 req=  3 ready=  472ms ok
