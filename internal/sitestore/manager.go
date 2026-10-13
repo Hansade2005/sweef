@@ -233,6 +233,24 @@ func (o *Origin) scan() {
 		}
 	}
 	o.scanCaches()
+	o.scanSW()
+}
+
+// scanSW sums the service worker files of an origin.
+func (o *Origin) scanSW() {
+	if o.dir == "" {
+		return
+	}
+	var n int64
+	_ = filepath.WalkDir(filepath.Join(o.dir, "sw"), func(_ string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			if fi, err := d.Info(); err == nil {
+				n += fi.Size()
+			}
+		}
+		return nil
+	})
+	o.other.Store(n)
 }
 
 // touch makes sure the origin's directory and meta.json exist.
@@ -257,6 +275,20 @@ func (o *Origin) writeMeta() {
 		_ = os.Rename(tmp, filepath.Join(o.dir, "meta.json"))
 	}
 }
+
+// SWDir is where the origin's service worker registrations live ("" = memory only).
+func (o *Origin) SWDir() string {
+	if o.dir == "" {
+		return ""
+	}
+	return filepath.Join(o.dir, "sw")
+}
+
+// SetOtherBytes records how much the origin's service worker scripts occupy (counted in usage and quota).
+func (o *Origin) SetOtherBytes(n int64) { o.other.Store(n) }
+
+// Touch makes sure the origin is listed on disk (see Origins).
+func (o *Origin) Touch() { o.touch() }
 
 // Persisted reports whether the origin asked for (and got) persistent storage.
 func (o *Origin) Persisted() bool { return o.persist.Load() }

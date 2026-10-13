@@ -29,8 +29,9 @@
     return s;
   }
   function strBin(s) {
-    var u = new Uint8Array(s.length);
-    for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+    var n = s.length, u = new Uint8Array(n), i = 0;
+    for (; i + 4 <= n; i += 4) { u[i] = s.charCodeAt(i); u[i + 1] = s.charCodeAt(i + 1); u[i + 2] = s.charCodeAt(i + 2); u[i + 3] = s.charCodeAt(i + 3); }
+    for (; i < n; i++) u[i] = s.charCodeAt(i);
     return u;
   }
 
@@ -39,6 +40,7 @@
   function bodyBin(r) {
     if (r._used) throw new TypeError('body is already used');
     r._used = true;
+    if (r._bin !== undefined) return r._bin; // built from stored bytes: still in transfer form
     if (r._rawBytes) return binStr(r._rawBytes);
     var b = r._body;
     if (b === null || b === undefined) return '';
@@ -52,16 +54,20 @@
     h.forEach(function (v, k) { out.push([k, v]); });
     return out;
   }
-  // bytes: a Uint8Array, or a binary string (decoded to bytes here)
+  // The body of a response built from stored bytes stays a binary string; it becomes a Uint8Array or text only when
+  // script asks for it. bytes: a binary string or a Uint8Array.
+  function attachBytes(r, bytes) {
+    var bin = typeof bytes === 'string' ? bytes : undefined, raw = bin === undefined ? bytes : null, text;
+    Object.defineProperty(r, '_bin', { value: bin, writable: true, configurable: true });
+    Object.defineProperty(r, '_rawBytes', { get: function () { return raw || (raw = strBin(bin)); }, set: function (v) { raw = v; bin = undefined; r._bin = undefined; }, configurable: true });
+    r._body = { toString: function () { return text === undefined ? (text = H.binToUtf8(bin !== undefined ? bin : binStr(raw))) : text; } };
+  }
   function responseFrom(bytes, init) {
     var hdr = new global.Headers();
     (init.headers || []).forEach(function (p) { hdr.append(p[0], p[1]); });
     var st = init.status | 0;
     var r = new global.Response(null, { status: st >= 200 && st <= 599 ? st : 200, statusText: init.statusText || '', headers: hdr });
-    var raw = typeof bytes === 'string' ? strBin(bytes) : bytes, text;
-    // text() decodes on first use, so a big binary body that is only read as an ArrayBuffer costs nothing
-    r._body = { toString: function () { return text === undefined ? (text = H.binToUtf8(binStr(raw))) : text; } };
-    Object.defineProperty(r, '_rawBytes', { value: raw, writable: true });
+    attachBytes(r, bytes);
     r.url = init.url || '';
     r.type = init.type || 'basic';
     return r;
@@ -71,7 +77,8 @@
     var orig = global.Response.prototype.clone;
     Object.defineProperty(global.Response.prototype, 'clone', { value: function () {
       var c = orig.call(this);
-      if (this._rawBytes) Object.defineProperty(c, '_rawBytes', { value: this._rawBytes, writable: true });
+      if (this._bin !== undefined) attachBytes(c, this._bin);
+      else if (this._rawBytes) Object.defineProperty(c, '_rawBytes', { value: this._rawBytes, writable: true, configurable: true });
       return c;
     }, writable: true, configurable: true });
   })();

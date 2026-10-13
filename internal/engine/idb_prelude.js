@@ -47,11 +47,17 @@
   function isObj(v) { return v !== null && (typeof v === 'object' || typeof v === 'function'); }
 
   // ---- tasks: one Go event per queued function, microtasks drain between them ------------
-  var tasks = [];
-  function schedule(fn) { tasks.push(fn); H.idbSched(); }
+  // One Go event drives the whole queue: Go calls __swIdbTask until it reports nothing left (draining microtasks
+  // between the calls), then the next schedule() raises a new event.
+  var tasks = [], driven = false;
+  function schedule(fn) {
+    tasks.push(fn);
+    if (!driven) { driven = true; H.idbSched(); }
+  }
   Object.defineProperty(global, '__swIdbTask', { value: function () {
     var f = tasks.shift();
     if (f) { try { f(); } catch (e) { report(e); } }
+    if (!tasks.length) driven = false;
     return tasks.length;
   } });
 
@@ -400,10 +406,12 @@
   tag(IDBVersionChangeEvent, 'IDBVersionChangeEvent');
   exportClass(IDBVersionChangeEvent, 'IDBVersionChangeEvent');
 
+  var handlerCalls = 0;
   function invoke(t, ev, phase) {
     var threw = false;
     ev.currentTarget = t; ev.eventPhase = phase;
     function call(fn) {
+      handlerCalls++;
       try { if (typeof fn === 'function') fn.call(t, ev); else fn.handleEvent(ev); } catch (e) { threw = true; report(e); }
     }
     if (phase !== 1 && t._on && t._on[ev.type]) call(t._on[ev.type]);
@@ -590,8 +598,16 @@
     tx._state = 'inactive';
     var item = tx._queue.shift();
     if (!item) { settle(tx); return; }
-    runItem(tx, item);
-    if (!tx._finished) { tx._busy = true; schedule(function () { step(tx); }); }
+    // requests nobody listens to run back to back: no script ran, so there is no microtask to wait for
+    for (;;) {
+      var before = handlerCalls;
+      runItem(tx, item);
+      if (tx._finished) return;
+      if (handlerCalls !== before || !tx._queue.length) break;
+      item = tx._queue.shift();
+    }
+    tx._busy = true;
+    schedule(function () { step(tx); });
   }
   function runItem(tx, item) {
     var req = item.req, result, err = null;

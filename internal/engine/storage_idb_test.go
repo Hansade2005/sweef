@@ -36,7 +36,11 @@ func newStorageEngine(t *testing.T, dir string) *Engine {
 // js runs an async snippet in the tab and returns its JSON result.
 func js(t *testing.T, tab *Tab, body string) string {
 	t.Helper()
-	raw := mustEval(t, tab, "(async () => {\n"+body+"\n})()")
+	r, err := tab.Evaluate("(async () => {\n" + body + "\n})()")
+	if err != nil {
+		t.Fatalf("script error: %v\nconsole:\n%s", err, consoleText(tab))
+	}
+	raw := string(r)
 	var s string
 	if json.Unmarshal([]byte(raw), &s) == nil {
 		return s

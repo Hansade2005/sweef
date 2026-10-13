@@ -43,6 +43,8 @@ type httpResp struct {
 	aborted  bool  // the size cap tripped; body is empty
 	synth    bool
 
+	statusText string // reason phrase to report instead of the standard one (service worker responses)
+
 	fromCache  bool   // answered by the HTTP cache (hit, 304 revalidation or stale-if-error)
 	cachedXfer int64  // what the stored response cost when it was downloaded (for budgets and savings)
 	cacheState string // see meterInfo.cacheState
@@ -85,6 +87,9 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	abs, err := resolveURL(t.URL(), o.url)
 	if err != nil {
 		return nil, err
+	}
+	if r, handled, err := t.swFetch(o, abs, kind); handled { // a service worker controls the document
+		return r, err
 	}
 	if t.IsOfflineMode() {
 		return nil, fmt.Errorf("TypeError: Failed to fetch (offline)")
@@ -220,7 +225,11 @@ func (t *Tab) httpForScriptKind(kind DataKind, method, rawurl string, headers ma
 	for k, v := range r.header {
 		hdr[strings.ToLower(k)] = strings.Join(v, ", ")
 	}
-	out := map[string]any{"status": r.status, "statusText": http.StatusText(r.status), "headers": hdr, "body": string(r.body), "url": r.finalURL}
+	statusText := http.StatusText(r.status)
+	if r.statusText != "" {
+		statusText = r.statusText
+	}
+	out := map[string]any{"status": r.status, "statusText": statusText, "headers": hdr, "body": string(r.body), "url": r.finalURL}
 	if !r.synth && !utf8.Valid(r.body) {
 		// binary payload: the text form above is lossy, so also hand over the exact bytes
 		out["b64"] = base64.StdEncoding.EncodeToString(r.body)

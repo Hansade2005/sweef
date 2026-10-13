@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/sweefbrowser/sweef/internal/sitestore"
 )
@@ -30,16 +31,33 @@ func init() {
 	registerPrelude("storage_idb", idbPreludeJS)
 	registerHostExtension("storage_idb", func(j *jsVM) map[string]hostFn { return (&storageHost{j: j}).fns() })
 	registerAsyncHandler("storage", func(j *jsVM, e asyncEvent) {
-		var err error
-		if e.typ == "task" {
-			_, err = j.call("__swIdbTask")
-		} else {
-			_, err = j.call("__swStorageEvent", e.data)
+		if e.typ != "task" {
+			if _, err := j.call("__swStorageEvent", e.data); err != nil && j.tab != nil {
+				j.tab.LogConsole("error", jsErrorText(err, "storage event"))
+			}
+			j.jobs()
+			return
 		}
-		if err != nil && j.tab != nil {
-			j.tab.LogConsole("error", jsErrorText(err, "storage "+e.typ))
+		// Run queued tasks one after the other, the microtasks of each before the next starts (that is what keeps a
+		// transaction active across an await). A bounded batch, so timers and input are not starved.
+		deadline := time.Now().Add(4 * time.Millisecond)
+		for i := 0; i < 512; i++ {
+			r, err := j.call("__swIdbTask")
+			if err != nil {
+				if j.tab != nil {
+					j.tab.LogConsole("error", jsErrorText(err, "storage task"))
+				}
+				return
+			}
+			j.jobs()
+			if n, _ := r.(int); n == 0 {
+				return
+			}
+			if i%16 == 15 && time.Now().After(deadline) {
+				break
+			}
 		}
-		j.jobs() // the microtasks of one task run before the next one starts
+		j.rt().push(asyncEvent{kind: "storage", typ: "task"}) // more is queued: continue on the next turn
 	})
 }
 
