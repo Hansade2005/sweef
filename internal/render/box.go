@@ -47,6 +47,7 @@ type replacedInfo struct {
 	url    string
 	bitmap bool
 	ctrl   string // control subtype: text, checkbox, radio, button, range, color, file...
+	lite   string // "skipped" (img) or "frame" (iframe) when the host withheld the resource (data-sweef-lite); drawn as a labelled box
 }
 
 type lbox struct {

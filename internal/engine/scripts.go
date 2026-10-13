@@ -92,7 +92,7 @@ func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {
 			return
 		}
 		name = abs
-		body, status, err := t.fetchResource(abs)
+		body, status, err := t.fetchResourceKind(abs, KindScript)
 		if err != nil || status >= 400 {
 			msg := "script " + abs + ": "
 			if err != nil {

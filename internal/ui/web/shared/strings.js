@@ -96,5 +96,55 @@
     ["Switch theme: light", "theme:light", ""], ["Switch theme: dark", "theme:dark", ""], ["Switch theme: match system", "theme:system", ""]
   ];
   S.overlay = { working: "{agent} is working", fulfilling: "Fulfilling \"{task}\"", takeControl: "Take control", stop: "Stop", control: "You are in control", controlSub: "{agent} is paused.", resume: "Hand back to {agent}", step: "Step {n}", done: "Done", stopped: "Stopped", cursorLabel: "{agent}" };
+
+  /* Data Saver. Plain words, never guilt: say what is happening and what the person can do.
+     "Measured" = counted from the network. "Estimated" = our best guess. The UI never adds the two. */
+  S.data = {
+    name: "Data Saver", chipTip: "{used} of {limit} used {period}", chipTipFree: "{used} used {period}", chipAria: "Data used {period}: {used} of {limit}", chipAriaFree: "Data used {period}: {used}",
+    period: { day: "today", week: "this week", month: "this month" }, periodName: { day: "day", week: "week", month: "month" },
+    lvl: { off: "Off", standard: "Standard", strict: "Text first" },
+    left: "left", of: "of", usedWord: "used", resetsIn: "Resets in {n} days", resetsTomorrow: "Resets tomorrow", resetsOn: "Resets {date}", noLimit: "No limit set", setLimit: "Set a limit",
+    thisPage: "This page", usedHere: "Used on this page", approx: "(approx.)", usedHereTip: "Counted from each response as it arrived. It can differ slightly from the total on the wire.",
+    savedM: "Saved by cache and limits", savedMTip: "Files we did not download again, or stopped downloading because they were over the size limit. Counted exactly.",
+    notLoaded: "Not loaded", notLoadedReq: "{n} requests not loaded", notLoadedReq1: "1 request not loaded", about: "about", estTip: "An estimate from typical sizes of the files we skipped. It may be higher or lower than the real size.",
+    measured: "Measured", estimate: "Estimate", legend: "Estimates are never added to measured numbers.",
+    nothingHere: "Nothing counted on this page yet.", noMeter: "Counting is not available in this build yet, so there are no numbers to show.",
+    loadImages: "Load images on this page", loadImagesN: "Load images on this page ({n})", loadFully: "Load fully, once", loadFullyDone: "Loaded fully", loadFullyTip: "Reloads this page with everything on. Next page goes back to your settings.",
+    siteRule: "For {host}", ruleAuto: "Auto", ruleFull: "Always full", ruleLite: "Always lite", ruleSub: { "": "Follows your level.", full: "Everything loads on this site.", lite: "This site always loads in a lighter way." },
+    top: "Top sites {period}", topNote: "Approximate", topNone: "Sites will show up here as you browse.", settings: "Data settings", mode: "Level",
+    tapHint: "Or tap a box on the page to load just that one.", incogNote: "Private windows count toward your budget. {brand} does not keep which sites they used.",
+    research: "Research used {n}", researchNot: "About {n} not loaded (estimate)", researchTip: "Counted from the pages {agent} opened. They load as text, without images or video.",
+    nt: { left: "{n} left {period}", used: "You have used your {limit} {period}. It resets {when}.", tomorrow: "tomorrow", inDays: "in {n} days" },
+    stop: {
+      title: "You have used your {limit} {period}", sub: "{brand} paused new pages so your data plan stays safe. Your budget resets {when}.", once: "Load this page once", onceNote: "Loading once still counts toward your total.",
+      raise: "Raise limit", wait: "Wait until reset", raiseTitle: "New limit", raiseGo: "Raise and load", noLimit: "No limit", back: "Back", host: "You asked for"
+    },
+    set: {
+      nav: "Data", lead: "Say how much data you have and {brand} helps you stretch it. Everything happens on this device: pages are never sent through a server to shrink them.",
+      gLevel: "Data Saver level", levelOff: "Off", levelOffTag: "Count only", levelStd: "Standard", levelStdTag: "Lighter pages, same look", levelStrict: "Text first", levelStrictTag: "Pages as text, pictures on tap",
+      does: "What it does", doesnt: "What it does not do", recommended: "Good for most plans",
+      offDo: ["Counts the data you use", "Keeps your budget and tells you as you get close"], offDont: ["Does not block or delay anything", "Does not change how pages look"],
+      stdDo: ["Loads images only as you scroll near them", "Turns very large images (over 200 KB) into tap-to-load boxes", "Plays video and audio only when you press play", "Pauses background tabs and reuses saved files instead of downloading again"],
+      stdDont: ["Does not change text, layout or buttons", "Does not send pages through another company's servers", "Anything you tap loads in full"],
+      strictDo: ["Everything in Standard", "Shows no images until you tap them; boxes keep the page layout", "Skips video, audio and scripts from other sites", "Limits the site's own scripts to 300 KB per page"],
+      strictDont: ["Keeps page colours and layout (styles stay on)", "Has a Load fully, once button on every page", "Some interactive sites may look plain until you load them fully"],
+      gBudget: "Data budget", budgetD: "Pick your plan size. {brand} only counts what pages load, and never stops you unless you ask it to.", presets: [["100", "100 MB"], ["500", "500 MB"], ["1024", "1 GB"], ["0", "No limit"]],
+      custom: "Custom size", customD: "In megabytes.", period: "Budget period", periodD: "How often your data allowance starts over.", day: "Day", week: "Week", month: "Month",
+      resetDay: "Resets on", resetDayWeek: "Week starts on", resetDayMonth: "Day of the month", weekdays: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+      warn: "Heads-up", warnD: "{brand} tells you once at {a}% and {b}% of your budget. No nagging.", hardStop: "Stop loading pages when the budget is used up",
+      hardStopD: "You can still load one page at a time, raise the limit, or wait for the reset. Off by default: pages keep loading and you just see the numbers.",
+      gUse: "So far {period}", usedL: "Used", usedLD: "Counted from the network as pages arrive.", savedL: "Saved, measured", savedLD: "Cache hits and downloads stopped early. Counted exactly.", estL: "Not loaded, estimate", estLD: "A guess from typical sizes. Never added to the measured numbers.",
+      top: "Busiest sites", topD: "Approximate, by site.", reset: "Reset counter", resetD: "Start counting from zero. Your budget stays as it is.", resetSure: "Reset the usage counter?", resetYes: "Yes, reset", cancel: "Cancel",
+      gMore: "More", agentLite: "Light loading for {agent}", agentLiteD: "When {agent} researches for you, pages load as text without images or video. It never needs them.", showMeter: "Show the data meter in the toolbar", showMeterD: "A small chip next to the address bar.",
+      gSites: "Sites with their own rule", sitesD: "Set from the data popover on any page.", sitesNone: "No site has its own rule yet.", forget: "Forget", ruleFull: "Always full", ruleLite: "Always lite",
+      gCount: "What is counted", countD: "Used is counted from the network, including encryption overhead. Downloads and favicons are included; {agent}'s own messages to the model are not. Saved is split in two: measured (files we did not download) and estimated (a guess from typical sizes). We never add them together.",
+      unavailable: "Counting is not available in this build yet, so the numbers below stay empty."
+    },
+    ob: {
+      title: "Do you have a data plan?", sub: "If your data is limited, say so and {brand} will help it last. Change it any time in Settings.",
+      opts: [["100", "100 MB", "a month", "Text first", "Pages load as text. Pictures when you tap."], ["500", "500 MB", "a month", "Standard", "Lighter pages that still look like pages."], ["1024", "1 GB", "a month", "Standard", "Lighter pages that still look like pages."], ["0", "No limit", "unlimited", "Off", "Nothing held back. You can still see what you use."]],
+      notSure: "I am not sure", picked: "Starting with {lvl}. You can switch any time.", skipped: "No problem. You can set this later in Settings."
+    }
+  };
   S.stat = { mem: "Memory", tabs: "Tabs", blocked: "Blocked today" };
 })();

@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"sync"
 )
@@ -20,6 +21,7 @@ const (
 	KString Kind = "string"
 	KInt    Kind = "int"
 	KEnum   Kind = "enum"
+	KObject Kind = "object" // a JSON object, normalised by Spec.Norm
 )
 
 // Spec describes one typed setting.
@@ -31,6 +33,8 @@ type Spec struct {
 	Min     int      `json:"min,omitempty"`
 	Max     int      `json:"max,omitempty"`
 	Group   string   `json:"group,omitempty"`
+	// Norm validates and canonicalises a KObject value.
+	Norm func(any) (any, error) `json:"-"`
 }
 
 // Schema is the full list of known settings (also sent to the settings page).
@@ -64,6 +68,45 @@ var Schema = []Spec{
 	{Key: "zoom.default", Kind: KInt, Default: 100, Min: 25, Max: 500, Group: "appearance"},
 	{Key: "tabs.discardMinutes", Kind: KInt, Default: 30, Min: 0, Max: 1440, Group: "performance"},
 	{Key: "onboarding.done", Kind: KBool, Default: false, Group: "general"},
+
+	// Data Saver (docs/data-saver.md). data.level "auto" means: standard when a
+	// budget is set, else off. The resolved level is in state.data.level.
+	{Key: "data.level", Kind: KEnum, Default: "auto", Enum: []string{"auto", "off", "standard", "strict"}, Group: "data"},
+	{Key: "data.budget", Kind: KObject, Default: DefaultBudget().Map(), Group: "data", Norm: normBudget},
+	{Key: "data.sites", Kind: KObject, Default: map[string]any{}, Group: "data", Norm: normDataSites},
+	{Key: "data.agentLite", Kind: KBool, Default: true, Group: "data"},
+	{Key: "data.showMeter", Kind: KBool, Default: true, Group: "data"},
+}
+
+func normBudget(v any) (any, error) {
+	b, err := ParseBudget(v)
+	if err != nil {
+		return nil, err
+	}
+	return b.Map(), nil
+}
+
+// normDataSites keeps {origin: "full"|"lite"} entries with a usable origin.
+func normDataSites(v any) (any, error) {
+	in, ok := v.(map[string]any)
+	if !ok {
+		if m, ok2 := v.(map[string]string); ok2 {
+			in = map[string]any{}
+			for k, x := range m {
+				in[k] = x
+			}
+		} else {
+			return nil, fmt.Errorf("data.sites: want an object")
+		}
+	}
+	out := map[string]any{}
+	for k, x := range in {
+		r, _ := x.(string)
+		if o := OriginOf(k); o != "" && (r == "full" || r == "lite") {
+			out[o] = r
+		}
+	}
+	return out, nil
 }
 
 // Settings holds typed values with defaults and schema versioning.
@@ -208,6 +251,10 @@ func coerce(sp Spec, v any) (any, error) {
 			}
 			return nil, fmt.Errorf("%s: %q not one of %v", sp.Key, s, sp.Enum)
 		}
+	case KObject:
+		if sp.Norm != nil {
+			return sp.Norm(v)
+		}
 	}
 	return nil, fmt.Errorf("%s: want %s", sp.Key, sp.Kind)
 }
@@ -223,7 +270,7 @@ func (s *Settings) Set(key string, v any) error {
 		return err
 	}
 	s.mu.Lock()
-	if old, had := s.vals[key]; had && old == cv {
+	if old, had := s.vals[key]; had && reflect.DeepEqual(old, cv) {
 		s.mu.Unlock()
 		return nil
 	}

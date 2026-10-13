@@ -478,6 +478,10 @@ func (t *translator) finish(f finish) {
 	t.inflight = nil
 	st := f.stats
 	key := t.h.keyNow()
+	var research app.AgentData
+	if a := t.h.appNow(); a != nil {
+		research = a.AgentDataEnd() // always closes the measurement, even for a failed run
+	}
 	if f.err != nil {
 		code, msg, retry := classify(f.err, key)
 		d := map[string]any{"code": code, "message": msg}
@@ -512,6 +516,11 @@ func (t *translator) finish(f finish) {
 	}
 	if src := t.r.sourceList(); len(src) > 0 {
 		d["sources"] = src
+	}
+	if research.Available {
+		// real numbers from the agent tabs' own counters; the estimate is flagged as one in the UI
+		d["data"] = map[string]any{"bytes": research.Bytes, "savedMeasured": research.SavedMeasured, "savedEstimated": research.SavedEstimated,
+			"skipped": research.Skipped, "lite": research.Lite, "available": true, "text": research.Text}
 	}
 	t.send("done", "", d)
 }

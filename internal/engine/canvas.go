@@ -753,7 +753,7 @@ func (h *cvHost) loadURL(u string) *raster.Surface {
 		}
 		data = d
 	} else {
-		body, status, err := t.fetchResource(abs)
+		body, status, err := t.fetchResourceKind(abs, KindImage)
 		if err != nil || status >= 400 {
 			return nil
 		}

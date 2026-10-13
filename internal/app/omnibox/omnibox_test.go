@@ -2,6 +2,7 @@ package omnibox
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -237,20 +238,22 @@ func TestSuggestFast(t *testing.T) {
 		big = append(big, HistoryHit{URL: fmt.Sprintf("https://site%d.example.com/page", i), Title: "t"})
 	}
 	src := Sources{History: func(string, int) []HistoryHit { return big }, Tabs: func() []TabHit { return nil }}
-	var worst time.Duration
+	// A single scheduler or GC pause on a shared runner can stall one call for milliseconds, so the
+	// assertion is on the 98th percentile of 200 calls; the maximum is logged.
+	lat := make([]time.Duration, 0, 200)
 	for i := 0; i < 200; i++ {
 		t0 := time.Now()
 		Suggest(src, "site", 8)
-		if d := time.Since(t0); d > worst {
-			worst = d
-		}
+		lat = append(lat, time.Since(t0))
 	}
+	sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
+	worst, p98 := lat[len(lat)-1], lat[len(lat)*98/100]
 	limit := 5 * time.Millisecond
 	if raceEnabled {
 		limit *= 10
 	}
-	if worst > limit {
-		t.Fatalf("omnibox merge took %v", worst)
+	if p98 > limit {
+		t.Fatalf("omnibox merge p98 %v (max %v)", p98, worst)
 	}
 	t.Logf("worst merge of 100 history hits: %v", worst)
 }

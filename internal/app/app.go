@@ -68,6 +68,11 @@ type Config struct {
 	NoSmoothScroll bool
 	// Logf receives diagnostics (default: discard).
 	Logf func(format string, args ...any)
+	// DataEngine is the engine's Data Saver API (counters, policies). Nil uses
+	// the default adapter (see dataengine_stub.go / dataengine_real.go).
+	DataEngine DataEngine
+	// Now overrides the clock the data budget uses (tests).
+	Now func() time.Time
 }
 
 // App is the browser.
@@ -148,6 +153,7 @@ type App struct {
 	tabSeq              int
 	fullscreen          bool
 	ovl                 overlayState
+	dat                 dataSaver
 }
 
 type rect struct{ X, Y, W, H float64 }
@@ -241,6 +247,12 @@ func New(cfg Config) (*App, error) {
 		}
 		a.eng = engine.New(o)
 		a.ownE = true
+	}
+	a.initDataSaver()
+	// the app's own HTTP clients count toward "used" like page traffic
+	if ct := a.eng.DefaultContext().CountedTransport(); ct != nil {
+		a.favicons.cli.Transport = ct
+		a.prof.Downloads.Client.Transport = ct
 	}
 	if at, ok := cfg.Agent.(AgentAttacher); ok {
 		at.AttachApp(a)
@@ -463,6 +475,7 @@ func (a *App) shutdown() error {
 	if c, ok := a.agentRaw.(interface{ Close() }); ok {
 		c.Close() // cancel the agent run before the tabs it drives go away
 	}
+	a.dataBook()          // book the last bytes before the counters go away (the ledger is flushed with the profile)
 	a.prof.Session.Stop() // flush the debounced save first, then mark the exit clean
 	a.saveSession(true)
 	if a.animT != nil {

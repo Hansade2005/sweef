@@ -301,9 +301,6 @@ func (f *flatState) addTextAtoms(it *textItem) {
 		if te == start && collapse && end > start {
 			a.space = true
 		}
-		if rs[end-1] == 0xad && end-1 >= start {
-			// soft hyphen: zero width unless the break happens here (handled when finishing the line)
-		}
 		f.atoms = append(f.atoms, a)
 		if forced {
 			f.atoms = append(f.atoms, atom{kind: aBreak, box: it.src, forced: true, it: it})

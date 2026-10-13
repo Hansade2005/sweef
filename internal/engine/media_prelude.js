@@ -271,6 +271,7 @@
 
   // ---- playback policy ------------------------------------------------------------------------
   function hasAudioTrack(s) { return !s.info || s.info.tracks.some(function (t) { return t.kind === 'audio'; }); }
+  function liteMedia() { try { return !!sw.mediaLite(); } catch (e) { return false; } }
   function playAllowed(el) {
     if (activation.has) return true;
     if (isVideo(el) && el.muted) return true;
@@ -342,7 +343,10 @@
     s.sel = cand;
     if (cand.mode === 'object') { task(function () { if (s.loadId === id) streamSource(el, s, id); }); return; }
     var pre = el.preload;
-    var explicitPlay = !s.paused || (el.hasAttribute('autoplay') && s.autoplaying);
+    // Data Saver: no preload and no autoplay download; the load starts when play() is called
+    var lite = liteMedia();
+    if (lite) pre = 'none';
+    var explicitPlay = !s.paused || (!lite && el.hasAttribute('autoplay') && s.autoplaying);
     var go = function () { if (s.loadId === id) startFetch(el, s, id, cand, 0); };
     if (pre === 'none' && !explicitPlay) {
       s.resumeLoad = go;

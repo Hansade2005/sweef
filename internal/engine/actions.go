@@ -185,6 +185,12 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 	if info == nil {
 		return nil
 	}
+	// a tap on a Data Saver placeholder loads what it stands for (and does
+	// not also follow the link the image may sit in)
+	if t.isLitePlaceholder(bid) {
+		defer t.afterAction()
+		return t.LoadSkipped(bid)
+	}
 	defer t.afterAction()
 	switch strings.ToLower(info.Name) {
 	case "a":
@@ -482,6 +488,8 @@ func (t *Tab) ScrollIntoView(sel string) error {
 	})
 	t.stateRing.Push(Event{Kind: EvDomMutated, Data: map[string]any{"scrollTo": box}})
 	t.fire(bid, "scroll", nil)
+	_, vh, _, _, _ := t.Viewport()
+	t.SetScrollY(box[1] - vh/3)
 	return nil
 }
 
@@ -489,6 +497,13 @@ func (t *Tab) ScrollIntoView(sel string) error {
 func (t *Tab) MouseWheel(dx, dy int) error {
 	t.jsCall("__swWheel", dx, dy)
 	t.afterAction()
+	if dy != 0 {
+		y := int(t.ds.scrollY.Load()) + dy
+		if y < 0 {
+			y = 0
+		}
+		t.SetScrollY(y) // lazy images follow the wheel
+	}
 	return nil
 }
 

@@ -128,6 +128,13 @@ func (b *Bus) Unsubscribe(id uint64) {
 	}
 }
 
+// hasSubscribers reports whether anyone listens (data events are not even built otherwise).
+func (b *Bus) hasSubscribers() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return len(b.subs) > 0
+}
+
 func (b *Bus) Publish(e Event) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -150,6 +157,7 @@ type Engine struct {
 	nextID atomic.Int64
 
 	httpClient *http.Client // lazily built: cookie jar + bounded transport
+	wire       wireCounters // socket totals of every context (see wire.go)
 
 	// Context isolation (Playwright BrowserContext parity)
 	contexts   map[string]*BrowserContext
@@ -331,6 +339,10 @@ func (e *Engine) Close() error {
 	}
 	e.tabs = map[string]*Tab{}
 	e.order = nil
+	ctxs := make([]*BrowserContext, 0, len(e.contexts))
+	for _, c := range e.contexts {
+		ctxs = append(ctxs, c)
+	}
 	e.contexts = map[string]*BrowserContext{}
 	e.defaultCtx = nil
 	e.mu.Unlock()
@@ -344,12 +356,20 @@ func (e *Engine) Close() error {
 	e.mu.Lock()
 	hc := e.httpClient
 	e.mu.Unlock()
-	if hc != nil {
-		hc.CloseIdleConnections()
+	sweep := func() {
+		if hc != nil {
+			hc.CloseIdleConnections()
+		}
+		for _, c := range ctxs {
+			c.closeIdle()
+		}
+	}
+	if hc != nil || len(ctxs) > 0 {
+		sweep()
 		// Requests that were in flight at Close (favicons, subresources) turn idle only when they
 		// finish, after the sweep above; sweep again so their connections do not linger either.
 		for _, d := range []time.Duration{300 * time.Millisecond, 1500 * time.Millisecond} {
-			time.AfterFunc(d, hc.CloseIdleConnections)
+			time.AfterFunc(d, sweep)
 		}
 	}
 	return nil

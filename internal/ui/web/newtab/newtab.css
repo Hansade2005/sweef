@@ -42,3 +42,9 @@ html, body { min-height: 100%; background: var(--paper); }
 #inc .col { flex: 1; min-width: 0; padding: 0 18px; font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); } #inc .col + .col { border-left: 1px solid var(--line); }
 #inc .col:first-child { padding-left: 6px; }
 #inc .col p { margin-bottom: 12px; } #inc .col b { color: var(--text); font-weight: 650; display: block; margin-bottom: 1px; }
+
+#dataline { align-self: center; margin-top: 14px; display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 14px 0 10px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--fs-sm); color: var(--text-2); font-variant-numeric: tabular-nums; }
+#dataline:hover { background: var(--hover); color: var(--text); }
+#dataline .ic { color: var(--accent); }
+#dataline.w1, #dataline.w2 { background: var(--warn-soft); color: var(--warn); box-shadow: none; } #dataline.w1 .ic, #dataline.w2 .ic { color: var(--warn); }
+#dataline.x { background: var(--warn-soft); color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); } #dataline.x .ic { color: var(--warn); }

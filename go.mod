@@ -3,6 +3,7 @@ module github.com/sweefbrowser/sweef
 go 1.26.0
 
 require (
+	github.com/dsnet/compress v0.0.1
 	github.com/ebitengine/purego v0.11.1
 	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/jfreymuth/oggvorbis v1.0.5

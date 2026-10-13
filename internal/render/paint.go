@@ -735,6 +735,7 @@ func (p *painter) paintBgLayer(b *lbox, ly style.BgLayer, clip Rect, clipRad Rad
 		if img == nil {
 			sd := p.c.svgImageDocFor(ly.Image.URL)
 			if sd == nil {
+				p.hintImage(ly.Image.URL, pa)
 				return
 			}
 			svgDoc = sd

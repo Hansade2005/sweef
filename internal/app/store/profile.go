@@ -43,6 +43,7 @@ type Profile struct {
 	Session   *SessionStore
 	Sites     *Sites
 	Stats     *Usage
+	Data      *DataUsage // Data Saver usage per day
 }
 
 // OpenProfile opens (creating) the persistent profile in dir.
@@ -76,11 +77,13 @@ func openOn(b Backend, dir string, incog bool) (*Profile, error) {
 	p.Session = OpenSession(b)
 	p.Sites = OpenSites(b)
 	p.Stats = NewUsage()
+	p.Data = OpenDataUsage(b, nil)
 	return p, nil
 }
 
 // Close flushes and releases the profile; an incognito profile is wiped.
 func (p *Profile) Close() error {
 	p.Session.Flush()
+	p.Data.Flush()
 	return p.B.Close()
 }

@@ -1,7 +1,7 @@
 /* First run: three steps, always skippable. */
 (function () {
   var SW = window.SW, S = window.S, h = SW.h, icon = SW.icon, post = SW.post, $ = function (id) { return document.getElementById(id); };
-  var step = 1, TOTAL = 3, imp = {}, keyOK = false, demoTimers = [], pr = { trackers: "standard", vis: "ask" }, deflt = false;
+  var step = 1, TOTAL = 4, imp = {}, keyOK = false, demoTimers = [], pr = { trackers: "standard", vis: "ask" }, plan = null, deflt = false;
   var reduce = false; try { reduce = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) {}
   $("logo").appendChild(SW.wordmark(24, "obw")); $("skip").textContent = S.ob.skipAll; $("skip").addEventListener("click", function () { post("onboarding.skip"); });
   function dots() { var d = $("dots"); SW.clear(d); for (var i = 1; i <= TOTAL; i++) d.appendChild(h("i" + (i === step ? ".on" : i < step ? ".done" : ""))); d.setAttribute("aria-valuenow", step); d.setAttribute("aria-valuetext", S.f(S.ob.step, { n: step, total: TOTAL })); }
@@ -74,7 +74,27 @@
         h("div", h("h2", { text: S.f(S.ob.visTitle) }), h("div.choices", { role: "radiogroup", "aria-label": S.f(S.ob.visTitle) }, [["ask", S.ob.visAsk, S.ob.visAskSub, 1], ["allowed", S.ob.visAllowed, S.ob.visAllowedSub], ["blocked", S.ob.visBlocked, S.ob.visBlockedSub]].map(function (o) { return choice("agent.visibilityDefault", "vis", o); })))),
       h("div.note", { style: { marginTop: "22px" } }, icon("shield", 18), h("span", { text: S.f(S.ob.privNote) })));
   }
-  function render() { dots(); var m = $("step"); SW.clear(m); m.appendChild(step === 1 ? s1() : step === 2 ? s2() : s3()); foot(); }
+  /* Step 3: "Do you have a data plan?" Picking a size sets a sensible level; skipping changes nothing. */
+  var PLAN_LVL = { "100": "strict", "500": "standard", "1024": "standard", "0": "off" };
+  function pickPlan(mb) {
+    plan = mb; var n = +mb;
+    SW.post("data.setBudget", n > 0 ? { enabled: true, limitMB: n, period: "month", resetDay: 1 } : { enabled: false });
+    SW.post("data.setLevel", { level: PLAN_LVL[mb] }); render();
+  }
+  function s3data() {
+    var T = S.data.ob, grid = h("div.plans", { role: "radiogroup", "aria-label": T.title });
+    T.opts.forEach(function (o) {
+      var on = plan === o[0];
+      grid.appendChild(h("button.plan", { role: "radio", "aria-checked": on ? "true" : "false", onclick: function () { pickPlan(o[0]); } },
+        h("b", { text: o[1] }), h("span.per", { text: o[2] }), h("span.pl", icon("drop", 14), o[3]), h("span.pd", { text: o[4] })));
+    });
+    var line = plan != null ? S.f(T.picked, { lvl: S.data.lvl[PLAN_LVL[plan]] }) : "";
+    return h("div", h("h1", { text: T.title }), h("p.lead", { text: S.f(T.sub) }), grid,
+      h("div.plannote", { role: "status" }, line ? icon("check", 16) : null, h("span", { text: line || (plan === null && skippedPlan ? T.skipped : "") })),
+      h("div", { style: { marginTop: "6px" } }, h("button.btn.ghost.sm", { text: T.notSure, onclick: function () { plan = null; skippedPlan = true; SW.post("data.setBudget", { enabled: false }); SW.post("data.setLevel", { level: "auto" }); render(); } })));
+  }
+  var skippedPlan = false;
+  function render() { dots(); var m = $("step"); SW.clear(m); m.appendChild(step === 1 ? s1() : step === 2 ? s2() : step === 3 ? s3data() : s3()); foot(); }
   SW.on("import.progress", function (p) { imp[p.source] = { busy: true, pct: p.pct || 0 }; if (step === 1) render(); });
   SW.on("import.done", function (p) { imp[p.source] = { done: true, counts: p.summary || (p.bookmarks != null ? p.bookmarks + " bookmarks" : "") }; if (step === 1) render(); });
   SW.on("import.unavailable", function (p) { imp[p.source] = { off: true }; if (step === 1) render(); });

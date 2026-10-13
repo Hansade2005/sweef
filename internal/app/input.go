@@ -272,8 +272,12 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 			var res struct {
 				Open string `json:"open"`
 				BG   bool   `json:"bg"`
+				Lite *int   `json:"lite"` // index of a tapped Data Saver placeholder
 			}
 			_ = e.eval("__sweefPtr('click',"+itoa(px)+","+itoa(py)+","+itoa(btn)+","+itoa(mods)+")", &res)
+			if res.Lite != nil {
+				a.dataTapAt(e, *res.Lite)
+			}
 			if res.Open != "" {
 				open, bg := res.Open, res.BG
 				a.post(func() { a.openTab(openOpts{URL: open, Incognito: e.incog, Activate: !bg, After: e.id}) })

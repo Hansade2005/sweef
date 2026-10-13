@@ -7,7 +7,7 @@ import (
 )
 
 // Pages are the internal page hosts. sweef://<page> serves <page>/index.html.
-var Pages = map[string]bool{"chrome": true, "newtab": true, "settings": true, "history": true, "downloads": true, "bookmarks": true, "onboarding": true, "error": true}
+var Pages = map[string]bool{"chrome": true, "newtab": true, "settings": true, "history": true, "downloads": true, "bookmarks": true, "onboarding": true, "error": true, "datastop": true}
 
 // Route maps a sweef:// URL to a path inside FS.
 //
