@@ -1,0 +1,385 @@
+=== attempt 1 2026-10-13T03:10:09Z 
+engine data policy API: present (building with -tags datasaver_engine)-tags datasaver_engine
+baseline sweef-off          run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-off          run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-off          run 3: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-standard     run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-standard     run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-standard     run 3: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-strict       run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-strict       run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-strict       run 3: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline chromium           run 1: page in=0 out=0 conns=0; browser-internal in=10533 out=4198 [www.google.com accounts.google.com]
+baseline chromium           run 2: page in=0 out=0 conns=0; browser-internal in=13267 out=4198 [accounts.google.com www.google.com]
+baseline chromium           run 3: page in=0 out=0 conns=0; browser-internal in=11741 out=4198 [www.google.com accounts.google.com]
+baseline chromium-savedata  run 1: page in=0 out=0 conns=0; browser-internal in=11741 out=4198 [accounts.google.com www.google.com]
+baseline chromium-savedata  run 2: page in=0 out=0 conns=0; browser-internal in=11876 out=4198 [www.google.com accounts.google.com]
+baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=11801 out=4198 [www.google.com accounts.google.com]
+[1/345] sweef-off          run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  560038 warm=  147397 req= 41 ready= 5656ms ok
+[2/345] sweef-standard     run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  539228 warm=  147950 req= 34 ready= 3693ms ok
+[3/345] sweef-strict       run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  423174 warm=  154376 req= 14 ready= 4330ms ok
+[4/345] chromium           run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  527368 warm=  267182 req= 23 ready=  988ms ok
+[5/345] chromium-savedata  run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  532338 warm=  354143 req= 23 ready= 1169ms ok
+[6/345] sweef-standard     run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  539175 warm=  147518 req= 34 ready= 4693ms ok
+[7/345] sweef-strict       run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  421877 warm=  154489 req= 13 ready= 4185ms ok
+[8/345] chromium           run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  532269 warm=  391145 req= 23 ready= 1053ms ok
+[9/345] chromium-savedata  run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  640257 warm=  131124 req= 40 ready= 1289ms ok
+[10/345] sweef-off          run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  560058 warm=  147509 req= 41 ready= 5857ms ok
+[11/345] sweef-strict       run 3 https://en.wikipedia.org/wiki/Web_browser                    cold=  421906 warm=  154486 req= 13 ready= 3753ms ok
+[12/345] chromium           run 3 https://en.wikipedia.org/wiki/Web_browser                    cold=  527329 warm=  267199 req= 23 ready= 1041ms ok
+[13/345] chromium-savedata  run 3 https://en.wikipedia.org/wiki/Web_browser                    cold=  524250 warm=  267203 req= 23 ready= 1262ms ok
+[14/345] sweef-off          run 3 https://en.wikipedia.org/wiki/Web_browser                    cold=  559996 warm=  147948 req= 41 ready= 5626ms ok
+[15/345] sweef-standard     run 3 https://en.wikipedia.org/wiki/Web_browser                    cold=  546804 warm=  147625 req= 34 ready= 3834ms ok
+[16/345] sweef-off          run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1563568 warm=  811846 req=105 ready=11090ms ok
+[17/345] sweef-standard     run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold=  951082 warm=  491983 req= 60 ready=13375ms ok
+[18/345] sweef-strict       run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold=  301975 warm=  107072 req=  8 ready=  988ms ok
+[19/345] chromium           run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1270846 warm=  857515 req= 35 ready= 1351ms ok
+[20/345] chromium-savedata  run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1197321 warm=  593123 req= 35 ready= 1203ms ok
+[21/345] sweef-standard     run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1014956 warm=  554416 req= 60 ready=13745ms ok
+[22/345] sweef-strict       run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold=  301892 warm=  108524 req=  8 ready=  674ms ok
+[23/345] chromium           run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1271178 warm=  508049 req= 35 ready= 1233ms ok
+[24/345] chromium-savedata  run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1270577 warm=  508762 req= 35 ready= 8420ms ok
+[25/345] sweef-off          run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 2931076 warm=  806032 req=105 ready= 7259ms ok
+[26/345] sweef-strict       run 3 https://en.wikivoyage.org/wiki/Lisbon                        cold=  301902 warm=  107095 req=  8 ready= 1071ms ok
+[27/345] chromium           run 3 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1491803 warm=  338684 req= 89 ready= 1437ms ok
+[28/345] chromium-savedata  run 3 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1269645 warm=  507218 req= 35 ready= 1235ms ok
+[29/345] sweef-off          run 3 https://en.wikivoyage.org/wiki/Lisbon                        cold= 2856711 warm=  881105 req=105 ready= 7202ms ok
+[30/345] sweef-standard     run 3 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1014867 warm=  564703 req= 60 ready=12858ms ok
+[31/345] sweef-off          run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219924 warm=   98198 req= 24 ready= 1407ms ok
+[32/345] sweef-standard     run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219856 warm=   97454 req= 24 ready=  960ms ok
+[33/345] sweef-strict       run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  228569 warm=   98137 req= 24 ready= 1463ms ok
+[34/345] chromium           run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  578395 warm=  108357 req= 88 ready= 3016ms ok
+[35/345] chromium-savedata  run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  629197 warm=   92280 req= 88 ready= 2003ms ok
+[36/345] sweef-standard     run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219965 warm=   98136 req= 24 ready= 1170ms ok
+[37/345] sweef-strict       run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  227943 warm=   98398 req= 24 ready= 1658ms ok
+[38/345] chromium           run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  614447 warm=  106962 req= 88 ready= 2310ms ok
+[39/345] chromium-savedata  run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  630028 warm=   57175 req= 90 ready=  832ms ok
+[40/345] sweef-off          run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219699 warm=   98149 req= 24 ready= 1043ms ok
+[41/345] sweef-strict       run 3 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  228211 warm=   98037 req= 24 ready= 1544ms ok
+[42/345] chromium           run 3 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  629695 warm=   85432 req= 90 ready=  856ms ok
+[43/345] chromium-savedata  run 3 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  576476 warm=  108907 req= 88 ready= 2810ms ok
+[44/345] sweef-off          run 3 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219477 warm=   98215 req= 24 ready= 1452ms ok
+[45/345] sweef-standard     run 3 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  219962 warm=   97143 req= 24 ready=  881ms ok
+[46/345] sweef-off          run 1 https://docs.python.org/3/library/asyncio.html               cold=   49646 warm=   16861 req= 20 ready= 2630ms ok
+[47/345] sweef-standard     run 1 https://docs.python.org/3/library/asyncio.html               cold=   48479 warm=   16912 req= 19 ready= 2811ms ok
+[48/345] sweef-strict       run 1 https://docs.python.org/3/library/asyncio.html               cold=   64352 warm=   16912 req= 19 ready= 3992ms ok
+[49/345] chromium           run 1 https://docs.python.org/3/library/asyncio.html               cold=   53592 warm=    8728 req= 20 ready=  960ms ok
+[50/345] chromium-savedata  run 1 https://docs.python.org/3/library/asyncio.html               cold=   52749 warm=    7778 req= 20 ready= 1224ms ok
+[51/345] sweef-standard     run 2 https://docs.python.org/3/library/asyncio.html               cold=   48410 warm=   16914 req= 19 ready= 3042ms ok
+[52/345] sweef-strict       run 2 https://docs.python.org/3/library/asyncio.html               cold=   64545 warm=   16958 req= 19 ready= 3440ms ok
+[53/345] chromium           run 2 https://docs.python.org/3/library/asyncio.html               cold=   52853 warm=    7778 req= 20 ready=  965ms ok
+[54/345] chromium-savedata  run 2 https://docs.python.org/3/library/asyncio.html               cold=   53819 warm=    8734 req= 20 ready= 1183ms ok
+[55/345] sweef-off          run 2 https://docs.python.org/3/library/asyncio.html               cold=   49644 warm=   16889 req= 20 ready= 2926ms ok
+[56/345] sweef-strict       run 3 https://docs.python.org/3/library/asyncio.html               cold=   64393 warm=   16937 req= 19 ready= 3810ms ok
+[57/345] chromium           run 3 https://docs.python.org/3/library/asyncio.html               cold=   53695 warm=    7778 req= 20 ready= 1199ms ok
+[58/345] chromium-savedata  run 3 https://docs.python.org/3/library/asyncio.html               cold=   53717 warm=    8734 req= 20 ready= 1676ms ok
+[59/345] sweef-off          run 3 https://docs.python.org/3/library/asyncio.html               cold=   49535 warm=   16886 req= 20 ready= 2909ms ok
+[60/345] sweef-standard     run 3 https://docs.python.org/3/library/asyncio.html               cold=   47593 warm=   16906 req= 19 ready= 2372ms ok
+[61/345] sweef-off          run 1 https://go.dev/doc/effective_go                              cold=  610270 warm=  216555 req= 33 ready=12460ms ok
+[62/345] sweef-standard     run 1 https://go.dev/doc/effective_go                              cold=  593946 warm=  201352 req= 22 ready=10832ms ok
+[63/345] sweef-strict       run 1 https://go.dev/doc/effective_go                              cold=  177162 warm=  169831 req= 13 ready= 8469ms ok
+[64/345] chromium           run 1 https://go.dev/doc/effective_go                              cold=  793123 warm=  228615 req= 38 ready= 2450ms ok
+[65/345] chromium-savedata  run 1 https://go.dev/doc/effective_go                              cold=  794876 warm=  232361 req= 38 ready= 2433ms ok
+[66/345] sweef-standard     run 2 https://go.dev/doc/effective_go                              cold=  596136 warm=  204075 req= 23 ready=11544ms ok
+[67/345] sweef-strict       run 2 https://go.dev/doc/effective_go                              cold=  176963 warm=  168475 req= 13 ready= 8615ms ok
+[68/345] chromium           run 2 https://go.dev/doc/effective_go                              cold=  799715 warm=  229092 req= 38 ready= 2272ms ok
+[69/345] chromium-savedata  run 2 https://go.dev/doc/effective_go                              cold=  797232 warm=  229412 req= 38 ready= 2274ms ok
+[70/345] sweef-off          run 2 https://go.dev/doc/effective_go                              cold=  789559 warm=  219553 req= 36 ready=12992ms ok
+[71/345] sweef-strict       run 3 https://go.dev/doc/effective_go                              cold=  176578 warm=  168788 req= 13 ready= 8746ms ok
+[72/345] chromium           run 3 https://go.dev/doc/effective_go                              cold=  805595 warm=  249216 req= 38 ready= 2210ms ok
+[73/345] chromium-savedata  run 3 https://go.dev/doc/effective_go                              cold=  797946 warm=  231414 req= 38 ready= 2379ms ok
+[74/345] sweef-off          run 3 https://go.dev/doc/effective_go                              cold=  611030 warm=  218212 req= 33 ready=12041ms ok
+[75/345] sweef-standard     run 3 https://go.dev/doc/effective_go                              cold=  596184 warm=  200897 req= 22 ready=10560ms ok
+[76/345] sweef-off          run 1 https://news.ycombinator.com/                                cold=   18384 warm=   13897 req=  3 ready=  493ms ok
+[77/345] sweef-standard     run 1 https://news.ycombinator.com/                                cold=   18397 warm=   13910 req=  3 ready=  527ms ok
+[78/345] sweef-strict       run 1 https://news.ycombinator.com/                                cold=   25849 warm=   13933 req=  3 ready=  898ms ok
+[79/345] chromium           run 1 https://news.ycombinator.com/                                cold=   20028 warm=   14057 req=  7 ready=  797ms ok
+[80/345] chromium-savedata  run 1 https://news.ycombinator.com/                                cold=   20046 warm=   14061 req=  7 ready=  913ms ok
+  retrying sweef-standard https://news.ycombinator.com/ run 2 after: navigate: Get "https://news.ycombinator.com/": EOF
+[81/345] sweef-standard     run 2 https://news.ycombinator.com/                                cold=   18388 warm=   13902 req=  3 ready=  763ms ok
+[82/345] sweef-strict       run 2 https://news.ycombinator.com/                                cold=   25841 warm=   13924 req=  3 ready=  927ms ok
+[83/345] chromium           run 2 https://news.ycombinator.com/                                cold=   20021 warm=   14049 req=  7 ready=  995ms ok
+[84/345] chromium-savedata  run 2 https://news.ycombinator.com/                                cold=   20038 warm=   14061 req=  7 ready=  718ms ok
+[85/345] sweef-off          run 2 https://news.ycombinator.com/                                cold=   18375 warm=   13889 req=  3 ready=  779ms ok
+[86/345] sweef-strict       run 3 https://news.ycombinator.com/                                cold=   25840 warm=   13926 req=  3 ready=  878ms ok
+[87/345] chromium           run 3 https://news.ycombinator.com/                                cold=   20020 warm=   14049 req=  7 ready=  856ms ok
+[88/345] chromium-savedata  run 3 https://news.ycombinator.com/                                cold=   20059 warm=   14061 req=  7 ready=  853ms ok
+[89/345] sweef-off          run 3 https://news.ycombinator.com/                                cold=   18375 warm=   13881 req=  3 ready=  728ms ok
+[90/345] sweef-standard     run 3 https://news.ycombinator.com/                                cold=   18381 warm=   13891 req=  3 ready=  472ms ok
+[91/345] sweef-off          run 1 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1757590 warm=   43777 req= 70 ready= 7793ms ok
+[92/345] sweef-standard     run 1 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1538559 warm=   43657 req= 64 ready= 7519ms ok
+[93/345] sweef-strict       run 1 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold=  155424 warm=      24 req=  8 ready=  749ms ok
+[94/345] chromium           run 1 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 2988753 warm=  136065 req=120 ready= 3396ms ok
+[95/345] chromium-savedata  run 1 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 2780784 warm=  381640 req=121 ready= 2223ms ok
+[96/345] sweef-standard     run 2 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1536363 warm=   43589 req= 64 ready= 7075ms ok
+[97/345] sweef-strict       run 2 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold=  154523 warm=      48 req=  8 ready=  779ms ok
+[98/345] chromium           run 2 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 3009006 warm=  138366 req=120 ready= 3559ms ok
+[99/345] chromium-savedata  run 2 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 3015224 warm=  145028 req=120 ready= 3329ms ok
+[100/345] sweef-off          run 2 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1750992 warm=   42439 req= 70 ready= 8413ms ok
+[101/345] sweef-strict       run 3 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold=  154228 warm=      24 req=  8 ready=  740ms ok
+[102/345] chromium           run 3 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 3027309 warm=  134378 req=121 ready= 2104ms ok
+[103/345] chromium-savedata  run 3 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 2655350 warm=  483244 req=102 ready= 3332ms ok
+[104/345] sweef-off          run 3 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1756740 warm=   42292 req= 70 ready= 8544ms ok
+[105/345] sweef-standard     run 3 https://www.joelonsoftware.com/2000/04/06/things-you-should… cold= 1527962 warm=   42381 req= 64 ready= 7083ms ok
+[106/345] sweef-off          run 1 https://github.com/golang/go                                 cold= 1283242 warm=  514272 req= 38 ready= 2184ms ok
+[107/345] sweef-standard     run 1 https://github.com/golang/go                                 cold= 1284202 warm=  514225 req= 38 ready= 1829ms ok
+[108/345] sweef-strict       run 1 https://github.com/golang/go                                 cold=  418672 warm=   61245 req= 21 ready=  709ms ok
+[109/345] chromium           run 1 https://github.com/golang/go                                 cold= 2627144 warm=  184171 req=177 ready= 4446ms ok
+[110/345] chromium-savedata  run 1 https://github.com/golang/go                                 cold= 2683627 warm=  220789 req=194 ready= 1540ms ok
+[111/345] sweef-standard     run 2 https://github.com/golang/go                                 cold= 1247951 warm=  513840 req= 37 ready= 1920ms ok
+[112/345] sweef-strict       run 2 https://github.com/golang/go                                 cold=  418383 warm=   61216 req= 21 ready=  519ms ok
+[113/345] chromium           run 2 https://github.com/golang/go                                 cold= 2636077 warm=  260063 req=177 ready= 4350ms ok
+[114/345] chromium-savedata  run 2 https://github.com/golang/go                                 cold= 2624714 warm=  197538 req=177 ready= 4366ms ok
+[115/345] sweef-off          run 2 https://github.com/golang/go                                 cold= 1248487 warm=  513830 req= 37 ready= 2059ms ok
+[116/345] sweef-strict       run 3 https://github.com/golang/go                                 cold=  454498 warm=   61198 req= 22 ready=  599ms ok
+[117/345] chromium           run 3 https://github.com/golang/go                                 cold= 2682843 warm=  183990 req=194 ready= 1477ms ok
+[118/345] chromium-savedata  run 3 https://github.com/golang/go                                 cold= 2635822 warm=  184231 req=177 ready= 3801ms ok
+[119/345] sweef-off          run 3 https://github.com/golang/go                                 cold= 1212427 warm=  514249 req= 36 ready= 2512ms ok
+[120/345] sweef-standard     run 3 https://github.com/golang/go                                 cold= 1211832 warm=  513781 req= 36 ready= 1684ms ok
+[121/345] sweef-off          run 1 https://stackoverflow.com/questions/927358/how-do-i-undo-th… cold=  112261 warm=       0 req=  2 ready=  355ms FAIL main document HTTP 403
+[122/345] sweef-standard     run 1 https://stackoverflow.com/questions/927358/how-do-i-undo-th… cold=  115374 warm=       0 req=  2 ready=  779ms FAIL main document HTTP 403
+[123/345] sweef-strict       run 1 https://stackoverflow.com/questions/927358/how-do-i-undo-th… cold=  123894 warm=       0 req=  2 ready=  606ms FAIL main document HTTP 403
+[124/345] chromium           run 1 https://stackoverflow.com/questions/927358/how-do-i-undo-th… cold=  908826 warm=       0 req=125 ready=  808ms FAIL main document HTTP 403
+[125/345] chromium-savedata  run 1 https://stackoverflow.com/questions/927358/how-do-i-undo-th… cold=  917284 warm=       0 req=123 ready=  772ms FAIL main document HTTP 403
+[126/345] sweef-standard     run 2 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[127/345] sweef-strict       run 2 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[128/345] chromium           run 2 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[129/345] chromium-savedata  run 2 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[130/345] sweef-off          run 2 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[131/345] sweef-strict       run 3 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[132/345] chromium           run 3 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[133/345] chromium-savedata  run 3 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[134/345] sweef-off          run 3 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[135/345] sweef-standard     run 3 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[136/345] sweef-off          run 1 https://www.bbc.com/news                                     cold= 2459414 warm=  124423 req=110 ready=19742ms ok
+[137/345] sweef-standard     run 1 https://www.bbc.com/news                                     cold= 2099340 warm=  143063 req= 89 ready=23461ms ok
+[138/345] sweef-strict       run 1 https://www.bbc.com/news                                     cold=  201519 warm=   84946 req=  9 ready= 3122ms ok
+[139/345] chromium           run 1 https://www.bbc.com/news                                     cold= 2727375 warm=  226668 req=108 ready= 3559ms ok
+[140/345] chromium-savedata  run 1 https://www.bbc.com/news                                     cold= 2728699 warm=  230633 req=108 ready= 3737ms ok
+[141/345] sweef-standard     run 2 https://www.bbc.com/news                                     cold= 2109703 warm=  135932 req= 90 ready=15999ms ok
+[142/345] sweef-strict       run 2 https://www.bbc.com/news                                     cold=  201557 warm=   84827 req=  9 ready= 2941ms ok
+[143/345] chromium           run 2 https://www.bbc.com/news                                     cold= 2721772 warm=  226604 req=108 ready= 3816ms ok
+[144/345] chromium-savedata  run 2 https://www.bbc.com/news                                     cold= 2723668 warm= 1899330 req=108 ready= 4471ms ok
+[145/345] sweef-off          run 2 https://www.bbc.com/news                                     cold= 2462815 warm=  124597 req=109 ready=19083ms ok
+[146/345] sweef-strict       run 3 https://www.bbc.com/news                                     cold=  201332 warm=   84873 req=  9 ready= 3148ms ok
+[147/345] chromium           run 3 https://www.bbc.com/news                                     cold= 3864029 warm=  236331 req=160 ready= 2407ms ok
+[148/345] chromium-savedata  run 3 https://www.bbc.com/news                                     cold= 2732792 warm=  227872 req=108 ready= 3791ms ok
+[149/345] sweef-off          run 3 https://www.bbc.com/news                                     cold= 2452208 warm=  124459 req=109 ready=18770ms ok
+[150/345] sweef-standard     run 3 https://www.bbc.com/news                                     cold= 2107965 warm=  124443 req= 89 ready=13592ms ok
+[151/345] sweef-off          run 1 https://www.theguardian.com/environment/2019/may/06/human-s… cold=   21968 warm=       0 req=  5 ready=  606ms FAIL main document HTTP 404
+[152/345] sweef-standard     run 1 https://www.theguardian.com/environment/2019/may/06/human-s… cold=   21961 warm=       0 req=  5 ready=  900ms FAIL main document HTTP 404
+[153/345] sweef-strict       run 1 https://www.theguardian.com/environment/2019/may/06/human-s… cold=   22002 warm=       0 req=  1 ready=  525ms FAIL main document HTTP 404
+[154/345] chromium           run 1 https://www.theguardian.com/environment/2019/may/06/human-s… cold=  101794 warm=       0 req=  7 ready= 1065ms FAIL main document HTTP 404
+[155/345] chromium-savedata  run 1 https://www.theguardian.com/environment/2019/may/06/human-s… cold=   92564 warm=       0 req=  7 ready= 1233ms FAIL main document HTTP 404
+[156/345] sweef-standard     run 2 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[157/345] sweef-strict       run 2 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[158/345] chromium           run 2 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[159/345] chromium-savedata  run 2 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[160/345] sweef-off          run 2 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[161/345] sweef-strict       run 3 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[162/345] chromium           run 3 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[163/345] chromium-savedata  run 3 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[164/345] sweef-off          run 3 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[165/345] sweef-standard     run 3 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+  retrying sweef-off https://www.npr.org/ run 1 after: navigation not finished within 1m0s
+  retrying sweef-off https://www.npr.org/ run 1 after: navigation not finished within 1m0s
+[166/345] sweef-off          run 1 https://www.npr.org/                                         cold= 4395575 warm=       0 req=  0 ready=60000ms FAIL navigation not finished within 1m0s
+[167/345] sweef-standard     run 1 https://www.npr.org/                                         cold= 2910303 warm=  427379 req= 71 ready=46884ms ok
+[168/345] sweef-strict       run 1 https://www.npr.org/                                         cold=  810600 warm=  304344 req= 14 ready=12628ms ok
+[169/345] chromium           run 1 https://www.npr.org/                                         cold= 6397981 warm= 4530858 req=183 ready= 7829ms ok
+  retrying chromium-savedata https://www.npr.org/ run 1 after: load event not fired within 1m0s
+[170/345] chromium-savedata  run 1 https://www.npr.org/                                         cold= 6362201 warm=  812055 req=181 ready=13482ms ok
+  retrying sweef-standard https://www.npr.org/ run 2 after: navigation not finished within 1m0s
+[171/345] sweef-standard     run 2 https://www.npr.org/                                         cold= 2945173 warm=  440546 req= 71 ready=34342ms ok
+[172/345] sweef-strict       run 2 https://www.npr.org/                                         cold=  814114 warm=  307945 req= 14 ready=13012ms ok
+[173/345] chromium           run 2 https://www.npr.org/                                         cold= 6296846 warm=  877602 req=177 ready=20808ms ok
+[174/345] chromium-savedata  run 2 https://www.npr.org/                                         cold= 5448938 warm= 1622994 req=140 ready=44882ms ok
+[175/345] sweef-off          run 2 https://www.npr.org/                                         skipped (failed earlier)
+[176/345] sweef-strict       run 3 https://www.npr.org/                                         cold=  814235 warm=  307948 req= 14 ready=12621ms ok
+[177/345] chromium           run 3 https://www.npr.org/                                         cold= 5866933 warm= 1416239 req=175 ready= 3887ms ok
+  retrying chromium-savedata https://www.npr.org/ run 3 after: load event not fired within 1m0s
+[178/345] chromium-savedata  run 3 https://www.npr.org/                                         cold= 5592525 warm= 1809311 req=167 ready= 4999ms ok
+[179/345] sweef-off          run 3 https://www.npr.org/                                         skipped (failed earlier)
+[180/345] sweef-standard     run 3 https://www.npr.org/                                         cold= 2927159 warm=  465125 req= 71 ready=52061ms ok
+[181/345] sweef-off          run 1 https://arstechnica.com/                                     cold= 3778475 warm=  265715 req=155 ready=16626ms ok
+[182/345] sweef-standard     run 1 https://arstechnica.com/                                     cold= 2355012 warm=  271169 req=124 ready=43706ms ok
+[183/345] sweef-strict       run 1 https://arstechnica.com/                                     cold=  103504 warm=   49204 req=  5 ready=  553ms ok
+[184/345] chromium           run 1 https://arstechnica.com/                                     cold= 7022992 warm=  572138 req=276 ready= 4909ms ok
+[185/345] chromium-savedata  run 1 https://arstechnica.com/                                     cold= 5228189 warm=  967180 req=173 ready= 8562ms ok
+[186/345] sweef-standard     run 2 https://arstechnica.com/                                     cold= 2853937 warm=  277659 req=124 ready=14587ms ok
+[187/345] sweef-strict       run 2 https://arstechnica.com/                                     cold=  103475 warm=   49257 req=  5 ready=  570ms ok
+[188/345] chromium           run 2 https://arstechnica.com/                                     cold= 5577986 warm= 2075227 req=170 ready= 8977ms ok
+[189/345] chromium-savedata  run 2 https://arstechnica.com/                                     cold= 5552090 warm=  559801 req=170 ready= 7372ms ok
+[190/345] sweef-off          run 2 https://arstechnica.com/                                     cold= 3728521 warm=  790704 req=153 ready=45200ms ok
+[191/345] sweef-strict       run 3 https://arstechnica.com/                                     cold=  103597 warm=   49204 req=  5 ready=  517ms ok
+[192/345] chromium           run 3 https://arstechnica.com/                                     cold= 5597709 warm= 2140081 req=180 ready= 9057ms ok
+[193/345] chromium-savedata  run 3 https://arstechnica.com/                                     cold= 5069378 warm= 2416681 req=150 ready=51652ms ok
+[194/345] sweef-off          run 3 https://arstechnica.com/                                     cold= 3774883 warm=  374964 req=151 ready=15526ms ok
+[195/345] sweef-standard     run 3 https://arstechnica.com/                                     cold= 2861242 warm=  267022 req=124 ready=31088ms ok
+[196/345] sweef-off          run 1 https://www.theverge.com/                                    cold= 9742409 warm=  111697 req=168 ready=15033ms ok
+[197/345] sweef-standard     run 1 https://www.theverge.com/                                    cold= 2121873 warm=   98190 req=127 ready=10665ms ok
+[198/345] sweef-strict       run 1 https://www.theverge.com/                                    cold=  954985 warm=   75976 req=108 ready= 3477ms ok
+[199/345] chromium           run 1 https://www.theverge.com/                                    cold= 7753369 warm= 1412398 req=396 ready=18055ms ok
+[200/345] chromium-savedata  run 1 https://www.theverge.com/                                    cold= 7931201 warm= 1183877 req=403 ready=17996ms ok
+[201/345] sweef-standard     run 2 https://www.theverge.com/                                    cold= 2121992 warm=  105077 req=127 ready=10352ms ok
+[202/345] sweef-strict       run 2 https://www.theverge.com/                                    cold=  957389 warm=   75977 req=108 ready= 5647ms ok
+[203/345] chromium           run 2 https://www.theverge.com/                                    cold= 7866893 warm= 1154854 req=401 ready=15025ms ok
+[204/345] chromium-savedata  run 2 https://www.theverge.com/                                    cold= 7925275 warm= 1488606 req=398 ready=15113ms ok
+[205/345] sweef-off          run 2 https://www.theverge.com/                                    cold= 9742017 warm=  144362 req=168 ready=12633ms ok
+[206/345] sweef-strict       run 3 https://www.theverge.com/                                    cold=  955126 warm=   76175 req=108 ready= 3398ms ok
+[207/345] chromium           run 3 https://www.theverge.com/                                    cold= 7934312 warm= 1174595 req=398 ready=16143ms ok
+[208/345] chromium-savedata  run 3 https://www.theverge.com/                                    cold= 7895972 warm= 1471960 req=398 ready=14760ms ok
+[209/345] sweef-off          run 3 https://www.theverge.com/                                    cold= 9741447 warm=   98222 req=168 ready=12278ms ok
+[210/345] sweef-standard     run 3 https://www.theverge.com/                                    cold= 2122579 warm=  105079 req=127 ready= 9367ms ok
+[211/345] sweef-off          run 1 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    cold=   15165 warm=       0 req=  1 ready=  455ms FAIL main document HTTP 403
+[212/345] sweef-standard     run 1 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    cold=   15184 warm=       0 req=  1 ready=  414ms FAIL main document HTTP 403
+[213/345] sweef-strict       run 1 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    cold=   15183 warm=       0 req=  1 ready=  565ms FAIL main document HTTP 403
+[214/345] chromium           run 1 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    cold=  402153 warm=       0 req=  4 ready= 1409ms FAIL main document HTTP 403
+[215/345] chromium-savedata  run 1 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    cold=  403437 warm=       0 req=  4 ready= 1596ms FAIL main document HTTP 403
+[216/345] sweef-standard     run 2 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[217/345] sweef-strict       run 2 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[218/345] chromium           run 2 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[219/345] chromium-savedata  run 2 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[220/345] sweef-off          run 2 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[221/345] sweef-strict       run 3 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[222/345] chromium           run 3 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[223/345] chromium-savedata  run 3 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[224/345] sweef-off          run 3 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[225/345] sweef-standard     run 3 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[226/345] sweef-off          run 1 https://www.newegg.com/p/pl?d=laptop                         cold= 3293448 warm= 1602960 req=124 ready=33105ms ok
+[227/345] sweef-standard     run 1 https://www.newegg.com/p/pl?d=laptop                         cold= 2855022 warm=  294678 req= 68 ready=32333ms ok
+[228/345] sweef-strict       run 1 https://www.newegg.com/p/pl?d=laptop                         cold=  526012 warm=  133268 req=  5 ready= 1323ms ok
+[229/345] chromium           run 1 https://www.newegg.com/p/pl?d=laptop                         cold= 9654668 warm=  936035 req=325 ready=16969ms ok
+[230/345] chromium-savedata  run 1 https://www.newegg.com/p/pl?d=laptop                         cold= 9607092 warm= 1174863 req=332 ready= 9388ms ok
+[231/345] sweef-standard     run 2 https://www.newegg.com/p/pl?d=laptop                         cold= 2846783 warm=  295932 req= 68 ready=30860ms ok
+[232/345] sweef-strict       run 2 https://www.newegg.com/p/pl?d=laptop                         cold=  477068 warm=  132684 req=  5 ready= 1199ms ok
+[233/345] chromium           run 2 https://www.newegg.com/p/pl?d=laptop                         cold= 9650914 warm=  823731 req=333 ready= 9517ms ok
+[234/345] chromium-savedata  run 2 https://www.newegg.com/p/pl?d=laptop                         cold= 9636039 warm= 1887016 req=325 ready=15269ms ok
+[235/345] sweef-off          run 2 https://www.newegg.com/p/pl?d=laptop                         cold= 3283722 warm=  286529 req=125 ready=30373ms ok
+[236/345] sweef-strict       run 3 https://www.newegg.com/p/pl?d=laptop                         cold=  514227 warm=  277335 req=  5 ready= 1511ms ok
+[237/345] chromium           run 3 https://www.newegg.com/p/pl?d=laptop                         cold= 9629677 warm=  828543 req=331 ready= 9049ms ok
+[238/345] chromium-savedata  run 3 https://www.newegg.com/p/pl?d=laptop                         cold= 9652798 warm= 1822609 req=334 ready= 9021ms ok
+[239/345] sweef-off          run 3 https://www.newegg.com/p/pl?d=laptop                         cold= 3270182 warm= 1656511 req=124 ready=30507ms ok
+[240/345] sweef-standard     run 3 https://www.newegg.com/p/pl?d=laptop                         cold= 2845195 warm= 1493588 req= 68 ready=29659ms ok
+[241/345] sweef-off          run 1 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1350470 warm=   63397 req= 55 ready= 9451ms ok
+[242/345] sweef-standard     run 1 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1315217 warm=   89941 req= 47 ready= 7390ms ok
+[243/345] sweef-strict       run 1 https://discuss.python.org/t/pep-703-making-the-global-inte… cold=  361953 warm=   55955 req= 34 ready= 1631ms ok
+[244/345] chromium           run 1 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2266983 warm=   57651 req=113 ready= 5978ms ok
+[245/345] chromium-savedata  run 1 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265311 warm=   57635 req=113 ready= 5742ms ok
+[246/345] sweef-standard     run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1322773 warm=   89846 req= 47 ready= 7466ms ok
+[247/345] sweef-strict       run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold=  361626 warm=   55849 req= 34 ready= 1454ms ok
+[248/345] chromium           run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265150 warm=  163650 req=113 ready= 6191ms ok
+[249/345] chromium-savedata  run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265147 warm=  163740 req=113 ready= 6064ms ok
+[250/345] sweef-off          run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1327702 warm=   63260 req= 55 ready= 7776ms ok
+[251/345] sweef-strict       run 3 https://discuss.python.org/t/pep-703-making-the-global-inte… cold=  361904 warm=   55963 req= 34 ready= 1539ms ok
+[252/345] chromium           run 3 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265023 warm=  163653 req=113 ready= 6151ms ok
+[253/345] chromium-savedata  run 3 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2272152 warm=   57668 req=113 ready= 5803ms ok
+[254/345] sweef-off          run 3 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1350242 warm=   63402 req= 55 ready= 7878ms ok
+[255/345] sweef-standard     run 3 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1337744 warm=   89794 req= 47 ready= 7392ms ok
+[256/345] sweef-off          run 1 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold=  444990 warm=       0 req=  2 ready=  780ms FAIL main document HTTP 403
+[257/345] sweef-standard     run 1 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold=  444355 warm=       0 req=  2 ready=  907ms FAIL main document HTTP 403
+[258/345] sweef-strict       run 1 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold=  452450 warm=       0 req=  2 ready= 1230ms FAIL main document HTTP 403
+[259/345] chromium           run 1 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold= 4201649 warm= 2122848 req=200 ready= 3042ms ok
+[260/345] chromium-savedata  run 1 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold= 7350737 warm= 1431187 req=410 ready= 1827ms ok
+[261/345] sweef-standard     run 2 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[262/345] sweef-strict       run 2 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[263/345] chromium           run 2 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold= 1791536 warm=       0 req= 12 ready=  858ms FAIL main document HTTP 403
+[264/345] chromium-savedata  run 2 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold= 6475274 warm= 1057156 req=340 ready= 4092ms ok
+[265/345] sweef-off          run 2 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[266/345] sweef-strict       run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[267/345] chromium           run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[268/345] chromium-savedata  run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… cold= 4145040 warm= 1836808 req=203 ready= 2889ms ok
+[269/345] sweef-off          run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[270/345] sweef-standard     run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
+[271/345] sweef-off          run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 2008856 warm=  251243 req= 37 ready= 9246ms ok
+[272/345] sweef-standard     run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1732019 warm=    7835 req= 28 ready= 6534ms ok
+[273/345] sweef-strict       run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold=  326963 warm=       0 req=  7 ready= 1614ms ok
+[274/345] chromium           run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1893963 warm=  580362 req= 40 ready= 2925ms ok
+[275/345] chromium-savedata  run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1889304 warm=  252237 req= 39 ready= 2619ms ok
+[276/345] sweef-standard     run 2 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1724168 warm=    9135 req= 28 ready= 6771ms ok
+[277/345] sweef-strict       run 2 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold=  314333 warm=      24 req=  7 ready= 1650ms ok
+[278/345] chromium           run 2 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1888665 warm=   26884 req= 39 ready= 2727ms ok
+[279/345] chromium-savedata  run 2 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1885394 warm=   17148 req= 39 ready= 2802ms ok
+[280/345] sweef-off          run 2 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 2011945 warm=  250151 req= 37 ready=10336ms ok
+[281/345] sweef-strict       run 3 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold=  314193 warm=      24 req=  7 ready= 1797ms ok
+[282/345] chromium           run 3 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1884963 warm=  337066 req= 39 ready= 2769ms ok
+[283/345] chromium-savedata  run 3 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1886861 warm=   17126 req= 39 ready= 2977ms ok
+[284/345] sweef-off          run 3 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 2009606 warm=   15845 req= 37 ready=38272ms ok
+[285/345] sweef-standard     run 3 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1731054 warm=    9103 req= 28 ready= 5886ms ok
+[286/345] sweef-off          run 1 https://www.lonelyplanet.com/japan                           cold= 3327818 warm=  176399 req= 65 ready=21080ms ok
+[287/345] sweef-standard     run 1 https://www.lonelyplanet.com/japan                           cold= 1012654 warm=  175796 req= 52 ready=10590ms ok
+[288/345] sweef-strict       run 1 https://www.lonelyplanet.com/japan                           cold=  411447 warm=  150897 req= 28 ready= 6007ms ok
+[289/345] chromium           run 1 https://www.lonelyplanet.com/japan                           cold= 4613362 warm= 3720659 req=153 ready= 7004ms ok
+[290/345] chromium-savedata  run 1 https://www.lonelyplanet.com/japan                           cold= 4365717 warm= 3409988 req=149 ready= 6186ms ok
+[291/345] sweef-standard     run 2 https://www.lonelyplanet.com/japan                           cold= 1012250 warm=  176285 req= 52 ready=10637ms ok
+[292/345] sweef-strict       run 2 https://www.lonelyplanet.com/japan                           cold=  411655 warm=  151291 req= 28 ready= 5908ms ok
+[293/345] chromium           run 2 https://www.lonelyplanet.com/japan                           cold= 4309571 warm= 4191547 req=151 ready= 6128ms ok
+[294/345] chromium-savedata  run 2 https://www.lonelyplanet.com/japan                           cold= 4606688 warm= 2841051 req=151 ready= 5622ms ok
+[295/345] sweef-off          run 2 https://www.lonelyplanet.com/japan                           cold= 3336634 warm=  176963 req= 65 ready=20112ms ok
+[296/345] sweef-strict       run 3 https://www.lonelyplanet.com/japan                           cold=  411215 warm=  150884 req= 28 ready= 6307ms ok
+[297/345] chromium           run 3 https://www.lonelyplanet.com/japan                           cold= 4632734 warm=  858545 req=151 ready= 6063ms ok
+[298/345] chromium-savedata  run 3 https://www.lonelyplanet.com/japan                           cold= 4611853 warm= 3360347 req=148 ready= 6707ms ok
+[299/345] sweef-off          run 3 https://www.lonelyplanet.com/japan                           cold= 3332204 warm=  175759 req= 71 ready=20505ms ok
+[300/345] sweef-standard     run 3 https://www.lonelyplanet.com/japan                           cold= 1008531 warm=  176261 req= 46 ready=11438ms ok
+[301/345] sweef-off          run 1 https://pypi.org/project/requests/                           cold= 2134424 warm=  259468 req= 51 ready= 9807ms ok
+[302/345] sweef-standard     run 1 https://pypi.org/project/requests/                           cold= 1097130 warm=   65939 req= 24 ready= 6532ms ok
+[303/345] sweef-strict       run 1 https://pypi.org/project/requests/                           cold=  408885 warm=   32846 req= 14 ready= 3405ms ok
+[304/345] chromium           run 1 https://pypi.org/project/requests/                           cold= 1422812 warm=  165006 req= 45 ready= 2576ms ok
+[305/345] chromium-savedata  run 1 https://pypi.org/project/requests/                           cold= 1586927 warm=  153779 req= 47 ready= 1434ms ok
+[306/345] sweef-standard     run 2 https://pypi.org/project/requests/                           cold= 1011328 warm=   65982 req= 24 ready= 6882ms ok
+[307/345] sweef-strict       run 2 https://pypi.org/project/requests/                           cold=   28458 warm=   25079 req=  5 ready=  518ms ok
+[308/345] chromium           run 2 https://pypi.org/project/requests/                           cold=  167276 warm= 1521770 req= 11 ready=  565ms ok
+[309/345] chromium-savedata  run 2 https://pypi.org/project/requests/                           cold= 1570975 warm=  769241 req= 45 ready= 2431ms ok
+[310/345] sweef-off          run 2 https://pypi.org/project/requests/                           cold= 2084080 warm=  167592 req= 51 ready= 9140ms ok
+[311/345] sweef-strict       run 3 https://pypi.org/project/requests/                           cold=   28458 warm=  409520 req=  5 ready=  543ms ok
+[312/345] chromium           run 3 https://pypi.org/project/requests/                           cold= 1540553 warm=  167083 req= 45 ready= 2260ms ok
+[313/345] chromium-savedata  run 3 https://pypi.org/project/requests/                           cold=  166445 warm= 1600666 req= 11 ready=  572ms ok
+[314/345] sweef-off          run 3 https://pypi.org/project/requests/                           cold= 2219351 warm=  159141 req= 51 ready= 9598ms ok
+[315/345] sweef-standard     run 3 https://pypi.org/project/requests/                           cold= 1008039 warm=   67235 req= 24 ready= 6295ms ok
+[316/345] sweef-off          run 1 https://www.gov.uk/browse/driving                            cold=  105391 warm=       0 req=  8 ready= 2624ms ok
+[317/345] sweef-standard     run 1 https://www.gov.uk/browse/driving                            cold=  105649 warm=      24 req=  8 ready= 2691ms ok
+[318/345] sweef-strict       run 1 https://www.gov.uk/browse/driving                            cold=  114267 warm=      24 req=  8 ready= 3284ms ok
+[319/345] chromium           run 1 https://www.gov.uk/browse/driving                            cold=  187335 warm=    7925 req= 12 ready=  640ms ok
+[320/345] chromium-savedata  run 1 https://www.gov.uk/browse/driving                            cold=  187349 warm=    7925 req= 12 ready=  644ms ok
+[321/345] sweef-standard     run 2 https://www.gov.uk/browse/driving                            cold=  105507 warm=      24 req=  8 ready= 2787ms ok
+[322/345] sweef-strict       run 2 https://www.gov.uk/browse/driving                            cold=  114150 warm=      24 req=  8 ready= 3166ms ok
+[323/345] chromium           run 2 https://www.gov.uk/browse/driving                            cold=  187388 warm=    7925 req= 12 ready=  652ms ok
+[324/345] chromium-savedata  run 2 https://www.gov.uk/browse/driving                            cold=  187384 warm=    7925 req= 12 ready=  637ms ok
+[325/345] sweef-off          run 2 https://www.gov.uk/browse/driving                            cold=  105511 warm=      24 req=  8 ready= 2928ms ok
+[326/345] sweef-strict       run 3 https://www.gov.uk/browse/driving                            cold=  114263 warm=      24 req=  8 ready= 3196ms ok
+[327/345] chromium           run 3 https://www.gov.uk/browse/driving                            cold=  187350 warm=    7925 req= 12 ready=  783ms ok
+[328/345] chromium-savedata  run 3 https://www.gov.uk/browse/driving                            cold=  187364 warm=    7925 req= 12 ready=  606ms ok
+[329/345] sweef-off          run 3 https://www.gov.uk/browse/driving                            cold=  105253 warm=      24 req=  8 ready= 2836ms ok
+[330/345] sweef-standard     run 3 https://www.gov.uk/browse/driving                            cold=  105576 warm=       0 req=  8 ready= 2608ms ok
+[331/345] sweef-off          run 1 https://dev.to/                                              cold= 1689467 warm=   22421 req= 70 ready=10761ms ok
+[332/345] sweef-standard     run 1 https://dev.to/                                              cold= 1365407 warm=   22763 req= 48 ready= 8537ms ok
+[333/345] sweef-strict       run 1 https://dev.to/                                              cold=  773971 warm=  155971 req= 46 ready=10676ms ok
+[334/345] chromium           run 1 https://dev.to/                                              cold= 2692960 warm=  236537 req= 71 ready= 2896ms ok
+[335/345] chromium-savedata  run 1 https://dev.to/                                              cold= 3069485 warm=  233171 req= 69 ready= 2643ms ok
+[336/345] sweef-standard     run 2 https://dev.to/                                              cold= 1279576 warm=  177764 req= 44 ready=11061ms ok
+[337/345] sweef-strict       run 2 https://dev.to/                                              cold=  781367 warm=  155686 req= 46 ready= 8942ms ok
+[338/345] chromium           run 2 https://dev.to/                                              cold= 2681953 warm=  232910 req= 69 ready= 4389ms ok
+[339/345] chromium-savedata  run 2 https://dev.to/                                              cold= 3234436 warm=  239126 req= 71 ready= 2755ms ok
+[340/345] sweef-off          run 2 https://dev.to/                                              cold= 1760796 warm=   22332 req= 72 ready=10070ms ok
+[341/345] sweef-strict       run 3 https://dev.to/                                              cold=  780766 warm=  155646 req= 46 ready= 8484ms ok
+[342/345] chromium           run 3 https://dev.to/                                              cold= 2940372 warm=  247057 req= 81 ready= 2421ms ok
+[343/345] chromium-savedata  run 3 https://dev.to/                                              cold= 3082475 warm=  504615 req= 70 ready= 2533ms ok
+[344/345] sweef-off          run 3 https://dev.to/                                              cold= 1746480 warm=  192171 req= 71 ready=11306ms ok
+[345/345] sweef-standard     run 3 https://dev.to/                                              cold= 1308464 warm=   74561 req= 47 ready= 8477ms ok
+results: bench/datasaver/results/2026-10-13-fixed.json
+report: docs/data-saver-bench.md
+
+18 of 23 sites included, 5 excluded, 3 runs
+mode                     mean KB/page        pages/100MB   req/page     ready ms
+Sweef off                        2071   48.3 (48.1-50.1)       65.4         9071
+Sweef standard                   1201   83.3 (83.3-84.7)       48.7         7270
+Sweef strict                      312  320.7 (301.1-324.7)       20.3         1670
+Chromium                         2728   36.7 (36.2-38.9)      113.7         2970
+Chromium + Save-Data             2642   37.9 (37.0-39.1)      108.8         2894
+Sweef standard vs Sweef off                      saved 42.0% (40.9 to 42.2)
+Sweef strict vs Sweef off                        saved 84.9% (83.4 to 85.2)
+Sweef off vs Chromium                            saved 25.0% (19.1 to 26.8)
+Sweef standard vs Chromium                       saved 56.5% (53.3 to 56.7)
+Sweef strict vs Chromium                         saved 88.0% (87.8 to 88.7)
+Chromium with Save-Data header vs Chromium       saved 3.1% (-5.2 to 7.3)
+=== finished 2026-10-13T05:05:57Z

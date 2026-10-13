@@ -532,8 +532,8 @@ func TestDataSaverOffChangesNothing(t *testing.T) {
 		t.Fatalf("requests differ:\nno policy: %v\noff:       %v\nflags only: %v", plain, off, zero)
 	}
 	for _, l := range plain {
-		if strings.Contains(l, "Save-Data") || strings.Contains(l, "br") {
-			t.Fatalf("off sends neither Save-Data nor br: %s", l)
+		if strings.Contains(l, "Save-Data") {
+			t.Fatalf("off sends no Save-Data: %s", l)
 		}
 	}
 }

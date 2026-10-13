@@ -138,7 +138,7 @@ func (j *jsVM) wsOpen(rawurl, protocols string) int64 {
 			cfg.Header.Set("Cookie", ck)
 		}
 		t.touchNet()
-		conn, err := websocket.DialConfig(cfg)
+		conn, err := t.eng.dialWebSocket(t.eng.ctx, t.Context(), cfg)
 		if err != nil {
 			j.wsLog("error", rawurl, err.Error(), false)
 			r.push(asyncEvent{kind: "ws", id: id, typ: "error"})
@@ -215,7 +215,9 @@ func (j *jsVM) wsClose(id int64) {
 // ---- Workers ----------------------------------------------------------------------
 
 type workerVM struct {
-	mu     sync.Mutex
+	mu      sync.Mutex // the VM: held while the worker runs script, timers or message handlers
+	inboxMu sync.Mutex // inbox only, never held across anything that blocks: the page thread posts and polls
+	// through it while the worker may be busy (taking mu there deadlocked against realtime.mu, see hasLiveWork)
 	vm     *quickjs.VM
 	id     int64
 	inbox  []string
@@ -364,9 +366,9 @@ func (j *jsVM) workerPost(id int64, msg string) {
 	if w == nil {
 		return
 	}
-	w.mu.Lock()
+	w.inboxMu.Lock()
 	w.inbox = append(w.inbox, msg)
-	w.mu.Unlock()
+	w.inboxMu.Unlock()
 }
 
 func (j *jsVM) workerTerminate(id int64) {
@@ -400,8 +402,10 @@ func (j *jsVM) pumpWorkers() float64 {
 			w.mu.Unlock()
 			continue
 		}
+		w.inboxMu.Lock()
 		inbox := w.inbox
 		w.inbox = nil
+		w.inboxMu.Unlock()
 		for _, m := range inbox {
 			if _, err := w.vm.Call("__swwDeliver", m); err != nil {
 				j.tab.LogConsole("error", jsErrorText(err, "worker onmessage"))
@@ -458,14 +462,19 @@ func (j *jsVM) hasLiveWork() bool {
 	}
 	r := j.realtime
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if len(r.queue) > 0 {
+		r.mu.Unlock()
 		return true
 	}
+	ws := make([]*workerVM, 0, len(r.workers))
 	for _, w := range r.workers {
-		w.mu.Lock()
+		ws = append(ws, w)
+	}
+	r.mu.Unlock() // never hold r.mu while taking a worker lock: a starting worker holds its own and pushes to r
+	for _, w := range ws {
+		w.inboxMu.Lock()
 		busy := len(w.inbox) > 0
-		w.mu.Unlock()
+		w.inboxMu.Unlock()
 		if busy {
 			return true
 		}

@@ -94,7 +94,7 @@ func (e *tabEnv) loadImageBytes(u string) (data []byte, memo bool) {
 		case skipped:
 			return nil, false
 		case pol.NoImages:
-			e.skip(u, "strict", t.knownSize(t.eng.res.key(t.Context(), u)), -1)
+			e.skip(u, "strict", t.knownSizeURL(u), -1)
 			return nil, false
 		case t.suspended():
 			return nil, false

@@ -42,7 +42,7 @@ here, and the document says so instead of counting them as savings.
     style 15 KB, font 25 KB, media 1 MB, frame 30 KB, xhr 5 KB). The defaults are guesses
     in the range of public HTTP Archive medians. UIs must label the number as estimated.
 * Not counted: traffic made through other HTTP clients (the app's favicon fetcher, downloads
-  manager and update check). `BrowserContext.CountedTransport()` returns the engine's
+  manager and update check). `BrowserContext.CountedTransport()` returns the engine's (cache, accounting and proxy included)
   transport for code that wants its traffic in the numbers.
 
 ## API as implemented
@@ -94,9 +94,9 @@ Differences from the contract text:
 | Switch | What it does in this engine | Limits |
 |---|---|---|
 | `SaveDataHeader` | `Save-Data: on` on every request of the tab or context (documents, sub-resources, page `fetch`/XHR, media, redirect hops). | Servers decide what to do with it. |
-| `Accept-Encoding` | `br, gzip` when the level is not off, `gzip` otherwise (what `net/http` sends by itself, so off is unchanged on the wire). The engine decodes both itself, in the transport wrapper, so compressed byte counts are exact. Brotli is decoded by `github.com/dsnet/compress/brotli` (BSD-3, pure Go, decoder only, +0.1 ms init, +0.35 MB binary). Range requests are left alone. | Savings depend on servers having brotli; CDNs mostly do. |
+| `Accept-Encoding` | `br, gzip` at **every** level, `off` included (it was `gzip` at `off` before: that is what `net/http` sends by itself; checked on the wire by `TestDataSaverHeadersAndEncodings`). The engine decodes both itself, in the transport wrapper, so compressed byte counts are exact. Brotli is decoded by `github.com/dsnet/compress/brotli` (BSD-3, pure Go, decoder only, +0.1 ms init, +0.35 MB binary). Range requests are left alone. | Savings depend on servers having brotli; CDNs mostly do. |
 | `LazyImages` | Images are fetched during layout. Under this policy an image is fetched only when paint says it is within one viewport above or two below the visible window (`render.ImageHinter`); the rest are deferred and re-checked after every layout pass, on `SetScrollY`, on the wheel and when a background tab comes to the front. Page layout is unchanged when images have `width`/`height` (or CSS sizes); the tests compare every element box with the policy off. | Images without a declared size have no box until they load, so they stack at one spot: at most 3 per layout round are admitted, then layout runs again (up to 12 rounds), which can cost extra layout time and moves content below a late image. Layout is done for the whole document, not lazily. |
-| `ImageMaxBytes` | The request is made with a size cap. A `Content-Length` over the cap closes the response before any body byte is read (`AbortedBytes`, measured); a chunked response is read up to the cap and abandoned (those bytes are used; the rest is not measured). The `<img>` gets `data-sweef-lite="skipped"` and a labelled box of its declared size (300x150 if none; one dimension declared gives a 2:1 box). Tapping loads it at full size, ignoring the cap. | We cannot transcode or downscale: an image is loaded whole or not at all. The cap needs the server to send `Content-Length` to save anything on the first byte. CSS `background-image`s over the cap are simply omitted (no node to mark). |
+| `ImageMaxBytes` | The request is made with a size cap. A `Content-Length` over the cap closes the response before any body byte is read (`AbortedBytes`, measured). Requests with a cap use connections with a 64 KiB HTTP/2 receive window (`cappedStreamWindow`): with the default 4 MiB window the server had already been allowed to send the whole body when the stream was reset, so a refused 1.4 MB image still cost 1.44 MB on the wire over HTTP/2 while `AbortedBytes` claimed it as saved (now about 70 KB, `TestSizeCapOverHTTP2CostsAtMostOneSmallWindow`). A refusal is remembered with the response's freshness (a tombstone in the cache): the next visit does not send the request while it is fresh; a chunked response is read up to the cap and abandoned (those bytes are used; the rest is not measured). The `<img>` gets `data-sweef-lite="skipped"` and a labelled box of its declared size (300x150 if none; one dimension declared gives a 2:1 box). Tapping loads it at full size, ignoring the cap. | We cannot transcode or downscale: an image is loaded whole or not at all. The cap needs the server to send `Content-Length` to save anything on the first byte. CSS `background-image`s over the cap are simply omitted (no node to mark). |
 | `NoImages` (strict, agent) | No image requests at all (`<img>`, CSS backgrounds, SVG `<image>`, video posters). `<img>` elements become placeholders with their alt text; `Tab.LoadSkipped` or `LoadSkippedImages` loads them. Sizes already in the cache are credited as measured; others are estimated. | Placeholder boxes use the declared size, so a page that sizes images with CSS only (`width:100%`) gets a 2:1 box and reflows. |
 | `BlockFonts` | **A no-op on the wire today**: this engine loads no web fonts in any mode (`registerFonts` is a stub; the text is always laid out with its fallback). The switch is enforced at the single place a font read would go through (`fetchRes` with `KindFont`) so a future font loader obeys it. Tests check that no font is requested in any mode and that layout is identical. | Do not count it as a saving. |
 | `BlockMediaLoad` | `<video>`/`<audio>`/`new Audio()` neither preload nor autoplay: no request is made until `play()` is called by the page in response to the person (the existing user-activation rules apply; muted autoplay is also held back). Without it, `preload=metadata` (the default) already costs a 1 MB range read per element, which is where the large saving is. Video posters follow the image rules. | Players that fetch through `fetch`/XHR/MSE (YouTube-style) decide for themselves; the engine cannot tell their requests from any others. |
@@ -114,31 +114,84 @@ background suspension. A per-tab policy override (`Tab.SetDataPolicy`) wins over
 `LoadFully` reloads the page unconditionally with no policy, and the exemption lasts until the
 tab navigates somewhere else (including lazy loading while you scroll).
 
-## Cache rules (`rescache.go`, `fetchres.go`, `tab.go`)
+## Cache rules (`httpcache_policy.go`, `httpcache_rt.go`, `httpcache_store.go`)
 
-Applies to sub-resources the engine fetches itself (scripts, styles, images, workers) and, under
-`ExtendCache`, to documents. Page `fetch`/XHR and media are never served from this cache.
+The HTTP cache is a transport layer (`cacheRT`, between the `http.Client` and the accounting/decoding wrapper), so
+every request the engine makes for a page goes through it: documents, scripts, styles, images, workers, page
+`fetch`/XHR (GET), redirect hops, media ranges. A hit costs no bytes and is not charged; a revalidation costs the
+304's few hundred. The request log (`Network.response` records) shows what it did under the request header
+`x-sweef-cache`: `hit`, `revalidated`, `stale-if-error`, `tombstone`, `bypass`, or `miss: stored lifetime=Ns` /
+`miss: no-store` / `miss: no-lifetime` / `miss: status-302` ...
 
-* `no-store`: never stored (and the prefetch/loader handover keeps it for one use only).
-  `Vary: *`: never stored. Entries are partitioned by browsing context, so a private window never
-  reads what another stored. A stored response is reused only if the request headers named by its
-  `Vary` (Cookie and User-Agent included) match the ones it was stored under.
-* Stale entries with `ETag`/`Last-Modified` are revalidated with `If-None-Match`/`If-Modified-Since`;
-  `304` reuses the stored body.
-* Extended freshness, only for images, fonts, CSS and JS that have a validator, and never over
-  `no-store`/`no-cache`: an `immutable` or versioned URL (hash segment, `?v=`) is fresh for at least a
-  day (or the server's longer max-age, at most 30 days); with no stated lifetime the RFC 9111 heuristic
-  applies (10% of the time since `Last-Modified`, at most a day); otherwise the server's lifetime
-  stands and expiry means a conditional request, not a download. The contract table says to ignore
-  `max-age < 1 day` for all such assets; this implementation applies the one-day floor to versioned
-  URLs only, because a stable URL with `max-age=300` is how a site ships a CSS fix.
-* Documents: with `ExtendCache`, a stored document with a validator is requested with
-  `If-None-Match`/`If-Modified-Since` and shown from the cache on `304`. It is **never** shown without
-  asking the server, whatever its `max-age`. `Reload` and `LoadFully` skip the stored copy; a document
-  without a validator or with `no-store` is not stored.
-* `off` keeps the engine's previous rules exactly (including its 5 s memory window and its habit of
-  reading a no-store script twice per navigation); under the saver levels the window only serves the
-  navigation that filled it.
+This is the same at every Data Saver level except for the extensions marked below. `BrowserContext.Fetch`
+(Playwright's APIRequestContext) never uses it.
+
+* **Freshness** (RFC 9111): `max-age`; else `Expires` minus `Date` (an invalid `Expires` is already expired);
+  `s-maxage` and `proxy-revalidate` are ignored (this is a private cache, so `private` responses are stored);
+  `no-cache` and `max-age=0` store the response but revalidate before every reuse; `immutable` without a lifetime is
+  fresh for a day. Age is the larger of `Age` and the apparent age (`response time - Date`), plus the time stored.
+  Without a stated lifetime, non-document responses get the heuristic 10% of the time since `Last-Modified`, at most
+  7 days; `301`/`308` are reused for a day. **A document is only served without asking when the server stated a
+  lifetime**; there is no heuristic for documents.
+* **Not stored**: `no-store` (an older copy is dropped too), `Vary: *`, request `Cache-Control: no-store`, `302`/`307`
+  and error statuses unless the server stated a lifetime, `5xx`, responses with neither a lifetime nor a validator
+  (kept for the rest of the navigation only, in memory, so the loader finds what the parallel prefetch read),
+  documents/XHR/media/frames of that kind not at all. `Set-Cookie` is never stored: cookies are applied from the
+  network response only.
+* **Revalidation**: a stale entry with `ETag`/`Last-Modified` is requested with `If-None-Match`/`If-Modified-Since`.
+  A `304` keeps the stored body, merges the new headers (not `Content-*`), restarts freshness. A `5xx` or a network error
+  serves the stale entry when `stale-if-error` allows and `must-revalidate` is absent. A request that already carries
+  validators (page code) goes to the network untouched.
+* **Request directives**: `Cache-Control: no-cache` / `Pragma: no-cache` (what `Reload` and `LoadFully` send) skip the
+  stored copy and send no validators; the answer replaces it. `max-age=N` and `min-fresh` on the request are honoured.
+* **Vary**: an entry is used only if the request headers named by its `Vary` (Cookie, User-Agent, Accept-Language, Save-Data ...)
+  match those it was stored under; `Accept-Encoding` is ignored because the engine decodes everything it asks for.
+* **Redirects**: each hop is cached on its own, so a `301`/`308` (or a `302` with a lifetime) is not asked for again.
+* **Ranges**: a `206` is stored under URL plus `Range`; the same range is answered from the cache, another is not.
+* **Unsafe methods**: a successful `POST`/`PUT`/`DELETE`/`PATCH` drops the stored GET of the same URL.
+* **Key**: normalised URL (no fragment, lower-case scheme and host, default port dropped); the query is never reordered.
+  The default context shares entries; every other context (private windows, isolated contexts) has its own namespace in
+  memory, so it never reads what another stored and leaves nothing on disk.
+* **Per navigation**: a resource is read from the network once per navigation whatever its headers (the stylesheet that
+  layout reads again, the script the prefetch read): `fetchRes` keeps this memo and it costs no event.
+* **Tiers**: memory (`Options.MaxCacheMiB`, default 32, LRU) and the profile-level disk cache under
+  `<CacheDir>/http` (`Options.DiskCacheMiB`, default 100, negative = memory only), default context only, never for
+  loopback hosts, entries up to a eighth of the cap. Files are written under a temporary name and renamed into place
+  (a reader sees a whole entry or none, also from another process on the same profile), a corrupt file is a miss and is
+  removed, the least recently used files go when the directory passes the cap, and the writer is one goroutine started on
+  the first write, so engine start-up touches no disk. `Engine.DropMemoryCache()` keeps only the disk tier (the state
+  after a restart, used by the benchmark), `Engine.ClearHTTPCache()` / `BrowserContext.DeleteCache()` forget entries.
+* **Data Saver extension** (`ExtendCache`, standard and strict): for images, fonts, CSS and JS that have a validator, an
+  `immutable` or versioned URL (hash segment, `?v=`) is fresh for at least a day (or the server's longer lifetime, at most 30
+  days), never over `no-store`/`no-cache`. The contract table says to ignore `max-age < 1 day` for all such assets; this
+  implementation applies the one-day floor to versioned URLs only, because a stable URL with `max-age=300` is how a site
+  ships a CSS fix. Also: a navigation's prefetch of a `no-store` response is handed to its loader once (stash).
+* **Documents** used to be revalidated always under `ExtendCache` and never cached under `off`. They now follow the rules
+  above at every level: fresh by the server's word means no request, otherwise a conditional request when there is a
+  validator. Reload and LoadFully bypass.
+
+### Why a warm visit used to cost 71% (off) / 47% (standard) of a cold one
+
+Measured with `datasaver probe` (per-request log of two visits): (1) the memory cache held 8 MiB with oldest-first
+eviction and refused any entry over 2 MiB, so a page that fetched more than 8 MiB (theverge.com 18 MB) lost its
+stylesheets and scripts to its own images before the second visit; (2) images were reused only while their entry
+survived, and nothing persisted past the process; (3) refused over-cap images (lonelyplanet.com in standard: three images,
+1.6 MB) were requested again on every visit and, over HTTP/2, sent in full each time (above); (4) documents were not
+cached at `off`, scripts/styles/images were the only cached kinds, and redirects and `fetch`/XHR never. See
+`docs/data-saver-bench.md` for the numbers of the fixed engine.
+
+### Proxy, headers and WebSockets
+
+* `Options.ProxyURL` / `ContextOptions.ProxyURL` (http, https or socks5 URL; `direct` for none); with neither set,
+  `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` apply (`http.ProxyFromEnvironment`, loopback never proxied). An explicit
+  URL that does not parse fails every request instead of going direct. The dial to the proxy is the counted dial, so
+  `WireIn/WireOut` stay exact.
+* WebSockets are dialled by the same counted dialer through the same proxy (CONNECT for `ws` and `wss`), so their
+  frames are in the context's counters (`TestWebSocketBytesAreCounted`, `TestWebSocketGoesThroughTheProxy`).
+* Requests carry the headers an ordinary browser sends (`browserheaders.go`): `Accept` (only formats the engine decodes),
+  `Accept-Language` (`Options.AcceptLanguage`, `ContextOptions.AcceptLanguage`, `Engine.SetAcceptLanguage`; default
+  `en-US,en;q=0.9`, as `navigator.language`), `Sec-Fetch-Dest/Mode/Site/User` (to https and loopback only),
+  `Upgrade-Insecure-Requests`, and `Referer` under `strict-origin-when-cross-origin`. See `docs/compat.md`.
 
 ## Measured on the test page
 

@@ -451,7 +451,7 @@ func writeReport(res *Results, mdPath, resultsPath string) error {
 	// ---- excluded
 	w.p("## Excluded sites")
 	w.p("")
-	w.p("Rule, fixed before the run: a site is excluded from every mode if, in any mode and any run, the main document answered HTTP 400 or higher, navigation failed or timed out (one automatic retry for transport errors and timeouts, none for HTTP errors), a WebSocket made some traffic unmeasurable, or a visit did not complete. Nothing is excluded for any other reason, and the frozen list is never edited.")
+	w.p("Rule, fixed before the run: a site is excluded from every mode if, in any mode and any run, the main document answered HTTP 400 or higher, navigation failed or timed out (one automatic retry for transport errors and timeouts, none for HTTP errors), or a visit did not complete. Nothing is excluded for any other reason, and the frozen list is never edited.")
 	w.p("")
 	if len(exc) == 0 {
 		w.p("None: every listed site completed in every mode.")
@@ -497,9 +497,8 @@ func writeReport(res *Results, mdPath, resultsPath string) error {
 		"**TLS is re-terminated.** The sandbox's egress gateway terminates TLS with its own certificate chain, so handshake bytes are not exactly what the real site would send. Both browsers see the same chain, so the comparison is fair, but absolute bytes are slightly off from a direct connection. Chromium cannot use QUIC through an HTTP proxy, so it ran HTTP/2 or HTTP/1.1, as did Sweef.",
 		"**What is not counted.** TCP/IP headers, DNS lookups (resolved by the upstream proxy), and the CONNECT exchanges between browser, recorder and upstream proxy. TCP/IP headers would add a few percent to every mode alike.",
 		"**Plain http:// is not forwarded** by the recorder (the sandbox proxy only tunnels). All listed pages are https; any plain-http sub-resource a page asked for is refused and noted per run, which can make a page slightly smaller than in the wild.",
-		"**Sweef WebSockets** are dialled by the engine outside its HTTP transport, so they bypass the recorder; a run in which a page opens one is failed rather than under-counted.",
-		"**Sweef proxy routing is a harness hack.** The engine ignores `HTTPS_PROXY` and `ContextOptions.ProxyURL` today; the harness reaches the engine's HTTP transport by reflection to point it at the recorder, and a dial guard makes any bypass fail. This goes away when the engine supports a proxy.",
-		"**Warm-cache definitions differ by necessity.** Chromium's warm visit is a new process on the same profile (disk cache); Sweef's is the same process and context (memory cache of scripts and styles only; documents are never cached).",
+		"**Sweef proxy routing.** The harness points the engine at its recorder with `Options.ProxyURL`, the same option an application uses (`Options.ProxyURL`); HTTP(S) and WebSocket traffic of the engine both go through it, so both are counted. (Earlier runs of this benchmark reached the transport by reflection and failed any page that opened a WebSocket.)",
+		"**Warm-cache definitions differ by necessity.** Chromium's warm visit is a new process on the same profile (disk cache); Sweef's is the same process and context, but the in-memory tier of its HTTP cache is dropped first (`Engine.DropMemoryCache`), so the warm visit is served from the on-disk cache only, as after a restart. Cookies survive in both. Chromium's disk cache is partitioned by site and has its own size limit; Sweef's is one profile-wide directory with a 100 MB cap.",
 	} {
 		w.p("* " + c)
 	}
@@ -544,9 +543,9 @@ func writeMethod(w *mdw, res *Results) {
 	w.p("")
 	w.p("**Chromium.** The binary at `/opt/pw-browsers/chromium`, `--headless=new --no-sandbox`, a fresh `--user-data-dir` for every cold visit and a new process on the same directory for the warm visit. Flags that stop it generating non-page traffic: `--disable-background-networking --disable-sync --disable-component-update --disable-default-apps --disable-domain-reliability --disable-client-side-phishing-detection --safebrowsing-disable-auto-update --disable-breakpad --metrics-recording-only --no-pings` plus feature switches for optimization hints, translate, media router, autofill server and the certificate-transparency updater. The about:blank baseline table shows what remains. CDP is attached with flat sessions and `Target.setAutoAttach` (paused on start) so iframes, workers and service workers are counted too. The `chromium-savedata` mode additionally sets `Save-Data: on` with `Network.setExtraHTTPHeaders`; it does not enable any Chromium data-saving behaviour (the old DataReductionProxy is gone), so it shows what a plain header does. Viewport 1280x720, same as the Sweef engine default.")
 	w.p("")
-	w.p("**Sweef.** The harness drives the engine in-process (`internal/engine`), one child process per cold visit: fresh engine, fresh cache directory, fresh cookie jar and connection pool, a new `BrowserContext`, default engine options (`DefaultOptions()`, user agent included). `ready` is when `NewTabInContext(url)` returns. The idle window pumps the page's event loop with `Tab.Settle`. Modes `standard` and `strict` apply `engine.PolicyFor(level)` with `SetDataPolicy`; they are only run in a build that has that API (`-tags datasaver_engine`). Sweef `off` today is the engine with nothing blocked, which is what `off` means in the spec.")
+	w.p("**Sweef.** The harness drives the engine in-process (`internal/engine`), one child process per cold visit: fresh engine, fresh cache directory, fresh cookie jar and connection pool, the engine's default context (the one the desktop app browses in, and the only one with the on-disk HTTP cache), default engine options (`DefaultOptions()`, user agent included). `ready` is when `NewTabInContext(url)` returns. The idle window pumps the page's event loop with `Tab.Settle`. Modes `standard` and `strict` apply `engine.PolicyFor(level)` with `SetDataPolicy`; they are only run in a build that has that API (`-tags datasaver_engine`). Sweef `off` today is the engine with nothing blocked, which is what `off` means in the spec.")
 	w.p("")
-	w.p("**Request counts.** Chromium: CDP `requestWillBeSent` for http(s) URLs, one per redirect hop, cache hits included. Sweef: the engine's own network log (`Network.request` events plus cache-hit responses). Connections are counted by the proxy for both.")
+	w.p("**Request counts.** Chromium: CDP `requestWillBeSent` for http(s) URLs, one per redirect hop, cache hits included. Sweef: the engine's own network log (one request event per request, cache hits and 304 revalidations included). Connections are counted by the proxy for both.")
 	w.p("")
 	w.p("**Pages per 100 MB.** 100,000,000 bytes divided by the mean wire bytes (in plus out) per page over the included sites, computed once per run index and reported as median, min and max over runs. Per-site tables apply the same formula to a single visit.")
 	w.p("")
@@ -571,7 +570,7 @@ func writeEnv(w *mdw, res *Results) {
 		{"Chromium user agent used", "`" + e.ChromiumUA + "`"},
 		{"Sweef", fmt.Sprintf("commit %s%s; engine data policy API present in this build: %v", e.SweefCommit, dirty, e.PolicyAPI)},
 		{"Sweef user agent", fmt.Sprintf("`%v`", e.SweefOpts["UserAgent"])},
-		{"Sweef engine options", fmt.Sprintf("SettleMs %v, MaxCacheMiB %v, viewport %vx%v, JS timeout %v ms", e.SweefOpts["SettleMs"], e.SweefOpts["MaxCacheMiB"], e.SweefOpts["ViewportWidth"], e.SweefOpts["ViewportHeight"], e.SweefOpts["JSTimeoutMs"])},
+		{"Sweef engine options", fmt.Sprintf("SettleMs %v, MaxCacheMiB %v, DiskCacheMiB %v, viewport %vx%v, JS timeout %v ms", e.SweefOpts["SettleMs"], e.SweefOpts["MaxCacheMiB"], e.SweefOpts["DiskCacheMiB"], e.SweefOpts["ViewportWidth"], e.SweefOpts["ViewportHeight"], e.SweefOpts["JSTimeoutMs"])},
 		{"Network", e.Network},
 		{"Upstream proxy", "`" + e.Upstream + "`"},
 	}

@@ -288,8 +288,6 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	rec := fnet.RequestRecord{Method: method, URL: target}
 	start := time.Now()
 	var res *http.Response
-	var docEntry *resEntry
-	var docKey string
 	var docMI *meterInfo
 	if synth != nil {
 		res = synth
@@ -300,7 +298,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 			return nil, err
 		}
 		req.Header.Set("User-Agent", t.UserAgent())
-		req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
+		t.setBrowserHeaders(req.Header, req.URL, KindDocument, true)
 		for k, v := range t.ExtraHeaders() {
 			req.Header.Set(k, v)
 		}
@@ -311,22 +309,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		if ck := t.Context().JarRef().ForURL(target); ck != "" {
 			req.Header.Set("Cookie", ck)
 		}
-		// Saver levels: revalidate a stored copy of the document instead of
-		// downloading it again. A document is never served without asking the server.
 		pol := t.policy()
-		if pol.ExtendCache && method == "GET" && !strings.Contains(strings.ToLower(req.Header.Get("Cache-Control")), "no-cache") {
-			docKey = t.eng.res.key(t.Context(), "doc:"+target)
-			if e := t.eng.res.get(docKey); e != nil && (e.etag != "" || e.lastMod != "") &&
-				(len(e.vary) == 0 || e.varyVal == t.varyValue(e.vary, target, hdrs)) {
-				docEntry = e
-				if e.etag != "" {
-					req.Header.Set("If-None-Match", e.etag)
-				}
-				if e.lastMod != "" {
-					req.Header.Set("If-Modified-Since", e.lastMod)
-				}
-			}
-		}
 		rec.Headers = flattenHeaders(req.Header)
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 		t.emit(EvRequest, rec)
@@ -366,28 +349,19 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	}
 	rec.DurationMs = time.Since(start).Milliseconds()
 	rec.ResponseHeaders = flattenHeaders(res.Header)
+	if docMI != nil {
+		if st := docMI.cacheState(); st != "" {
+			h := make(map[string]string, len(rec.Headers)+1)
+			for k, v := range rec.Headers {
+				h[k] = v
+			}
+			h["x-sweef-cache"] = st
+			rec.Headers = h
+		}
+	}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
 	t.emit(EvResponse, rec)
 	status, text := res.StatusCode, string(body)
-	if docKey != "" {
-		switch {
-		case res.StatusCode == http.StatusNotModified && docEntry != nil:
-			// the stored copy is current: only the headers crossed the wire
-			status, text = docEntry.status, docEntry.body
-			rec.Status = status
-			t.noteCacheHit(docEntry.xfer)
-		case res.StatusCode == http.StatusOK && cacheable(res.Header) && docMI != nil &&
-			(res.Header.Get("ETag") != "" || res.Header.Get("Last-Modified") != ""):
-			names := varyNames(res.Header)
-			t.eng.res.put(docKey, &resEntry{
-				body: text, status: status, etag: res.Header.Get("ETag"), lastMod: res.Header.Get("Last-Modified"),
-				storedAt: time.Now(), xfer: docMI.hdrBytes.Load() + docMI.rawBytes.Load(),
-				vary: names, varyVal: t.varyValue(names, target, hdrs), tab: t.ID, epoch: t.ds.epoch.Load(),
-			})
-		default:
-			t.eng.res.drop(docKey) // no-store, no validator, or an error: do not keep an old copy around
-		}
-	}
 	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec}, nil
 }
 
@@ -704,7 +678,7 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	t.touchNet()
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", t.UserAgent())
-	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
+	t.setBrowserHeaders(req.Header, req.URL, KindDocument, true)
 	for k, v := range t.ExtraHeaders() {
 		req.Header.Set(k, v)
 	}

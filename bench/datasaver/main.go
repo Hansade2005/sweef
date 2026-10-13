@@ -32,6 +32,9 @@ func main() {
 		case "sweef-child":
 			childMain(os.Args[2:])
 			return
+		case "probe":
+			probeMain(os.Args[2:])
+			return
 		case "report":
 			reportMain(os.Args[2:])
 			return

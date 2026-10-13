@@ -1,23 +1,13 @@
 package engine
 
-// fetchres.go: sub-resource fetching through the engine's HTTP cache, with the
-// Data Saver gates for scripts and fonts and the cache rules of the saver
-// levels. The cache rules in short (see rescache.go for freshness):
-//
-//   - no-store responses are never stored; Vary: * responses are never stored;
-//   - a stored response is only reused when the request headers named by its
-//     Vary match the ones it was stored under (Cookie and User-Agent included);
-//   - stale entries with a validator are revalidated with a conditional
-//     request, a 304 reuses the stored body and costs only the headers;
-//   - cache entries are partitioned by browsing context (incognito never reads
-//     what another context stored).
+// fetchres.go: sub-resource fetching with the Data Saver gates for scripts and
+// fonts. The HTTP cache itself (freshness, validators, Vary, 304, redirects,
+// disk persistence) is a transport layer, see httpcache_rt.go: everything
+// fetched through httpDo gets it. What stays here is the per-navigation memo
+// (a resource is read from the network once per navigation).
 
 import (
 	"net/http"
-	"strings"
-	"time"
-
-	fnet "github.com/sweefbrowser/sweef/internal/net"
 )
 
 type fetchOpts struct {
@@ -38,70 +28,12 @@ func (t *Tab) fetchResourceKind(rawurl string, kind DataKind) (string, int, erro
 	return t.fetchRes(rawurl, fetchOpts{kind: kind})
 }
 
-// varyValue snapshots the request headers named by names for url.
-func (t *Tab) varyValue(names []string, abs string, extra map[string]string) string {
-	if len(names) == 0 {
-		return ""
-	}
-	var sb strings.Builder
-	for _, n := range names {
-		v := ""
-		switch n {
-		case "cookie":
-			v = t.Context().JarRef().ForURL(abs)
-		case "user-agent":
-			v = t.UserAgent()
-		case "accept":
-			v = "*/*"
-		default:
-			for k, x := range t.ExtraHeaders() {
-				if strings.EqualFold(k, n) {
-					v = x
-				}
-			}
-			for k, x := range extra {
-				if strings.EqualFold(k, n) {
-					v = x
-				}
-			}
-		}
-		sb.WriteString(n)
-		sb.WriteByte('=')
-		sb.WriteString(v)
-		sb.WriteByte('\n')
-	}
-	return sb.String()
-}
-
-// entryFresh decides whether a stored response can be served without asking.
-func (t *Tab) entryFresh(e *resEntry, pol DataPolicy, now time.Time) bool {
-	if e.expires.IsZero() || !now.Before(e.expires) {
-		return false
-	}
-	if e.windowOnly && pol.ExtendCache {
-		// the short window exists so the loader finds what the parallel prefetch
-		// of the same navigation fetched; under the saver levels it does not
-		// outlive that navigation (a no-cache response is revalidated every time)
-		return e.tab == t.ID && e.epoch == t.ds.epoch.Load()
-	}
-	return true
-}
-
-// creditHit books a cache hit as bytes saved, but only when the entry comes from an
-// earlier navigation: reuse inside one navigation (the stylesheet the parallel
-// prefetch read and the layout reads again) is bookkeeping, not a saving.
-func (t *Tab) creditHit(e *resEntry) {
-	if e.tab != t.ID || e.epoch != t.ds.epoch.Load() {
-		t.noteCacheHit(e.xfer)
-	}
-}
-
 // knownSize is the transfer size of a cached response, or -1.
-func (t *Tab) knownSize(key string) int64 {
-	if e := t.eng.res.get(key); e != nil && e.xfer > 0 {
-		return e.xfer
-	}
-	return -1
+func (t *Tab) knownSize(key string) int64 { return t.eng.res.peekXfer(key) }
+
+func (t *Tab) knownSizeURL(u string) int64 {
+	key, _ := t.eng.res.key(t.Context(), u, "")
+	return t.knownSize(key)
 }
 
 func (t *Tab) fetchRes(rawurl string, o fetchOpts) (string, int, error) {
@@ -114,9 +46,7 @@ func (t *Tab) fetchRes(rawurl string, o fetchOpts) (string, int, error) {
 		kind = KindOther
 	}
 	pol := t.policy()
-	now := time.Now()
-	key := t.eng.res.key(t.Context(), abs)
-	entry := t.eng.res.get(key)
+	key, _ := t.eng.res.key(t.Context(), abs, "")
 
 	budget := int64(-1) // remaining first-party script budget, -1 = none
 	if !o.forced {
@@ -153,32 +83,22 @@ func (t *Tab) fetchRes(rawurl string, o fetchOpts) (string, int, error) {
 		}
 	}
 
-	if entry == nil && pol.ExtendCache && !o.prefetch {
+	// Inside one navigation a resource is read from the network once: the loader finds what the parallel
+	// prefetch fetched, and every relayout finds the stylesheet. This is the browser's memory cache for the
+	// document; it ignores freshness and costs no event.
+	if !t.IsOfflineMode() {
+		if e := t.eng.res.navEntry(key, t.ID, t.ds.epoch.Load()); e != nil && !e.Resp.IsZero() {
+			spend(e.Xfer)
+			return string(e.Body), e.Status, nil
+		}
+	}
+	if pol.ExtendCache && !o.prefetch {
 		// what the navigation's prefetch read but may not be stored (no-store, Vary: *)
 		if body, ok := t.takeStash(key); ok {
 			return body, http.StatusOK, nil
 		}
 	}
-	var hdr map[string]string
-	if entry != nil && len(entry.vary) > 0 && entry.varyVal != t.varyValue(entry.vary, abs, nil) {
-		entry = nil // stored for a request that differed in a header the server varies on
-	}
-	if entry != nil {
-		if t.entryFresh(entry, pol, now) && !t.IsOfflineMode() {
-			t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: now, Data: fnet.RequestRecord{Method: "GET", URL: abs, FinalURL: abs, Status: entry.status, Headers: map[string]string{"x-sweef-cache": "hit"}}})
-			t.creditHit(entry)
-			spend(entry.xfer)
-			return entry.body, entry.status, nil
-		}
-		hdr = map[string]string{}
-		if entry.etag != "" {
-			hdr["If-None-Match"] = entry.etag
-		}
-		if entry.lastMod != "" {
-			hdr["If-Modified-Since"] = entry.lastMod
-		}
-	}
-	r, err := t.httpDo(httpOpts{method: "GET", url: abs, headers: hdr, kind: kind, maxBody: o.maxBody})
+	r, err := t.httpDo(httpOpts{method: "GET", url: abs, kind: kind, maxBody: o.maxBody})
 	if err != nil {
 		return "", 0, err
 	}
@@ -189,62 +109,15 @@ func (t *Tab) fetchRes(rawurl string, o fetchOpts) (string, int, error) {
 		}
 		return "", 0, errTooLarge{declared: r.declared}
 	}
-	h := r.header
-	if r.status == http.StatusNotModified && entry != nil {
-		hh := http.Header{}
-		hh.Set("Cache-Control", h.Get("Cache-Control"))
-		hh.Set("Expires", h.Get("Expires"))
-		for _, k := range []string{"ETag", "Last-Modified", "Date"} {
-			if v := h.Get(k); v != "" {
-				hh.Set(k, v)
-			} else if k == "ETag" && entry.etag != "" {
-				hh.Set(k, entry.etag)
-			} else if k == "Last-Modified" && entry.lastMod != "" {
-				hh.Set(k, entry.lastMod)
-			}
-		}
-		var exp time.Time
-		if pol.ExtendCache {
-			exp = extendedFreshness(hh, now, kind, abs)
-		} else {
-			exp = freshness(hh, now)
-		}
-		window := false
-		if exp.IsZero() && pol.ExtendCache {
-			// revalidated just now: the rest of this navigation may reuse it
-			exp, window = now.Add(5*time.Second), true
-		}
-		t.creditHit(entry) // before refresh moves the entry into this navigation
-		t.eng.res.refresh(key, exp, now, window, t.ID, t.ds.epoch.Load())
-		spend(entry.xfer)
-		return entry.body, entry.status, nil
+	if r.fromCache {
+		spend(r.cachedXfer) // the page behaves the same warm or cold
+		return string(r.body), r.status, nil
 	}
 	if r.status == http.StatusOK {
 		spend(r.xfer)
 		t.Context().data().observe(kind, r.xfer)
-		if !cacheable(h) && pol.ExtendCache && o.prefetch {
+		if noStoreResponse(r.header) && pol.ExtendCache && o.prefetch {
 			t.stash(key, string(r.body))
-		}
-		if cacheable(h) {
-			var exp time.Time
-			if pol.ExtendCache {
-				exp = extendedFreshness(h, now, kind, abs)
-			} else {
-				exp = freshness(h, now)
-			}
-			window := false
-			if exp.IsZero() {
-				// Memory-cache window: a resource fetched for this navigation
-				// (e.g. by the parallel prefetch) is reused by the loader.
-				exp = now.Add(5 * time.Second)
-				window = true
-			}
-			names := varyNames(h)
-			t.eng.res.put(key, &resEntry{
-				body: string(r.body), status: r.status, etag: h.Get("Etag"), lastMod: h.Get("Last-Modified"),
-				expires: exp, storedAt: now, xfer: r.xfer, vary: names, varyVal: t.varyValue(names, abs, nil),
-				windowOnly: window, tab: t.ID, epoch: t.ds.epoch.Load(),
-			})
 		}
 	} else if r.status >= 200 && r.status < 300 {
 		spend(r.xfer)

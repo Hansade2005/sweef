@@ -32,14 +32,16 @@ var (
 // Options tune the whole browser instance for low-memory machines.
 type Options struct {
 	MaxRSSMiB        int  // soft budget; GC pressure + eviction kicks in above this
-	MaxCacheMiB      int  // HTTP memory cache ceiling
+	MaxCacheMiB      int  // HTTP memory cache ceiling (default 32)
+	DiskCacheMiB     int  // profile-level on-disk HTTP cache cap under CacheDir/http (0 = 100, negative = memory only)
 	Headless         bool // always true today; "headful" streams to a thin client
 	DisableJS        bool // pure fetch+DOM mode for tiny agents
 	ConsoleRingSize  int  // console messages retained per tab
 	NetworkRingSize  int  // network events retained per tab
 	StateRingSize    int  // actionability/state log entries retained
 	DefaultUserAgent string
-	ProxyURL         string
+	ProxyURL         string // HTTP/HTTPS/SOCKS5 proxy for every context ("" = HTTPS_PROXY/HTTP_PROXY/NO_PROXY from the environment, "direct" = none)
+	AcceptLanguage   string // Accept-Language of every request (default "en-US,en;q=0.9"); see Engine.SetAcceptLanguage
 	ViewportWidth    int    // default viewport width (px) for text rendering
 	ViewportHeight   int    // default viewport height (px)
 	SettleMs         int    // event-loop budget after load and after actions (default 1500)
@@ -53,7 +55,7 @@ type Options struct {
 func DefaultOptions() Options {
 	return Options{
 		MaxRSSMiB:        48,
-		MaxCacheMiB:      8,
+		MaxCacheMiB:      32,
 		Headless:         true,
 		ConsoleRingSize:  512,
 		NetworkRingSize:  512,
@@ -166,7 +168,8 @@ type Engine struct {
 	metrics    *Metrics
 	started    time.Time
 	vms        *vmPool
-	res        *resCache
+	res        *httpCache
+	acceptLang atomic.Value // string: Engine.SetAcceptLanguage
 	code       *codeCache
 
 	ctx    context.Context
@@ -195,7 +198,7 @@ func New(opts Options) *Engine {
 	}
 	e.code = newCodeCache(cacheDir)
 	setPreludeCacheDir(e.code.dir)
-	e.res = newResCache(opts.MaxCacheMiB)
+	e.res = newHTTPCache(opts.MaxCacheMiB, cacheDir, opts.DiskCacheMiB)
 	e.vms = newVMPool(opts)
 	return e
 }
@@ -351,6 +354,7 @@ func (e *Engine) Close() error {
 	}
 	e.cancel()
 	e.vms.close()
+	e.res.close()
 	// keep-alive connections would otherwise outlive the engine (their reader
 	// goroutines wait for IdleConnTimeout)
 	e.mu.Lock()

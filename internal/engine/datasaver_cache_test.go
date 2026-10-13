@@ -237,69 +237,91 @@ func TestExtendedCacheVaryAndPartition(t *testing.T) {
 	}
 }
 
-func TestExtendedCacheDocumentsAreAlwaysRevalidated(t *testing.T) {
+func TestExtendedCacheDocumentsAreRevalidatedUnlessTheServerSaysFresh(t *testing.T) {
 	s := newDSSite(t)
 	serveCacheSite(s, []cacheCase{
 		{path: "/d/fresh.html", etag: `"d1"`, cc: "max-age=3600", body: "<html><body><p id=t>document one</p></body></html>"},
+		{path: "/d/stale.html", etag: `"s1"`, cc: "max-age=0", body: "<html><body><p id=t>stale one</p></body></html>"},
+		{path: "/d/heur.html", etag: `"h1"`, extra: map[string]string{"Last-Modified": "Mon, 01 Jan 2024 00:00:00 GMT"}, body: "<html><body><p id=t>heuristic</p></body></html>"},
 		{path: "/d/nostore.html", etag: `"d2"`, cc: "no-store", body: "<html><body><p id=t>never stored</p></body></html>"},
 		{path: "/d/plain.html", body: "<html><body><p id=t>no validators</p></body></html>"},
 	})
 	e := newDSEngine(t)
-	c, tab := ctxTab(t, e, polPtr(SaverStandard))
-	nav(t, tab, s.URL()+"/d/fresh.html")
-	s.reset()
-	nav(t, tab, s.URL()+"/d/fresh.html")
-	rs := reqsFor(s, "/d/fresh.html")
-	if len(rs) != 1 || rs[0].Header.Get("If-None-Match") != `"d1"` {
-		t.Fatalf("a document is never served without asking the server, even with max-age=3600: %v", rs)
-	}
-	if txt, _ := tab.Text("#t"); txt != "document one" {
-		t.Fatalf("304 must show the stored document, got %q", txt)
-	}
-	if hit := c.DataStats().CacheHitBytes; hit < 100 {
-		t.Fatalf("a 304 on a document is a measured saving, got %d", hit)
-	}
-	// a changed document replaces the stored one
-	s.mu.Lock()
-	s.hook = func(w http.ResponseWriter, r *http.Request) bool {
-		if r.URL.Path == "/d/fresh.html" {
-			w.Header().Set("ETag", `"d1b"`)
-			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprint(w, "<html><body><p id=t>document two</p></body></html>")
-			return true
-		}
-		return false
-	}
-	s.mu.Unlock()
-	nav(t, tab, s.URL()+"/d/fresh.html")
-	if txt, _ := tab.Text("#t"); txt != "document two" {
-		t.Fatalf("changed document: %q", txt)
-	}
-	for _, p := range []string{"/d/nostore.html", "/d/plain.html"} {
-		nav(t, tab, s.URL()+p)
+	for _, lvl := range []SaverLevel{SaverStandard, SaverOff} {
+		c, tab := ctxTab(t, e, polPtr(lvl))
+		nav(t, tab, s.URL()+"/d/fresh.html")
 		s.reset()
-		nav(t, tab, s.URL()+p)
-		rs := reqsFor(s, p)
-		if len(rs) != 1 || rs[0].Header.Get("If-None-Match") != "" || rs[0].Header.Get("If-Modified-Since") != "" {
-			t.Fatalf("%s must not be conditional: %v", p, rs)
+		nav(t, tab, s.URL()+"/d/fresh.html")
+		if rs := reqsFor(s, "/d/fresh.html"); len(rs) != 0 {
+			t.Fatalf("%s: the server said fresh for an hour, no request expected: %v", lvl, rs)
 		}
-	}
-	// reload bypasses the stored copy
-	nav(t, tab, s.URL()+"/d/fresh.html")
-	s.reset()
-	if err := tab.Reload(); err != nil {
-		t.Fatal(err)
-	}
-	if rs := reqsFor(s, "/d/fresh.html"); len(rs) != 1 || rs[0].Header.Get("If-None-Match") != "" {
-		t.Fatalf("reload is unconditional: %v", rs)
-	}
-	// off: documents are not cached at all (unchanged behaviour)
-	_, offTab := ctxTab(t, e, polPtr(SaverOff))
-	s.hook = nil
-	nav(t, offTab, s.URL()+"/d/fresh.html")
-	s.reset()
-	nav(t, offTab, s.URL()+"/d/fresh.html")
-	if rs := reqsFor(s, "/d/fresh.html"); len(rs) != 1 || rs[0].Header.Get("If-None-Match") != "" {
-		t.Fatalf("off: %v", rs)
+		if txt, _ := tab.Text("#t"); txt != "document one" {
+			t.Fatalf("%s: fresh document from the cache, got %q", lvl, txt)
+		}
+		// max-age=0 with a validator: always a conditional request, a 304 shows the stored document
+		nav(t, tab, s.URL()+"/d/stale.html")
+		s.reset()
+		nav(t, tab, s.URL()+"/d/stale.html")
+		rs := reqsFor(s, "/d/stale.html")
+		if len(rs) != 1 || rs[0].Header.Get("If-None-Match") != `"s1"` {
+			t.Fatalf("%s: a stale document is revalidated: %v", lvl, rs)
+		}
+		if txt, _ := tab.Text("#t"); txt != "stale one" {
+			t.Fatalf("%s: 304 must show the stored document, got %q", lvl, txt)
+		}
+		if hit := c.DataStats().CacheHitBytes; hit < 100 {
+			t.Fatalf("%s: a 304 on a document is a measured saving, got %d", lvl, hit)
+		}
+		// no stated lifetime: never heuristically fresh for a document
+		nav(t, tab, s.URL()+"/d/heur.html")
+		s.reset()
+		nav(t, tab, s.URL()+"/d/heur.html")
+		if rs := reqsFor(s, "/d/heur.html"); len(rs) != 1 || rs[0].Header.Get("If-None-Match") != `"h1"` {
+			t.Fatalf("%s: a document without a stated lifetime is revalidated, never served on a heuristic: %v", lvl, rs)
+		}
+		// a changed document replaces the stored one
+		s.mu.Lock()
+		old := s.hook
+		s.hook = func(w http.ResponseWriter, r *http.Request) bool {
+			if r.URL.Path == "/d/stale.html" {
+				w.Header().Set("ETag", `"s1b"`)
+				w.Header().Set("Cache-Control", "max-age=0")
+				w.Header().Set("Content-Type", "text/html")
+				fmt.Fprint(w, "<html><body><p id=t>stale two</p></body></html>")
+				return true
+			}
+			return old(w, r)
+		}
+		s.mu.Unlock()
+		nav(t, tab, s.URL()+"/d/stale.html")
+		if txt, _ := tab.Text("#t"); txt != "stale two" {
+			t.Fatalf("%s: changed document: %q", lvl, txt)
+		}
+		for _, p := range []string{"/d/nostore.html", "/d/plain.html"} {
+			nav(t, tab, s.URL()+p)
+			s.reset()
+			nav(t, tab, s.URL()+p)
+			rs := reqsFor(s, p)
+			if len(rs) != 1 || rs[0].Header.Get("If-None-Match") != "" || rs[0].Header.Get("If-Modified-Since") != "" {
+				t.Fatalf("%s: %s must not be conditional: %v", lvl, p, rs)
+			}
+		}
+		// reload bypasses the stored copy
+		nav(t, tab, s.URL()+"/d/fresh.html")
+		s.reset()
+		if err := tab.Reload(); err != nil {
+			t.Fatal(err)
+		}
+		if rs := reqsFor(s, "/d/fresh.html"); len(rs) != 1 || rs[0].Header.Get("If-None-Match") != "" {
+			t.Fatalf("%s: reload is unconditional: %v", lvl, rs)
+		}
+		serveCacheSite(s, []cacheCase{
+			{path: "/d/fresh.html", etag: `"d1"`, cc: "max-age=3600", body: "<html><body><p id=t>document one</p></body></html>"},
+			{path: "/d/stale.html", etag: `"s1"`, cc: "max-age=0", body: "<html><body><p id=t>stale one</p></body></html>"},
+			{path: "/d/heur.html", etag: `"h1"`, extra: map[string]string{"Last-Modified": "Mon, 01 Jan 2024 00:00:00 GMT"}, body: "<html><body><p id=t>heuristic</p></body></html>"},
+			{path: "/d/nostore.html", etag: `"d2"`, cc: "no-store", body: "<html><body><p id=t>never stored</p></body></html>"},
+			{path: "/d/plain.html", body: "<html><body><p id=t>no validators</p></body></html>"},
+		})
+		s.reset()
 	}
 }

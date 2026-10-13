@@ -67,6 +67,39 @@ and layout dominate), the Chromium memory comparison is against a headless build
 sites that need features we lack (DRM, extensions, WebRTC) will not work and show an "Open in system
 browser" action, and macOS/Windows packaging and signing are untested. Installers: `docs/install.md`.
 
+## Data Saver (alpha)
+
+For people on small data plans. Everything happens on the device: no proxy, no server-side transcoding, nothing about
+your browsing leaves the machine. The browser counts the bytes that cross the network (TLS included), keeps a budget you
+choose (for example 100 MB a month), warns at 70% and 90%, and can hard-stop at the limit. Three levels: **off** (counting
+only), **standard** (lazy images near the viewport, big images become tap-to-load, media only on play, background tabs
+idle, third-party embeds on tap, an HTTP cache that revalidates instead of refetching) and **strict** (text first: no
+images, no third-party scripts, a script budget). "Load fully, once" and per-site rules are one tap away. The Sidekick
+agent reads pages in a lite mode and reports what its research cost.
+
+Measured on one Linux VM through an independent byte-counting proxy that neither browser controls (18 real public pages,
+3 runs each, cold cache; method, site list, exclusions and caveats in [docs/data-saver-bench.md](docs/data-saver-bench.md),
+reproduce with `scripts/bench/datasaver.sh -runs 3`):
+
+| Mode | Mean data per page | Pages per 100 MB |
+|---|---:|---:|
+| Sweef off | 2.07 MB | 48 |
+| Sweef standard | 1.20 MB | 83 |
+| Sweef strict | 312 KB | 321 |
+| Chromium (headless, no browser UI) | 2.73 MB | 37 |
+
+* **The saver itself:** standard uses 42% less data than Sweef with the saver off (41% to 42% over the runs) and strict
+  uses 85% less (83% to 85%).
+* **Repeat visits:** a second visit costs about 13% of the first in Sweef (served from an on-disk HTTP cache) against 22%
+  in Chromium.
+* **Read the Chromium column with care.** Sweef does not fetch everything Chromium does (it loads no web fonts, renders
+  no iframe documents and drops prefetch hints), so part of the gap is a simpler page, not a better saver. The honest
+  like-for-like number is the saver against our own "off" row. Chromium's Save-Data header saved nothing measurable.
+* **Sites that did not count.** 5 of the 23 listed sites are excluded for every mode: three are blocked by bot detection
+  (Cloudflare and Akamai challenges, documented in [docs/compat.md](docs/compat.md)), one URL was a 404 and one exceeded
+  the 60 s navigation limit. The result describes these 18 pages, on one network, on one day.
+* The Sidekick's own model traffic is not in the meter (it goes outside the engine); the Settings page says so.
+
 ## Batching: one call, many steps, one observation
 
 Agents pay per tool call, and a model round trip costs seconds while a Sweef command costs milliseconds. Send the whole plan at once:
