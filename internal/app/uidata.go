@@ -227,6 +227,7 @@ func (a *App) clearBrowsingData() {
 	for _, e := range a.pagesSnapshot() {
 		ctx.ClearStorage(urlOrigin(e.topURL.Load()))
 	}
+	ctx.ClearSiteData("") // IndexedDB, Cache Storage and service worker registrations of every site
 	a.favicons.clear()
 	a.sendChrome(mToast, map[string]any{"text": "Browsing data cleared", "kind": "info"})
 	a.markState()

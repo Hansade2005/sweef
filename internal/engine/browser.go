@@ -35,6 +35,8 @@ type BrowserContext struct {
 
 	httpClient *http.Client            // per-context client with its own cookie jar (see clientFor)
 	ds         atomic.Pointer[ctxData] // Data Saver policy, counters and stats (datasaver.go)
+
+	site siteHolder // origin-scoped storage and service workers (storage_host.go)
 }
 
 type ContextOptions struct {
@@ -53,6 +55,7 @@ type ContextOptions struct {
 	ProxyURL          string            `json:"proxy,omitempty"` // overrides Options.ProxyURL and the environment for this context
 	AcceptLanguage    string            `json:"acceptLanguage,omitempty"`
 	StoragePath       string            `json:"storagePath,omitempty"` // load/save state JSON
+	StorageDir        string            `json:"storageDir,omitempty"`  // persist IndexedDB, Cache Storage and service workers here ("" = memory only)
 }
 
 func randHex(n int) string {
@@ -175,6 +178,7 @@ func (c *BrowserContext) Close() error {
 	if c.options.StoragePath != "" {
 		_ = c.SaveState(c.options.StoragePath)
 	}
+	c.siteClose()
 	c.closeIdle()
 	c.eng.removeContext(c.name)
 	c.eng.emit(EvConsole, map[string]any{"contextClosed": c.name})

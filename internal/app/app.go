@@ -242,6 +242,9 @@ func New(cfg Config) (*App, error) {
 		o.DefaultUserAgent = userAgent(cfg.UserAgent)
 		if a.prof.Dir != "" {
 			o.CacheDir = filepath.Join(a.prof.Dir, "cache")
+			// IndexedDB, Cache Storage and service workers of the normal window; private windows run in
+			// their own engine context without a directory, so they never reach the disk
+			o.StorageDir = filepath.Join(a.prof.Dir, "storage")
 		} else {
 			o.CacheDir = "off"
 		}

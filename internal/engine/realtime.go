@@ -463,6 +463,10 @@ func (j *jsVM) drainAsync() bool {
 			if _, err := j.call("__swImgEvent", e.id, e.typ, e.code, atoiSafe(e.data)); err != nil {
 				j.tab.LogConsole("error", jsErrorText(err, "image "+e.typ))
 			}
+		default:
+			if h := asyncHandlers[e.kind]; h != nil { // feature files register their own (see registerAsyncHandler)
+				h(j, e)
+			}
 		}
 	}
 	return len(evs) > 0
