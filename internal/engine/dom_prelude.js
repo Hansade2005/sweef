@@ -1927,7 +1927,7 @@
   def(global, 'closed', { value: false, writable: true });
   def(global, 'name', { value: '', writable: true });
   def(global, 'origin', { get: function () { return originOf(currentURL()); } });
-  def(global, 'isSecureContext', { get: function () { return /^https:/.test(currentURL()); } });
+  def(global, 'isSecureContext', { get: function () { var u = currentURL(); return /^(https|sweef):/.test(u) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]|[^/:]*\.localhost)(:|\/|$)/.test(u); } });
   def(global, 'crossOriginIsolated', { value: false });
   function Window() { illegal(); } setTag(Window, 'Window'); global.Window = Window;
   Object.setPrototypeOf(Window.prototype, EventTarget.prototype);

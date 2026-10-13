@@ -71,7 +71,7 @@ func AcquireVideoFrom(key string, open func() (VideoSource, error), c VideoConst
 			}
 			liveMu.Unlock()
 		})
-		self.mode = func(src srcAPI[Frame, VideoConstraints], f *Frame) any {
+		self.mode = func(src srcAPI[Frame, VideoConstraints], f *Frame, c VideoConstraints) any {
 			if m, ok := src.(Moder); ok {
 				if w, h, fps := m.Mode(); w > 0 && h > 0 {
 					return VideoMode{W: w, H: h, FPS: fps}
@@ -113,7 +113,12 @@ func (l *VideoLease) Mode() VideoMode {
 }
 
 // Reopen restarts the device with new constraints; every lease and subscription keeps working.
-func (l *VideoLease) Reopen(c VideoConstraints) error { return l.sh.reopen(c) }
+func (l *VideoLease) Reopen(c VideoConstraints) error {
+	if err := l.sh.reopen(c); err != nil {
+		return err
+	}
+	return l.sh.wait(DefaultStartTimeout)
+}
 
 // Ended is closed when the device stops for good (unplugged, taken by another application, last release).
 func (l *VideoLease) Ended() <-chan struct{} { return l.sh.ended }
@@ -166,7 +171,7 @@ func AcquireAudioFrom(key string, open func() (AudioSource, error), c AudioConst
 			}
 			liveMu.Unlock()
 		})
-		self.mode = func(_ srcAPI[AudioChunk, AudioConstraints], a *AudioChunk) any {
+		self.mode = func(_ srcAPI[AudioChunk, AudioConstraints], a *AudioChunk, _ AudioConstraints) any {
 			return AudioMode{Rate: a.Rate, Channels: a.Channels}
 		}
 		audioShares[key] = self

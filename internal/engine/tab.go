@@ -134,6 +134,8 @@ type Tab struct {
 	userAgent   string
 	geo         *[2]float64
 	permissions map[string]bool
+	mediaBroker atomic.Pointer[MediaBroker] // permission/display handler of the embedding app (capture_host.go)
+	docPolicy   atomic.Value                // string: the document's Permissions-Policy header
 	offline     bool
 	colorScheme string
 	extraHdrs   map[string]string
@@ -402,6 +404,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	}
 	rec.DurationMs = time.Since(start).Milliseconds()
 	rec.ResponseHeaders = flattenHeaders(res.Header)
+	t.setDocPolicy(res.Header.Get("Permissions-Policy"), res.Header.Get("Feature-Policy"))
 	if docMI != nil {
 		if st := docMI.cacheState(); st != "" {
 			h := make(map[string]string, len(rec.Headers)+1)

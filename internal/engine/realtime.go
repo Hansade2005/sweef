@@ -470,6 +470,10 @@ func (j *jsVM) drainAsync() bool {
 			if _, err := j.call("__swHttpEvent", e.id); err != nil {
 				j.tab.LogConsole("error", jsErrorText(err, "request callback"))
 			}
+		case "cap":
+			if _, err := j.call("__swCapEvent", e.id, e.typ, e.data); err != nil {
+				j.tab.LogConsole("error", jsErrorText(err, "capture "+e.typ))
+			}
 		case "img":
 			if _, err := j.call("__swImgEvent", e.id, e.typ, e.code, atoiSafe(e.data)); err != nil {
 				j.tab.LogConsole("error", jsErrorText(err, "image "+e.typ))

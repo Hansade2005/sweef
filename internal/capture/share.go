@@ -86,7 +86,7 @@ type shared[T, C any] struct {
 	ready    chan struct{} // closed when the first item arrived or start failed
 	startErr error
 	ended    chan struct{} // closed when the source stopped for good
-	mode     func(src srcAPI[T, C], first *T) any
+	mode     func(src srcAPI[T, C], first *T, cons C) any
 	modeVal  any
 }
 
@@ -132,7 +132,7 @@ func (s *shared[T, C]) pump(src srcAPI[T, C], ch <-chan *T, gen int) {
 			if s.first == nil {
 				s.first = v
 				if s.mode != nil {
-					s.modeVal = s.mode(src, v)
+					s.modeVal = s.mode(src, v, s.cons)
 				}
 				close(s.ready)
 			}
