@@ -662,12 +662,13 @@ func TestNoServerMeansNoMicrophone(t *testing.T) {
 func TestServerPaths(t *testing.T) {
 	env := map[string]string{"XDG_RUNTIME_DIR": "/run/user/1000"}
 	got := serverPaths(func(k string) string { return env[k] }, 1000)
-	if len(got) != 2 || got[0] != "/run/user/1000/pulse/native" || got[1] != "/run/user/1000/pulse/native" {
+	want := filepath.Join("/run/user/1000", "pulse", "native") // OS separators: the paths are joined with filepath
+	if len(got) != 2 || got[0] != want || got[1] != "/run/user/1000/pulse/native" {
 		t.Fatalf("%v", got)
 	}
 	env["PULSE_RUNTIME_PATH"] = "/custom"
 	got = serverPaths(func(k string) string { return env[k] }, 1000)
-	if got[0] != "/custom/native" {
+	if got[0] != filepath.Join("/custom", "native") {
 		t.Fatalf("%v", got)
 	}
 }

@@ -17,8 +17,11 @@ import (
 
 // newTestReceiver builds a VideoReceiver without a transport and without goroutines, so the reassembly,
 // ordering and loss policy can be driven packet by packet with a clock the test controls.
+// testSentMu guards the RTCP a test receiver sent: PLIs go out from their own goroutine.
+var testSentMu sync.Mutex
+
 func newTestReceiver() (*VideoReceiver, *[]rtcp.Packet) {
-	var mu sync.Mutex
+	mu := &testSentMu
 	var sent []rtcp.Packet
 	r := &VideoReceiver{
 		ssrc: 1234, usePLI: true, pkts: map[uint32]*vpkt{}, missing: map[uint32]*nackInfo{}, nackRTT: 0.05,
@@ -162,12 +165,22 @@ func TestReceiverLossAndKeyFrameResync(t *testing.T) {
 	if !r.haveRef || r.needKey {
 		t.Fatalf("did not resynchronise on the key frame (haveRef %v needKey %v)", r.haveRef, r.needKey)
 	}
-	plis := 0
-	for _, p := range *sent {
-		if _, ok := p.(*rtcp.PictureLossIndication); ok {
-			plis++
+	countPLI := func() int {
+		testSentMu.Lock()
+		defer testSentMu.Unlock()
+		n := 0
+		for _, p := range *sent {
+			if _, ok := p.(*rtcp.PictureLossIndication); ok {
+				n++
+			}
 		}
+		return n
 	}
+	// the PLI is written from its own goroutine: give a slow scheduler (Windows runners) time to run it
+	for i := 0; i < 200 && countPLI() == 0; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	plis := countPLI()
 	if plis == 0 {
 		t.Errorf("no PLI was sent after the loss")
 	}
