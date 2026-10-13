@@ -206,3 +206,48 @@ baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=
 [183/345] sweef-strict       run 1 https://arstechnica.com/                                     cold=  103504 warm=   49204 req=  5 ready=  553ms ok
 [184/345] chromium           run 1 https://arstechnica.com/                                     cold= 7022992 warm=  572138 req=276 ready= 4909ms ok
 [185/345] chromium-savedata  run 1 https://arstechnica.com/                                     cold= 5228189 warm=  967180 req=173 ready= 8562ms ok
+[186/345] sweef-standard     run 2 https://arstechnica.com/                                     cold= 2853937 warm=  277659 req=124 ready=14587ms ok
+[187/345] sweef-strict       run 2 https://arstechnica.com/                                     cold=  103475 warm=   49257 req=  5 ready=  570ms ok
+[188/345] chromium           run 2 https://arstechnica.com/                                     cold= 5577986 warm= 2075227 req=170 ready= 8977ms ok
+[189/345] chromium-savedata  run 2 https://arstechnica.com/                                     cold= 5552090 warm=  559801 req=170 ready= 7372ms ok
+[190/345] sweef-off          run 2 https://arstechnica.com/                                     cold= 3728521 warm=  790704 req=153 ready=45200ms ok
+[191/345] sweef-strict       run 3 https://arstechnica.com/                                     cold=  103597 warm=   49204 req=  5 ready=  517ms ok
+[192/345] chromium           run 3 https://arstechnica.com/                                     cold= 5597709 warm= 2140081 req=180 ready= 9057ms ok
+[193/345] chromium-savedata  run 3 https://arstechnica.com/                                     cold= 5069378 warm= 2416681 req=150 ready=51652ms ok
+[194/345] sweef-off          run 3 https://arstechnica.com/                                     cold= 3774883 warm=  374964 req=151 ready=15526ms ok
+[195/345] sweef-standard     run 3 https://arstechnica.com/                                     cold= 2861242 warm=  267022 req=124 ready=31088ms ok
+[196/345] sweef-off          run 1 https://www.theverge.com/                                    cold= 9742409 warm=  111697 req=168 ready=15033ms ok
+[197/345] sweef-standard     run 1 https://www.theverge.com/                                    cold= 2121873 warm=   98190 req=127 ready=10665ms ok
+[198/345] sweef-strict       run 1 https://www.theverge.com/                                    cold=  954985 warm=   75976 req=108 ready= 3477ms ok
+[199/345] chromium           run 1 https://www.theverge.com/                                    cold= 7753369 warm= 1412398 req=396 ready=18055ms ok
+[200/345] chromium-savedata  run 1 https://www.theverge.com/                                    cold= 7931201 warm= 1183877 req=403 ready=17996ms ok
+[201/345] sweef-standard     run 2 https://www.theverge.com/                                    cold= 2121992 warm=  105077 req=127 ready=10352ms ok
+[202/345] sweef-strict       run 2 https://www.theverge.com/                                    cold=  957389 warm=   75977 req=108 ready= 5647ms ok
+[203/345] chromium           run 2 https://www.theverge.com/                                    cold= 7866893 warm= 1154854 req=401 ready=15025ms ok
+[204/345] chromium-savedata  run 2 https://www.theverge.com/                                    cold= 7925275 warm= 1488606 req=398 ready=15113ms ok
+[205/345] sweef-off          run 2 https://www.theverge.com/                                    cold= 9742017 warm=  144362 req=168 ready=12633ms ok
+[206/345] sweef-strict       run 3 https://www.theverge.com/                                    cold=  955126 warm=   76175 req=108 ready= 3398ms ok
+[207/345] chromium           run 3 https://www.theverge.com/                                    cold= 7934312 warm= 1174595 req=398 ready=16143ms ok
+[208/345] chromium-savedata  run 3 https://www.theverge.com/                                    cold= 7895972 warm= 1471960 req=398 ready=14760ms ok
+[209/345] sweef-off          run 3 https://www.theverge.com/                                    cold= 9741447 warm=   98222 req=168 ready=12278ms ok
+[210/345] sweef-standard     run 3 https://www.theverge.com/                                    cold= 2122579 warm=  105079 req=127 ready= 9367ms ok
+[211/345] sweef-off          run 1 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    cold=   15165 warm=       0 req=  1 ready=  455ms FAIL main document HTTP 403
+[212/345] sweef-standard     run 1 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    cold=   15184 warm=       0 req=  1 ready=  414ms FAIL main document HTTP 403
+[213/345] sweef-strict       run 1 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    cold=   15183 warm=       0 req=  1 ready=  565ms FAIL main document HTTP 403
+[214/345] chromium           run 1 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    cold=  402153 warm=       0 req=  4 ready= 1409ms FAIL main document HTTP 403
+[215/345] chromium-savedata  run 1 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    cold=  403437 warm=       0 req=  4 ready= 1596ms FAIL main document HTTP 403
+[216/345] sweef-standard     run 2 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[217/345] sweef-strict       run 2 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[218/345] chromium           run 2 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[219/345] chromium-savedata  run 2 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[220/345] sweef-off          run 2 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[221/345] sweef-strict       run 3 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[222/345] chromium           run 3 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[223/345] chromium-savedata  run 3 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[224/345] sweef-off          run 3 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[225/345] sweef-standard     run 3 https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276    skipped (failed earlier)
+[226/345] sweef-off          run 1 https://www.newegg.com/p/pl?d=laptop                         cold= 3293448 warm= 1602960 req=124 ready=33105ms ok
+[227/345] sweef-standard     run 1 https://www.newegg.com/p/pl?d=laptop                         cold= 2855022 warm=  294678 req= 68 ready=32333ms ok
+[228/345] sweef-strict       run 1 https://www.newegg.com/p/pl?d=laptop                         cold=  526012 warm=  133268 req=  5 ready= 1323ms ok
+[229/345] chromium           run 1 https://www.newegg.com/p/pl?d=laptop                         cold= 9654668 warm=  936035 req=325 ready=16969ms ok
+[230/345] chromium-savedata  run 1 https://www.newegg.com/p/pl?d=laptop                         cold= 9607092 warm= 1174863 req=332 ready= 9388ms ok
