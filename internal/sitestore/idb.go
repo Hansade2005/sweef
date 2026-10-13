@@ -161,6 +161,7 @@ type Tx struct {
 	vw   *view
 
 	ioErr       error
+	strict      bool // commit with a synchronous write (IDBTransaction durability "strict")
 	wrote       bool
 	delta       int64
 	schemaDirty bool
@@ -537,6 +538,18 @@ func (m *Manager) Abort(txID int64) {
 	d.unlock()
 }
 
+// SetDurability marks a transaction strict: its commit returns only once the data is on stable storage
+// (IDBTransaction durability "strict"). The default commit reaches the journal, which survives a crash of the
+// process and is written out with the next synchronous commit, when a store is closed and by the operating
+// system; a version change always commits strictly.
+func (m *Manager) SetDurability(txID int64, strict bool) {
+	if t := m.tx(txID); t != nil {
+		t.db.mu.Lock()
+		t.strict = strict
+		t.db.mu.Unlock()
+	}
+}
+
 // Commit makes a transaction durable. A QuotaExceededError leaves it uncommitted: the caller aborts it.
 func (m *Manager) Commit(txID int64) error {
 	t := m.tx(txID)
@@ -604,7 +617,7 @@ func (d *Database) commitTx(t *Tx) error {
 	for _, id := range t.freed {
 		b.Delete(blobKey(id))
 	}
-	if err := o.commitBatch(t.conn.kv, &b, t.delta, 0, 0, t.mode == ModeVersionChange); err != nil {
+	if err := o.commitBatch(t.conn.kv, &b, t.delta, 0, 0, t.mode == ModeVersionChange || t.strict); err != nil {
 		return errf("UnknownError", "%v", err)
 	}
 	o.dropBlobFiles(t.freed)

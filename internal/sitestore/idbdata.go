@@ -541,6 +541,7 @@ func (d *Database) doClear(t *Tx, st *store) {
 	t.delta -= freed
 	t.wrote = true
 	t.garbage = append(t.garbage, [2]uint32{oldID, iidAll})
+	t.schemaDirty = true // the new physical id is part of the schema record
 	t.markDirty(st)
 	t.addUndo(func() {
 		st.id, st.count, st.bytes = oldID, oldCount, oldRec

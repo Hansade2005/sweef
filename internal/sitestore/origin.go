@@ -122,7 +122,11 @@ func (o *Origin) acquire() (*kvStore, error) {
 			dir = filepath.Join(o.dir, "kv")
 			o.removeLegacy()
 		}
-		k, err := openKV(dir)
+		open := openKV
+		if o.m.opts.openStore != nil {
+			open = o.m.opts.openStore
+		}
+		k, err := open(dir)
 		if err != nil {
 			return nil, err
 		}

@@ -65,6 +65,9 @@ type Options struct {
 	IdleClose time.Duration
 	// MaxTxBytes caps the uncommitted writes of one transaction (0 = 256 MiB).
 	MaxTxBytes int64
+
+	// openStore replaces how an origin's ordered store is opened (tests inject faulty storage).
+	openStore func(dir string) (*kvStore, error)
 }
 
 func (o Options) withDefaults() Options {
@@ -218,6 +221,9 @@ func (o *Origin) Quota() int64 {
 	q := u + room
 	if b.OriginCap < q {
 		q = b.OriginCap
+	}
+	if q < u { // above its cap (the disk filled up): nothing more to use, but never less than what is used
+		q = u
 	}
 	return q
 }
