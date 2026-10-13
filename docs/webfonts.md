@@ -38,7 +38,9 @@ Code: `internal/font` (decoders, sanitiser, variable fonts, the per document `We
    for several weights). Decoded fonts are kept per browser context by content hash (24 MB).
 5. **CORS.** A font from another origin is used only if its response has `Access-Control-Allow-Origin: *` or
    the page's origin, as in browsers; the request carries `Origin`. Same-origin fonts send no `Origin`,
-   `data:` URLs and `file:` pages are exempt. A refused font logs the usual console error.
+   `data:` URLs and `file:` pages are exempt. A refused font logs the usual console error. A cross-origin font request is
+   anonymous: it carries no cookies and a `Set-Cookie` in its response is dropped (`httpOpts.anonymous`, which also
+   bypasses the HTTP client's own jar); a same-origin one carries them.
 6. **Decode** (below), then `WebSet` bumps its generation and the document lays out again: a window
    repaints (the update hook, at most every 40 ms), a headless document waits.
 7. **Headless commands** (`shot`, `snapshot`, `batch`, MCP, `PaintRGBA` without `SetAsyncImages`) wait inside

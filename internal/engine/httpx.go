@@ -127,7 +127,13 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	start := time.Now()
 	req, mi := withMeter(req, t.Context(), t, kind, t.policy())
 	mi.maxBody = o.maxBody
-	res, err := t.eng.clientFor(t.Context()).Do(req)
+	cl := t.eng.clientFor(t.Context())
+	if o.anonymous { // the client's own cookie jar must not add or keep cookies either
+		c2 := *cl
+		c2.Jar = nil
+		cl = &c2
+	}
+	res, err := cl.Do(req)
 	defer func() { t.tspan("http."+string(kind), abs, start) }()
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": abs, "error": err.Error()}})
