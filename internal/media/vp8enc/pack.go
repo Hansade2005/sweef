@@ -195,7 +195,10 @@ func (e *Encoder) pack(key bool, cnt *tokenCounts, nIntra, nSkip, nNoSkip int, n
 		l := len(e.partBufs[p])
 		out = append(out, byte(l), byte(l>>8), byte(l>>16))
 	}
+	e.partStarts = e.partStarts[:0]
+	e.partStarts = append(e.partStarts, 0)
 	for _, b := range e.partBufs {
+		e.partStarts = append(e.partStarts, len(out))
 		out = append(out, b...)
 	}
 	return out

@@ -62,11 +62,14 @@ type Image struct {
 
 // Packet is one encoded frame.
 type Packet struct {
-	Data     []byte
-	Key      bool
-	Q        int           // base quantiser index used
-	EncTime  time.Duration // wall time spent encoding
-	Duration time.Duration
+	Data []byte
+	// PartStarts are the byte offsets in Data where each VP8 partition begins (the first partition at 0,
+	// then the token partitions), as the RTP payload descriptor needs them.
+	PartStarts []int
+	Key        bool
+	Q          int           // base quantiser index used
+	EncTime    time.Duration // wall time spent encoding
+	Duration   time.Duration
 }
 
 // Stats are cumulative counters.
@@ -134,6 +137,7 @@ type Encoder struct {
 	firstBuf      []byte
 	lastPackets   int
 	refreshGolden bool
+	partStarts    []int
 	lfLevel       []uint8
 	lfInner       []bool
 	nextProbs     vp8.CoeffProbs
@@ -381,7 +385,7 @@ func (e *Encoder) Encode(img *Image) (*Packet, error) {
 		e.encEMA = dt.Seconds()
 	}
 	e.frameNum++
-	return &Packet{Data: data, Key: key, Q: q, EncTime: dt, Duration: time.Duration(float64(time.Second) / e.cfg.FrameRate)}, nil
+	return &Packet{Data: data, PartStarts: append([]int(nil), e.partStarts...), Key: key, Q: q, EncTime: dt, Duration: time.Duration(float64(time.Second) / e.cfg.FrameRate)}, nil
 }
 
 func (e *Encoder) applySpeed() {
