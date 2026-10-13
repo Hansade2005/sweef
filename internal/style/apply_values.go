@@ -1186,13 +1186,13 @@ func (s *cstate) autoTracks(v string) ([]Track, bool) {
 func parseGridLine(l string) (GridLine, bool) {
 	g := GridLine{Set: true}
 	l = strings.TrimSpace(l)
-	if l == "auto" {
+	if strings.EqualFold(l, "auto") {
 		g.Auto = true
 		return g, true
 	}
 	f := strings.Fields(l)
 	for i := 0; i < len(f); i++ {
-		if f[i] == "span" {
+		if strings.EqualFold(f[i], "span") {
 			g.Span = 1
 			continue
 		}
