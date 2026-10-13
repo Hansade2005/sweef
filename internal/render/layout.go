@@ -22,6 +22,10 @@ type ctx struct {
 	cv          *cvState
 	cvDepth     int // > 0 while building inside a skipped content-visibility subtree
 	opts        Options
+	sess        *Session  // cross-pass caches; nil: none
+	svgU        *svgUnion // ids of all the page's inline svg elements (this pass)
+	svgUDone    bool
+	svgNoSess   bool // the session's scene cache is off for this pass (duplicate ids)
 	env         Env
 	eng         *style.Engine
 	vw, vh      float64
@@ -144,8 +148,16 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 		sheets = append(sheets, style.SheetIn{Text: s.Text, Media: s.Media})
 	}
 	c.quirks = isQuirks(root)
-	c.eng = style.NewEngineQ(env, sheets, c.quirks)
+	if o.Session != nil {
+		c.sess = o.Session
+		o.Session.Style.SetWebFonts(o.Fonts)
+		c.eng = o.Session.Style.Acquire(env, sheets, c.quirks)
+		defer func() { o.Session.Style.EndPass(); o.Session.svg.sweep() }()
+	} else {
+		c.eng = style.NewEngineQ(env, sheets, c.quirks)
+	}
 	c.eng.SysFont = "arial"
+	c.eng.SetWebFonts(o.Fonts)
 	if cq != nil {
 		c.eng.SetContainerSizes(cq)
 	}
@@ -157,7 +169,9 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 		return res, nil, false
 	}
 	var top []*lbox
+	tk := newStageClock()
 	c.buildElement(c.docEl, nil, &top)
+	tk.lap("build")
 	if len(top) == 0 {
 		res.Width, res.Height = o.Width, o.Height
 		res.Viewport = Rect{0, 0, o.Width, o.Height}
@@ -169,7 +183,9 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 	c.rootBox = rb
 	c.findBody(rb)
 	c.layoutRoot(rb)
+	tk.lap("layout")
 	c.finishResult(rb)
+	tk.lap("finish")
 	if !c.eng.HasContainerQueries() {
 		return res, nil, false
 	}
@@ -262,11 +278,16 @@ func (c *ctx) finishResult(rb *lbox) {
 	res.Viewport = Rect{0, 0, vw, c.vh - c.sbViewportH}
 	res.Width = math.Max(vw, math.Max(rb.ovRight, rb.ax+rb.w+rb.mar[1]))
 	res.Height = math.Max(c.vh, math.Max(rb.ovBottom, rb.ay+rb.h+rb.mar[2]))
+	tk := newStageClock()
 	c.layoutForeignObjects()
 	c.finishFilterRefs()
+	tk.lap("finish:fo")
 	c.buildBoxes()
+	tk.lap("finish:boxes")
 	c.paintAll(rb)
+	tk.lap("finish:paint")
 	c.installHit(rb)
+	tk.lap("finish:hit")
 }
 
 // ---- placement: absolute coordinates ---------------------------------------------------

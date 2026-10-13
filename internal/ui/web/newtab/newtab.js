@@ -22,7 +22,7 @@
   try { q.focus(); } catch (e) {}
 
   function pick() {  // four rows, always including one Agent mode row; rotates per visit
-    var seed = Math.floor(Date.now() / 36e5), pool = [1, 2, 3, 4, 5, 6, 7, 8].map(function (i) { return { i: i, v: S.nt["r" + i], agent: i === 3 || i === 7 }; });
+    var seed = window.__sweefSeed != null ? window.__sweefSeed : Math.floor(Date.now() / 36e5), pool = [1, 2, 3, 4, 5, 6, 7, 8].map(function (i) { return { i: i, v: S.nt["r" + i], agent: i === 3 || i === 7 }; });
     var ag = pool.filter(function (x) { return x.agent; }), ot = pool.filter(function (x) { return !x.agent; }), out = [ag[seed % ag.length]];
     for (var k = 0; k < 3; k++) out.push(ot[(seed + k * 2) % ot.length]); 
     return [out[1], out[2], out[0], out[3]];

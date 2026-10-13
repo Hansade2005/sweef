@@ -248,7 +248,7 @@ func (c *ctx) svgCascadeFor() *svgCascade {
 			svgShared.imgs, svgShared.sized = nil, nil
 		}
 		svgShared.c = c
-		svgShared.sc = newSVGCascade(c.opts.Sheets, env, nil)
+		svgShared.sc = c.newSVGCascade(env)
 		svgShared.docs = map[*html.Node]*SVGDoc{}
 		svgShared.roots = nil
 	}

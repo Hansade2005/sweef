@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"golang.org/x/net/html"
+
+	"github.com/sweefbrowser/sweef/internal/font"
 )
 
 // SheetIn is one author stylesheet handed to NewEngine.
@@ -37,6 +39,10 @@ type Engine struct {
 	conts     map[*html.Node]*contInfo
 	hasCQ     bool
 	curCont   *html.Node
+	persist   *Persist     // cross-pass style cache (persist.go); nil: none
+	web       *font.WebSet // the document's web fonts: declared families get scoped names (webfonts.go)
+	// usesWebMetrics: some length was computed from the metrics of a web font (webfonts.go)
+	usesWebMetrics bool
 }
 
 var (
@@ -276,6 +282,14 @@ func layerKey(r *Rule) int {
 // pseudo-elements. parent is the parent element's computed style (nil for the
 // root). A nil result for a pseudo means no rule applies.
 func (e *Engine) Compute(n *html.Node, parent *Computed, pseudo string) *Computed {
+	if e.persist != nil {
+		return e.persist.compute(e, n, parent, pseudo)
+	}
+	return e.computeNoCache(n, parent, pseudo)
+}
+
+// computeNoCache is Compute without the cross-pass cache (persist.go).
+func (e *Engine) computeNoCache(n *html.Node, parent *Computed, pseudo string) *Computed {
 	c := e.compute(n, parent, pseudo)
 	if c != nil && pseudo == "" && c.ContainerType != "" {
 		e.noteContainer(n, c)

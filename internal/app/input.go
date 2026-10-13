@@ -409,6 +409,23 @@ func (a *App) onKeyDown(ev shell.Event) {
 		a.markState()
 		return
 	}
+	// Space is printable like any letter: its text arrives as EvText, which is what types it into a field and
+	// gives the page its keydown/keypress/keyup. Sending the key as well typed every space twice (the omnibox
+	// showed "a  the  quick"; the dropdown collapses whitespace and looked right). Here Space only scrolls a page
+	// that is not being typed into.
+	if key == " " && ev.Mods&(shell.ModCtrl|shell.ModAlt|shell.ModMeta) == 0 {
+		if isPage {
+			shift := ev.Mods&shell.ModShift != 0
+			e.w.do(func() {
+				editing := false
+				_ = e.eval("__sweefEditing()", &editing)
+				if !editing {
+					a.post(func() { a.scrollKey(" ", shift) })
+				}
+			})
+		}
+		return
+	}
 	e.w.do(func() {
 		var ok bool
 		_ = e.eval("__sweefKey("+jsString(key)+","+itoa(mods)+")", &ok)

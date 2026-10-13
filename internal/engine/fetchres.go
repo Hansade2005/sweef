@@ -92,26 +92,50 @@ func (t *Tab) fetchRes(rawurl string, o fetchOpts) (string, int, error) {
 			return string(e.Body), e.Status, nil
 		}
 	}
+	// What the HTTP cache may not keep (no-store, Vary: *, error statuses, no lifetime and no validator) still
+	// serves the rest of this navigation, so a stylesheet or script is not downloaded again by the loader, by
+	// every relayout, or by the second consumer of the same URL.
+	fk := itoa(int(t.ds.epoch.Load())) + " " + string(kind) + " " + key
+	if m := t.memoGet(fk); m != nil {
+		spend(m.xfer)
+		return m.body, m.status, m.err
+	}
+	// The same resource asked for twice at the same time (preload scanner and parser, prefetch and loader,
+	// layout and script) shares one request.
+	fl, leader := t.flightJoin(fk)
+	if !leader {
+		<-fl.done
+		spend(fl.xfer)
+		return fl.body, fl.status, fl.err
+	}
+	body, status, xfer, err := t.fetchResNet(abs, key, kind, pol, o, spend)
+	fl.body, fl.status, fl.xfer, fl.err = body, status, xfer, err
+	t.flightDone(fk, fl, err == nil)
+	return body, status, err
+}
+
+// fetchResNet is the network part of fetchRes (the request, its accounting and the policy aborts).
+func (t *Tab) fetchResNet(abs, key string, kind DataKind, pol DataPolicy, o fetchOpts, spend func(int64)) (string, int, int64, error) {
 	if pol.ExtendCache && !o.prefetch {
 		// what the navigation's prefetch read but may not be stored (no-store, Vary: *)
 		if body, ok := t.takeStash(key); ok {
-			return body, http.StatusOK, nil
+			return body, http.StatusOK, 0, nil
 		}
 	}
 	r, err := t.httpDo(httpOpts{method: "GET", url: abs, kind: kind, maxBody: o.maxBody})
 	if err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
 	if r.aborted {
 		if kind == KindScript {
 			t.noteSkipped(KindScript, abs, -2, r.declared, "script-budget", 0)
-			return "", 0, errSaverBlocked
+			return "", 0, 0, errSaverBlocked
 		}
-		return "", 0, errTooLarge{declared: r.declared}
+		return "", 0, 0, errTooLarge{declared: r.declared}
 	}
 	if r.fromCache {
 		spend(r.cachedXfer) // the page behaves the same warm or cold
-		return string(r.body), r.status, nil
+		return string(r.body), r.status, r.cachedXfer, nil
 	}
 	if r.status == http.StatusOK {
 		spend(r.xfer)
@@ -122,7 +146,64 @@ func (t *Tab) fetchRes(rawurl string, o fetchOpts) (string, int, error) {
 	} else if r.status >= 200 && r.status < 300 {
 		spend(r.xfer)
 	}
-	return string(r.body), r.status, nil
+	return string(r.body), r.status, r.xfer, nil
+}
+
+// ---- per-navigation memo and in-flight requests ---------------------------------------------
+
+type resMemo struct {
+	body   string
+	status int
+	xfer   int64
+	err    error
+}
+
+type flight struct {
+	done   chan struct{}
+	body   string
+	status int
+	xfer   int64
+	err    error
+}
+
+const memoLimit = 48 << 20 // bytes kept per navigation
+
+func (t *Tab) memoGet(fk string) *resMemo {
+	t.ds.mu.Lock()
+	m := t.ds.memo[fk]
+	t.ds.mu.Unlock()
+	return m
+}
+
+// flightJoin registers a request for fk. The caller that gets leader=true makes the request and must call
+// flightDone; the others wait on fl.done.
+func (t *Tab) flightJoin(fk string) (fl *flight, leader bool) {
+	t.ds.mu.Lock()
+	defer t.ds.mu.Unlock()
+	if f := t.ds.flights[fk]; f != nil {
+		return f, false
+	}
+	if t.ds.flights == nil {
+		t.ds.flights = map[string]*flight{}
+	}
+	f := &flight{done: make(chan struct{})}
+	t.ds.flights[fk] = f
+	return f, true
+}
+
+// flightDone publishes the leader's result to the waiters and, for a completed response, to the memo.
+func (t *Tab) flightDone(fk string, fl *flight, keep bool) {
+	t.ds.mu.Lock()
+	delete(t.ds.flights, fk)
+	if keep && t.ds.memoBytes+int64(len(fl.body)) <= memoLimit {
+		if t.ds.memo == nil {
+			t.ds.memo = map[string]*resMemo{}
+		}
+		t.ds.memo[fk] = &resMemo{body: fl.body, status: fl.status, xfer: fl.xfer}
+		t.ds.memoBytes += int64(len(fl.body))
+	}
+	t.ds.mu.Unlock()
+	close(fl.done)
 }
 
 // stash keeps a response that must not be stored for the one use the loader of the
@@ -143,4 +224,27 @@ func (t *Tab) takeStash(key string) (string, bool) {
 	b, ok := t.ds.stashed[key]
 	delete(t.ds.stashed, key)
 	return b, ok
+}
+
+// resourceReady reports whether fetchRes would answer for abs without waiting for
+// the network: the navigation already read it (or the HTTP cache holds it).
+func (t *Tab) resourceReady(abs string, kind DataKind) bool {
+	key, _ := t.eng.res.key(t.Context(), abs, "")
+	if t.memoGet(itoa(int(t.ds.epoch.Load()))+" "+string(kind)+" "+key) != nil {
+		return true
+	}
+	if e := t.eng.res.navEntry(key, t.ID, t.ds.epoch.Load()); e != nil && !e.Resp.IsZero() {
+		return true
+	}
+	return t.eng.res.peek(key) != nil // an earlier visit's copy: fresh, or one conditional request away
+}
+
+// fetchInFlight reports whether a request for abs of this kind is being made right now in this navigation.
+func (t *Tab) fetchInFlight(abs string, kind DataKind) bool {
+	key, _ := t.eng.res.key(t.Context(), abs, "")
+	fk := itoa(int(t.ds.epoch.Load())) + " " + string(kind) + " " + key
+	t.ds.mu.Lock()
+	_, ok := t.ds.flights[fk]
+	t.ds.mu.Unlock()
+	return ok
 }

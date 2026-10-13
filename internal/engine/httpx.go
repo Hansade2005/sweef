@@ -28,6 +28,9 @@ type httpOpts struct {
 	// maxBody > 0 aborts the response when its transfer size exceeds this:
 	// before reading anything when Content-Length says so, else while reading.
 	maxBody int64
+	// anonymous: send no cookies and keep none from the response (CORS requests without
+	// credentials, such as a cross-origin web font)
+	anonymous bool
 }
 
 type httpResp struct {
@@ -104,11 +107,11 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	if body != "" {
 		rdr = strings.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(t.eng.ctx, strings.ToUpper(method), abs, rdr)
+	req, err := http.NewRequestWithContext(t.withNetTrace(t.eng.ctx, string(kind)), strings.ToUpper(method), abs, rdr)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", t.UserAgent())
+	req.Header.Set("User-Agent", fontCSSUserAgent(req.URL.Hostname(), t.UserAgent()))
 	t.setBrowserHeaders(req.Header, req.URL, kind, false)
 	for k, v := range t.ExtraHeaders() {
 		req.Header.Set(k, v)
@@ -116,7 +119,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	if ck := t.Context().JarRef().ForURL(abs); ck != "" {
+	if ck := t.Context().JarRef().ForURL(abs); ck != "" && !o.anonymous {
 		req.Header.Set("Cookie", ck)
 	}
 	rec := fnet.RequestRecord{Method: req.Method, URL: abs, Headers: flattenHeaders(req.Header)}
@@ -124,7 +127,14 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	start := time.Now()
 	req, mi := withMeter(req, t.Context(), t, kind, t.policy())
 	mi.maxBody = o.maxBody
-	res, err := t.eng.clientFor(t.Context()).Do(req)
+	cl := t.eng.clientFor(t.Context())
+	if o.anonymous { // the client's own cookie jar must not add or keep cookies either
+		c2 := *cl
+		c2.Jar = nil
+		cl = &c2
+	}
+	res, err := cl.Do(req)
+	defer func() { t.tspan("http."+string(kind), abs, start) }()
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": abs, "error": err.Error()}})
 		return nil, fmt.Errorf("TypeError: Failed to fetch (%s)", err.Error())
@@ -160,6 +170,9 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 		}
 	}
 	for _, sc := range res.Header.Values("Set-Cookie") {
+		if o.anonymous {
+			break
+		}
 		if c := parseCookie(sc, t.eng.now()); c != nil {
 			if c.Domain == "" {
 				c.Domain = res.Request.URL.Hostname()

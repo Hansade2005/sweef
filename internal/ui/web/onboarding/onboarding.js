@@ -17,7 +17,7 @@
     var st = imp[s[0]] || {}, cls = "src" + (st.busy ? " busy" : "") + (st.done ? " done" : "") + (st.off ? " off" : "");
     var sub = st.off ? S.ob.importOff : st.done ? S.ob.imported + (st.counts ? " · " + st.counts : "") : st.busy ? S.ob.importing + " " + Math.round((st.pct || 0) * 100) + "%" : S.ob.importTry;
     var el = h("button." + cls.split(" ").join("."), { "aria-label": S.ob.importTry + " " + s[1], onclick: function () { if (st.off || st.busy || st.done) return; imp[s[0]] = { busy: true, pct: 0 }; post("import.start", { source: s[0] }); render(); } },
-      h("span.lg", { style: { background: s[2] }, text: s[1][0] }), h("div", h("b", { text: s[1] }), h("div.st", { text: sub })));
+      (SW.brandIcon(s[0], 24) || h("span.lg", { style: { background: s[2] }, text: s[1][0] })), h("div", h("b", { text: s[1] }), h("div.st", { text: sub })));
     if (st.busy) el.appendChild(h("div.bar", h("i", { style: { width: Math.round((st.pct || 0) * 100) + "%" } })));
     if (st.off) el.setAttribute("aria-disabled", "true"); return el;
   }

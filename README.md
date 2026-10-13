@@ -51,21 +51,35 @@ byte-stable cached prefix, snapshot deltas and early dispatch of tool calls; see
 
 ![Sweef on Linux under Xvfb](docs/design/real-gui-linux-xvfb.png)
 
-Measured on one 4-vCPU Linux VM (reproduce with `go run ./internal/app/cmd/appbench`; details in
-`internal/app/BENCH.md`):
+Measured on one 4-vCPU Linux VM, relative to a headed Chromium 141 (Playwright build, not branded Chrome) under the
+same Xvfb, with the same external method for both (`scripts/bench/vschrome.sh`; method, caveats and every number in
+[docs/vs-chrome.md](docs/vs-chrome.md); 7 runs each, run on commit `f4584ca`). Xvfb has no GPU, so only the comparison is
+meaningful, not the absolute milliseconds.
 
-| Measure | Result |
-|---|---|
-| First frame, cold | about 0.4 s |
-| Memory, 1 tab / 10 tabs (idle) | 94 / 153 MiB (Chromium headless without UI: 283 / 380 MiB PSS) |
-| Omnibox keystroke to pixels, 1x | 13.9 ms p50, 20.3 ms p99 (was 81 ms) |
-| History search, 100k entries | about 0.04 ms p50 |
-| Live agent task (3 model turns, real API) | 3.4 s, $0.0014; provider time is about 85% of wall clock |
+| | Sweef | Chromium |
+|---|---|---|
+| Typing in the omnibox, dropdown open (p50) | 5.0 ms | 9.1 ms |
+| Tab switch (p50) | 5.3 ms | 18.4 ms |
+| New tab (p50) | 7.5 ms | 49.8 ms |
+| Start to first UI frame, cold cache | 492 ms | 770 ms |
+| Memory, 1 tab / 10 tabs (PSS, whole process tree) | 101 / 260 MiB | 370 / 506 MiB |
+| Installed size | 25 MiB | 596 MiB |
+| Idle CPU, static page | 0.00% | 0.45% |
 
-Known limits: we have not hit our 8 ms keystroke target yet (JS in the omnibox handler and per-mutation style
-and layout dominate), the Chromium memory comparison is against a headless build that draws no browser UI,
-sites that need features we lack (DRM, extensions, WebRTC) will not work and show an "Open in system
-browser" action, and macOS/Windows packaging and signing are untested. Installers: `docs/install.md`.
+Where Chromium is ahead, and we say so:
+* **First key that opens the dropdown:** 16.3 ms in Sweef against 13.0 ms.
+* **Page load:** on the heavy and single-page-app test pages Chromium reaches the load event 4 to 11 times sooner
+  (QuickJS has no JIT), and real pages settle later in Sweef (Wikivoyage 1.4x, MDN 2.7x; Wikipedia is a tie).
+  Sweef paints a first frame early, so pages become visible sooner than they finish.
+* **Typing p99** is about the same (19 ms against 18 ms), and Sweef starts the dropdown-closed case slower.
+* **Compatibility:** no DRM, no extensions, no WebRTC, no WebAssembly yet, no colour fonts; sites that need them show
+  an "Open in system browser" action.
+
+In-process numbers on an idle machine (`go run ./internal/app/cmd/appbench`, `internal/app/BENCH.md`): typing with the
+dropdown open is 4.6 ms p50 / 7.5 ms p99 at 1x and 6.3 / 9.7 ms at 2x; the first key that opens the dropdown is 12.7 ms
+at 1x and 28 ms at 2x (not yet at our 8 ms target). A live Sidekick task (3 model turns, real API) took 3.4 s and cost
+$0.0014; provider time is about 85% of the wall clock. macOS and Windows windows, installers and signing are untested
+(CI only builds and unit-tests them). Installers: `docs/install.md`.
 
 ## Data Saver (alpha)
 
@@ -92,9 +106,14 @@ reproduce with `scripts/bench/datasaver.sh -runs 3`):
   uses 85% less (83% to 85%).
 * **Repeat visits:** a second visit costs about 13% of the first in Sweef (served from an on-disk HTTP cache) against 22%
   in Chromium.
-* **Read the Chromium column with care.** Sweef does not fetch everything Chromium does (it loads no web fonts, renders
-  no iframe documents and drops prefetch hints), so part of the gap is a simpler page, not a better saver. The honest
-  like-for-like number is the saver against our own "off" row. Chromium's Save-Data header saved nothing measurable.
+* **Read the Chromium column with care.** Sweef does not fetch everything Chromium does (no iframe documents, no
+  prefetch hints), so part of the gap is a simpler page, not a better saver. The honest like-for-like number is the
+  saver against our own "off" row. Chromium's Save-Data header saved nothing measurable.
+* **Web fonts were added after this run.** These tables were measured before Sweef could load `@font-face` fonts. A
+  separate single-run check on 16 of the sites with fonts on measured about +3% (off), +5% (standard) and +4% (strict)
+  more bytes, with the savers still saving roughly 47% (standard) and 88% (strict) against off. A full three-mode rerun
+  was started and stopped partway (the partial results are in `bench/datasaver/results/`), so treat the table as
+  "before web fonts" and expect the totals to move by a few points.
 * **Sites that did not count.** 5 of the 23 listed sites are excluded for every mode: three are blocked by bot detection
   (Cloudflare and Akamai challenges, documented in [docs/compat.md](docs/compat.md)), one URL was a 404 and one exceeded
   the 60 s navigation limit. The result describes these 18 pages, on one network, on one day.

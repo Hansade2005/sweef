@@ -139,11 +139,12 @@ const cappedStreamWindow = 64 << 10
 func newTransportWindow(w *wireCounters, proxyURL string, streamWindow int) *http.Transport {
 	tr := &http.Transport{
 		Proxy:               proxyFunc(proxyURL),
-		MaxIdleConns:        16,
-		MaxIdleConnsPerHost: 4, // tiny boxes don't need Chromium's 256/host
-		IdleConnTimeout:     60 * time.Second,
-		ForceAttemptHTTP2:   true,
-		DialContext:         countedDial(w),
+		MaxIdleConns:        32,
+		MaxIdleConnsPerHost: 6, // a browser's 6 connections per host: a page's stylesheets, scripts and images come in parallel
+		// and an HTTP/1 origin keeps what they opened for the next navigation (HTTP/2 hosts need one)
+		IdleConnTimeout:   60 * time.Second,
+		ForceAttemptHTTP2: true,
+		DialContext:       countedDial(w),
 	}
 	if streamWindow > 0 {
 		tr.HTTP2 = &http.HTTP2Config{MaxReceiveBufferPerStream: streamWindow, MaxReceiveBufferPerConnection: 1 << 20}

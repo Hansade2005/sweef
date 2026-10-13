@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/sweefbrowser/sweef/internal/font"
 	snet "github.com/sweefbrowser/sweef/internal/net"
 )
 
@@ -54,6 +55,9 @@ type FontFace struct {
 	Weight string
 	Style  string
 	Src    string
+	// Desc holds every descriptor parsed (fontface.go); source URLs are
+	// relative to the stylesheet.
+	Desc font.FaceDesc
 }
 
 // Env describes the environment media queries and viewport units see.
@@ -371,20 +375,7 @@ func (p *parser) atBlock(prelude, body, parentSel string) {
 		p.nestedBody(body, parentSel)
 		p.curLayer = old
 	case "@font-face":
-		ff := FontFace{}
-		for _, d := range parseDecls(body) {
-			switch d.Name {
-			case "font-family":
-				ff.Family = unquote(d.Val)
-			case "font-weight":
-				ff.Weight = d.L
-			case "font-style":
-				ff.Style = d.L
-			case "src":
-				ff.Src = d.Val
-			}
-		}
-		if ff.Family != "" {
+		if ff, ok := parseFontFaceDecls(parseDecls(body)); ok {
 			p.out.Fonts = append(p.out.Fonts, ff)
 		}
 	case "@container":

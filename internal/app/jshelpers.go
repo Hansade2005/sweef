@@ -164,7 +164,7 @@ const helperJS = `(function(G){
   }
   // privileged bridge only for sweef:// documents
   if (G.location && G.location.protocol === 'sweef:' && typeof G.__sweefPost === 'function') {
-    var q = [], h = null, s = {};
+    var q = [], h = null, s = {sync: true};  // sync: the host settles the page and paints once after every message, and answers omni.input inside the same event turn
     s.post = function(t, p){ G.__sweefPost(String(t), p === undefined ? null : p); };
     Object.defineProperty(s, 'onMessage', {
       get: function(){ return h; },

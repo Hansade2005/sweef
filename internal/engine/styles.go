@@ -8,6 +8,10 @@ import (
 	"github.com/sweefbrowser/sweef/internal/pdf"
 )
 
+// prefetchConns bounds the sub-resource requests a navigation starts at once. HTTP/2 hosts multiplex them over
+// one connection; HTTP/1 hosts get up to this many connections (a browser uses 6 per host).
+const prefetchConns = 12
+
 // applyStyles feeds the document's stylesheets (inline <style> plus linked
 // sheets, fetched in parallel through the resource cache) into the CSS
 // cascade so visibility follows the page's real rules. Scripts referenced by
@@ -35,27 +39,31 @@ func (t *Tab) applyStyles(doc *fnet.Doc) {
 	fetched := make([]string, len(links))
 	if len(links)+len(scriptSrcs) > 0 && !t.IsOfflineMode() {
 		var wg sync.WaitGroup
-		sem := make(chan struct{}, 6) // like a browser's per-host connection limit
+		sem := make(chan struct{}, prefetchConns) // stylesheets first, then the scripts
 		for i, href := range links {
 			wg.Add(1)
+			sem <- struct{}{}
 			go func(i int, href string) {
 				defer wg.Done()
-				sem <- struct{}{}
 				defer func() { <-sem }()
+				tf := time.Now()
 				if body, status, err := t.fetchResourceFromKind(doc, href, KindStyle); err == nil && status < 400 {
 					fetched[i] = body
 				}
+				t.tspan("css.fetch", href, tf)
 			}(i, href)
 		}
-		for _, src := range scriptSrcs {
-			wg.Add(1)
-			go func(src string) {
-				defer wg.Done()
+		// Scripts are fetched ahead of the loader but do not hold the first frame: the loader joins the request
+		// in flight (or finds the bytes) when it gets to the script.
+		go func() {
+			for _, src := range scriptSrcs {
 				sem <- struct{}{}
-				defer func() { <-sem }()
-				_, _, _ = t.fetchResourceFromKind(doc, src, KindScript)
-			}(src)
-		}
+				go func(src string) {
+					defer func() { <-sem }()
+					_, _, _ = t.fetchResourceFromKind(doc, src, KindScript)
+				}(src)
+			}
+		}()
 		done := make(chan struct{})
 		go func() { wg.Wait(); close(done) }()
 		select {

@@ -2,7 +2,9 @@ package engine
 
 // scripts.go — page script loading and the document lifecycle.
 //
-// Order follows the HTML spec closely enough for real sites:
+// The lifecycle itself (script order, DOMContentLoaded, load, the settle pump) is
+// the state machine in progload.go. Order follows the HTML spec closely enough
+// for real sites:
 //  1. classic scripts without async/defer run in document order as the tree
 //     is walked (inline source, or fetched src);
 //  2. async scripts run next, in document order (we have no parallel fetch
@@ -28,39 +30,6 @@ func isJavaScriptType(typ string) bool {
 		return true
 	}
 	return false
-}
-
-// runPageScripts executes the document's scripts and fires the lifecycle.
-// Called by SetDocument with no locks held.
-func (t *Tab) runPageScripts(j *jsVM, doc *fnet.Doc) {
-	scripts := doc.ScriptElements()
-	var async, deferred []fnet.ScriptEl
-	for _, s := range scripts {
-		if !isJavaScriptType(s.Type) || s.NoModule {
-			j.executed[s.ID] = true
-			continue
-		}
-		switch {
-		case s.Module || s.Defer:
-			deferred = append(deferred, s)
-		case s.Async:
-			async = append(async, s)
-		default:
-			t.runScriptEl(j, s)
-		}
-	}
-	for _, s := range async {
-		t.runScriptEl(j, s)
-	}
-	for _, s := range deferred {
-		t.runScriptEl(j, s)
-	}
-	j.lifecycle("DOMContentLoaded")
-	if j.pump(t.settleBudget() / 2) {
-		return // navigated away
-	}
-	j.lifecycle("load")
-	j.pump(t.settleBudget())
 }
 
 func (t *Tab) settleBudget() time.Duration {
@@ -107,23 +76,34 @@ func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {
 		src = body
 	}
 	_, _ = j.call("__swSetCurrentScript", s.ID)
+	j.mu.Lock()
+	j.curBase = t.URL()
+	if s.Src != "" {
+		j.curBase = name
+	}
+	j.mu.Unlock()
+	te := time.Now()
 	if s.Module {
+		j.prefetchModuleDeps(name, src) // its static imports download in parallel, not one by one from the loader
 		_ = j.runModule(src, name)
 		j.jobs()
 	} else {
 		_, _ = j.runCached(src, name)
 	}
+	bc := j.bcState
+	t.tspan("script.exec", name+" "+itoa(len(src))+"B bytecode:"+bc, te)
 	_, _ = j.call("__swSetCurrentScript", 0)
 	if s.Src != "" {
 		j.dispatch(s.ID, "load", nil)
 	}
 }
 
-// drainScripts runs scripts that page code inserted into the document.
-func (j *jsVM) drainScripts() {
+// drainScripts runs scripts that page code inserted into the document, until the queue is empty or limit
+// (zero = none) has passed; the rest stays queued for the next pump.
+func (j *jsVM) drainScripts(limit time.Time) {
 	for {
 		j.mu.Lock()
-		if j.closed || len(j.scriptQueue) == 0 {
+		if j.closed || len(j.scriptQueue) == 0 || (!limit.IsZero() && !time.Now().Before(limit)) || (!j.scriptCap.IsZero() && !time.Now().Before(j.scriptCap)) {
 			j.mu.Unlock()
 			return
 		}

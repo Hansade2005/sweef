@@ -62,7 +62,7 @@ type DataPolicy struct {
 	ImageMaxBytes       int  // tap-to-load above this Content-Length (default 200<<10); 0 = no cap
 	ScriptMaxBytes      int  // strict: total first-party script budget per page (default 300<<10); 0 = no budget
 	LazyImages          bool // fetch only near the viewport
-	BlockFonts          bool
+	BlockFonts          bool // strict: web fonts are not fetched, except icon fonts (webfonts.go)
 	BlockMediaLoad      bool // no preload/autoplay; fetch on play only
 	ClickToLoad3PFrames bool
 	DropHints           bool // prefetch/preload/prerender/dns-prefetch
@@ -74,12 +74,19 @@ type DataPolicy struct {
 	// that the agent preset can be "strict minus script limits").
 	NoImages               bool // images only when tapped (placeholders keep their declared size)
 	BlockThirdPartyScripts bool
+
+	// Web font limits (webfonts.go). Zero means no limit / no restriction.
+	FontMaxBytes   int  // one font file, transfer size (standard: 300 KB)
+	FontTotalBytes int  // all fonts of a page, transfer size (standard: 600 KB); icon fonts are exempt
+	FontWOFFOnly   bool // only WOFF2/WOFF sources are used (plain TrueType/OpenType files are skipped)
 }
 
 // Default caps.
 const (
 	DefaultImageMaxBytes  = 200 << 10
 	DefaultScriptMaxBytes = 300 << 10
+	DefaultFontMaxBytes   = 300 << 10
+	DefaultFontTotalBytes = 600 << 10
 )
 
 // PolicyFor returns the preset of a level (the table in docs/data-saver.md).
@@ -90,15 +97,18 @@ func PolicyFor(level SaverLevel) DataPolicy {
 			Level:               level,
 			ImageMaxBytes:       DefaultImageMaxBytes,
 			LazyImages:          true,
-			BlockFonts:          true,
 			BlockMediaLoad:      true,
 			ClickToLoad3PFrames: true,
 			DropHints:           true,
 			SuspendBackground:   true,
 			ExtendCache:         true,
 			SaveDataHeader:      true,
+			FontMaxBytes:        DefaultFontMaxBytes,
+			FontTotalBytes:      DefaultFontTotalBytes,
+			FontWOFFOnly:        true,
 		}
 		if level == SaverStrict {
+			p.BlockFonts = true // icon fonts excepted
 			p.NoImages = true
 			p.BlockThirdPartyScripts = true
 			p.ScriptMaxBytes = DefaultScriptMaxBytes
@@ -279,6 +289,8 @@ type ctxData struct {
 
 	lastEmit atomic.Int64
 	trail    atomic.Bool
+
+	fonts atomic.Pointer[fontStore] // decoded web fonts (webfonts.go)
 }
 
 func (c *BrowserContext) data() *ctxData {
@@ -472,6 +484,10 @@ type tabDS struct {
 	skipped  []SkippedItem
 	skipSeen map[string]bool
 	stashed  map[string]string
+
+	memo      map[string]*resMemo // sub-resources read in this navigation (fetchres.go)
+	memoBytes int64
+	flights   map[string]*flight // requests in flight, shared by concurrent consumers
 }
 
 // SkippedItem describes one resource the policy withheld on this page.
@@ -508,6 +524,9 @@ func (t *Tab) SetBackground(bg bool) {
 	was := t.ds.bg.Swap(bg)
 	if was && !bg {
 		t.lazyReeval() // visible again: images near the viewport may be due
+		if env := t.ds.env.Load(); env != nil {
+			env.fonts.resume() // and fonts refused while hidden
+		}
 	}
 }
 
@@ -561,6 +580,7 @@ func (t *Tab) resetDataForNavigation() {
 	t.ds.skipped = nil
 	t.ds.skipSeen = nil
 	t.ds.stashed = nil
+	t.ds.memo, t.ds.memoBytes = nil, 0
 	t.ds.mu.Unlock()
 	if t.ds.fullNext.Swap(false) {
 		t.ds.fullDoc.Store(true)

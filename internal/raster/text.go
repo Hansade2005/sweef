@@ -220,7 +220,10 @@ var (
 )
 
 func resolveFaces(fams []string, weight int, italic bool) *faceSet {
-	key := strings.Join(fams, "\x00") + "|" + strconv.Itoa(weight) + "|" + strconv.FormatBool(italic)
+	key := strings.Join(fams, "\x01") + "|" + strconv.Itoa(weight) + "|" + strconv.FormatBool(italic)
+	if font.HasScoped(fams) {
+		key += "|" + strconv.FormatUint(font.WebGen(), 10) // faces of web fonts come and go
+	}
 	fsMu.Lock()
 	defer fsMu.Unlock()
 	if fs, ok := fsCache[key]; ok {
@@ -229,7 +232,9 @@ func resolveFaces(fams []string, weight int, italic bool) *faceSet {
 	st := font.Style{Weight: weight, Italic: italic}
 	fs := &faceSet{fams: fams, st: st}
 	for _, f := range fams {
-		if face := font.Lookup(f, st); face != nil {
+		if strings.IndexByte(f, 0) >= 0 {
+			fs.faces = append(fs.faces, font.LookupAll(f, st)...) // one face per unicode-range subset
+		} else if face := font.Lookup(f, st); face != nil {
 			fs.faces = append(fs.faces, face)
 		}
 	}
@@ -818,6 +823,16 @@ func (c *Context) SetFont(s string) bool {
 
 // Font returns the current font spec.
 func (c *Context) Font() FontSpec { return c.st.text.font }
+
+// MapFamilies rewrites the family names of the current font (web fonts: the
+// owner of the context swaps declared names for their document scope).
+func (c *Context) MapFamilies(fn func(string) string) {
+	fams := make([]string, len(c.st.text.font.Families))
+	for i, f := range c.st.text.font.Families {
+		fams[i] = fn(f)
+	}
+	c.st.text.font.Families = fams
+}
 
 // SetTextOptions sets the remaining text attributes.
 func (c *Context) SetTextAlign(a string)      { c.st.text.align = a }

@@ -107,6 +107,13 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 	}
 	a.markState()
 	a.stats.navStart(tabID, seq)
+	// The window shows the page while it loads (first frame once the HTML and its stylesheets are in, the rest
+	// in slices between paints and input). The agent drives its tabs headless-style: it waits for a settled
+	// page, so those loads, internal pages and the Data Saver's "load fully" run to the end before the first
+	// paint, as before.
+	progressive := !e.agentLoad.Load() && !fullOnce && (strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://"))
+	e.t.SetAsyncImages(!e.agentLoad.Load())
+	e.t.SetProgressiveNav(progressive)
 	e.w.do(func() {
 		if stop {
 			a.dataStopLoad(e, seq, target, mode)
@@ -115,9 +122,12 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 		a.dat.eng.SetTabPolicy(e.t, level)
 		a.prepareInternal(e, target)
 		var err error
-		if fullOnce {
+		switch {
+		case fullOnce:
 			err = a.dat.eng.LoadFully(e.t) // reloads this page with everything on, once
-		} else {
+		case progressive:
+			err = e.t.NavigateProgressive(target, nil)
+		default:
 			err = e.t.Navigate(target, nil)
 		}
 		fellBack := false
@@ -125,7 +135,13 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 			// the site does not speak HTTPS: fall back to the URL the user asked for
 			e.navTarget.Store(orig)
 			e.topURL.Store(orig)
-			if err2 := e.t.Navigate(orig, nil); err2 == nil {
+			var err2 error
+			if progressive {
+				err2 = e.t.NavigateProgressive(orig, nil)
+			} else {
+				err2 = e.t.Navigate(orig, nil)
+			}
+			if err2 == nil {
 				err, fellBack = nil, true
 			}
 		}
@@ -151,9 +167,102 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 			})
 		}
 		e.paint(true)
+		if !isErr && e.t.LoadPending() {
+			// first frame is out; the title and address are committed now, the load finishes in the background
+			a.post(func() { a.onCommitted(e, seq, shown, mode, meta) })
+			e.driveLoad(seq, func() {
+				m := a.collectMeta(e, false)
+				a.post(func() { a.onLoaded(e, seq, shown, mode, typed, m) })
+			})
+			return
+		}
 		a.post(func() { a.onLoaded(e, seq, shown, mode, typed, meta) })
 		e.armPump()
 	})
+}
+
+// Progressive loading: the worker steps the tab's pending load in short slices, each a worker op of its own so
+// input, scroll and paint requests queue in between, and repaints the document as it changes (images, scripts).
+const (
+	loadSlice    = 25 * time.Millisecond  // engine work per op
+	loadPaintGap = 150 * time.Millisecond // minimum time between repaints of a loading page
+)
+
+// requeue queues f behind what is waiting. Called from the worker itself it must not block on a full queue.
+func (e *etab) requeue(f func()) {
+	if len(e.w.ops) < cap(e.w.ops)/2 {
+		e.w.do(f)
+		return
+	}
+	go e.w.do(f)
+}
+
+// driveLoad steps e's pending progressive load until it is done. onLoad runs once, when the page's load
+// event has fired (or the load ended): the spinner stops and the visit is recorded then, not at the end of
+// the settle budget. Worker only; seq is the navigation this belongs to. One navigation drives at a time: a
+// newer one takes over (the older chain notices at its next step and ends without touching the tab).
+func (e *etab) driveLoad(seq int64, onLoad func()) {
+	if e.driveSeq.Load() == seq {
+		return // already driven
+	}
+	e.driveSeq.Store(seq)
+	loaded := false
+	last := time.Now()
+	gap := loadPaintGap
+	gen := e.t.Generation()
+	var step func()
+	finish := func() {
+		if !loaded && onLoad != nil {
+			onLoad()
+		}
+		if e.navSeq.Load() == seq {
+			e.paint(false)
+		}
+		e.driveSeq.CompareAndSwap(seq, 0)
+		e.armPump()
+	}
+	step = func() {
+		if e.driveSeq.Load() != seq || e.navSeq.Load() != seq {
+			e.driveSeq.CompareAndSwap(seq, 0) // superseded (a newer load drives, or the stop button was pressed)
+			return
+		}
+		if e.closed.Load() || e.a.closing.Load() {
+			e.driveSeq.CompareAndSwap(seq, 0)
+			return
+		}
+		more, wait := e.t.LoadStep(loadSlice)
+		e.drainBindings()
+		if !loaded && (!more || e.t.LoadLoaded()) {
+			loaded = true
+			if onLoad != nil {
+				onLoad()
+			}
+		}
+		if g := e.t.Generation(); g != gen && time.Since(last) >= gap {
+			t0 := time.Now()
+			e.paint(false)
+			gen, last = g, time.Now()
+			// repainting a big page takes long: leave at least twice that for the page's own work, so a page that
+			// keeps changing cannot spend the whole load repainting itself
+			if gap = 3 * time.Since(t0); gap < loadPaintGap {
+				gap = loadPaintGap
+			}
+		}
+		if !more {
+			finish()
+			return
+		}
+		if wait <= 0 {
+			e.requeue(step)
+			return
+		}
+		e.a.pending.Add(1) // a load waiting for a timer is not idle
+		time.AfterFunc(wait, func() {
+			e.w.do(step)
+			e.a.pending.Add(-1)
+		})
+	}
+	e.w.do(step)
 }
 
 // dataStopLoad shows the hard-stop interstitial for target (worker only).
@@ -232,6 +341,33 @@ func securityFor(raw string, errPage bool) state.Security {
 	return state.Security{Level: "none"}
 }
 
+// onCommitted is the first half of onLoaded for a page that is shown while it loads: the address, history
+// entry, title and security state are those of the document that painted its first frame.
+func (a *App) onCommitted(e *etab, seq int64, shown string, mode int32, m pageMeta) {
+	if e.navSeq.Load() != seq || e.closed.Load() {
+		return
+	}
+	final := m.URL
+	if final == "" || final == "about:blank" {
+		final = shown
+	}
+	a.model.Navigated(e.id, final, mode == modeTraverse || mode == modeReplace)
+	e.commitSeq, e.commitURL = seq, final
+	e.topURL.Store(final)
+	title := m.Title
+	if title == "" {
+		title = displayTitle(final)
+	}
+	a.model.Update(e.id, func(t *state.Tab) {
+		t.Title = title
+		t.Security = securityFor(final, false)
+		if t.Progress < 0.7 {
+			t.Progress = 0.7
+		}
+	})
+	a.markState()
+}
+
 func (a *App) onLoaded(e *etab, seq int64, shown string, mode int32, typed bool, m pageMeta) {
 	if e.navSeq.Load() != seq || e.closed.Load() {
 		return
@@ -243,10 +379,11 @@ func (a *App) onLoaded(e *etab, seq int64, shown string, mode int32, typed bool,
 	if m.Err {
 		final = shown
 	}
-	if mode == modeTraverse || mode == modeReplace {
-		a.model.Navigated(e.id, final, true)
-	} else {
-		a.model.Navigated(e.id, final, false)
+	switch {
+	case e.commitSeq != seq:
+		a.model.Navigated(e.id, final, mode == modeTraverse || mode == modeReplace)
+	case e.commitURL != final:
+		a.model.Navigated(e.id, final, true) // the page moved itself (replaceState, a redirect in script) while loading
 	}
 	e.topURL.Store(final)
 	title := m.Title
@@ -321,6 +458,14 @@ func (a *App) onEngineNavigated(e *etab, raw string) {
 		a.prepareInternal(e, raw)
 		meta := a.collectMeta(e, false)
 		e.paint(true)
+		if e.t.LoadPending() {
+			a.post(func() { a.onCommitted(e, seq, raw, modePush, meta) })
+			e.driveLoad(seq, func() {
+				m := a.collectMeta(e, false)
+				a.post(func() { a.onLoaded(e, seq, raw, modePush, false, m) })
+			})
+			return
+		}
 		a.post(func() { a.onLoaded(e, seq, raw, modePush, false, meta) })
 		e.armPump()
 	})
@@ -383,6 +528,7 @@ func (a *App) stopLoading(tabID string) {
 	// the UI stops and a late response is dropped.
 	e.navSeq.Add(1)
 	e.loadMode.Store(modeNone)
+	e.w.do(e.t.StopLoading) // what has run stays; the scripts that have not run yet never do
 	a.model.Update(tabID, func(t *state.Tab) { t.Loading, t.Progress = false, 0 })
 	a.markState()
 }
@@ -537,5 +683,8 @@ func (a *App) onInPageURL(e *etab, raw string) {
 	}
 	e.topURL.Store(raw)
 	a.model.Navigated(e.id, raw, false)
+	if p := a.profileFor(st.Incognito); p != nil && strings.HasPrefix(raw, "http") {
+		p.History.Visit(raw, st.Title, false) // pushState and hash changes are history entries, as in other browsers
+	}
 	a.markState()
 }

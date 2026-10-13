@@ -31,6 +31,9 @@ func (f *Face) gidLocked(r rune) int {
 		return g
 	}
 	g := 0
+	if !f.inRange(r) {
+		return 0
+	}
 	if gi, err := f.font.GlyphIndex(&f.buf, r); err == nil {
 		g = int(gi)
 	}
@@ -46,17 +49,39 @@ func (f *Face) GID(r rune) int { return f.gid(r) }
 
 // HasLigatures reports whether the face has GSUB standard ligature lookups.
 func (f *Face) HasLigatures() bool {
+	if f.noLiga {
+		return false
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.loadOT().liga != nil
 }
 
+// maxLigRunes bounds the length of a ligature: icon fonts (Material Icons)
+// ligate whole words such as "signal_cellular_connected_no_internet_0_bar".
+const maxLigRunes = 64
+
+// LigMax is the number of runes of the longest standard ligature of the face
+// (0 when it has none): how far text has to be scanned for one.
+func (f *Face) LigMax() int {
+	if f.noLiga {
+		return 0
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	lig := f.loadOT().liga
+	if lig == nil {
+		return 0
+	}
+	return lig.maxComps()
+}
+
 // Ligature looks for a standard ligature (liga, clig, rlig) at the start of
 // rs, which must all be in this face. It returns the ligature glyph id and
 // the number of runes it replaces (0 when there is none). rs may be longer
-// than the ligature; at most four runes are examined.
+// than the ligature; at most LigMax runes are examined.
 func (f *Face) Ligature(rs []rune) (gid, n int) {
-	if len(rs) < 2 {
+	if len(rs) < 2 || f.noLiga {
 		return 0, 0
 	}
 	f.mu.Lock()
@@ -65,21 +90,30 @@ func (f *Face) Ligature(rs []rune) (gid, n int) {
 	if lig == nil {
 		return 0, 0
 	}
-	if len(rs) > 4 {
-		rs = rs[:4]
+	g0 := f.gidLocked(rs[0])
+	if g0 == 0 {
+		return 0, 0
 	}
-	var gs [4]int
-	for i, r := range rs {
-		gs[i] = f.gidLocked(r)
-		if gs[i] == 0 {
-			rs = rs[:i]
+	mx := lig.firstMax(g0)
+	if mx < 2 {
+		return 0, 0
+	}
+	if len(rs) > mx {
+		rs = rs[:mx]
+	}
+	var gs [maxLigRunes]int
+	gs[0] = g0
+	k := 1
+	for ; k < len(rs); k++ {
+		gs[k] = f.gidLocked(rs[k])
+		if gs[k] == 0 {
 			break
 		}
 	}
-	if len(rs) < 2 {
+	if k < 2 {
 		return 0, 0
 	}
-	g, cc := lig.ligature(gs[:len(rs)])
+	g, cc := lig.ligature(gs[:k])
 	if cc < 2 {
 		return 0, 0
 	}
@@ -100,11 +134,7 @@ func (f *Face) KernGIDs(a, b int, size float64) float64 {
 func (f *Face) AdvanceGIDUnits(gid int) float64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	a, err := f.font.GlyphAdvance(&f.buf, glyphIndex(gid), fixed.Int26_6(f.upm*64), xfont.HintingNone)
-	if err != nil {
-		return 0
-	}
-	return float64(a) / 64
+	return f.advanceGIDLocked(gid)
 }
 
 // kernGID is the pair adjustment between two glyph ids in font units.
@@ -115,13 +145,13 @@ func (f *Face) kernGID(a, b int) float64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if ot := f.loadOT(); ot.kern != nil {
-		return float64(ot.kern.pairAdjust(a, b))
+		return float64(ot.kern.pairAdjust(a, b)) * f.sa()
 	}
 	k, err := f.font.Kern(&f.buf, glyphIndex(a), glyphIndex(b), fixed.Int26_6(f.upm*64), xfont.HintingNone)
 	if err != nil {
 		return 0
 	}
-	return float64(k) / 64
+	return float64(k) / 64 * f.sa()
 }
 
 // ShapeRun shapes rs (one script, one face) at size px the way HarfBuzz does
@@ -135,7 +165,7 @@ func (f *Face) ShapeRun(rs []rune, size float64, o ShapeOptions) []ShapedGlyph {
 		gids[i] = f.gid(r)
 	}
 	var lig *otLayout
-	if o.Liga {
+	if o.Liga && !f.noLiga {
 		f.mu.Lock()
 		lig = f.loadOT().liga
 		f.mu.Unlock()
@@ -146,7 +176,7 @@ func (f *Face) ShapeRun(rs []rune, size float64, o ShapeOptions) []ShapedGlyph {
 	for i := 0; i < len(rs); {
 		g, n := gids[i], 1
 		if lig != nil && g != 0 && i+1 < len(rs) {
-			end := i + 4
+			end := i + maxLigRunes
 			if end > len(rs) {
 				end = len(rs)
 			}

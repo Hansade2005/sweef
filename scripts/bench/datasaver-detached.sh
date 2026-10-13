@@ -20,7 +20,7 @@ if [ "${DETACHED_CHILD:-0}" != 1 ]; then
 fi
 for attempt in 1 2 3 4 5 6; do
   FILE=$(ls -t "$RES"/*-"$LABEL".json 2>/dev/null | head -1 || true)
-  ARGS=(-runs 3 -label "$LABEL")
+  ARGS=(-runs "${RUNS:-3}" -label "$LABEL")
   [ -n "$FILE" ] && ARGS+=(-resume "$FILE")
   echo "=== attempt $attempt $(date -u +%FT%TZ) ${FILE:+resuming $FILE}"
   SNAPSHOT=1 scripts/bench/datasaver.sh "${ARGS[@]}" && { echo "=== finished $(date -u +%FT%TZ)"; exit 0; }

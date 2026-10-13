@@ -1,8 +1,11 @@
 package raster
 
 import (
+	"fmt"
 	"image"
 	"math"
+	"os"
+	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -35,11 +38,14 @@ import (
 // ListInfo is the analysis of one display list.
 type ListInfo struct {
 	OK     bool
-	Key    []uint64 // content + context key per op
-	Bounds []IRect  // device bounds (a group's bounds for push ops)
-	Pair   []int32  // push -> matching pop index (and pop -> push), else -1
-	Wide   []bool   // damage touching this op / group must grow to its bounds
-	Pre    []uint64 // Pre[i] hashes Key[:i]: equal prefixes paint equal intermediate surfaces
+	Key    []uint64     // content + context key per op
+	Bounds []IRect      // device bounds (a group's bounds for push ops)
+	Pair   []int32      // push -> matching pop index (and pop -> push), else -1
+	Wide   []bool       // damage touching this op / group must grow to its bounds
+	Desc   []string     // op type names (SWEEF_NARROW_DEBUG)
+	Exact  []bool       // painting the op under a horizontal clip gives the same pixels as unclipped (see narrow)
+	Corner []cornerSpan // like Exact, unless the clip edge cuts the curved ends of the op (see cornerZone)
+	Pre    []uint64     // Pre[i] hashes Key[:i]: equal prefixes paint equal intermediate surfaces
 	Surf   IRect
 }
 
@@ -176,12 +182,56 @@ func shadowBounds(o render.BoxShadow) render.Rect {
 	return render.Rect{X: o.Rect.X - o.Spread + o.DX - e, Y: o.Rect.Y - o.Spread + o.DY - e, W: o.Rect.W + 2*o.Spread + 2*e, H: o.Rect.H + 2*o.Spread + 2*e}
 }
 
+// shadowWholeSurface reports whether boxShadow computes the coverage of o for
+// the whole surface (rather than for the current clip): its mask must not be
+// larger than shadowMaskMax, a bound taken here on the shadow's device box.
+func shadowWholeSurface(o render.BoxShadow, m Matrix) bool {
+	sigma := math.Max(0, o.Blur) / 2 * m.MaxScale()
+	pad := int(math.Ceil(sigma*3)) + 1
+	r := o.Rect
+	if !o.Inset {
+		r = render.Rect{X: r.X + o.DX - o.Spread, Y: r.Y + o.DY - o.Spread, W: r.W + 2*o.Spread, H: r.H + 2*o.Spread}
+	}
+	if r.W <= 0 || r.H <= 0 {
+		return true // nothing is drawn
+	}
+	w, h := r.W*m.MaxScale()+float64(2*pad+4), r.H*m.MaxScale()+float64(2*pad+4)
+	return w*h <= shadowMaskMax/2
+}
+
+// cornerSpan marks the device columns where the outline of a rounded
+// rectangle is curved: (Lo0, Lo1) at its left end and (Hi0, Hi1) at its right
+// end. Between them the outline has only horizontal and vertical edges, so a
+// vertical clip edge there cuts the shape exactly like a plain rectangle.
+// The zero value means "no such guarantee".
+type cornerSpan struct{ Lo0, Lo1, Hi0, Hi1 int }
+
+func (c cornerSpan) ok() bool { return c.Hi1 > c.Lo0 }
+
+// cornerZone is the cornerSpan of a rounded rectangle (zero when it has square
+// corners, where Exact says it all, or the transform is not axis aligned).
+func cornerZone(r render.Rect, rad render.Radii, m Matrix, surf IRect) cornerSpan {
+	if rad.IsZero() || m[1] != 0 || m[2] != 0 || !hasRect(r) {
+		return cornerSpan{}
+	}
+	mx := 0.0
+	for _, c := range rad {
+		mx = math.Max(mx, math.Max(c[0], c[1]))
+	}
+	b := devRect(m, r, IRect{-1 << 30, -1 << 30, 1 << 30, 1 << 30})
+	z := int(math.Ceil(mx*m.MaxScale())) + damagePad + 1
+	if b.Empty() || z < 0 || z > 1<<20 || b.X1-b.X0 > 1<<20 {
+		return cornerSpan{}
+	}
+	return cornerSpan{b.X0, b.X0 + z + damagePad, b.X1 - z - damagePad, b.X1}
+}
+
 func hasRect(r render.Rect) bool { return r.W > 0 && r.H > 0 }
 
 // Analyze builds the ListInfo of list for a w x h device-pixel surface.
 func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 	n := len(list)
-	in := &ListInfo{Key: make([]uint64, n), Bounds: make([]IRect, n), Pair: make([]int32, n), Wide: make([]bool, n), Pre: make([]uint64, n+1), Surf: IRect{0, 0, w, h}}
+	in := &ListInfo{Key: make([]uint64, n), Bounds: make([]IRect, n), Pair: make([]int32, n), Wide: make([]bool, n), Exact: make([]bool, n), Corner: make([]cornerSpan, n), Desc: descs(list), Pre: make([]uint64, n+1), Surf: IRect{0, 0, w, h}}
 	ctm := Scale(dpr, dpr)
 	var ctx uint64
 	var stack []groupRec
@@ -234,6 +284,10 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 		switch o := op.(type) {
 		case render.FillRect:
 			leaf(o.Rect, false)
+			// a plain rectangle has only vertical and horizontal edges: the scan
+			// converter treats them the same with and without a horizontal clip
+			in.Exact[i] = o.Radii.IsZero() && ctm[1] == 0 && ctm[2] == 0
+			in.Corner[i] = cornerZone(o.Rect, o.Radii, ctm, in.Surf)
 		case render.Border:
 			leaf(o.Rect, false)
 		case render.TextRun:
@@ -242,8 +296,19 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 			leaf(o.Dst, false)
 		case render.Gradient:
 			leaf(o.Rect, false)
+			in.Exact[i] = o.Radii.IsZero() && ctm[1] == 0 && ctm[2] == 0
+			in.Corner[i] = cornerZone(o.Rect, o.Radii, ctm, in.Surf)
 		case render.BoxShadow:
 			leaf(shadowBounds(o), false)
+			// without blur and corners it is built from rectangles only (a
+			// window-sized 1px inset frame is the usual case)
+			in.Exact[i] = o.Radii.IsZero() && o.Blur == 0 && ctm[1] == 0 && ctm[2] == 0
+			// otherwise it is a blend of a coverage mask that boxShadow computes
+			// over the whole surface (so it does not depend on the clip), as long
+			// as the mask is small enough to be computed that way
+			if !in.Exact[i] && ctm[1] == 0 && ctm[2] == 0 {
+				in.Exact[i] = shadowWholeSurface(o, ctm)
+			}
 		case render.Scrollbar:
 			leaf(o.Rect, false)
 		case render.ScrollCorner:
@@ -251,7 +316,10 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 		case render.SVGDraw:
 			leaf(o.Dst, true)
 		case render.PushClip:
+			zc := cornerZone(o.Rect, o.Radii, ctm, in.Surf)
 			push(i, sig, o.Rect, true, false, 0, false)
+			in.Exact[i] = o.Radii.IsZero() && ctm[1] == 0 && ctm[2] == 0
+			in.Corner[i] = zc
 		case render.PushLayer:
 			px, fok := filterReach(o.Filter)
 			if !fok {
@@ -290,6 +358,8 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 				b = b.Intersect(g.limit)
 			}
 			in.Bounds[g.idx], in.Bounds[i] = b, b
+			in.Exact[i] = in.Exact[g.idx]
+			in.Corner[i] = in.Corner[g.idx]
 			in.Wide[g.idx] = g.wide
 			in.Pair[g.idx], in.Pair[i] = int32(i), int32(g.idx)
 			add(b)
@@ -418,14 +488,26 @@ func Damage(old, cur *ListInfo) (bands []Band, ok bool) {
 	if !ok {
 		return nil, false
 	}
+	if dbgNarrow {
+		for i, m := range ma {
+			if !m {
+				println("changed old", i, old.Desc[i][:min(len(old.Desc[i]), 120)], old.Bounds[i].X0, old.Bounds[i].X1)
+			}
+		}
+		for i, m := range mb {
+			if !m {
+				println("changed new", i, cur.Desc[i][:min(len(cur.Desc[i]), 120)], cur.Bounds[i].X0, cur.Bounds[i].X1)
+			}
+		}
+	}
 	for i, m := range ma {
 		if !m {
-			bands = append(bands, Band{old.Bounds[i].Y0, old.Bounds[i].Y1})
+			bands = append(bands, Band{old.Bounds[i].Y0, old.Bounds[i].Y1, old.Bounds[i].X0, old.Bounds[i].X1})
 		}
 	}
 	for i, m := range mb {
 		if !m {
-			bands = append(bands, Band{cur.Bounds[i].Y0, cur.Bounds[i].Y1})
+			bands = append(bands, Band{cur.Bounds[i].Y0, cur.Bounds[i].Y1, cur.Bounds[i].X0, cur.Bounds[i].X1})
 		}
 	}
 	bands = mergeBands(bands)
@@ -443,7 +525,7 @@ func Damage(old, cur *ListInfo) (bands []Band, ok bool) {
 				}
 				for _, bd := range bands {
 					if b.Y0 < bd.Y1 && bd.Y0 < b.Y1 && (b.Y0 < bd.Y0 || b.Y1 > bd.Y1) {
-						bands = mergeBands(append(bands, Band{b.Y0, b.Y1}))
+						bands = mergeBands(append(bands, Band{b.Y0, b.Y1, b.X0, b.X1}))
 						grew = true
 						break
 					}
@@ -463,7 +545,9 @@ func Damage(old, cur *ListInfo) (bands []Band, ok bool) {
 }
 
 // Band is a range of device rows.
-type Band struct{ Y0, Y1 int }
+// Band is a range of device rows, and the columns [X0,X1) of them that were
+// repainted (X1 == 0: the whole width, for bands made by Damage).
+type Band struct{ Y0, Y1, X0, X1 int }
 
 // mergeBands sorts bands and merges those that overlap or nearly touch.
 func mergeBands(bs []Band) []Band {
@@ -480,6 +564,7 @@ func mergeBands(bs []Band) []Band {
 	for _, b := range out {
 		if n := len(m); n > 0 && b.Y0 <= m[n-1].Y1+gap {
 			m[n-1].Y1 = max(m[n-1].Y1, b.Y1)
+			m[n-1].X0, m[n-1].X1 = min(m[n-1].X0, b.X0), max(m[n-1].X1, b.X1)
 		} else {
 			m = append(m, b)
 		}
@@ -553,15 +638,33 @@ func (cv *Canvas) paint(list []render.Op, info *ListInfo) {
 	cv.Info = info
 }
 
+// ParallelBands lets Update repaint the damaged bands concurrently (a variable
+// so tests and benchmarks can compare).
+var ParallelBands = true
+
+// StripeRows is the least height of a stripe a tall band is cut into.
+var StripeRows = 64
+
+// wideInto reports whether a non-local op's bounds meet the rows of b.
+func wideInto(info *ListInfo, b Band) bool {
+	for i, w := range info.Wide {
+		if w && !info.Bounds[i].Empty() && info.Bounds[i].Y0 < b.Y1 && b.Y0 < info.Bounds[i].Y1 {
+			return true
+		}
+	}
+	return false
+}
+
 // SnapBuilt and SnapUsed count surface snapshots made and repaints that
 // started from one (tests check the snapshot path is exercised).
-var SnapBuilt, SnapUsed atomic.Int64
+var SnapBuilt, SnapUsed, SnapExtended atomic.Int64
 
 // Snapshot tuning (variables so tests can force the snapshot path).
 var (
-	SnapMinOps   = 120 // lists shorter than this are cheap enough to repaint
-	SnapStable   = 2   // consecutive updates that must share the prefix
-	SnapMinShare = 4   // the prefix must be at least 1/SnapMinShare of the list
+	SnapMinOps    = 120 // lists shorter than this are cheap enough to repaint
+	SnapStable    = 2   // consecutive updates that must share the prefix
+	SnapMinShare  = 4   // the prefix must be at least 1/SnapMinShare of the list
+	SnapExtendMin = 2   // a snapshot is moved forward when the stable prefix grows by more than this many ops
 )
 
 // Update brings the canvas to list. It returns the rows that were repainted
@@ -577,7 +680,7 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 	}
 	if !ok || rows*10 > cv.Surf.H()*6 {
 		cv.paint(list, info)
-		return []Band{{cv.Surf.R.Y0, cv.Surf.R.Y1}}, true
+		return []Band{{cv.Surf.R.Y0, cv.Surf.R.Y1, cv.Surf.R.X0, cv.Surf.R.X1}}, true
 	}
 	cv.Info = info
 	lcp := 0
@@ -587,27 +690,80 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 	if len(bands) == 0 {
 		return nil, false
 	}
+	if dbgNarrow {
+		println("update: lcp", lcp, "snap", cv.snap != nil, cv.snapN, "ops", len(list), "bands", len(bands))
+	}
 	if cv.snap != nil && !(cv.snapN <= len(list) && info.Pre[cv.snapN] == cv.snapPre) {
 		cv.snap = nil // the part under the snapshot changed
 	}
-	for _, b := range bands {
-		region := IRect{cv.Surf.R.X0, b.Y0, cv.Surf.R.X1, b.Y1}
+	// The bands are disjoint rows and each is repainted by its own painter, so
+	// they can be repainted at the same time: the result is the same bytes. A
+	// tall band is cut into stripes of rows for the same purpose (clipping
+	// vertically is exact), unless a non-local op reaches into it: such an op is
+	// repainted from its whole bounds, which a stripe does not contain.
+	type job struct {
+		band  *Band
+		b     Band
+		extra IRect // region painted
+	}
+	var jobs []job
+	for bi := range bands {
+		b := &bands[bi]
+		n := 1
+		if ParallelBands && b.Y1-b.Y0 >= 2*StripeRows && !wideInto(info, *b) {
+			n = min(runtime.GOMAXPROCS(0), (b.Y1-b.Y0)/StripeRows)
+		}
+		for k := 0; k < n; k++ {
+			s := *b
+			s.Y0, s.Y1 = b.Y0+(b.Y1-b.Y0)*k/n, b.Y0+(b.Y1-b.Y0)*(k+1)/n
+			jobs = append(jobs, job{band: b, b: s})
+		}
+	}
+	run := func(j *job) {
+		region := narrow(info, j.b, cv.Surf.R)
+		j.extra = region
 		if cv.snap != nil {
 			SnapUsed.Add(1)
-			for y := b.Y0; y < b.Y1; y++ {
+			for y := region.Y0; y < region.Y1; y++ {
 				copy(cv.Surf.Row(y, region.X0, region.X1), cv.snap.Row(y, region.X0, region.X1))
 			}
 			p := newPainterOver(cv.Surf, cv.DPR, cv.Env, region)
 			p.RunRegionFrom(list, info, region, cv.snapN)
-			continue
+			return
 		}
 		p := newPainterOn(cv.Surf, cv.DPR, cv.Env, region)
 		p.RunRegion(list, info, region)
+	}
+	if len(jobs) == 1 || !ParallelBands {
+		for i := range jobs {
+			run(&jobs[i])
+		}
+	} else {
+		var wg sync.WaitGroup
+		for i := range jobs[1:] {
+			wg.Add(1)
+			go func(j *job) {
+				defer wg.Done()
+				run(j)
+			}(&jobs[i+1])
+		}
+		run(&jobs[0])
+		wg.Wait()
+	}
+	for bi := range bands {
+		bands[bi].X0, bands[bi].X1 = 1<<30, -1<<30
+	}
+	for i := range jobs {
+		b := jobs[i].band
+		b.X0, b.X1 = min(b.X0, jobs[i].extra.X0), max(b.X1, jobs[i].extra.X1)
 	}
 	// keep a snapshot when the same prefix has stayed untouched for a while
 	cv.lcps = append(cv.lcps, lcp)
 	if len(cv.lcps) > SnapStable {
 		cv.lcps = cv.lcps[1:]
+	}
+	if cv.snap != nil && len(cv.lcps) == SnapStable {
+		cv.extendSnapshot(list, info)
 	}
 	if cv.snap == nil && len(list) >= SnapMinOps && len(cv.lcps) == SnapStable {
 		m := cv.lcps[0]
@@ -625,6 +781,44 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 		}
 	}
 	return bands, false
+}
+
+// extendSnapshot moves the snapshot forward over the ops that have stayed
+// unchanged since it was made: they are painted onto it, inside the rectangle
+// they cover, the same way an incremental repaint paints over its backdrop.
+// (The snapshot is the surface after list[:snapN] with the current list.)
+func (cv *Canvas) extendSnapshot(list []render.Op, info *ListInfo) {
+	m := cv.lcps[0]
+	for _, v := range cv.lcps {
+		m = min(m, v)
+	}
+	n := safeSnapPoint(list, m)
+	if n <= cv.snapN+SnapExtendMin || n > len(list) {
+		return
+	}
+	var hull IRect
+	for i := cv.snapN; i < n; i++ {
+		hull = hull.union(info.Bounds[i])
+	}
+	if !hull.Empty() {
+		region := narrow(info, Band{hull.Y0, hull.Y1, hull.X0, hull.X1}, cv.Surf.R)
+		p := newPainterOver(cv.snap, cv.DPR, cv.Env, region)
+		for i := 0; i < cv.snapN; i++ { // re-open the clips and transforms still open
+			switch list[i].(type) {
+			case render.PushClip, render.PushTransform:
+				if int(info.Pair[i]) >= cv.snapN {
+					p.op(list[i])
+				} else {
+					i = int(info.Pair[i])
+				}
+			case render.PushLayer, render.PushMask:
+				i = int(info.Pair[i])
+			}
+		}
+		p.runRegion(list, info, region, cv.snapN, n)
+	}
+	cv.snapN, cv.snapPre = n, info.Pre[n]
+	SnapExtended.Add(1)
 }
 
 // safeSnapPoint returns the largest n <= max such that no layer or mask group
@@ -707,17 +901,17 @@ func (p *Painter) RunRegionFrom(list []render.Op, info *ListInfo, region IRect, 
 			i = int(info.Pair[i]) // (never open at start)
 		}
 	}
-	p.runRegion(list, info, region, start)
+	p.runRegion(list, info, region, start, len(list))
 }
 
 // RunRegion executes the ops of list that can reach region (the painter's
 // clip), skipping whole groups that cannot.
 func (p *Painter) RunRegion(list []render.Op, info *ListInfo, region IRect) {
-	p.runRegion(list, info, region, 0)
+	p.runRegion(list, info, region, 0, len(list))
 }
 
-func (p *Painter) runRegion(list []render.Op, info *ListInfo, region IRect, start int) {
-	for i := start; i < len(list); i++ {
+func (p *Painter) runRegion(list []render.Op, info *ListInfo, region IRect, start, end int) {
+	for i := start; i < end; i++ {
 		switch list[i].(type) {
 		case render.PopClip, render.PopLayer, render.PopMask, render.PopTransform:
 			p.op(list[i])
@@ -737,4 +931,81 @@ func (p *Painter) runRegion(list []render.Op, info *ListInfo, region IRect, star
 	for p.c.LayerDepth() > 0 {
 		p.c.EndLayer(1, SourceOver)
 	}
+}
+
+// narrow returns the rectangle to repaint for a damaged band: the columns the
+// changed ops cover, widened until no op that reaches the band crosses its left
+// or right edge unless clipping it there is exact. Whole rows used to be
+// repainted because the scan converter handles a shape that crosses the clip's
+// left or right edge slightly differently from one that does not (the part
+// outside is folded into the edge column), and a full paint shows that only at
+// the real surface edges. Shapes made of vertical and horizontal edges only
+// (plain rectangles, rectangular clips) are not affected, so those may cross;
+// every other op is repainted whole or not at all.
+func narrow(info *ListInfo, b Band, surf IRect) IRect {
+	x0, x1 := b.X0, b.X1
+	if x1 <= x0 {
+		return IRect{surf.X0, b.Y0, surf.X1, b.Y1}
+	}
+	x0, x1 = max(x0-damagePad, surf.X0), min(x1+damagePad, surf.X1)
+	for changed := true; changed; {
+		changed = false
+		for i, bo := range info.Bounds {
+			if bo.X1 <= bo.X0 || bo.Y1 <= b.Y0 || bo.Y0 >= b.Y1 || info.Exact[i] {
+				continue
+			}
+			cross := (bo.X0 < x0 && bo.X1 > x0) || (bo.X0 < x1 && bo.X1 > x1)
+			if cz := info.Corner[i]; cz.ok() && cross {
+				// only an edge inside the curved ends matters: move it out of them
+				// (to the straight part of the outline, or to the outside of the op)
+				nx0, nx1 := x0, x1
+				switch {
+				case x0 > cz.Lo0 && x0 < cz.Lo1:
+					nx0 = cz.Lo0
+				case x0 > cz.Hi0 && x0 < cz.Hi1:
+					nx0 = cz.Hi0
+				}
+				switch {
+				case x1 > cz.Lo0 && x1 < cz.Lo1:
+					nx1 = cz.Lo1
+				case x1 > cz.Hi0 && x1 < cz.Hi1:
+					nx1 = cz.Hi1
+				}
+				nx0, nx1 = max(nx0, surf.X0), min(nx1, surf.X1)
+				if nx0 != x0 || nx1 != x1 {
+					x0, x1 = nx0, nx1
+					changed = true
+				}
+				continue
+			}
+			if cross {
+				nx0, nx1 := min(x0, bo.X0), max(x1, bo.X1)
+				if dbgNarrow {
+					println("narrow: op", i, info.Desc[i], "widens", x0, x1, "to", nx0, nx1, "band", b.Y0, b.Y1)
+				}
+				nx0, nx1 = max(nx0, surf.X0), min(nx1, surf.X1)
+				if nx0 != x0 || nx1 != x1 {
+					x0, x1 = nx0, nx1
+					changed = true
+				}
+			}
+		}
+	}
+	return IRect{x0, b.Y0, x1, b.Y1}
+}
+
+var dbgNarrow = os.Getenv("SWEEF_NARROW_DEBUG") != ""
+
+func descs(list []render.Op) []string {
+	if !dbgNarrow {
+		return make([]string, len(list))
+	}
+	out := make([]string, len(list))
+	for i, o := range list {
+		out[i] = fmt.Sprintf("%T %+v", o, o)
+		if len(out[i]) > 700 {
+			out[i] = out[i][:700]
+		}
+	}
+	return out
 }

@@ -128,6 +128,15 @@ type svgCascade struct {
 	idx    *style.EntryIndex
 	rank   map[*style.Rule]int // position of each rule in rules
 	memo   map[*html.Node][]style.Decl
+	// keep carries declsFor answers across passes of a session for elements
+	// whose cascade inputs are known (keyFn, from the style cache)
+	keep  map[*html.Node]*declKept
+	keyFn func(n *html.Node) (anc, own uint64, ok bool)
+}
+
+type declKept struct {
+	d        []style.Decl
+	anc, own uint64
 }
 
 func newSVGCascade(sheets []Sheet, env *style.Env, extra []string) *svgCascade {
@@ -171,10 +180,25 @@ func (sc *svgCascade) declsFor(n *html.Node) []style.Decl {
 	if d, ok := sc.memo[n]; ok {
 		return d
 	}
-	d := sc.declsForUncached(n)
 	if sc.memo == nil {
 		sc.memo = map[*html.Node][]style.Decl{}
 	}
+	if sc.keyFn != nil {
+		if anc, own, ok := sc.keyFn(n); ok {
+			if k := sc.keep[n]; k != nil && k.anc == anc && k.own == own {
+				sc.memo[n] = k.d
+				return k.d
+			}
+			d := sc.declsForUncached(n)
+			if sc.keep == nil || len(sc.keep) > 8192 {
+				sc.keep = map[*html.Node]*declKept{}
+			}
+			sc.keep[n] = &declKept{d: d, anc: anc, own: own}
+			sc.memo[n] = d
+			return d
+		}
+	}
+	d := sc.declsForUncached(n)
 	sc.memo[n] = d
 	return d
 }
@@ -189,10 +213,13 @@ func (sc *svgCascade) declsForUncached(n *html.Node) []style.Decl {
 		best uint32
 	}
 	var hits []hit
-	byRule := map[*style.Rule]int{}
+	var byRule map[*style.Rule]int
 	for _, en := range sc.idx.Candidates(n, nil) {
 		if en.Pseudo != "" || !en.Sel.Match(n, nil) {
 			continue
+		}
+		if byRule == nil {
+			byRule = map[*style.Rule]int{}
 		}
 		if i, ok := byRule[en.Rule]; ok {
 			if en.Spec > hits[i].best {
@@ -202,6 +229,9 @@ func (sc *svgCascade) declsForUncached(n *html.Node) []style.Decl {
 		}
 		byRule[en.Rule] = len(hits)
 		hits = append(hits, hit{rank: sc.rank[en.Rule], r: en.Rule, best: en.Spec})
+	}
+	if len(hits) == 0 && !hasAttr(n, "style") {
+		return nil // no rule and no inline style: callers only read the result
 	}
 	sort.Slice(hits, func(i, j int) bool { return hits[i].rank < hits[j].rank })
 	for _, h := range hits {
@@ -410,7 +440,7 @@ func parseFontShorthand(v string, a map[string]string) {
 
 // ---- entry points used by the painter ------------------------------------------------
 
-var svgShared struct {
+type svgSharedT struct {
 	sync.Mutex
 	c        *ctx
 	sc       *svgCascade
@@ -421,46 +451,28 @@ var svgShared struct {
 	extDepth int
 }
 
+var svgShared svgSharedT
+
 // svgDocFor returns the (cached) resolved scene of an inline <svg> element.
 // Ids defined in the page's other inline <svg> elements (icon sprites) resolve
 // too, as they do in a browser.
 func (c *ctx) svgDocFor(n *html.Node, st *style.Computed) *SVGDoc {
 	svgShared.Lock()
-	if svgShared.c != c || svgShared.sc == nil {
-		scheme := c.opts.ColorScheme
-		if scheme == "" {
-			scheme = "light"
-		}
-		env := &style.Env{Width: c.opts.Width, Height: c.opts.Height, DPR: c.opts.DPR, ColorScheme: scheme, Print: c.opts.Print}
-		if svgShared.c != c {
-			svgShared.imgs, svgShared.sized = nil, nil
-		}
-		svgShared.c = c
-		svgShared.sc = newSVGCascade(c.opts.Sheets, env, nil)
-		svgShared.docs = map[*html.Node]*SVGDoc{}
-		svgShared.roots = nil
-	}
+	c.svgInitLocked()
 	doc := c.svgBuildLocked(n, st)
+	if c.sess != nil && doc != nil {
+		// session scenes are never modified: the ids of the page's other svg
+		// elements are merged into a copy that is reused while they stay the same
+		if u, ok := c.svgUnionLocked(n); ok {
+			doc = c.svgMergeSessLocked(n, doc, u)
+			svgShared.Unlock()
+			c.svgEnsureExt(doc)
+			return doc
+		}
+	}
 	if doc != nil && !doc.merged {
 		doc.merged = true
-		if svgShared.roots == nil {
-			top := n
-			for top.Parent != nil {
-				top = top.Parent
-			}
-			svgShared.roots = []*html.Node{}
-			var walk func(x *html.Node)
-			walk = func(x *html.Node) {
-				if x.Type == html.ElementNode && strings.EqualFold(x.Data, "svg") {
-					svgShared.roots = append(svgShared.roots, x)
-					return
-				}
-				for ch := x.FirstChild; ch != nil; ch = ch.NextSibling {
-					walk(ch)
-				}
-			}
-			walk(top)
-		}
+		svgShared.mergeRootsLocked(n)
 		if len(svgShared.roots) > 1 && len(svgShared.roots) <= 400 {
 			for _, o := range svgShared.roots {
 				if o == n {
@@ -483,11 +495,66 @@ func (c *ctx) svgDocFor(n *html.Node, st *style.Computed) *SVGDoc {
 	return doc
 }
 
+// svgInitLocked starts the per-pass shared state (cascade, scene table) the
+// first time a pass asks for a scene.
+func (c *ctx) svgInitLocked() {
+	if svgShared.c != c || svgShared.sc == nil {
+		scheme := c.opts.ColorScheme
+		if scheme == "" {
+			scheme = "light"
+		}
+		env := &style.Env{Width: c.opts.Width, Height: c.opts.Height, DPR: c.opts.DPR, ColorScheme: scheme, Print: c.opts.Print}
+		if svgShared.c != c {
+			svgShared.imgs, svgShared.sized = nil, nil
+		}
+		svgShared.c = c
+		svgShared.sc = c.newSVGCascade(env)
+		svgShared.docs = map[*html.Node]*SVGDoc{}
+		svgShared.roots = nil
+	}
+}
+
+// mergeRootsLocked lists the page's inline svg elements (outermost ones, in
+// document order) the first time it is needed in a pass.
+func (s *svgSharedT) mergeRootsLocked(n *html.Node) {
+	if s.roots != nil {
+		return
+	}
+	top := n
+	for top.Parent != nil {
+		top = top.Parent
+	}
+	s.roots = []*html.Node{}
+	var walk func(x *html.Node)
+	walk = func(x *html.Node) {
+		if x.Type == html.ElementNode && strings.EqualFold(x.Data, "svg") {
+			s.roots = append(s.roots, x)
+			return
+		}
+		for ch := x.FirstChild; ch != nil; ch = ch.NextSibling {
+			walk(ch)
+		}
+	}
+	walk(top)
+}
+
 // svgBuildLocked builds and caches the scene of n (the caller holds
 // svgShared).
 func (c *ctx) svgBuildLocked(n *html.Node, st *style.Computed) *SVGDoc {
 	if d, ok := svgShared.docs[n]; ok {
 		return d
+	}
+	key, keyed := uint64(0), false
+	if !c.svgNoSess {
+		key, keyed = c.svgKey(n, st)
+	}
+	if keyed {
+		if e := c.sess.svg.docs[n]; e != nil && e.sig == key {
+			e.used = true
+			svgShared.docs[n] = e.doc
+			c.sess.svg.Hits++
+			return e.doc
+		}
 	}
 	sc := svgShared.sc
 	if st != nil {
@@ -518,7 +585,24 @@ func (c *ctx) svgBuildLocked(n *html.Node, st *style.Computed) *SVGDoc {
 		doc.Base = c.opts.BaseURL
 	}
 	svgShared.docs[n] = doc
+	if keyed && doc != nil {
+		if c.sess.svg.docs == nil {
+			c.sess.svg.docs = map[*html.Node]*svgEnt{}
+		}
+		doc.extDone = true // cacheable scenes have no external references to resolve
+		c.sess.svg.docs[n] = &svgEnt{doc: doc, sig: key, used: true}
+		c.sess.svg.Builds++
+	}
 	return doc
+}
+
+// newSVGCascade returns the page cascade for SVG property resolution: the
+// session's, when the sheets are unchanged since the previous pass.
+func (c *ctx) newSVGCascade(env *style.Env) *svgCascade {
+	if c.sess != nil {
+		return c.sess.svg.cascade(c.opts.Sheets, env, c.sess.Style.NodeKey)
+	}
+	return newSVGCascade(c.opts.Sheets, env, nil)
 }
 
 // inlineSVGDoc builds (and caches) the scene of an inline <svg> element.

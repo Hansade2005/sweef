@@ -79,9 +79,15 @@ func TestDataSaverBytesDecreaseByMode(t *testing.T) {
 	if strict.counts["/img/hero.png"] != 0 || strict.counts["/ads.js"] != 0 || strict.counts["/app.js"] != 1 {
 		t.Fatalf("strict: no images, no third-party script, first-party script yes: %v", strict.counts)
 	}
+	// web fonts: loaded when the text uses them (the bytes here are not a font, so the text stays in
+	// the fallback), within the caps in standard, not at all in strict; hints are never fetched
 	for name, r := range map[string]modeRun{"off": off, "standard": std, "strict": strict} {
-		if r.counts["/font.woff2"] != 0 || r.counts["/next.html"] != 0 {
-			t.Fatalf("%s: fonts and hints are never fetched: %v", name, r.counts)
+		wantFont := 1
+		if name == "strict" {
+			wantFont = 0
+		}
+		if r.counts["/font.woff2"] != wantFont || r.counts["/next.html"] != 0 {
+			t.Fatalf("%s: font requests want %d, hints never: %v", name, wantFont, r.counts)
 		}
 	}
 	if !off.ads || !std.ads || strict.ads {
@@ -790,24 +796,31 @@ func TestDataSaverLoadFullyAndOverrides(t *testing.T) {
 	_ = c
 }
 
-func TestDataSaverFontsAreNeverFetched(t *testing.T) {
+func TestDataSaverFontPolicy(t *testing.T) {
 	s := newDSSite(t)
 	e := newDSEngine(t)
-	// the engine loads no web fonts in any mode (the stub registerFonts); BlockFonts is
-	// still enforced at the one place a font would be read
+	// Web fonts load when the page's text needs them: always when the saver is off, within the caps
+	// in standard (webfonts_policy_test.go has the byte-exact tests), not in strict (icon fonts excepted).
+	// The font of this site is not a valid font file: the text stays in the fallback in every mode.
+	// A direct font read (fetchResourceKind) is still gated by BlockFonts.
 	for _, level := range []SaverLevel{SaverOff, SaverStandard, SaverStrict} {
 		s.reset()
 		_, tab := ctxTab(t, e, polPtr(level))
 		nav(t, tab, s.URL()+"/")
 		_, _ = tab.PaintRGBA(1280, 720, 1, false)
-		if s.count("/font.woff2") != 0 {
-			t.Fatalf("%s: font fetched", level)
+		want := 1
+		if level == SaverStrict {
+			want = 0
 		}
+		if s.count("/font.woff2") != want {
+			t.Fatalf("%s: font requests %d, want %d", level, s.count("/font.woff2"), want)
+		}
+		s.reset()
 		_, _, err := tab.fetchResourceKind(s.URL()+"/font.woff2", KindFont)
-		if level == SaverOff && (err != nil || s.count("/font.woff2") != 1) {
-			t.Fatalf("off: a font read is allowed: %v", err)
+		if level != SaverStrict && (err != nil && level == SaverOff) {
+			t.Fatalf("%s: a font read is allowed: %v", level, err)
 		}
-		if level != SaverOff && (err != errSaverBlocked || s.count("/font.woff2") != 0) {
+		if level == SaverStrict && (err != errSaverBlocked || s.count("/font.woff2") != 0) {
 			t.Fatalf("%s: BlockFonts must stop the read: %v", level, err)
 		}
 	}

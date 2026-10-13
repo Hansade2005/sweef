@@ -1,0 +1,79 @@
+=== attempt 1 2026-10-13T11:34:21Z 
+engine data policy API: present (building with -tags datasaver_engine)-tags datasaver_engine
+baseline sweef-off          run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-off          run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-standard     run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-standard     run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-strict       run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-strict       run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline chromium           run 1: page in=0 out=0 conns=0; browser-internal in=13285 out=4198 [www.google.com accounts.google.com]
+baseline chromium           run 2: page in=0 out=0 conns=0; browser-internal in=13210 out=4198 [www.google.com accounts.google.com]
+baseline chromium-savedata  run 1: page in=0 out=0 conns=0; browser-internal in=13150 out=4198 [accounts.google.com www.google.com]
+baseline chromium-savedata  run 2: page in=0 out=0 conns=0; browser-internal in=10457 out=4198 [accounts.google.com www.google.com]
+[1/230] sweef-off          run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  616653 warm=  138146 req= 42 ready= 4651ms ok
+[2/230] sweef-standard     run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  543260 warm=  138123 req= 34 ready= 3822ms ok
+[3/230] sweef-strict       run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  421839 warm=  144490 req= 13 ready= 3852ms ok
+[4/230] chromium           run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  522666 warm=  267180 req= 23 ready= 1226ms ok
+[5/230] chromium-savedata  run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  524398 warm=  267188 req= 23 ready= 1264ms ok
+[6/230] sweef-standard     run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  543593 warm=  138201 req= 34 ready= 4093ms ok
+[7/230] sweef-strict       run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  421751 warm=  144436 req= 13 ready= 3597ms ok
+[8/230] chromium           run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  529269 warm=  267160 req= 23 ready= 1143ms ok
+[9/230] chromium-savedata  run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  522856 warm=  267172 req= 23 ready= 1943ms ok
+[10/230] sweef-off          run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  639155 warm=  138975 req= 42 ready= 5345ms ok
+[11/230] sweef-off          run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1677936 warm=  684699 req=152 ready=10744ms ok
+[12/230] sweef-standard     run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1192104 warm=  491033 req= 70 ready=11866ms ok
+[13/230] sweef-strict       run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold=  302025 warm=  108473 req=  8 ready=  939ms ok
+=== attempt 1 2026-10-13T12:34:12Z resuming bench/datasaver/results/2026-10-13-withfonts.json
+engine data policy API: present (building with -tags datasaver_engine)-tags datasaver_engine
+[14/230] chromium           run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1677778 warm=  337088 req= 89 ready= 2962ms ok
+[15/230] chromium-savedata  run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1194910 warm=  518757 req= 35 ready= 2003ms ok
+[16/230] sweef-standard     run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1176210 warm=  367028 req= 70 ready=12907ms ok
+[17/230] sweef-strict       run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold=  302033 warm=  106944 req=  8 ready= 1118ms ok
+[18/230] chromium           run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1198761 warm=  592231 req= 35 ready= 1116ms ok
+[19/230] chromium-savedata  run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1269309 warm=  511151 req= 35 ready= 1505ms ok
+[20/230] sweef-off          run 2 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1669937 warm= 2067267 req=152 ready=11069ms ok
+[21/230] sweef-off          run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  595734 warm=    9111 req= 90 ready=12645ms ok
+[22/230] sweef-standard     run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  490320 warm=    9084 req= 81 ready=12543ms ok
+[23/230] sweef-strict       run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  224987 warm=    9176 req= 64 ready=12513ms ok
+[24/230] chromium           run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  588765 warm=   67597 req= 88 ready= 2244ms ok
+[25/230] chromium-savedata  run 1 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  584695 warm=  112672 req= 88 ready= 2428ms ok
+[26/230] sweef-standard     run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  489342 warm=    8804 req= 81 ready=13302ms ok
+[27/230] sweef-strict       run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  224914 warm=    9037 req= 64 ready=12525ms ok
+[28/230] chromium           run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  581118 warm=   59682 req= 88 ready= 2511ms ok
+[29/230] chromium-savedata  run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  632834 warm=   64590 req= 88 ready= 2491ms ok
+[30/230] sweef-off          run 2 https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching    cold=  595041 warm=    9060 req= 90 ready=13400ms ok
+[31/230] sweef-off          run 1 https://docs.python.org/3/library/asyncio.html               cold=  110472 warm=   19631 req= 22 ready= 3589ms ok
+[32/230] sweef-standard     run 1 https://docs.python.org/3/library/asyncio.html               cold=  109364 warm=   18300 req= 21 ready= 2581ms ok
+[33/230] sweef-strict       run 1 https://docs.python.org/3/library/asyncio.html               cold=   68256 warm=   26399 req= 20 ready= 6456ms ok
+[34/230] chromium           run 1 https://docs.python.org/3/library/asyncio.html               cold=   53843 warm=   12268 req= 20 ready=  654ms ok
+[35/230] chromium-savedata  run 1 https://docs.python.org/3/library/asyncio.html               cold=   53924 warm=   12379 req= 20 ready= 1437ms ok
+[36/230] sweef-standard     run 2 https://docs.python.org/3/library/asyncio.html               cold=  109361 warm=   18305 req= 21 ready= 5492ms ok
+[37/230] sweef-strict       run 2 https://docs.python.org/3/library/asyncio.html               cold=   68270 warm=   26375 req= 20 ready= 3731ms ok
+[38/230] chromium           run 2 https://docs.python.org/3/library/asyncio.html               cold=   53977 warm=   11922 req= 20 ready= 1222ms ok
+=== attempt 1 2026-10-13T12:59:19Z resuming bench/datasaver/results/2026-10-13-withfonts.json
+engine data policy API: present (building with -tags datasaver_engine)-tags datasaver_engine
+[39/230] chromium-savedata  run 2 https://docs.python.org/3/library/asyncio.html               cold=   53986 warm=   12211 req= 20 ready= 1712ms ok
+[40/230] sweef-off          run 2 https://docs.python.org/3/library/asyncio.html               cold=  110552 warm=   27887 req= 22 ready= 4006ms ok
+[41/230] sweef-off          run 1 https://go.dev/doc/effective_go                              cold=  747953 warm=  218339 req= 36 ready= 5269ms ok
+[42/230] sweef-standard     run 1 https://go.dev/doc/effective_go                              cold=  731347 warm=  200859 req= 23 ready= 4926ms ok
+[43/230] sweef-strict       run 1 https://go.dev/doc/effective_go                              cold=  175706 warm=  169119 req= 13 ready= 2752ms ok
+[44/230] chromium           run 1 https://go.dev/doc/effective_go                              cold=  800029 warm=  229711 req= 38 ready= 4261ms ok
+[45/230] chromium-savedata  run 1 https://go.dev/doc/effective_go                              cold=  797561 warm=  231277 req= 38 ready= 3079ms ok
+[46/230] sweef-standard     run 2 https://go.dev/doc/effective_go                              cold=  738763 warm=  199621 req= 23 ready= 8746ms ok
+[47/230] sweef-strict       run 2 https://go.dev/doc/effective_go                              cold=  176406 warm=  168437 req= 13 ready= 1969ms ok
+[48/230] chromium           run 2 https://go.dev/doc/effective_go                              cold=  794058 warm=  236279 req= 38 ready= 4199ms ok
+[49/230] chromium-savedata  run 2 https://go.dev/doc/effective_go                              cold=  792648 warm=  239172 req= 38 ready= 3656ms ok
+[50/230] sweef-off          run 2 https://go.dev/doc/effective_go                              cold=  751771 warm=  216161 req= 36 ready= 6055ms ok
+[51/230] sweef-off          run 1 https://news.ycombinator.com/                                cold=   18299 warm=   13836 req=  3 ready= 1104ms ok
+[52/230] sweef-standard     run 1 https://news.ycombinator.com/                                cold=   18312 warm=   13823 req=  3 ready=  558ms ok
+[53/230] sweef-strict       run 1 https://news.ycombinator.com/                                cold=   25762 warm=   13847 req=  3 ready= 1034ms ok
+[54/230] chromium           run 1 https://news.ycombinator.com/                                cold=   19905 warm=   15519 req=  7 ready=  953ms ok
+[55/230] chromium-savedata  run 1 https://news.ycombinator.com/                                cold=   19958 warm=   13984 req=  7 ready=  941ms ok
+[56/230] sweef-standard     run 2 https://news.ycombinator.com/                                cold=   18311 warm=   13824 req=  3 ready=  885ms ok
+[57/230] sweef-strict       run 2 https://news.ycombinator.com/                                cold=   25761 warm=   13825 req=  3 ready=  949ms ok
+[58/230] chromium           run 2 https://news.ycombinator.com/                                cold=   19942 warm=   13961 req=  7 ready=  776ms ok
+[59/230] chromium-savedata  run 2 https://news.ycombinator.com/                                cold=   19947 warm=   13973 req=  7 ready= 1339ms ok
+=== attempt 1 2026-10-13T13:15:23Z resuming bench/datasaver/results/2026-10-13-withfonts.json
+engine data policy API: present (building with -tags datasaver_engine)-tags datasaver_engine
+[60/230] sweef-off          run 2 https://news.ycombinator.com/                                cold=   18319 warm=   13833 req=  3 ready= 1090ms ok
+Terminated

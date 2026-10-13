@@ -11,6 +11,7 @@
   /* header + composer chrome ---------------------------------------------- */
   function setLabel(el, t) { el.setAttribute("aria-label", t); el.setAttribute("title", t); }
   function buildStatic() {
+    cK = "";
     SW.clear(E.chat); E.chat.appendChild(h("span.trunc", { text: chat.title || S.f(S.agent.title) })); E.chat.appendChild(icon("chev", 14)); setLabel(E.chat, S.agent.chats);
     var nb = $("sknew"), cb = $("skclose"); SW.clear(nb); nb.appendChild(icon("edit", 16)); setLabel(nb, S.agent.new); SW.clear(cb); cb.appendChild(icon("close", 16)); setLabel(cb, S.f(S.agent.close));
     SW.clear(E.plus); E.plus.appendChild(icon("plus", 18)); setLabel(E.plus, S.agent.attach);
@@ -22,15 +23,26 @@
     });
     SW.clear(E.rz); setLabel(E.send, S.agent.send);
   }
+  /* Runs on every key stroke of the composer: only what depends on the text or the mode is touched, and only when it changed. */
+  var cK = "";
   function renderComposer() {
-    var m = mode(); SW.$$("button", E.mode).forEach(function (b) { b.setAttribute("aria-checked", b.getAttribute("data-m") === m ? "true" : "false"); });
+    var m = mode(), has = !!E.input.value.trim(), k = m + "|" + busy + "|" + has;
+    if (k === cK) return; cK = k;
+    SW.$$("button", E.mode).forEach(function (b) { b.setAttribute("aria-checked", b.getAttribute("data-m") === m ? "true" : "false"); });
     E.input.setAttribute("placeholder", m === "agent" ? S.agent.placeholderAgent : S.agent.placeholder);
-    var has = !!E.input.value.trim(); SW.clear(E.send);
+    SW.clear(E.send);
     E.send.classList.toggle("stop", busy); E.send.classList.toggle("off", !busy && !has);
     E.send.appendChild(icon(busy ? "stop" : "send", busy ? 16 : 18)); setLabel(E.send, busy ? S.agent.stop : S.agent.send);
     E.run.classList.toggle("on", busy);
   }
-  function grow() { var t = E.input; t.style.height = "auto"; var sh = t.scrollHeight || 22 * Math.max(1, t.value.split("\n").length); t.style.height = Math.min(176, Math.max(22, sh)) + "px"; }
+  /* Fit the composer to its text. Growing needs one layout read; only shrinking has to reset the height first. */
+  var gLen = 0;
+  function grow() {
+    var t = E.input, len = t.value.length, grew = len > gLen && t.value.indexOf("\n") < 0 && t.style.height; gLen = len;
+    if (!grew) t.style.height = "auto";
+    var sh = t.scrollHeight || 22 * Math.max(1, t.value.split("\n").length), hh = Math.min(176, Math.max(22, sh)) + "px";
+    if (t.style.height !== hh) t.style.height = hh;
+  }
   E.input.addEventListener("input", function () { grow(); renderComposer(); });
   E.input.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (busy) return; send(); }

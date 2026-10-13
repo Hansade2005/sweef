@@ -16,6 +16,7 @@ h2 { font-size: var(--fs-lg); font-weight: 700; margin-bottom: 4px; } .sub { col
 .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .src { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; text-align: left; border-radius: var(--r-2); background: var(--surface); box-shadow: var(--sh-1), inset 0 0 0 1px var(--line); transition: box-shadow var(--dur-2), transform var(--dur-2) var(--ease); }
 .src:hover { transform: translateY(-2px); box-shadow: var(--sh-2), inset 0 0 0 1px var(--accent-line); }
+.src .brandic { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
 .src .lg { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 18px; }
 .src b { font-size: var(--fs-lg); display: block; } .src .st { font-size: var(--fs-sm); color: var(--text-3); margin-top: 2px; }
 .src.busy { box-shadow: var(--sh-2), inset 0 0 0 1.5px var(--accent); } .src.done { box-shadow: inset 0 0 0 1.5px var(--ok); } .src.done .st { color: var(--ok); } .src.off { opacity: .55; } .src.off:hover { transform: none; box-shadow: var(--sh-1), inset 0 0 0 1px var(--line); }

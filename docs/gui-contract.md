@@ -27,6 +27,10 @@ In the chrome page, `window.sweef` exists:
   `bookmark.toggle`, `menu.open {name}`, `agent.send {text, mode}`, `agent.stop`, `agent.takeControl`,
   `agent.pageVisibility {origin, allowed}`, `settings.set {key, value}`, `window.{minimize,maximize,close}`,
   `find.query {text}`, `downloads.open {id}`, `incognito.new`.
+* `sweef.sync` is `true` in the GUI host: the host settles the page and paints once after every message it delivers
+  or a page event, and it answers `omni.input` inside the same event turn (`omni.suggestions`, or `{id, stale:true}`
+  when it could not in time, the real answer then follows). A page that sees the flag builds its dropdown from the
+  answer instead of painting its old rows first, and coalesces its renders with a microtask instead of a 16 ms timer.
 * `sweef.onMessage = (type, payload) => {}`: Go -> UI. Types: `state` (full snapshot: tabs, active tab, url,
   title, loading, canBack/Forward, security {level, certValid}, bookmarked, incognito, theme,
   sidebar {open, width}, settings), `state.patch` (RFC 7386 merge patch), `omni.suggestions {id, items}`,

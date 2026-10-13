@@ -1,9 +1,11 @@
 package app
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/app/omnibox"
@@ -23,8 +25,57 @@ type omniReq struct {
 
 // omniInput answers omni.input. The UI builds its own "go to / search / ask"
 // rows, so only knowledge from the browser goes back: open tabs, bookmarks and
-// history (type tab|bookmark|history), plus an inline completion.
+// history (type tab|bookmark|history), plus an inline completion. No favicons
+// travel with the rows (the dropdown draws a type icon): the answer is compiled as
+// script text on every key stroke and must stay a few hundred bytes.
 func (a *App) omniInput(src *etab, p omniReq) {
+	a.omniAnswer(src, p, nil)
+}
+
+// omniWait is a worker waiting inside the event turn for the answer to an
+// omni.input it just forwarded. Whoever moves state from 0 wins: the UI loop
+// (1) hands over the script to run, the worker (2) gives up and the answer is
+// sent as an ordinary message when it is ready.
+type omniWait struct {
+	state atomic.Int32
+	js    chan string
+}
+
+// omniSyncWait bounds how long a worker holds a frame back for the omnibox
+// answer. The answer takes tens of microseconds; this only matters when the
+// UI loop is busy with something else.
+const omniSyncWait = 4 * time.Millisecond
+
+// omniSync forwards omni.input to the UI loop and waits (worker only, called
+// from drainBindings) for the answer so the key stroke paints once: the page
+// builds its rows from the suggestions instead of painting its old ones first
+// and the new ones in a second frame. On a timeout the page is told to show
+// what it has ({stale:true}) and the answer arrives later as a normal message.
+func (e *etab) omniSync(raw json.RawMessage) {
+	a := e.a
+	w := &omniWait{js: make(chan string, 1)}
+	p := decode[omniReq](raw)
+	a.post(func() { a.omniAnswer(e, p, w) })
+	t := time.NewTimer(omniSyncWait)
+	var js string
+	select {
+	case js = <-w.js:
+		t.Stop()
+	case <-t.C:
+		if w.state.CompareAndSwap(0, 2) {
+			js = "sweef.__recv(\"omni.suggestions\",{\"stale\":true,\"id\":" + jsJSON(p.ID) + "})"
+		} else {
+			js = <-w.js
+		}
+	case <-a.quit:
+		return
+	}
+	if _, err := e.t.Evaluate(js); err != nil {
+		a.logf("%s <- omni.suggestions: %v", e.kind, err)
+	}
+}
+
+func (a *App) omniAnswer(src *etab, p omniReq, w *omniWait) {
 	t0 := time.Now()
 	limit := p.Limit
 	if limit <= 0 || limit > 24 {
@@ -47,9 +98,6 @@ func (a *App) omniInput(src *etab, p omniReq) {
 		if it.Tab != "" {
 			m["tab"] = it.Tab
 		}
-		if ic := a.iconFor(it.URL); ic != "" {
-			m["favicon"] = ic
-		}
 		out = append(out, m)
 	}
 	msg := map[string]any{"items": out}
@@ -60,6 +108,10 @@ func (a *App) omniInput(src *etab, p omniReq) {
 		msg["inline"] = resp.Inline
 	}
 	a.stats.noteSuggest(time.Since(t0))
+	if w != nil && w.state.CompareAndSwap(0, 1) {
+		w.js <- "sweef.__recv(" + jsString(mOmniSuggest) + "," + jsJSON(msg) + ")"
+		return
+	}
 	a.sendTo(src, mOmniSuggest, msg)
 }
 

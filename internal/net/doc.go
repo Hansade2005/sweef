@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // Doc owns one parsed HTML tree. Node identity is a small integer issued by a
@@ -331,7 +332,7 @@ func (d *Doc) SetInnerHTML(backendID int64, frag string) error {
 		return fmt.Errorf("no node with backendNodeId %d", backendID)
 	}
 	clearChildren(n)
-	sub, err := html.ParseFragment(strings.NewReader(frag), &html.Node{Type: html.ElementNode, Data: "body"})
+	sub, err := html.ParseFragment(strings.NewReader(frag), &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body})
 	if err != nil {
 		return err
 	}

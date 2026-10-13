@@ -189,6 +189,18 @@ func runPaintGolden(t *testing.T) {
 			})
 		}
 	}
+	if os.Getenv("GOLDEN_PRINT") != "" {
+		// print the hashes of the scenarios that ran (go test -run 'TestPaintGolden/<scenario>'), to add one
+		// scenario's lines to the golden file without re-recording the others
+		var keys []string
+		for k := range got {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Printf("GOLDEN %s %s\n", k, got[k])
+		}
+	}
 	if *updateGolden {
 		var keys []string
 		for k := range got {
