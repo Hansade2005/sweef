@@ -82,6 +82,8 @@ func parseCookie(raw string, now time.Time) *Cookie {
 			c.HttpOnly = true
 		case lower == "secure":
 			c.Secure = true
+		case lower == "partitioned":
+			c.Partitioned = true
 		case strings.HasPrefix(lower, "max-age="):
 			var secs int64
 			if _, err := fmt.Sscanf(strings.TrimPrefix(lower, "max-age="), "%d", &secs); err == nil {

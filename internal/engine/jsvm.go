@@ -525,6 +525,12 @@ func (j *jsVM) dispatch(id int64, typ string, init map[string]any) bool {
 	if j == nil {
 		return true
 	}
+	switch typ {
+	case "click", "mousedown", "pointerdown", "keydown", "touchstart", "input":
+		if t := j.tab; t != nil && t.bc == nil { // the person used this top-level page: its site counts as visited
+			t.Context().noteInteraction(schemefulSite(t.URL()))
+		}
+	}
 	if init == nil {
 		init = map[string]any{}
 	}
@@ -1285,14 +1291,9 @@ func (j *jsVM) registerHost() error {
 			}
 			return out, nil
 		}},
-		{"cookie", func(a []any) (any, error) { return j.tab.Context().JarRef().ForURL(j.tab.URL()), nil }},
+		{"cookie", func(a []any) (any, error) { return j.tab.DocumentCookie(), nil }},
 		{"setCookie", func(a []any) (any, error) {
-			if c := parseCookie(argS(a, 0), j.tab.eng.now()); c != nil {
-				if c.Domain == "" {
-					c.Domain = hostOf(j.tab.URL())
-				}
-				j.tab.Context().JarRef().Set(c)
-			}
+			j.tab.SetDocumentCookie(argS(a, 0))
 			return nil, nil
 		}},
 		{"dialog", func(a []any) (any, error) {

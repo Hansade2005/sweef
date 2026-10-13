@@ -219,10 +219,13 @@ H.tag(PaymentRequest, 'PaymentRequest');
 
 // ---- Storage Access API: the engine only runs top-level documents -----------------------------------------------------------
 var DP = g.Document.prototype;
-H.define(DP, 'hasStorageAccess', function hasStorageAccess() { return Promise.resolve(g.top === g); });
+// Backed by the partition policy (partition.go): a third-party document has no access to unpartitioned cookies
+// until the browser grants it; a grant lasts for the (top-level site, embedded site) pair.
+H.define(DP, 'hasStorageAccess', function hasStorageAccess() {
+  try { return Promise.resolve(!!H.sw.saHas()); } catch (e) { return Promise.reject(H.hostErr(e)); }
+});
 H.define(DP, 'requestStorageAccess', function requestStorageAccess() {
-  if (g.top === g) return Promise.resolve(undefined);
-  return rej('NotAllowedError', 'requestStorageAccess not allowed: third-party storage access is not granted.');
+  try { H.sw.saRequest(); return Promise.resolve(undefined); } catch (e) { return Promise.reject(H.hostErr(e)); }
 });
 
 // ---- Trusted Types: policies pass values through, enforcement is not implemented ---------------------------------------------------

@@ -252,6 +252,7 @@ func New(cfg Config) (*App, error) {
 		a.ownE = true
 	}
 	a.initDataSaver()
+	a.applyCookiePolicy(a.eng.DefaultContext())
 	// the app's own HTTP clients count toward "used" like page traffic
 	if ct := a.eng.DefaultContext().CountedTransport(); ct != nil {
 		a.favicons.cli.Transport = ct

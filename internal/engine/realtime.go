@@ -149,7 +149,7 @@ func (j *jsVM) wsOpen(rawurl, protocols string) int64 {
 		cfg.Header = http.Header{}
 		cfg.Header.Set("User-Agent", t.UserAgent())
 		httpURL := strings.Replace(rawurl, "ws", "http", 1)
-		if ck := t.Context().JarRef().ForURL(httpURL); ck != "" {
+		if ck := t.Context().jar.Header(httpURL, t.cookieScopeFor(httpURL, KindXHR).query(false)); ck != "" {
 			cfg.Header.Set("Cookie", ck)
 		}
 		t.touchNet()

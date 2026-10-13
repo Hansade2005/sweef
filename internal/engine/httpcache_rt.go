@@ -37,7 +37,8 @@ func (c *cacheRT) CloseIdleConnections() {
 	}
 }
 
-func (c *cacheRT) RoundTrip(req *http.Request) (*http.Response, error) {
+// roundTrip is RoundTrip without the cookie layer (cookie_rt.go).
+func (c *cacheRT) roundTrip(req *http.Request) (*http.Response, error) {
 	mi, _ := req.Context().Value(meterKey).(*meterInfo)
 	if mi == nil || mi.t == nil || c.cache == nil { // context-level requests (APIRequestContext) never use the browser cache
 		return c.base.RoundTrip(req)
@@ -49,7 +50,7 @@ func (c *cacheRT) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Method != http.MethodGet {
 		res, err := c.base.RoundTrip(req)
 		if err == nil && res.StatusCode < 400 && unsafeMethod(req.Method) {
-			key, persist := c.cache.key(mi.c, req.URL.String(), "")
+			key, persist := mi.t.cacheKeyKind(req.URL.String(), "", mi.kind)
 			c.cache.drop(key, persist)
 		}
 		return res, err
@@ -60,7 +61,7 @@ func (c *cacheRT) RoundTrip(req *http.Request) (*http.Response, error) {
 		return c.base.RoundTrip(req)
 	}
 	rng := req.Header.Get("Range")
-	key, persist := c.cache.key(mi.c, req.URL.String(), rng)
+	key, persist := mi.t.cacheKeyKind(req.URL.String(), rng, mi.kind)
 	in := lifetimeInput{kind: mi.kind, rawURL: req.URL.String(), extend: mi.pol.ExtendCache}
 
 	var e *cacheEntry

@@ -108,6 +108,7 @@ func (m *swManager) startRuntime(w *swWorker) (*swRuntime, error) {
 	t.ctx = m.c
 	t.sw.noNav = true
 	t.url = parseURLQuiet(w.scriptURL)
+	t.bc = partCtxFor(w.reg.origin)
 	doc, err := fnet.ParseDocument(emptyWorkerDoc, w.scriptURL)
 	if err != nil {
 		return nil, err

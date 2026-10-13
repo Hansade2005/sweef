@@ -81,16 +81,36 @@ func schemefulSite(raw string) string {
 func (t *Tab) topLevelSite() string {
 	if bc := t.bc; bc != nil && bc.topSite != "" {
 		if bc.top != nil {
-			if s := schemefulSite(bc.top.URL()); s != "" {
-				return s
-			}
+			return bc.top.topLevelSite()
 		}
 		return bc.topSite
+	}
+	// while a navigation is under way the requests of the document being loaded already belong to its site
+	if p := t.navSite.Load(); p != nil && *p != "" {
+		return *p
 	}
 	return schemefulSite(t.URL())
 }
 
-func (t *Tab) crossAncestor() bool { return t.bc != nil && t.bc.crossAnc }
+// setNavSite records the site of the document a navigation is loading ("" = none).
+func (t *Tab) setNavSite(rawurl string) {
+	s := ""
+	if rawurl != "" {
+		s = schemefulSite(rawurl)
+	}
+	t.navSite.Store(&s)
+}
+
+// crossAncestor: some ancestor frame of this document is on another site than the document itself.
+func (t *Tab) crossAncestor() bool {
+	if t.bc == nil {
+		return false
+	}
+	if t.bc.isFrame {
+		return t.ancestorsCrossSite(schemefulSite(t.docOrigin()))
+	}
+	return t.bc.crossAnc
+}
 
 // thirdPartyContext reports whether the tab's own document is embedded under a different site than its own, or
 // under a chain of ancestors that includes one.
@@ -121,8 +141,8 @@ func partitionedKey(origin, topSite string, crossAnc bool) string {
 		return origin
 	}
 	k := origin + "^top=" + topSite
-	if crossAnc {
-		k += "^xa"
+	if crossAnc && schemefulSite(origin) == topSite {
+		k += "^xa" // A embeds B embeds A: the inner A shares neither A's first-party state nor B's
 	}
 	return k
 }
@@ -176,19 +196,24 @@ type PartitionPolicy struct {
 	// the request or document; returning true gives that pair unpartitioned cookie access (the first-party jar).
 	// It runs on the request path and must be fast and safe for concurrent use.
 	Exception func(topSite, embeddedSite string) bool
+	// StorageAccess decides document.requestStorageAccess() from a third-party document: it is told the two
+	// sites and whether the person has interacted with embeddedSite as a top-level page in this context.
+	// nil = grant exactly when they have (the interaction heuristic of Safari and Firefox).
+	StorageAccess func(topSite, embeddedSite string, interacted bool) bool
 }
 
 type partState struct {
-	mu     sync.RWMutex
-	pol    PartitionPolicy
-	grants map[[2]string]bool // (topSite, embeddedSite) pairs that were granted unpartitioned cookie access
+	mu         sync.RWMutex
+	pol        PartitionPolicy
+	grants     map[[2]string]bool // (topSite, embeddedSite) pairs that were granted unpartitioned cookie access
+	interacted map[string]bool    // sites the person has used as a top-level page in this context
 }
 
 func (c *BrowserContext) partitions() *partState {
 	if p := c.part.Load(); p != nil {
 		return p
 	}
-	p := &partState{grants: map[[2]string]bool{}}
+	p := &partState{grants: map[[2]string]bool{}, interacted: map[string]bool{}}
 	if !c.part.CompareAndSwap(nil, p) {
 		return c.part.Load()
 	}
@@ -257,4 +282,256 @@ func (j *jsVM) webStorageKey() (string, error) {
 		return "", jsErr("SecurityError", "Failed to read the 'localStorage' property from 'Window': Access is denied for this document.")
 	}
 	return t.storageKeyFor(o), nil
+}
+
+// keyOrigin is the origin part of a storage key.
+func keyOrigin(key string) string {
+	o, _, _ := splitStorageKey(key)
+	return o
+}
+
+// partCtxFor is the browsing context a hidden tab (a service worker, the fetcher of a worker script) carries for a
+// storage key: nil for a first-party key.
+func partCtxFor(key string) *browsingCtx {
+	o, top, partitioned := splitStorageKey(key)
+	if !partitioned {
+		return nil
+	}
+	return &browsingCtx{topSite: top, crossAnc: strings.HasSuffix(key, "^xa"), inherit: o}
+}
+
+// keyForURL is the storage key a document loaded from rawurl would have in this tab. A top-level tab is the
+// first party of whatever it loads; a frame or worker keeps the top-level site of the page it belongs to.
+func (t *Tab) keyForURL(raw string) string {
+	o := siteOriginOf(raw)
+	if o == "" {
+		return ""
+	}
+	switch {
+	case t.bc == nil:
+		return o
+	case t.bc.isFrame:
+		return partitionedKey(o, t.topLevelSite(), t.ancestorsCrossSite(schemefulSite(o)))
+	}
+	return partitionedKey(o, t.bc.topSite, t.bc.crossAnc)
+}
+
+// ancestorsCrossSite reports whether some ancestor frame is on a site other than site (an opaque ancestor counts).
+func (t *Tab) ancestorsCrossSite(site string) bool {
+	if t.bc == nil || !t.bc.isFrame {
+		return t.bc != nil && t.bc.crossAnc
+	}
+	for p := t.bc.parent; p != nil; {
+		if s := schemefulSite(p.docOrigin()); s == "" || s != site {
+			return true
+		}
+		if !p.isFrame() {
+			break
+		}
+		p = p.bc.parent
+	}
+	return false
+}
+
+// ---- cookies ----------------------------------------------------------------------------------------------
+
+// cookieScope is what a request or a document may do with cookies, decided from its place in the page tree.
+type cookieScope struct {
+	unpart   bool   // may read and write the unpartitioned jar
+	part     string // the partition for partitioned cookies: the top-level site
+	cross    bool   // cross-site context: only SameSite=None cookies are sent or accepted
+	onlyPart bool   // third party under CookiesBlocked: only cookies with the Partitioned attribute are kept
+}
+
+func (s cookieScope) query(script bool) cookieQuery {
+	return cookieQuery{Unpart: s.unpart, Partition: s.part, Script: script, Cross: s.cross}
+}
+
+// cookieScopeFor decides the cookie scope of a request to rawurl made on behalf of this tab. A top-level
+// navigation is first-party whatever the URL (and so is every redirect hop of it); anything else is first-party
+// when its site is the top-level site and no ancestor frame is on another site, third-party otherwise.
+func (t *Tab) cookieScopeFor(rawurl string, kind DataKind) cookieScope {
+	site := schemefulSite(rawurl)
+	if site == "" {
+		return cookieScope{unpart: true}
+	}
+	top := t.topLevelSite()
+	if t.bc == nil && (kind == KindDocument || top == "") {
+		// a navigation, and a page without a site of its own (about:blank, data:), have nothing to partition by
+		top = site
+	}
+	if site == top && !t.ancestorsCrossSite(site) {
+		return cookieScope{unpart: true, part: top}
+	}
+	c := t.Context()
+	sc := cookieScope{part: top, cross: true}
+	if c.PartitionPolicy().Cookies == CookiesAllowed { // the opt-out: third-party cookies behave as they always did
+		return cookieScope{unpart: true, part: top}
+	}
+	if c.unpartitionedFor(top, site) {
+		sc.unpart = true
+		return sc
+	}
+	sc.onlyPart = c.PartitionPolicy().Cookies == CookiesBlocked
+	return sc
+}
+
+// place chooses where a cookie goes under this scope ("" = the unpartitioned jar) and whether it is accepted.
+func (s cookieScope) place(c *Cookie) (string, bool) {
+	if s.cross && c.SameSite != 3 {
+		return "", false // SameSite=Lax/Strict (and the default) cookies are not accepted from a cross-site context
+	}
+	if c.Partitioned {
+		if s.part == "" {
+			return "", true
+		}
+		return s.part, true
+	}
+	if s.unpart {
+		return "", true
+	}
+	if s.onlyPart {
+		return "", false
+	}
+	return s.part, true
+}
+
+// documentCookieURL is the URL whose cookies document.cookie sees: the document's URL, or for about:blank and
+// srcdoc frames the URL of the origin they inherit. "" = no cookie access (opaque origin).
+func (t *Tab) documentCookieURL() string {
+	u := t.URL()
+	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+		if t.docOrigin() == "" {
+			return "" // sandboxed without allow-same-origin
+		}
+		return u
+	}
+	if o := t.docOrigin(); o != "" {
+		return o + "/"
+	}
+	return ""
+}
+
+// DocumentCookie is the string document.cookie returns for the tab's document.
+func (t *Tab) DocumentCookie() string {
+	u := t.documentCookieURL()
+	if u == "" {
+		return ""
+	}
+	return t.Context().jar.Header(u, t.cookieScopeFor(u, KindXHR).query(true))
+}
+
+// SetDocumentCookie is the document.cookie setter.
+func (t *Tab) SetDocumentCookie(raw string) {
+	u := t.documentCookieURL()
+	if u == "" {
+		return
+	}
+	c := parseCookie(raw, t.eng.now())
+	if c == nil || c.HttpOnly { // a script cannot create an HttpOnly cookie
+		return
+	}
+	t.Context().storeCookie(c, hostOf(u), t.cookieScopeFor(u, KindXHR))
+}
+
+// storeCookie files a parsed Set-Cookie of a response from host (or a document.cookie assignment).
+func (c *BrowserContext) storeCookie(ck *Cookie, host string, sc cookieScope) {
+	if ck.Domain == "" {
+		ck.Domain = host
+	}
+	ck.Domain = strings.TrimPrefix(strings.ToLower(ck.Domain), ".")
+	// a cookie may only name its own host or a parent domain of it
+	if h := strings.ToLower(host); ck.Domain != h && !strings.HasSuffix(h, "."+ck.Domain) {
+		return
+	}
+	pk, ok := sc.place(ck)
+	if !ok {
+		return
+	}
+	ck.Partition = pk
+	c.jar.Set(ck)
+}
+
+// cacheKey is the HTTP cache key of a sub-resource request of this tab: the URL under the top-level site.
+func (t *Tab) cacheKey(rawurl, rng string) (string, bool) {
+	return t.cacheKeyKind(rawurl, rng, KindOther)
+}
+
+// cacheKeyKind is cacheKey for a request of the given kind: a top-level document is cached under its own site.
+func (t *Tab) cacheKeyKind(rawurl, rng string, kind DataKind) (string, bool) {
+	top := t.topLevelSite()
+	if t.bc == nil && kind == KindDocument {
+		top = schemefulSite(rawurl)
+	}
+	return t.eng.res.keyTop(t.Context(), top, rawurl, rng)
+}
+
+// secureContext: https, a loopback address, or a document that inherits such an origin (about:blank, srcdoc).
+func (t *Tab) secureContext() bool {
+	if potentiallyTrustworthy(t.URL()) {
+		return true
+	}
+	o := t.docOrigin()
+	return o != "" && potentiallyTrustworthy(o)
+}
+
+// noteInteraction records that the person used a top-level page of site (a click, a key press).
+func (c *BrowserContext) noteInteraction(site string) {
+	if site == "" {
+		return
+	}
+	ps := c.partitions()
+	ps.mu.RLock()
+	seen := ps.interacted[site]
+	ps.mu.RUnlock()
+	if seen {
+		return
+	}
+	ps.mu.Lock()
+	ps.interacted[site] = true
+	ps.mu.Unlock()
+}
+
+// hasStorageAccess: a document that is not in a third-party context, or has been granted unpartitioned cookies.
+func (t *Tab) hasStorageAccess() bool {
+	if t.bc == nil {
+		return true
+	}
+	site := schemefulSite(t.docOrigin())
+	if site == "" {
+		return false
+	}
+	top := t.topLevelSite()
+	if site == top && !t.crossAncestor() {
+		return true
+	}
+	return t.Context().unpartitionedFor(top, site)
+}
+
+// requestStorageAccess implements document.requestStorageAccess(): nil = granted (cookies of the embedded site are
+// now unpartitioned under this top-level site), or the reason it was refused.
+func (t *Tab) requestStorageAccess() error {
+	if t.hasStorageAccess() {
+		return nil
+	}
+	if t.docOrigin() == "" {
+		return jsErr("NotAllowedError", "requestStorageAccess not allowed: the document has an opaque origin.")
+	}
+	if sb := t.bc.sandbox; sb&sbSandboxed != 0 && sb&sbStorageAccess == 0 {
+		return jsErr("NotAllowedError", "requestStorageAccess not allowed: the frame is sandboxed without allow-storage-access-by-user-activation.")
+	}
+	site, top, c := schemefulSite(t.docOrigin()), t.topLevelSite(), t.Context()
+	ps := c.partitions()
+	ps.mu.RLock()
+	interacted, decide := ps.interacted[site], ps.pol.StorageAccess
+	ps.mu.RUnlock()
+	grant := interacted
+	if decide != nil {
+		grant = decide(top, site, interacted)
+	}
+	if !grant {
+		return jsErr("NotAllowedError", "requestStorageAccess not allowed: storage access was not granted for this embed.")
+	}
+	c.GrantThirdPartyCookies(top, site)
+	return nil
 }

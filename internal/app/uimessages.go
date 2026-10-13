@@ -346,6 +346,11 @@ func (a *App) onSetting(key string, v any) {
 	switch key {
 	case "privacy.trackers", "privacy.gpc", "privacy.httpsUpgrade", "privacy.thirdPartyCookies", "privacy.trimReferrer":
 		a.priv.Update(a.privacySettings())
+		a.applyCookiePolicy(a.eng.DefaultContext())
+		a.mu.Lock()
+		ic := a.incogCtx
+		a.mu.Unlock()
+		a.applyCookiePolicy(ic)
 		hdr := a.priv.Headers()
 		a.mu.Lock()
 		for _, e := range a.pages {

@@ -163,6 +163,8 @@ type Tab struct {
 	wk    *bgWorker    // set on the hidden tab of a worker (workers.go)
 	fr    frameSet     // child frames of the document and, for a frame, its pump (frames.go)
 
+	navSite atomic.Pointer[string] // schemeful site of the document being loaded (partition.go)
+
 	asyncImg   atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
 	imgSem     chan struct{}             // images fetched at once
 	preloadSem chan struct{}             // requests the preload scanner has in flight
@@ -293,6 +295,10 @@ func (t *Tab) navigate(rawurl string, headers map[string]string, progressive boo
 	t.resetDataForNavigation()
 	t.resetTrace()
 	t0 := time.Now()
+	if t.bc == nil {
+		t.setNavSite(u.String())
+		defer t.setNavSite("") // however it ends, the document's own URL is the page again
+	}
 	res, err := t.fetch(u, headers)
 	t.tspan("doc.fetch", u.String(), t0)
 	if errors.Is(err, errDownloaded) {
@@ -388,10 +394,6 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		for k, v := range hdrs {
 			req.Header.Set(k, v)
 		}
-		// context cookie jar takes precedence over the shared transport jar
-		if ck := t.Context().JarRef().ForURL(target); ck != "" {
-			req.Header.Set("Cookie", ck)
-		}
 		pol := t.policy()
 		rec.Headers = flattenHeaders(req.Header)
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
@@ -417,6 +419,9 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		if res.Request != nil && res.Request.URL != nil {
 			finalURL = res.Request.URL.String()
 		}
+		if t.bc == nil {
+			t.setNavSite(finalURL) // a redirect may have moved the document to another site
+		}
 		b, err = readWithPreloadScan(t, io.LimitReader(res.Body, limit), finalURL)
 	} else {
 		b, err = io.ReadAll(io.LimitReader(res.Body, limit))
@@ -425,15 +430,6 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		return nil, err
 	}
 	body = b
-	// persist Set-Cookie into the tab's context jar
-	for _, sc := range res.Header.Values("Set-Cookie") {
-		if c := parseCookie(sc, t.eng.now()); c != nil {
-			if c.Domain == "" {
-				c.Domain = hostOf(target)
-			}
-			t.Context().JarRef().Set(c)
-		}
-	}
 	rec.Status = res.StatusCode
 	rec.FinalURL = target
 	if res.Request != nil && res.Request.URL != nil {
@@ -804,9 +800,6 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	for k, v := range t.ExtraHeaders() {
 		req.Header.Set(k, v)
 	}
-	if ck := t.Context().JarRef().ForURL(rawurl); ck != "" {
-		req.Header.Set("Cookie", ck)
-	}
 	rec := fnet.RequestRecord{Method: "POST", URL: rawurl, Headers: flattenHeaders(req.Header)}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 	start := time.Now()
@@ -818,14 +811,6 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
-	for _, sc := range res.Header.Values("Set-Cookie") {
-		if c := parseCookie(sc, t.eng.now()); c != nil {
-			if c.Domain == "" {
-				c.Domain = res.Request.URL.Hostname()
-			}
-			t.Context().JarRef().Set(c)
-		}
-	}
 	rec.Status = res.StatusCode
 	rec.FinalURL = res.Request.URL.String()
 	rec.DurationMs = time.Since(start).Milliseconds()

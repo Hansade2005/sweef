@@ -289,5 +289,13 @@ func (h *frHost) fns() map[string]hostFn {
 			return nil, nil
 		},
 		"frName": func(a []any) (any, error) { return h.me().windowName(), nil },
+		// ---- Storage Access API ----
+		"saHas": func(a []any) (any, error) { return h.me() != nil && h.me().hasStorageAccess(), nil },
+		"saRequest": func(a []any) (any, error) {
+			if h.me() == nil {
+				return nil, jsErr("NotAllowedError", "no document")
+			}
+			return nil, h.me().requestStorageAccess()
+		},
 	}
 }

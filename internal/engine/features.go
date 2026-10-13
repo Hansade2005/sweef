@@ -459,9 +459,6 @@ func (t *Tab) DownloadURL(rawurl, name string) (Download, error) {
 		for k, v := range hdrs {
 			req.Header.Set(k, v)
 		}
-		if ck := t.Context().JarRef().ForURL(outURL); ck != "" {
-			req.Header.Set("Cookie", ck)
-		}
 		t.touchNet()
 		req, _ = withMeter(req, t.Context(), t, KindOther, t.policy())
 		if resp, err = t.eng.clientFor(t.Context()).Do(req); err != nil {

@@ -166,6 +166,7 @@ type meterInfo struct {
 	pol  DataPolicy
 
 	// final hop, written by meterRT
+	noCreds  bool         // the request carries no cookies and keeps none (CORS without credentials)
 	maxBody  int64        // transfer-size cap of the request (0 = none), set before the request is made
 	declared atomic.Int64 // Content-Length as received (transfer size), -1 unknown
 	hdrBytes atomic.Int64

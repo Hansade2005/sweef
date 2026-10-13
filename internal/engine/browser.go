@@ -13,8 +13,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/net/publicsuffix"
 )
 
 // BrowserContext is the Playwright unit of isolation: its own cookie jar,
@@ -357,15 +355,36 @@ func (c *BrowserContext) ClearStorage(origin string) {
 		c.state = map[string]any{}
 		return
 	}
-	delete(c.state, origin)
+	for k := range c.state {
+		if keyMatches(k, origin) { // the origin's own bucket and the buckets of its partitions
+			delete(c.state, k)
+		}
+	}
 }
 
-// ClearCookies drops all or matching-name cookies.
+// ClearCookies drops the cookies called name, or every cookie (partitions included) when name is empty.
 func (c *BrowserContext) ClearCookies(name string) {
-	all := c.jar.All("")
+	if name == "" {
+		c.jar.Replace(nil)
+		return
+	}
 	var keep []*Cookie
-	for _, ck := range all {
-		if name != "" && ck.Name == name {
+	for _, ck := range c.jar.All("") {
+		if ck.Name == name {
+			continue
+		}
+		keep = append(keep, ck)
+	}
+	c.jar.Replace(keep)
+}
+
+// clearPartitionedCookies drops the cookies kept under a top-level site, and those of the site itself, for the
+// given origin ("" = every partition; the unpartitioned jar is ClearCookies' business).
+func (c *BrowserContext) clearPartitionedCookies(origin string) {
+	site, host := schemefulSite(origin), siteOf(hostOf(origin))
+	var keep []*Cookie
+	for _, ck := range c.jar.All("") {
+		if ck.Partition != "" && (origin == "" || ck.Partition == site || siteOf(ck.Domain) == host) {
 			continue
 		}
 		keep = append(keep, ck)
@@ -434,9 +453,6 @@ func (c *BrowserContext) Fetch(method, urlStr string, headers map[string]string,
 	if u := c.options.HTTPCredentials; u != nil {
 		req.SetBasicAuth(u[0], u[1])
 	}
-	if ck := c.jar.ForURL(urlStr); ck != "" {
-		req.Header.Set("Cookie", ck)
-	}
 	req, _ = withMeter(req, c, nil, KindXHR, c.policy())
 	resp, err := c.eng.clientFor(c).Do(req)
 	if err != nil {
@@ -448,14 +464,6 @@ func (c *BrowserContext) Fetch(method, urlStr string, headers map[string]string,
 	for k, vs := range resp.Header {
 		if len(vs) > 0 {
 			hdr[k] = vs[0]
-		}
-	}
-	// persist Set-Cookie like a real context would
-	for _, sc := range resp.Header.Values("Set-Cookie") {
-		if ck := parseCookie(sc, c.eng.now()); ck != nil {
-			host, _ := publicsuffix.EffectiveTLDPlusOne(hostOf(urlStr))
-			ck.Domain = host
-			c.jar.Set(ck)
 		}
 	}
 	return resp.StatusCode, hdr, string(data), nil

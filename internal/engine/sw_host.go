@@ -43,11 +43,14 @@ type swHost struct{ j *jsVM }
 
 func (h *swHost) mgr() *swManager { return h.j.tab.Context().sw() }
 
+// origin is the storage key of the calling document (origin, plus top-level site when embedded): registrations
+// are kept per key, so an embed's worker under site A is not the one it has under site B.
 func (h *swHost) origin() string {
-	if h.j.tab == nil {
+	t := h.j.tab
+	if t == nil {
 		return ""
 	}
-	return siteOriginOf(h.j.tab.URL())
+	return t.storageKeyFor(t.docOrigin())
 }
 
 func (h *swHost) available() bool {
@@ -88,7 +91,7 @@ func (m *swManager) regByID(id string) *swReg {
 func (m *swManager) clientsOfLocked(origin string) []*swClient {
 	var out []*swClient
 	for _, c := range m.clients {
-		if siteOriginOf(c.url) == origin {
+		if c.key == origin {
 			out = append(out, c)
 		}
 	}
@@ -131,11 +134,11 @@ func (h *swHost) fns() map[string]hostFn {
 				return nil, nil
 			}
 			u := argS(a, 0)
-			if siteOriginOf(u) != h.origin() {
+			if siteOriginOf(u) != h.j.tab.docOrigin() {
 				return nil, &swError{"SecurityError", "Failed to get a ServiceWorkerRegistration: The URL provided ('" + u + "') is not under this origin."}
 			}
 			m := h.mgr()
-			reg := m.lookup(u)
+			reg := m.lookup(h.origin(), u)
 			if reg == nil {
 				return nil, nil
 			}
@@ -174,8 +177,9 @@ func (h *swHost) fns() map[string]hostFn {
 				return nil, err
 			}
 			m := h.mgr()
+			key := h.origin()
 			m.goJob(func() {
-				snap, err := m.register(scriptURL, scope, typ, uvc)
+				snap, err := m.register(key, scriptURL, scope, typ, uvc)
 				if err != nil {
 					pushSW(j, errToResult(token, err))
 					return
@@ -293,7 +297,7 @@ func (h *swHost) fns() map[string]hostFn {
 			m := h.mgr()
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			if c := m.clients[argS(a, 0)]; c != nil && siteOriginOf(c.url) == rt.w.reg.origin {
+			if c := m.clients[argS(a, 0)]; c != nil && c.key == rt.w.reg.origin {
 				return clientDesc(c), nil
 			}
 			return nil, nil
@@ -413,10 +417,10 @@ func (m *swManager) claim(reg *swReg) {
 	}
 	var changed []change
 	for _, c := range m.clients {
-		if c.reg == reg || siteOriginOf(c.url) != reg.origin {
+		if c.reg == reg || c.key != reg.origin {
 			continue
 		}
-		if m.lookupLocked(c.url) != reg {
+		if m.lookupLocked(c.key, c.url) != reg {
 			continue
 		}
 		changed = append(changed, change{c, c.reg})
