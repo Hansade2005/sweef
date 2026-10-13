@@ -118,22 +118,26 @@
       prev = el;
     });
     Object.keys(tabEls).forEach(function (id) { if (!seen[id]) { var e = tabEls[id]; if (e.parentNode) e.parentNode.removeChild(e); delete tabEls[id]; } });
-    sizeTabs();
   }
-  var lastN = -1, lastW = -1;
+  /* The tab width depends on the tab count, the window width and the window controls. It is measured (a layout read)
+     only when one of those changed, and after every other write of a render pass: a read in the middle of the writes
+     makes the engine run style + layout again for each of them. */
+  var lastN = -1, lastW = -1, lastQ = "";
   function sizeTabs() {
     var s = st(), tabs = s.tabs || [], pinned = tabs.filter(function (t) { return t.pinned; }).length, n = tabs.length - pinned;
+    var q = n + "|" + pinned + "|" + window.innerWidth + "|" + (document.documentElement.getAttribute("data-maximized") || "") + "|" + (document.documentElement.getAttribute("data-platform") || "");
+    if (q === lastQ && lastN !== -1) return;
     var sw = E.strip.clientWidth || window.innerWidth;
     var fixed = (E.strip.firstChild.offsetWidth || 0) + 34 + 34 + $("wc").offsetWidth + 64 + 16;
     var avail = Math.max(120, sw - fixed), tw = n ? SW.clamp(Math.floor((avail - pinned * 40) / n) - 2, MINW, MAXW) : MAXW;
-    var key = n + "|" + tw + "|" + pinned + "|" + sw; if (key === lastN) return; lastN = key;
+    lastQ = q; var key = n + "|" + tw + "|" + pinned + "|" + sw; if (key === lastN) return; lastN = key;
     E.tabs.style.setProperty("--tw", tw + "px"); E.wrap.style.maxWidth = avail + "px";
     E.wrap.classList.toggle("ovf", n * (tw + 2) + pinned * 40 > avail);
     Object.keys(tabEls).forEach(function (id) { var e = tabEls[id]; e.classList.toggle("narrow", tw < 130); e.classList.toggle("tiny", tw < 70); });
     SW.raf(function () { tsc.refresh(); var a = tabEls[s.active]; if (a) tsc.reveal(a); });
   }
   var tsc = SW.chrome.tsc = SW.scroller(E.wrap, E.tabs, { horizontal: true, noThumb: true });
-  window.addEventListener("resize", function () { lastN = -1; sizeTabs(); reportLayout(); });
+  window.addEventListener("resize", function () { lastN = -1; lastQ = ""; sizeTabs(); reportLayout(); });
 
   var drag = null;
   E.tabs.addEventListener("mousedown", function (e) {
@@ -420,6 +424,7 @@
     renderTabs(); renderToolbar(); applyLayout(); renderInc();
     var s = st(), mx = s.window && s.window.maximized ? "1" : ""; if (mx) document.documentElement.setAttribute("data-maximized", "1"); else document.documentElement.removeAttribute("data-maximized");
     var mxb = $("wc").querySelector(".mx"); if (mxb && mxb._m !== !!mx) { mxb._m = !!mx; SW.clear(mxb); mxb.appendChild(icon(mx ? "restore" : "maxi", 14)); mxb.setAttribute("aria-label", mx ? S.win.restore : S.win.max); }
+    sizeTabs();
     reportLayout();
     if (first && (s.tabs || []).length) { first = false; }
   });

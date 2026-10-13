@@ -193,11 +193,11 @@ func Scenarios() []Scenario {
 	add(Scenario{Name: "data-popover-exhausted", Page: "chrome/index.html", W: 1280, H: 800, State: dsOut, Backdrop: "article", Setup: pop})
 	add(Scenario{Name: "data-popover-nolimit", Page: "chrome/index.html", W: 1280, H: 800, State: dsFree, Backdrop: "article", Setup: pop})
 	add(Scenario{Name: "data-chip-toast-light", Page: "chrome/index.html", W: 1280, H: 800, State: dsWarn, Backdrop: "article",
-		Setup: `SW.chrome.toast({text:"You have used 70% of your 100 MB this month. 22 MB left.",kind:"info",action:{label:"Switch to Text first",type:"data.setLevel",payload:{level:"strict"}}});`})
+		Setup: holdToast(`SW.chrome.toast({text:"You have used 70% of your 100 MB this month. 22 MB left.",kind:"info",action:{label:"Switch to Text first",type:"data.setLevel",payload:{level:"strict"}}});`)})
 	add(Scenario{Name: "data-chip-toast-dark", Page: "chrome/index.html", W: 1280, H: 800, State: dsWarn2, Backdrop: "article",
-		Setup: `SW.chrome.toast({text:"About 7 MB left this month. It resets in 19 days.",kind:"warn"});`})
+		Setup: holdToast(`SW.chrome.toast({text:"About 7 MB left this month. It resets in 19 days.",kind:"warn"});`)})
 	add(Scenario{Name: "data-chip-exhausted", Page: "chrome/index.html", W: 1280, H: 800, State: dsOut, Backdrop: "article",
-		Setup: `SW.chrome.toast({text:"You have used your 100 MB this month. It resets in 19 days.",kind:"warn",action:{label:"Raise limit",type:"tab.new",payload:{url:"sweef://settings#data"}}});`})
+		Setup: holdToast(`SW.chrome.toast({text:"You have used your 100 MB this month. It resets in 19 days.",kind:"warn",action:{label:"Raise limit",type:"tab.new",payload:{url:"sweef://settings#data"}}});`)})
 	add(Scenario{Name: "data-settings-light", Page: "settings/index.html", Query: "?s=data", W: 1280, H: 2000, State: dsLight})
 	add(Scenario{Name: "data-settings-dark", Page: "settings/index.html", Query: "?s=data", W: 1280, H: 2000, State: dsDark})
 	add(Scenario{Name: "data-settings-incognito", Page: "settings/index.html", Query: "?s=data", W: 1280, H: 2000, State: dsInc})
@@ -245,4 +245,11 @@ func dataFree() M {
 	d["budget"] = M{"enabled": false, "limitMB": 100, "period": "month", "resetDay": 1, "warnAt": []int{70, 90}, "hardStop": false, "usedMB": 41.3, "leftMB": 0, "pct": 0, "resetsInDays": 19, "resetsOn": "2026-11-01", "exhausted": false, "usedBytes": 43_300_000, "limitBytes": 0}
 	d["used"] = 43_300_000
 	return d
+}
+
+// holdToast runs js (which shows a toast) with the toast's dismiss timer disabled: a toast times out on the wall
+// clock, so a scenario that keeps stepping for a few seconds (the paint golden test types into the omnibox
+// afterwards) would lose it at a different step depending on how fast the machine is.
+func holdToast(js string) string {
+	return `(function(st){window.setTimeout=function(f,d){if(d>=3000)return 0;return st.apply(this,arguments)};try{` + js + `}finally{window.setTimeout=st}})(window.setTimeout);`
 }

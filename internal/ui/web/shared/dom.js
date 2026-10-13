@@ -37,7 +37,14 @@
   SW.clamp = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
   SW.raf = function (f) { return (window.requestAnimationFrame || function (g) { return setTimeout(g, 16); })(f); };
   SW.debounce = function (f, ms) { var t; return function () { var a = arguments, s = this; clearTimeout(t); t = setTimeout(function () { f.apply(s, a); }, ms); }; };
-  SW.schedule = function (f) { var p = false; return function () { if (p) return; p = true; SW.raf(function () { p = false; f(); }); }; };
+  /* coalesce calls into one run. In the GUI host (sweef.sync) the run is a microtask: the host settles the page
+     right after every message and paints once, so waiting for a 16 ms animation frame timer only delays pixels. */
+  var micro = window.queueMicrotask ? function (f) { window.queueMicrotask(f); } : function (f) { Promise.resolve().then(f); };
+  SW.schedule = function (f) {
+    var p = false, sync = !!(window.sweef && window.sweef.sync);
+    function run() { p = false; if (sync) { try { f(); } catch (e) { console.error("render: " + (e && e.stack || e)); } } else f(); }
+    return function () { if (p) return; p = true; if (sync) micro(run); else SW.raf(run); };
+  };
 
   /* urls */
   SW.host = function (u) { try { var m = /^[a-z][\w+.-]*:\/\/([^\/?#]*)/i.exec(u || ""); return m ? m[1].replace(/^www\./, "") : (u || ""); } catch (e) { return u || ""; } };

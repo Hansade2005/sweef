@@ -29,7 +29,7 @@ const (
 	// which about 9 KB are copy in strings.js). The chrome page's eager set went from about 122 KB to
 	// about 134 KB: the meter chip is eager (tiny), the popover is lazy, and the copy deck is shared.
 	budgetPage  = 150 * 1024
-	budgetTotal = 295 * 1024
+	budgetTotal = 315 * 1024 // raised from 295: brand marks for the import cards (Simple Icons paths, about 16 KB, loaded only by the onboarding page)
 )
 
 // pageWeight sums the JS and CSS an HTML page loads eagerly.
@@ -948,5 +948,72 @@ func TestNewTabDataLineAndSidekickResearchLine(t *testing.T) {
 		if e := x.Errors(); len(e) > 0 {
 			t.Errorf("errors: %v", e)
 		}
+	}
+}
+
+// The dropdown is patched in place: a keystroke must not rebuild the rows, and the selection moves by
+// class names alone.
+func TestOmniboxRowsPatchedInPlace(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.open("chrome-light-empty")
+	r.run(s, typeInto)
+	r.run(s, `__type(document.getElementById('url'),'gith')`)
+	r.run(s, `window.__rows=SW.$$('#od .orow'); window.__foot=SW.$('#od .ofoot'); __type(document.getElementById('url'),'githu')`)
+	same := evalS(t, s, `(function(){var n=SW.$$('#od .orow'); return n.length===window.__rows.length && n.every(function(e,i){return e===window.__rows[i]}) && SW.$('#od .ofoot')===window.__foot})()`)
+	if same != true {
+		t.Errorf("a keystroke rebuilt the rows instead of patching them")
+	}
+	if v := evalS(t, s, `SW.$$('#od .orow .ot').map(function(e){return e.textContent}).join('|')`).(string); !strings.Contains(v, "githu") || strings.Contains(v, "gith|") {
+		t.Errorf("row text not updated: %q", v)
+	}
+	// ArrowDown moves .sel (and aria-selected, aria-activedescendant) without touching the nodes
+	r.run(s, `__key(document.getElementById('url'),'ArrowDown')`)
+	v := evalS(t, s, `(function(){var n=SW.$$('#od .orow'); return n.map(function(e){return e.className.indexOf('sel')>=0?1:0}).join('')+'/'+n.map(function(e){return e.getAttribute('aria-selected')}).join(',')+'/'+(document.getElementById('url').getAttribute('aria-activedescendant')===n[1].id)+'/'+n.every(function(e,i){return e===window.__rows[i]})})()`).(string)
+	if v != "01/false,true/true/true" {
+		t.Errorf("selection after ArrowDown: %s", v)
+	}
+	// closing and reopening keeps working
+	r.run(s, `__type(document.getElementById('url'),'')`)
+	r.run(s, `__type(document.getElementById('url'),'git')`)
+	if n := evalS(t, s, `SW.$$('#od .orow').length`).(float64); n < 2 {
+		t.Errorf("dropdown did not reopen: %v rows", n)
+	}
+	if errs := s.Errors(); len(errs) > 0 {
+		t.Errorf("errors: %v", errs)
+	}
+}
+
+// A host that sets sweef.sync answers omni.input inside the same event turn: the rows are built once, from the
+// answer (or from {stale:true} when the host could not answer in time), not once before and once after it.
+func TestOmniboxWaitsForSyncHost(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.open("chrome-light-empty")
+	r.run(s, typeInto)
+	r.run(s, `sweef.sync=true; window.__builds=0; __type(document.getElementById('url'),'gi')`)
+	r.run(s, `var inst=SW.omniLast; var rb=Object.getPrototypeOf(inst).rebuild; Object.getPrototypeOf(inst).rebuild=function(){window.__builds++;return rb.apply(this,arguments)}; __type(document.getElementById('url'),'git')`)
+	if n := evalS(t, s, `window.__builds`).(float64); n != 0 {
+		t.Fatalf("rows built %v times before the host answered", n)
+	}
+	r.run(s, `__send('omni.suggestions',{id:SW.omniSeq,items:[{type:'history',title:'GitHub',url:'https://github.com/'}]})`)
+	if n := evalS(t, s, `window.__builds`).(float64); n != 1 {
+		t.Fatalf("rows built %v times for one answer", n)
+	}
+	if !strings.Contains(evalS(t, s, `SW.$('#od').textContent`).(string), "GitHub") {
+		t.Errorf("the answer did not reach the dropdown")
+	}
+	// a stale reply shows what there is, once
+	r.run(s, `__type(document.getElementById('url'),'gitl'); __send('omni.suggestions',{id:SW.omniSeq,stale:true})`)
+	if n := evalS(t, s, `window.__builds`).(float64); n != 2 {
+		t.Errorf("stale reply: rows built %v times in total, want 2", n)
+	}
+	if !strings.Contains(evalS(t, s, `SW.$('#od').textContent`).(string), "gitl") {
+		t.Errorf("stale reply did not render the typed text")
+	}
+	// the late real answer for that request is still applied
+	r.run(s, `__send('omni.suggestions',{id:SW.omniSeq,items:[{type:'bookmark',title:'GitLab',url:'https://gitlab.com/'}]})`)
+	if !strings.Contains(evalS(t, s, `SW.$('#od').textContent`).(string), "GitLab") {
+		t.Errorf("the late answer was dropped")
 	}
 }
