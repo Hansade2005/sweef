@@ -54,8 +54,32 @@
 
   // network
   global.importScripts = function () { for (var i = 0; i < arguments.length; i++) { var src = w.fetchText(String(arguments[i])); (0, eval)(src); } };
-  function Response(r) { this.status = r.status; this.ok = r.status >= 200 && r.status < 300; this.statusText = r.statusText || ''; this.url = r.url; this._body = r.body; var h = r.headers || {}; this.headers = { get: function (k) { var v = h[String(k).toLowerCase()]; return v === undefined ? null : v; }, has: function (k) { return String(k).toLowerCase() in h; } }; }
+  function Response(r) { this.status = r.status; this.ok = r.status >= 200 && r.status < 300; this.statusText = r.statusText || ''; this.url = r.url; this._body = r.body; this._b64 = r.b64 || ''; var h = r.headers || {}; this.headers = { get: function (k) { var v = h[String(k).toLowerCase()]; return v === undefined ? null : v; }, has: function (k) { return String(k).toLowerCase() in h; } }; }
   Response.prototype.text = function () { return Promise.resolve(this._body); };
+  // exact bytes: binary bodies arrive base64-encoded next to the lossy text form
+  var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function b64Bytes(s) {
+    s = String(s).replace(/=+$/, '');
+    var out = new Uint8Array(Math.floor(s.length * 3 / 4)), n = 0, acc = 0, bits = 0;
+    for (var i = 0; i < s.length; i++) {
+      acc = (acc << 6) | B64.indexOf(s.charAt(i)); bits += 6;
+      if (bits >= 8) { bits -= 8; out[n++] = (acc >> bits) & 255; }
+    }
+    return out;
+  }
+  function utf8Bytes(str) {
+    var a = [];
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      if (c >= 0xd800 && c < 0xdc00 && i + 1 < str.length) { c = 0x10000 + ((c - 0xd800) << 10) + (str.charCodeAt(++i) - 0xdc00); }
+      if (c < 0x80) a.push(c);
+      else if (c < 0x800) a.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+      else if (c < 0x10000) a.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      else a.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    }
+    return new Uint8Array(a);
+  }
+  Response.prototype.arrayBuffer = function () { var self = this; return new Promise(function (res) { res((self._b64 ? b64Bytes(self._b64) : utf8Bytes(String(self._body))).buffer); }); };
   Response.prototype.json = function () { var b = this._body; return new Promise(function (res) { res(JSON.parse(b)); }); };
   global.Response = Response;
   global.fetch = function (input, init) {

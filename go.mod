@@ -12,11 +12,14 @@ require (
 	github.com/pion/logging v0.2.4
 	github.com/pion/transport/v5 v5.1.1
 	github.com/pion/webrtc/v4 v4.2.23
+	github.com/tetratelabs/wazero v1.12.0
 	github.com/thesyncim/gopus v0.1.2
 	golang.org/x/image v0.47.0
 	golang.org/x/net v0.61.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
+	modernc.org/libc v1.77.1
+	modernc.org/libquickjs v0.13.1
 	modernc.org/quickjs v0.25.0
 )
 
@@ -41,8 +44,6 @@ require (
 	github.com/wlynxg/anet v0.0.5 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
-	modernc.org/libc v1.77.1 // indirect
-	modernc.org/libquickjs v0.13.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
