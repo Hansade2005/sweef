@@ -10,7 +10,7 @@ Code: `internal/sitestore` (the data: records, indexes, transaction scheduling, 
 
 ## Supported surface
 
-**IndexedDB** (pages and service workers; not dedicated `Worker`s, see Limits)
+**IndexedDB** (pages, dedicated and shared workers, service workers)
 
 * `indexedDB.open(name, version)`, `deleteDatabase`, `databases()`, `cmp`; `IDBOpenDBRequest` with `upgradeneeded`,
   `blocked`, `success`, `error`; `IDBVersionChangeEvent`. Opening a higher version fires `versionchange` at the other
@@ -43,7 +43,8 @@ Code: `internal/sitestore` (the data: records, indexes, transaction scheduling, 
 
 **StorageManager** (`navigator.storage`): `estimate()` returns the real use of the origin
 (`usage`, `usageDetails.indexedDB / caches / serviceWorkerRegistrations`) and the quota; `persist()` / `persisted()`;
-`getDirectory()` rejects (no Origin Private File System).
+`getDirectory()` returns the Origin Private File System: a memory-backed tree per storage key and `BrowserContext` (not kept across a
+restart), with `FileSystemSyncAccessHandle` in dedicated workers (exclusive lock, in place).
 
 **Cache Storage** (`caches`, `Cache`): `open`, `has`, `delete`, `keys`, `match` (all caches in creation order, or
 `{cacheName}`), `Cache.match`, `matchAll`, `add`, `addAll`, `put`, `delete`, `keys`, with `ignoreSearch` and
@@ -103,19 +104,17 @@ evicted: data stays until the site or the person removes it.
 
 ## Privacy
 
-* Keyed by origin (scheme, host, port) inside one `BrowserContext`. The engine does not partition cookies or
-  `localStorage` by top-level site (it blocks third-party cookies instead), and storage follows the same model: there
-  is no per top-level-site partition. Iframes are not loaded as documents by this engine (`contentWindow` is `null`), so a
-  third party embedded in a page has no script, and therefore no storage, of its own to partition.
+* Keyed by origin (scheme, host, port) inside one `BrowserContext` in a first-party context, and by (origin, top-level
+  site) when the document or worker is embedded under another site; the directory name is the hash of that key. The
+  policy for every API is in [storage-partitioning.md](storage-partitioning.md).
 * Private windows use a separate context without a directory (above). Closing it discards everything.
 * "Clear browsing data" (`App.clearBrowsingData`) calls `BrowserContext.ClearSiteData("")` on the profile's context:
   open connections get `close` and are closed, then every origin's databases, caches, service worker registrations and
-  their files are deleted. `ClearSiteData(origin)` does it for one origin.
+  their files are deleted. `ClearSiteData(origin)` does it for one origin and for the partitions that mention it.
 
 ## Limits and what is not done
 
-* IndexedDB and Cache Storage are not available inside dedicated `Worker`s (their VM is the minimal worker prelude);
-  they are inside service workers.
+* The Origin Private File System is memory-backed (it does not survive a restart) and has a fixed 256 MiB quota per key.
 * The whole database is held in memory; a database with hundreds of megabytes of values is not a use case. Large values
   cost time: a value crosses the host boundary as one string, a 1 MiB `ArrayBuffer` takes roughly 0.3 s to turn back
   into bytes because QuickJS runs the loop without a JIT.
