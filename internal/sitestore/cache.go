@@ -1,29 +1,35 @@
 package sitestore
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
+	"bytes"
+	"encoding/binary"
+	"io"
+	"sort"
 	"strings"
 	"sync"
+
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
-// Cache Storage of one origin.
+// Cache Storage of one origin, in the origin's ordered store (origin.go lists the key layout).
 //
-// On disk (persistent managers):
+//	pCacheReg  name                      -> cache id, creation sequence
+//	pCacheOrd  seq                       -> name                      (caches in creation order)
+//	pCacheEnt  cache | entry seq         -> entry metadata            (request, status, headers, sizes)
+//	pCacheBody cache | entry seq         -> the body, or a reference to its blob file
+//	pCacheURL  cache | url-sans-query 0 url 0 entry seq -> (nothing)   (lookup by URL, with or without the query)
 //
-//	<origin>/caches/index.log     append-only log of cache creations/deletions and entry puts/deletes
-//	<origin>/caches/bodies/<id>   one file per stored response body
-//
-// A body file is written (to a temporary name, then renamed) before the index
-// record that points at it, so a crash leaves at worst an unreferenced file,
-// which the next open deletes. Bodies are read from disk on a match; only the
-// entry metadata lives in memory.
+// Entry metadata and bodies are separate keys so that listing a cache (keys())
+// never reads a body. A body above BlobThreshold is a file and is streamed
+// from it (MatchStream); only the reference is in the store. Replacing a
+// request keeps the entry's position, as the specification's "in place"
+// requires: the new entry takes the old entry's sequence.
+
+const pCacheBody = 0x24
 
 // CacheEntry is one stored request/response pair.
 type CacheEntry struct {
-	ID         int64
+	ID         int64  // the entry's sequence in its cache (stable when the request is replaced)
 	URL        string // request URL without fragment
 	Method     string
 	ReqHeaders [][2]string
@@ -33,7 +39,6 @@ type CacheEntry struct {
 	Type       string // response type: basic, cors, default
 	ResURL     string // response.url
 	Size       int64  // body bytes
-	body       []byte // memory-only stores keep the body here
 }
 
 // CacheQuery is the matching part of a request plus the CacheQueryOptions.
@@ -44,96 +49,194 @@ type CacheQuery struct {
 	IgnoreMethod bool
 }
 
-type cacheData struct {
-	name    string
-	entries []*CacheEntry
-}
-
-// CacheStore is the Cache Storage of one origin.
+// CacheStore is the Cache Storage of one origin. It holds no data: every call goes to the ordered store.
 type CacheStore struct {
-	o      *Origin
-	mu     sync.Mutex
-	dir    string // "" = memory only
-	log    *recLog
-	caches map[string]*cacheData
-	order  []string
-	nextID int64
-	dead   int // log records that no longer describe live state
-	live   int
+	o  *Origin
+	mu sync.Mutex // read-modify-write sequences (put replaces, delete)
 }
 
-const (
-	cOpCreate = 1
-	cOpDelete = 2
-	cOpPut    = 3
-	cOpDel    = 4
-)
-
-// Caches returns the origin's Cache Storage, loading it from disk on first use.
+// Caches returns the origin's Cache Storage.
 func (o *Origin) Caches() (*CacheStore, error) {
 	o.cacheMu.Lock()
 	defer o.cacheMu.Unlock()
-	if o.cache != nil {
-		return o.cache, nil
+	if o.cache == nil {
+		o.cache = &CacheStore{o: o}
 	}
-	c := &CacheStore{o: o, caches: map[string]*cacheData{}, nextID: 1}
-	if o.dir != "" {
-		c.dir = filepath.Join(o.dir, "caches")
-		if err := c.load(); err != nil {
-			return nil, err
-		}
-		o.touch()
-	}
-	o.cache = c
-	return c, nil
+	return o.cache, nil
 }
 
-func (c *CacheStore) bodyPath(id int64) string {
-	return filepath.Join(c.dir, "bodies", strconv.FormatInt(id, 10))
+func u32(b []byte) uint32 { return binary.BigEndian.Uint32(b) }
+func u64(b []byte) uint64 { return binary.BigEndian.Uint64(b) }
+
+func cacheRegKey(name string) []byte { return append([]byte{pCacheReg}, name...) }
+
+func cacheKey(kind byte, cid uint32, seq uint64) []byte {
+	k := make([]byte, 13)
+	k[0] = kind
+	binary.BigEndian.PutUint32(k[1:], cid)
+	binary.BigEndian.PutUint64(k[5:], seq)
+	return k
 }
 
-func (c *CacheStore) load() error {
-	l, recs, err := openLog(filepath.Join(c.dir, "index.log"), false)
-	if err != nil && !os.IsNotExist(err) {
-		return err
+func cachePrefix(kind byte, cid uint32) []byte {
+	k := make([]byte, 5)
+	k[0] = kind
+	binary.BigEndian.PutUint32(k[1:], cid)
+	return k
+}
+
+func ordKey(seq uint64) []byte {
+	k := make([]byte, 9)
+	k[0] = pCacheOrd
+	binary.BigEndian.PutUint64(k[1:], seq)
+	return k
+}
+
+func cleanURL(u string) string { return strings.ReplaceAll(u, "\x00", "") }
+
+// urlKeyPrefix is the lookup prefix for a URL: with fullURL "" every query variant of the path matches.
+func urlKeyPrefix(cid uint32, rawURL string, exact bool) []byte {
+	u := cleanURL(rawURL)
+	k := append(cachePrefix(pCacheURL, cid), stripQuery(u)...)
+	k = append(k, 0)
+	if exact {
+		k = append(k, u...)
+		k = append(k, 0)
 	}
-	c.log = l // nil until the first write creates the file
-	referenced := map[int64]bool{}
-	for _, rec := range recs {
-		r := rbuf{b: rec}
-		for r.more() {
-			if c.replay(&r) != nil {
-				break
-			}
-		}
+	return k
+}
+
+func urlKey(cid uint32, rawURL string, seq uint64) []byte {
+	k := urlKeyPrefix(cid, rawURL, true)
+	return binary.BigEndian.AppendUint64(k, seq)
+}
+
+type cacheReg struct {
+	id  uint32
+	seq uint64
+}
+
+func (c *CacheStore) lookup(k *kvStore, name string) (cacheReg, bool) {
+	v, ok := k.get(cacheRegKey(name))
+	if !ok || len(v) < 12 {
+		return cacheReg{}, false
 	}
-	for _, cd := range c.caches {
-		for _, e := range cd.entries {
-			referenced[e.ID] = true
-		}
+	return cacheReg{u32(v), u64(v[4:])}, true
+}
+
+// Open creates the cache if it does not exist. It reports whether it was created.
+func (c *CacheStore) Open(name string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	k, err := c.o.acquire()
+	if err != nil {
+		return false, err
 	}
-	// unreferenced bodies are leftovers of a crash between the file and the index record
-	ents, _ := os.ReadDir(filepath.Join(c.dir, "bodies"))
-	for _, e := range ents {
-		id, err := strconv.ParseInt(e.Name(), 10, 64)
-		if err != nil || !referenced[id] {
-			_ = os.Remove(filepath.Join(c.dir, "bodies", e.Name()))
-		}
+	defer c.o.release(k)
+	if _, ok := c.lookup(k, name); ok {
+		c.o.access()
+		return false, nil
 	}
-	c.live = len(c.caches)
-	var cost int64
-	for _, cd := range c.caches {
-		c.live += len(cd.entries)
-		for _, e := range cd.entries {
-			cost += c.entryCost(e)
-		}
+	c.o.touch()
+	id, seq := uint32(c.o.allocID()), c.o.allocID()
+	var reg [12]byte
+	binary.BigEndian.PutUint32(reg[:], id)
+	binary.BigEndian.PutUint64(reg[4:], seq)
+	var b leveldb.Batch
+	b.Put(cacheRegKey(name), reg[:])
+	b.Put(ordKey(seq), []byte(name))
+	if err := c.o.commitBatch(k, &b, 0, 0, 0, false); err != nil {
+		return false, errf("UnknownError", "%v", err)
 	}
-	c.o.extra.Store(cost) // same accounting as Put and Delete from here on
-	c.dead = len(recs) - c.live
-	if c.dead < 0 {
-		c.dead = 0
+	c.o.access()
+	return true, nil
+}
+
+func (c *CacheStore) Has(name string) bool {
+	k, err := c.o.acquire()
+	if err != nil {
+		return false
 	}
-	return nil
+	defer c.o.release(k)
+	_, ok := c.lookup(k, name)
+	return ok
+}
+
+// Keys lists the cache names in creation order.
+func (c *CacheStore) Keys() []string {
+	if !c.o.hasStore() {
+		return nil
+	}
+	k, err := c.o.acquire()
+	if err != nil {
+		return nil
+	}
+	defer c.o.release(k)
+	var out []string
+	it := k.db.NewIterator(prefixRange([]byte{pCacheOrd}), nil)
+	for it.Next() {
+		out = append(out, string(it.Value()))
+	}
+	it.Release()
+	return out
+}
+
+// Delete removes a cache and its bodies. The entries are dropped by the background collector; the cache is
+// gone for every reader the moment the batch commits.
+func (c *CacheStore) Delete(name string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.o.hasStore() {
+		return false
+	}
+	k, err := c.o.acquire()
+	if err != nil {
+		return false
+	}
+	defer c.o.release(k)
+	reg, ok := c.lookup(k, name)
+	if !ok {
+		return false
+	}
+	var b leveldb.Batch
+	b.Delete(cacheRegKey(name))
+	b.Delete(ordKey(reg.seq))
+	b.Put(garbageKey(gcCaches, reg.id, 0), nil)
+	// its bytes: the sum of the entries' costs, kept in the cache's counter record
+	freed := c.cacheBytes(k, reg.id)
+	b.Delete(cacheBytesKey(reg.id))
+	if err := c.o.commitBatch(k, &b, 0, -freed, 0, false); err != nil {
+		return false
+	}
+	c.o.kickGC()
+	c.o.access()
+	return true
+}
+
+func cacheBytesKey(cid uint32) []byte {
+	k := make([]byte, 6)
+	k[0], k[1] = 0x00, 'C'
+	binary.BigEndian.PutUint32(k[2:], cid)
+	return k
+}
+
+func (c *CacheStore) cacheBytes(k *kvStore, cid uint32) int64 {
+	if v, ok := k.get(cacheBytesKey(cid)); ok {
+		n, _ := binary.Varint(v)
+		return n
+	}
+	return 0
+}
+
+func entryCost(e *CacheEntry) int64 {
+	n := e.Size + int64(len(e.URL)+len(e.StatusText)+64)
+	for _, h := range e.ReqHeaders {
+		n += int64(len(h[0]) + len(h[1]))
+	}
+	for _, h := range e.ResHeaders {
+		n += int64(len(h[0]) + len(h[1]))
+	}
+	return n
 }
 
 func encEntry(w *wbuf, e *CacheEntry) {
@@ -171,163 +274,6 @@ func decEntry(r *rbuf) *CacheEntry {
 	return e
 }
 
-func (c *CacheStore) replay(r *rbuf) error {
-	switch r.byte() {
-	case cOpCreate:
-		name := r.s()
-		if r.err == nil && c.caches[name] == nil {
-			c.caches[name] = &cacheData{name: name}
-			c.order = append(c.order, name)
-		}
-	case cOpDelete:
-		c.dropCache(r.s())
-	case cOpPut:
-		name := r.s()
-		e := decEntry(r)
-		if r.err != nil {
-			return r.err
-		}
-		if cd := c.caches[name]; cd != nil {
-			cd.entries = append(cd.entries, e)
-		}
-		if e.ID >= c.nextID {
-			c.nextID = e.ID + 1
-		}
-	case cOpDel:
-		name, id := r.s(), r.i()
-		if cd := c.caches[name]; cd != nil {
-			for i, e := range cd.entries {
-				if e.ID == id {
-					cd.entries = append(cd.entries[:i], cd.entries[i+1:]...)
-					break
-				}
-			}
-		}
-	default:
-		return errCorrupt
-	}
-	return r.err
-}
-
-func (c *CacheStore) dropCache(name string) {
-	delete(c.caches, name)
-	for i, n := range c.order {
-		if n == name {
-			c.order = append(c.order[:i], c.order[i+1:]...)
-			break
-		}
-	}
-}
-
-func (c *CacheStore) appendOp(f func(w *wbuf)) error {
-	if c.dir == "" {
-		return nil
-	}
-	if c.log == nil {
-		l, _, err := openLog(filepath.Join(c.dir, "index.log"), true)
-		if err != nil {
-			return err
-		}
-		c.log = l
-	}
-	var w wbuf
-	f(&w)
-	return c.log.append(w.b)
-}
-
-// compact rewrites the index as a snapshot when dead records outnumber live ones.
-func (c *CacheStore) maybeCompact() {
-	if c.log == nil || c.dead < 256 || c.dead < c.live {
-		return
-	}
-	var recs [][]byte
-	for _, name := range c.order {
-		var w wbuf
-		w.byte(cOpCreate)
-		w.s(name)
-		recs = append(recs, w.b)
-		for _, e := range c.caches[name].entries {
-			var pw wbuf
-			pw.byte(cOpPut)
-			pw.s(name)
-			encEntry(&pw, e)
-			recs = append(recs, pw.b)
-		}
-	}
-	if c.log.rewrite(recs) == nil {
-		c.dead, c.live = 0, len(recs)
-	}
-}
-
-// Open creates the cache if it does not exist. It reports whether it was created.
-func (c *CacheStore) Open(name string) (bool, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.caches[name] != nil {
-		return false, nil
-	}
-	if err := c.appendOp(func(w *wbuf) { w.byte(cOpCreate); w.s(name) }); err != nil {
-		return false, err
-	}
-	c.caches[name] = &cacheData{name: name}
-	c.order = append(c.order, name)
-	c.live++
-	return true, nil
-}
-
-func (c *CacheStore) Has(name string) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.caches[name] != nil
-}
-
-// Keys lists the cache names in creation order.
-func (c *CacheStore) Keys() []string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return append([]string(nil), c.order...)
-}
-
-// Delete removes a cache and its bodies.
-func (c *CacheStore) Delete(name string) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	cd := c.caches[name]
-	if cd == nil {
-		return false
-	}
-	_ = c.appendOp(func(w *wbuf) { w.byte(cOpDelete); w.s(name) })
-	var freed int64
-	for _, e := range cd.entries {
-		freed += c.entryCost(e)
-		c.removeBody(e)
-	}
-	c.o.extra.Add(-freed)
-	c.dropCache(name)
-	c.dead += 1 + len(cd.entries)
-	c.live -= 1 + len(cd.entries)
-	c.maybeCompact()
-	return true
-}
-
-func (c *CacheStore) entryCost(e *CacheEntry) int64 {
-	n := e.Size + int64(len(e.URL)+len(e.StatusText)+64)
-	for _, h := range e.ReqHeaders {
-		n += int64(len(h[0]) + len(h[1]))
-	}
-	for _, h := range e.ResHeaders {
-		n += int64(len(h[0]) + len(h[1]))
-	}
-	return n
-}
-
-func (c *CacheStore) removeBody(e *CacheEntry) {
-	if c.dir != "" {
-		_ = os.Remove(c.bodyPath(e.ID))
-	}
-	e.body = nil
-}
-
 func stripFragment(u string) string {
 	if i := strings.IndexByte(u, '#'); i >= 0 {
 		return u[:i]
@@ -342,84 +288,123 @@ func stripQuery(u string) string {
 	return u
 }
 
-func (q CacheQuery) matches(e *CacheEntry) bool {
-	if q.URL == "" { // no request: every entry
-		return true
+func (q CacheQuery) methodOK() bool {
+	return q.IgnoreMethod || q.Method == "" || q.Method == "GET" || q.Method == "HEAD"
+}
+
+// entries lists the entries of a cache that match q, in insertion order. A query without a URL matches
+// every entry.
+func (c *CacheStore) entries(k *kvStore, cid uint32, q CacheQuery, limit int) []*CacheEntry {
+	var out []*CacheEntry
+	if q.URL == "" {
+		it := k.db.NewIterator(prefixRange(cachePrefix(pCacheEnt, cid)), nil)
+		for it.Next() && (limit <= 0 || len(out) < limit) {
+			r := rbuf{b: it.Value()}
+			if e := decEntry(&r); r.err == nil {
+				out = append(out, e)
+			}
+		}
+		it.Release()
+		return out
 	}
-	if !q.IgnoreMethod && q.Method != "" && q.Method != "GET" && q.Method != "HEAD" {
-		return false
+	if !q.methodOK() {
+		return nil
 	}
-	a, b := stripFragment(q.URL), e.URL
-	if q.IgnoreSearch {
-		a, b = stripQuery(a), stripQuery(b)
+	url := stripFragment(q.URL)
+	pre := urlKeyPrefix(cid, url, !q.IgnoreSearch)
+	var seqs []uint64
+	it := k.db.NewIterator(prefixRange(pre), nil)
+	for it.Next() {
+		key := it.Key()
+		seqs = append(seqs, u64(key[len(key)-8:]))
 	}
-	return a == b
+	it.Release()
+	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
+	for _, s := range seqs {
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+		v, ok := k.get(cacheKey(pCacheEnt, cid, s))
+		if !ok {
+			continue
+		}
+		r := rbuf{b: v}
+		if e := decEntry(&r); r.err == nil {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // Put stores an entry (replacing the first entry for the same request in place and dropping any other
 // duplicates). body is the response body.
 func (c *CacheStore) Put(cacheName string, e CacheEntry, body []byte) error {
+	e.URL = cleanURL(stripFragment(e.URL))
+	e.Size = int64(len(body))
+	cost := entryCost(&e)
+	// room first, before any lock of ours is held: making room can evict other origins
+	if err := c.o.reserve(cost); err != nil {
+		return err
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	cd := c.caches[cacheName]
-	if cd == nil {
-		return errf("NotFoundError", "The cache was deleted.")
-	}
-	e.ID = c.nextID
-	e.URL = stripFragment(e.URL)
-	e.Size = int64(len(body))
-	cost := c.entryCost(&e)
-	if q := c.o.m.quota; q > 0 && c.o.usage()+cost > q {
-		return errf("QuotaExceededError", "The storage quota for this origin was exceeded.")
-	}
-	if c.dir != "" {
-		dir := filepath.Join(c.dir, "bodies")
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return err
-		}
-		tmp := c.bodyPath(e.ID) + ".tmp"
-		if err := os.WriteFile(tmp, body, 0o600); err != nil {
-			return err
-		}
-		if err := os.Rename(tmp, c.bodyPath(e.ID)); err != nil {
-			os.Remove(tmp)
-			return err
-		}
-	} else {
-		e.body = body
-	}
-	ne := &e
-	if err := c.appendOp(func(w *wbuf) { w.byte(cOpPut); w.s(cacheName); encEntry(w, ne) }); err != nil {
-		c.removeBody(ne)
+	k, err := c.o.acquire()
+	if err != nil {
 		return errf("UnknownError", "%v", err)
 	}
-	c.nextID++
-	q := CacheQuery{URL: e.URL, Method: e.Method}
-	var kept []*CacheEntry
-	replaced := false
+	defer c.o.release(k)
+	reg, ok := c.lookup(k, cacheName)
+	if !ok {
+		return errf("NotFoundError", "The cache was deleted.")
+	}
+	stored, blob, err := c.o.packValue(body)
+	if err != nil {
+		return errf("UnknownError", "%v", err)
+	}
+	var b leveldb.Batch
+	seq := c.o.allocID()
 	var freed int64
-	for _, old := range cd.entries {
-		if q.matches(old) && old.Method == e.Method {
-			_ = c.appendOp(func(w *wbuf) { w.byte(cOpDel); w.s(cacheName); w.i(old.ID) })
-			c.removeBody(old)
-			freed += c.entryCost(old)
-			c.dead += 2
-			c.live--
-			if !replaced {
-				kept = append(kept, ne)
-				replaced = true
-			}
+	var freedBlobs []uint64
+	for _, old := range c.entries(k, reg.id, CacheQuery{URL: e.URL, Method: e.Method, IgnoreMethod: true}, 0) {
+		if old.Method != e.Method {
 			continue
 		}
-		kept = append(kept, old)
+		freed += entryCost(old)
+		b.Delete(cacheKey(pCacheEnt, reg.id, uint64(old.ID)))
+		b.Delete(urlKey(reg.id, old.URL, uint64(old.ID)))
+		if bv, ok := k.get(cacheKey(pCacheBody, reg.id, uint64(old.ID))); ok {
+			if id, _, vok := valueInfo(bv); vok && id != 0 && isBlobValue(bv) {
+				b.Delete(blobKey(id))
+				freedBlobs = append(freedBlobs, id)
+			}
+		}
+		b.Delete(cacheKey(pCacheBody, reg.id, uint64(old.ID)))
+		if uint64(old.ID) < seq {
+			seq = uint64(old.ID) // keep the position of the earliest replaced entry
+		}
 	}
-	if !replaced {
-		kept = append(kept, ne)
+	e.ID = int64(seq)
+	var w wbuf
+	encEntry(&w, &e)
+	b.Put(cacheKey(pCacheEnt, reg.id, seq), w.b)
+	b.Put(cacheKey(pCacheBody, reg.id, seq), stored)
+	b.Put(urlKey(reg.id, e.URL, seq), nil)
+	if blob != 0 {
+		var sz [8]byte
+		binary.BigEndian.PutUint64(sz[:], uint64(len(body)))
+		b.Put(blobKey(blob), sz[:])
 	}
-	cd.entries = kept
-	c.live++
-	c.o.extra.Add(cost - freed)
-	c.maybeCompact()
+	// the cache's own byte counter (to give the bytes back when the whole cache is deleted)
+	nb := c.cacheBytes(k, reg.id) + cost - freed
+	b.Put(cacheBytesKey(reg.id), binary.AppendVarint(nil, nb))
+	if err := c.o.commitBatch(k, &b, 0, cost-freed, 0, false); err != nil {
+		if blob != 0 {
+			c.o.dropBlobFiles([]uint64{blob})
+		}
+		return errf("UnknownError", "%v", err)
+	}
+	c.o.dropBlobFiles(freedBlobs)
+	c.o.access()
 	return nil
 }
 
@@ -429,57 +414,102 @@ type CacheMatch struct {
 	Body  []byte
 }
 
-func (c *CacheStore) readBody(e *CacheEntry) []byte {
-	if c.dir == "" {
-		return e.body
-	}
-	b, _ := os.ReadFile(c.bodyPath(e.ID))
-	return b
+// CacheStream is a stored entry whose body is read as a stream.
+type CacheStream struct {
+	Entry CacheEntry
+	Body  io.ReadCloser
 }
 
-// Match finds entries for a request in one cache, or, with everyCache, in every cache in creation order.
-// all=false stops at the first match.
-func (c *CacheStore) Match(cacheName string, everyCache bool, q CacheQuery, all bool) []CacheMatch {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	var out []CacheMatch
-	for _, name := range c.searchOrder(cacheName, everyCache) {
-		for _, e := range c.caches[name].entries {
-			if q.matches(e) {
-				out = append(out, CacheMatch{Entry: *e, Body: c.readBody(e)})
-				if !all {
-					return out
-				}
+func (c *CacheStore) openBody(k *kvStore, cid uint32, e *CacheEntry) io.ReadCloser {
+	v, ok := k.get(cacheKey(pCacheBody, cid, uint64(e.ID)))
+	if !ok || len(v) < 2 || v[0] != valV1 {
+		return io.NopCloser(bytes.NewReader(nil))
+	}
+	if v[1]&flagBlob == 0 {
+		return io.NopCloser(bytes.NewReader(append([]byte(nil), v[2:]...)))
+	}
+	id, _, _ := valueInfo(v)
+	rc, _, err := c.o.openBlob(id)
+	if err != nil {
+		return io.NopCloser(bytes.NewReader(nil))
+	}
+	return rc
+}
+
+// MatchStream finds entries for a request in one cache, or, with everyCache, in every cache in creation order,
+// and hands back each body as a stream (a large body is read from its file, never loaded whole). The caller
+// closes every Body. all=false stops at the first match.
+func (c *CacheStore) MatchStream(cacheName string, everyCache bool, q CacheQuery, all bool) []CacheStream {
+	if !c.o.hasStore() {
+		return nil
+	}
+	k, err := c.o.acquire()
+	if err != nil {
+		return nil
+	}
+	defer c.o.release(k)
+	var names []string
+	if everyCache {
+		it := k.db.NewIterator(prefixRange([]byte{pCacheOrd}), nil)
+		for it.Next() {
+			names = append(names, string(it.Value()))
+		}
+		it.Release()
+	} else {
+		names = []string{cacheName}
+	}
+	var out []CacheStream
+	for _, name := range names {
+		reg, ok := c.lookup(k, name)
+		if !ok {
+			continue
+		}
+		limit := 1
+		if all {
+			limit = 0
+		}
+		for _, e := range c.entries(k, reg.id, q, limit) {
+			out = append(out, CacheStream{Entry: *e, Body: c.openBody(k, reg.id, e)})
+			if !all {
+				c.o.access()
+				return out
 			}
 		}
+	}
+	c.o.access()
+	return out
+}
+
+// Match is MatchStream with the bodies read whole.
+func (c *CacheStore) Match(cacheName string, everyCache bool, q CacheQuery, all bool) []CacheMatch {
+	var out []CacheMatch
+	for _, s := range c.MatchStream(cacheName, everyCache, q, all) {
+		b, _ := io.ReadAll(s.Body)
+		s.Body.Close()
+		out = append(out, CacheMatch{Entry: s.Entry, Body: b})
 	}
 	return out
 }
 
-func (c *CacheStore) searchOrder(cacheName string, everyCache bool) []string {
-	if everyCache {
-		return append([]string(nil), c.order...)
-	}
-	if c.caches[cacheName] == nil {
-		return nil
-	}
-	return []string{cacheName}
-}
-
 // Requests lists the stored requests of one cache (those matching q when q.URL != "").
 func (c *CacheStore) Requests(cacheName string, q CacheQuery) ([]CacheEntry, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	cd := c.caches[cacheName]
-	if cd == nil {
+	if !c.o.hasStore() {
+		return nil, errf("NotFoundError", "The cache was deleted.")
+	}
+	k, err := c.o.acquire()
+	if err != nil {
+		return nil, errf("UnknownError", "%v", err)
+	}
+	defer c.o.release(k)
+	reg, ok := c.lookup(k, cacheName)
+	if !ok {
 		return nil, errf("NotFoundError", "The cache was deleted.")
 	}
 	var out []CacheEntry
-	for _, e := range cd.entries {
-		if q.URL == "" || q.matches(e) {
-			out = append(out, *e)
-		}
+	for _, e := range c.entries(k, reg.id, q, 0) {
+		out = append(out, *e)
 	}
+	c.o.access()
 	return out, nil
 }
 
@@ -487,79 +517,48 @@ func (c *CacheStore) Requests(cacheName string, q CacheQuery) ([]CacheEntry, err
 func (c *CacheStore) DeleteEntries(cacheName string, q CacheQuery) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	cd := c.caches[cacheName]
-	if cd == nil {
+	if !c.o.hasStore() {
 		return 0, errf("NotFoundError", "The cache was deleted.")
 	}
-	var kept []*CacheEntry
-	n := 0
+	k, err := c.o.acquire()
+	if err != nil {
+		return 0, errf("UnknownError", "%v", err)
+	}
+	defer c.o.release(k)
+	reg, ok := c.lookup(k, cacheName)
+	if !ok {
+		return 0, errf("NotFoundError", "The cache was deleted.")
+	}
+	var b leveldb.Batch
 	var freed int64
-	for _, e := range cd.entries {
-		if q.matches(e) {
-			_ = c.appendOp(func(w *wbuf) { w.byte(cOpDel); w.s(cacheName); w.i(e.ID) })
-			c.removeBody(e)
-			freed += c.entryCost(e)
-			c.dead += 2
-			c.live--
-			n++
-			continue
+	var blobs []uint64
+	es := c.entries(k, reg.id, q, 0)
+	for _, old := range es {
+		freed += entryCost(old)
+		b.Delete(cacheKey(pCacheEnt, reg.id, uint64(old.ID)))
+		b.Delete(urlKey(reg.id, old.URL, uint64(old.ID)))
+		if bv, ok := k.get(cacheKey(pCacheBody, reg.id, uint64(old.ID))); ok {
+			if id, _, vok := valueInfo(bv); vok && id != 0 && isBlobValue(bv) {
+				b.Delete(blobKey(id))
+				blobs = append(blobs, id)
+			}
 		}
-		kept = append(kept, e)
+		b.Delete(cacheKey(pCacheBody, reg.id, uint64(old.ID)))
 	}
-	cd.entries = kept
-	c.o.extra.Add(-freed)
-	c.maybeCompact()
-	return n, nil
-}
-
-func (c *CacheStore) sync() {
-	c.mu.Lock()
-	c.log.sync()
-	c.mu.Unlock()
-}
-
-func (o *Origin) syncCaches() {
-	o.cacheMu.Lock()
-	c := o.cache
-	o.cacheMu.Unlock()
-	if c != nil {
-		c.sync()
+	if len(es) == 0 {
+		return 0, nil
 	}
+	b.Put(cacheBytesKey(reg.id), binary.AppendVarint(nil, c.cacheBytes(k, reg.id)-freed))
+	if err := c.o.commitBatch(k, &b, 0, -freed, 0, false); err != nil {
+		return 0, errf("UnknownError", "%v", err)
+	}
+	c.o.dropBlobFiles(blobs)
+	c.o.access()
+	return len(es), nil
 }
 
 func (o *Origin) wipeCaches() {
 	o.cacheMu.Lock()
-	c := o.cache
 	o.cache = nil
 	o.cacheMu.Unlock()
-	if c != nil {
-		c.mu.Lock()
-		c.log.close()
-		c.log = nil
-		c.mu.Unlock()
-	}
-	o.extra.Store(0)
-	if o.dir != "" {
-		_ = os.RemoveAll(filepath.Join(o.dir, "caches"))
-	}
 }
-
-// scanCaches sums what an origin's Cache Storage occupies on disk, so usage is right before it is opened.
-func (o *Origin) scanCaches() {
-	if o.dir == "" {
-		return
-	}
-	var n int64
-	if fi, err := os.Stat(filepath.Join(o.dir, "caches", "index.log")); err == nil {
-		n += fi.Size()
-	}
-	ents, _ := os.ReadDir(filepath.Join(o.dir, "caches", "bodies"))
-	for _, e := range ents {
-		if fi, err := e.Info(); err == nil {
-			n += fi.Size()
-		}
-	}
-	o.extra.Store(n)
-}
-
-var _ = fmt.Sprint

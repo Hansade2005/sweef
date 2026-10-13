@@ -3,7 +3,6 @@ package sitestore
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -261,7 +260,7 @@ func TestIndexUniqueAndCursor(t *testing.T) {
 	_ = m.Commit(tx)
 }
 
-func TestPersistenceReplayAndCompaction(t *testing.T) {
+func TestPersistenceAcrossRestart(t *testing.T) {
 	dir := t.TempDir()
 	m := NewManager(dir, 0)
 	o := m.Origin("http://a")
@@ -274,7 +273,6 @@ func TestPersistenceReplayAndCompaction(t *testing.T) {
 		tx := begin(t, m, conn, ModeReadWrite, "s")
 		for j := 0; j < 50; j++ {
 			k, _ := m.Put(tx, "s", "", strings.Repeat("x", 200), false, idxKeys("i", fmt.Sprintf("\x30%05d\x01", j)))
-			_ = k
 			if j%2 == 0 {
 				_ = m.DeleteRange(tx, "s", Range{Lo: k, Hi: k})
 			}
@@ -282,13 +280,6 @@ func TestPersistenceReplayAndCompaction(t *testing.T) {
 		if err := m.Commit(tx); err != nil {
 			t.Fatal(err)
 		}
-	}
-	d, _ := o.DB("db")
-	d.mu.Lock()
-	logSize, live := d.log.length(), d.bytes
-	d.mu.Unlock()
-	if logSize > 1<<20+3*live {
-		t.Fatalf("log not compacted: %d bytes for %d live", logSize, live)
 	}
 	m.CloseConn(conn)
 	m.Close()
@@ -310,37 +301,6 @@ func TestPersistenceReplayAndCompaction(t *testing.T) {
 	k, _ := m2.Put(tx, "s", "", "next", false, nil)
 	if f, _ := DecodeNumberKey(k); f != 2001 {
 		t.Fatalf("key generator after restart: %v want 2001", f)
-	}
-}
-
-func TestTornTailIsCutOff(t *testing.T) {
-	dir := t.TempDir()
-	m := NewManager(dir, 0)
-	o := m.Origin("http://a")
-	sink := &testSink{}
-	conn := open(t, o, "db", 1, sink, func(tx int64) { _ = m.CreateStore(tx, "s", "", false, false) })
-	tx := begin(t, m, conn, ModeReadWrite, "s")
-	m.Put(tx, "s", nk(1), "one", false, nil)
-	_ = m.Commit(tx)
-	tx = begin(t, m, conn, ModeReadWrite, "s")
-	m.Put(tx, "s", nk(2), "two", false, nil)
-	_ = m.Commit(tx)
-	m.Close()
-	files, _ := filepath.Glob(filepath.Join(dir, "*", "idb", "*.db"))
-	if len(files) != 1 {
-		t.Fatalf("files %v", files)
-	}
-	fi, _ := os.Stat(files[0])
-	if err := os.Truncate(files[0], fi.Size()-3); err != nil { // the second commit is torn
-		t.Fatal(err)
-	}
-	m2 := NewManager(dir, 0)
-	sink2 := &testSink{}
-	conn2 := open(t, m2.Origin("http://a"), "db", 0, sink2, nil)
-	tx = begin(t, m2, conn2, ModeReadOnly, "s")
-	vals, _ := m2.Query(tx, "s", "", QValues, Range{}, 0)
-	if fmt.Sprint(vals) != "[one]" {
-		t.Fatalf("after torn write: %v", vals)
 	}
 }
 

@@ -12,6 +12,7 @@ require (
 	github.com/pion/logging v0.2.4
 	github.com/pion/transport/v5 v5.1.1
 	github.com/pion/webrtc/v4 v4.2.23
+	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/thesyncim/gopus v0.1.2
 	golang.org/x/image v0.47.0
@@ -25,6 +26,7 @@ require (
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jfreymuth/vorbis v1.0.2 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect

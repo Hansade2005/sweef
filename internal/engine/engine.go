@@ -51,7 +51,8 @@ type Options struct {
 	DownloadsDir     string // where downloads are saved (default $TMPDIR/sweef-downloads)
 	CacheDir         string // on-disk bytecode cache ("" = $SWEEF_CACHE_DIR or user cache dir; "off" disables)
 	StorageDir       string // profile storage root of the default context: IndexedDB, Cache Storage, service workers ("" = memory only; other contexts: ContextOptions.StorageDir)
-	StorageQuotaMiB  int    // per-origin quota of those (0 = 1024)
+	StorageQuotaMiB  int    // hard cap per origin for all site storage in MiB (0 = 20% of the budget)
+	StorageBudgetMiB int    // global budget of all origins in MiB (0 = 60% of the profile volume's free space, at most 64 GiB); see docs/storage.md
 }
 
 func DefaultOptions() Options {

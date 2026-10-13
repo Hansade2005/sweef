@@ -1,212 +1,132 @@
 package engine
 
-// platform_opfs.go: storage behind navigator.storage.getDirectory(), the
-// Origin Private File System. The tree is memory-backed and shared by every
-// tab of the same origin in this process (it survives navigations and reloads,
-// not a restart); platformjs/opfs.js builds the handle classes on top of it.
+// platform_opfs.go: host side of navigator.storage.getDirectory(), the Origin
+// Private File System. The tree is kept by internal/sitestore (OPFS): its
+// nodes live in the origin's ordered store and file contents above 64 KiB are
+// files under the origin's storage directory, so nothing is held in memory
+// beyond the file an operation is working on, and it counts against the
+// origin's quota like IndexedDB and Cache Storage. A context without a storage
+// directory (private windows, throw-away agent contexts) keeps the tree in
+// memory and discards it with the context. platformjs/opfs.js builds the
+// handle classes on top of this.
 
 import (
 	"encoding/base64"
-	"fmt"
-	"sort"
-	"strings"
 	"sync"
-	"time"
+
+	"github.com/sweefbrowser/sweef/internal/sitestore"
 )
-
-const opfsQuota = 256 << 20 // bytes per origin
-
-type opfsNode struct {
-	dir   bool
-	data  []byte
-	kids  map[string]*opfsNode
-	mtime int64
-}
-
-type opfsOrigin struct {
-	mu   sync.Mutex
-	root *opfsNode
-	size int64
-}
 
 var (
-	opfsMu      sync.Mutex
-	opfsOrigins = map[string]*opfsOrigin{}
+	opfsFallbackOnce sync.Once
+	opfsFallbackMgr  *sitestore.Manager
 )
 
-func opfsFor(origin string) *opfsOrigin {
-	opfsMu.Lock()
-	defer opfsMu.Unlock()
-	o := opfsOrigins[origin]
-	if o == nil {
-		o = &opfsOrigin{root: &opfsNode{dir: true, kids: map[string]*opfsNode{}}}
-		opfsOrigins[origin] = o
+// opfsFor returns the file system of the document's origin. Documents without an http(s) origin (about:blank,
+// data:, file:) and script VMs without a tab get a process-wide memory-only tree, as before.
+func (j *jsVM) opfsFor() *sitestore.OPFS {
+	if j.tab != nil {
+		if o := siteOriginOf(j.tab.URL()); o != "" {
+			return j.tab.Context().SiteStorage().Origin(o).OPFS()
+		}
 	}
-	return o
+	opfsFallbackOnce.Do(func() { opfsFallbackMgr = sitestore.NewManager("", 0) })
+	name := "null"
+	if j.tab != nil {
+		name = j.tab.origin()
+	}
+	return opfsFallbackMgr.Origin(name).OPFS()
+}
+
+func (j *jsVM) opfsHost(f map[string]hostFn) {
+	f["opfs"] = func(a []any) (any, error) {
+		fs := j.opfsFor()
+		op, parts := argS(a, 0), opfsSplit(argS(a, 1))
+		switch op {
+		case "usage":
+			var quota int64
+			if j.tab != nil {
+				if o := siteOriginOf(j.tab.URL()); o != "" {
+					quota = j.tab.Context().SiteStorage().Origin(o).Quota()
+				}
+			}
+			if quota == 0 {
+				quota = 256 << 20
+			}
+			return map[string]any{"usage": fs.Usage(), "quota": quota}, nil
+		case "stat":
+			st, err := fs.Stat(parts)
+			if err != nil || st == nil {
+				return nil, err
+			}
+			kind := "file"
+			if st.Dir {
+				kind = "directory"
+			}
+			return map[string]any{"kind": kind, "size": st.Size, "mtime": st.Mtime}, nil
+		case "get": // (path, kind, create): get or create a child
+			if len(parts) == 0 {
+				return nil, nil
+			}
+			if err := fs.Get(parts, argS(a, 2) == "directory", argB(a, 3)); err != nil {
+				return nil, err
+			}
+			return true, nil
+		case "list":
+			es, err := fs.List(parts)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]any, 0, len(es))
+			for _, e := range es {
+				kind := "file"
+				if e.Dir {
+					kind = "directory"
+				}
+				out = append(out, []any{e.Name, kind})
+			}
+			return out, nil
+		case "remove": // (path, recursive)
+			if err := fs.Remove(parts, argB(a, 2)); err != nil {
+				return nil, err
+			}
+			return true, nil
+		case "read":
+			b, mtime, err := fs.Read(parts)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"d": base64.StdEncoding.EncodeToString(b), "mtime": mtime}, nil
+		case "write":
+			data, err := base64.StdEncoding.DecodeString(argS(a, 2))
+			if err != nil {
+				return nil, &sitestore.Error{Name: "TypeError", Msg: "bad data"}
+			}
+			if err := fs.Write(parts, data); err != nil {
+				return nil, err
+			}
+			return true, nil
+		case "move": // (path, newPath): rename or move within the tree
+			if err := fs.Move(parts, opfsSplit(argS(a, 2))); err != nil {
+				return nil, err
+			}
+			return true, nil
+		}
+		return nil, &sitestore.Error{Name: "TypeError", Msg: "unknown opfs operation"}
+	}
 }
 
 func opfsSplit(p string) []string {
 	if p == "" {
 		return nil
 	}
-	return strings.Split(p, "/")
-}
-
-// walk returns the node at the path (nil when absent).
-func (o *opfsOrigin) walk(parts []string) *opfsNode {
-	n := o.root
-	for _, p := range parts {
-		if n == nil || !n.dir {
-			return nil
+	out := []string{}
+	start := 0
+	for i := 0; i <= len(p); i++ {
+		if i == len(p) || p[i] == '/' {
+			out = append(out, p[start:i])
+			start = i + 1
 		}
-		n = n.kids[p]
 	}
-	return n
-}
-
-func opfsErr(name, msg string) error { return fmt.Errorf("%s: %s", name, msg) }
-
-func (o *opfsOrigin) total(n *opfsNode) int64 {
-	if !n.dir {
-		return int64(len(n.data))
-	}
-	var t int64
-	for _, k := range n.kids {
-		t += o.total(k)
-	}
-	return t
-}
-
-func (j *jsVM) opfsHost(f map[string]hostFn) {
-	origin := func() string {
-		if j.tab == nil {
-			return "null"
-		}
-		return j.tab.origin()
-	}
-	f["opfs"] = func(a []any) (any, error) {
-		o := opfsFor(origin())
-		o.mu.Lock()
-		defer o.mu.Unlock()
-		op, parts := argS(a, 0), opfsSplit(argS(a, 1))
-		now := time.Now().UnixMilli()
-		switch op {
-		case "usage":
-			return map[string]any{"usage": o.total(o.root), "quota": opfsQuota}, nil
-		case "stat":
-			n := o.walk(parts)
-			if n == nil {
-				return nil, nil
-			}
-			kind := "file"
-			if n.dir {
-				kind = "directory"
-			}
-			return map[string]any{"kind": kind, "size": len(n.data), "mtime": n.mtime}, nil
-		case "get": // (path, kind, create): get or create a child
-			kind, create := argS(a, 2), argB(a, 3)
-			if len(parts) == 0 {
-				return nil, nil
-			}
-			parent := o.walk(parts[:len(parts)-1])
-			if parent == nil || !parent.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			name := parts[len(parts)-1]
-			n := parent.kids[name]
-			if n != nil {
-				if n.dir != (kind == "directory") {
-					return nil, opfsErr("TypeMismatchError", "The path supplied exists, but was not an entry of requested type.")
-				}
-				return true, nil
-			}
-			if !create {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			n = &opfsNode{dir: kind == "directory", mtime: now}
-			if n.dir {
-				n.kids = map[string]*opfsNode{}
-			}
-			parent.kids[name] = n
-			parent.mtime = now
-			return true, nil
-		case "list":
-			n := o.walk(parts)
-			if n == nil || !n.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			names := make([]string, 0, len(n.kids))
-			for k := range n.kids {
-				names = append(names, k)
-			}
-			sort.Strings(names)
-			out := make([]any, 0, len(names))
-			for _, k := range names {
-				kind := "file"
-				if n.kids[k].dir {
-					kind = "directory"
-				}
-				out = append(out, []any{k, kind})
-			}
-			return out, nil
-		case "remove": // (path, recursive)
-			if len(parts) == 0 {
-				return nil, opfsErr("NoModificationAllowedError", "The root directory cannot be removed.")
-			}
-			parent := o.walk(parts[:len(parts)-1])
-			if parent == nil || !parent.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			name := parts[len(parts)-1]
-			n := parent.kids[name]
-			if n == nil {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			if n.dir && len(n.kids) > 0 && !argB(a, 2) {
-				return nil, opfsErr("InvalidModificationError", "The object can not be modified in this way.")
-			}
-			delete(parent.kids, name)
-			parent.mtime = now
-			return true, nil
-		case "read":
-			n := o.walk(parts)
-			if n == nil || n.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			return map[string]any{"d": base64.StdEncoding.EncodeToString(n.data), "mtime": n.mtime}, nil
-		case "write":
-			n := o.walk(parts)
-			if n == nil || n.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			data, err := base64.StdEncoding.DecodeString(argS(a, 2))
-			if err != nil {
-				return nil, opfsErr("TypeError", "bad data")
-			}
-			if o.total(o.root)-int64(len(n.data))+int64(len(data)) > opfsQuota {
-				return nil, opfsErr("QuotaExceededError", "The origin private file system quota was exceeded.")
-			}
-			n.data, n.mtime = data, now
-			return true, nil
-		case "move": // (path, newPath): rename or move within the tree
-			np := opfsSplit(argS(a, 2))
-			if len(parts) == 0 || len(np) == 0 {
-				return nil, opfsErr("NoModificationAllowedError", "The root directory cannot be moved.")
-			}
-			sp := o.walk(parts[:len(parts)-1])
-			dp := o.walk(np[:len(np)-1])
-			if sp == nil || dp == nil || !dp.dir || sp.kids[parts[len(parts)-1]] == nil {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			n := sp.kids[parts[len(parts)-1]]
-			if ex := dp.kids[np[len(np)-1]]; ex != nil && (ex.dir || n.dir) {
-				return nil, opfsErr("InvalidModificationError", "The object can not be modified in this way.")
-			}
-			delete(sp.kids, parts[len(parts)-1])
-			dp.kids[np[len(np)-1]] = n
-			n.mtime = now
-			return true, nil
-		}
-		return nil, opfsErr("TypeError", "unknown opfs operation")
-	}
+	return out
 }
