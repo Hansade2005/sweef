@@ -22,6 +22,10 @@ type ctx struct {
 	cv          *cvState
 	cvDepth     int // > 0 while building inside a skipped content-visibility subtree
 	opts        Options
+	sess        *Session  // cross-pass caches; nil: none
+	svgU        *svgUnion // ids of all the page's inline svg elements (this pass)
+	svgUDone    bool
+	svgNoSess   bool // the session's scene cache is off for this pass (duplicate ids)
 	env         Env
 	eng         *style.Engine
 	vw, vh      float64
@@ -144,7 +148,13 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 		sheets = append(sheets, style.SheetIn{Text: s.Text, Media: s.Media})
 	}
 	c.quirks = isQuirks(root)
-	c.eng = style.NewEngineQ(env, sheets, c.quirks)
+	if o.Session != nil {
+		c.sess = o.Session
+		c.eng = o.Session.Style.Acquire(env, sheets, c.quirks)
+		defer func() { o.Session.Style.EndPass(); o.Session.svg.sweep() }()
+	} else {
+		c.eng = style.NewEngineQ(env, sheets, c.quirks)
+	}
 	c.eng.SysFont = "arial"
 	if cq != nil {
 		c.eng.SetContainerSizes(cq)

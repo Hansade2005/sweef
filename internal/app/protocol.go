@@ -4,7 +4,8 @@ package app
 //
 //	state            full snapshot (see internal/app/state)
 //	state.patch      RFC 7386 merge patch of the snapshot
-//	omni.suggestions {id, items, inline}
+//	omni.suggestions {id, items, inline}  (items carry no favicons: the dropdown draws type icons)
+//	                 {id, stale:true}     the answer did not make it in time: show what you have, the real one follows
 //	agent.event      {runId, kind, ...}
 //	downloads.update {items:[...]} or a single item with "id"
 //	toast            {text, kind}
@@ -21,6 +22,8 @@ package app
 //
 // Messages chrome page -> Go (sweef.post(type, payload)) beyond the contract:
 //
+//	omni.input       {text,id,scope,limit}     answered inside the same event turn (etab.omniSync): the page
+//	                                           sees sweef.sync and waits for the reply instead of painting twice
 //	layout           {viewport:{x,y,w,h}}      logical px; sent whenever it changes
 //	ready            {}                         optional; Go also pushes state after load
 //	sidebar.set      {open?, width?}

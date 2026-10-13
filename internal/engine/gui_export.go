@@ -111,6 +111,9 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 		img = raster.Paint(list, o.Width, height, o.DSF, env)
 	}
 	t.lastPaint.Store(&PaintInfo{Layout: tLayout, Raster: time.Since(t1), Incremental: o.Incremental, Rect: img.Rect})
+	if stageTrace {
+		stageLog("paint", t.ID, time.Since(t0), "layout=%.2fms raster=%.2fms rect=%v", ms(tLayout), ms(time.Since(t1)), img.Rect)
+	}
 	return img, true
 }
 
@@ -135,4 +138,13 @@ func isRootScrollbar(op render.Op, vp render.Rect) bool {
 		return o.Rect.X+o.Rect.W >= vp.W-0.5 && o.Rect.Y+o.Rect.H >= vp.H-0.5
 	}
 	return false
+}
+
+// LayoutStats reports how many times the render pipeline ran style + layout +
+// display list for this tab and how long they took in total. A layout read
+// from page JavaScript (offsetWidth, getBoundingClientRect, ...) on a dirty
+// tree counts here too, so the difference of two readings around an operation
+// is the number of (forced or painting) layouts it caused.
+func (t *Tab) LayoutStats() (n int64, total time.Duration) {
+	return t.layoutN.Load(), time.Duration(t.layoutNs.Load())
 }

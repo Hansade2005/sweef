@@ -202,6 +202,10 @@ func (e *etab) drainBindings() {
 			if len(args) > 1 {
 				payload = args[1]
 			}
+			if typ == "omni.input" {
+				e.omniSync(payload)
+				continue
+			}
 			e.a.post(func() { e.a.onUIMessage(e, typ, payload) })
 		case "__sweefOpen":
 			var args []string

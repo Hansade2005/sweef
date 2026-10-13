@@ -836,6 +836,15 @@ func (j *jsVM) withDoc(fn func(d *fnet.Doc) (any, error)) (any, error) {
 
 func (j *jsVM) registerHost() error {
 	reg := func(name string, fn func(a []any) (any, error)) error {
+		if stageTrace {
+			inner := fn
+			fn = func(a []any) (any, error) {
+				t0 := time.Now()
+				r, err := inner(a)
+				hostStat(name, time.Since(t0))
+				return r, err
+			}
+		}
 		return j.vm.RegisterHostFunc("__sw_"+name, fn)
 	}
 	type h struct {

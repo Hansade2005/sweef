@@ -294,4 +294,8 @@ type Options struct {
 	// relevant to the user for another reason (they contain focus or the
 	// selection); those are never skipped.
 	CVRelevant func(n *html.Node) bool
+	// Session, when set, carries styles and SVG scenes from one pass over a
+	// document to the next (see Session). The caller owns it and must not run
+	// two passes at once.
+	Session *Session
 }

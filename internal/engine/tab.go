@@ -103,6 +103,8 @@ type Tab struct {
 	incrMu    sync.Mutex
 	incr      *raster.Canvas // pixels of the last incremental paint (see incremental.go)
 	lastPaint atomic.Pointer[PaintInfo]
+	layoutN   atomic.Int64 // style+layout runs of the render pipeline (LayoutStats)
+	layoutNs  atomic.Int64 // their total time in nanoseconds
 	mu        sync.RWMutex
 	eng       *Engine
 	ctx       *BrowserContext // isolation context (nil = engine default)
@@ -542,6 +544,14 @@ func (t *Tab) LogConsole(level, text string) {
 // the JSON-encoded completion value. DOM nodes serialise as {nodeType,
 // tagName, id, ref}.
 func (t *Tab) Evaluate(expr string) (json.RawMessage, error) {
+	if stageTrace {
+		n0, d0 := t.LayoutStats()
+		t0 := time.Now()
+		defer func() {
+			n1, d1 := t.LayoutStats()
+			stageLog("eval", t.ID, time.Since(t0), "layouts=%d layout=%.2fms expr=%.40q %s", n1-n0, ms(d1-d0), expr, hostStatTake())
+		}()
+	}
 	j, err := t.ensureJS()
 	if err != nil {
 		return nil, err

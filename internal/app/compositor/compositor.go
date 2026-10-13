@@ -25,6 +25,7 @@
 package compositor
 
 import (
+	"encoding/binary"
 	"image"
 	"image/color"
 	"sort"
@@ -173,7 +174,7 @@ func (c *Compositor) noteChromeChange(d image.Rectangle) {
 		// work that is limited to the damage anyway. An exact rescan happens
 		// after a number of changes (and for large ones).
 		c.inkChanges++
-		if c.inkOK && c.inkChanges%64 != 0 && h.Dx()*h.Dy()*4 < c.vp.Dx()*c.vp.Dy() {
+		if c.inkOK && c.inkChanges%64 != 0 && h.Dx()*h.Dy()*2 < c.vp.Dx()*c.vp.Dy() {
 			c.ink = c.ink.Union(c.inkIn(h))
 		} else {
 			c.inkOK = false
@@ -181,52 +182,47 @@ func (c *Compositor) noteChromeChange(d image.Rectangle) {
 	}
 }
 
+// inkSpan returns the byte offsets (multiples of 4) of the first and the last pixel of a premultiplied RGBA row
+// whose alpha is not zero, or -1, -1 for a row without ink. It looks at two pixels per load, from both ends.
+func inkSpan(row []byte) (first, last int) {
+	n := len(row) &^ 3
+	first = -1
+	i := 0
+	for ; i+8 <= n; i += 8 {
+		if binary.LittleEndian.Uint64(row[i:])&0xff000000ff000000 != 0 {
+			break
+		}
+	}
+	for ; i+4 <= n; i += 4 {
+		if row[i+3] != 0 {
+			first = i
+			break
+		}
+	}
+	if first < 0 {
+		return -1, -1
+	}
+	j := n - 4
+	for ; j-4 > first; j -= 8 {
+		if binary.LittleEndian.Uint64(row[j-4:])&0xff000000ff000000 != 0 {
+			break
+		}
+	}
+	for ; j > first; j -= 4 {
+		if row[j+3] != 0 {
+			break
+		}
+	}
+	return first, j
+}
+
 // inkIn is the bounding box of the non-transparent chrome pixels inside r.
 func (c *Compositor) inkIn(r image.Rectangle) image.Rectangle {
 	r = r.Intersect(c.chrome.Bounds())
-	var out image.Rectangle
+	minX, minY, maxX, maxY := r.Max.X, r.Max.Y, r.Min.X, r.Min.Y
 	for y := r.Min.Y; y < r.Max.Y; y++ {
 		o := c.chrome.PixOffset(r.Min.X, y)
-		row := c.chrome.Pix[o : o+4*r.Dx()]
-		first, last := -1, -1
-		for x := 3; x < len(row); x += 4 {
-			if row[x] != 0 {
-				if first < 0 {
-					first = x
-				}
-				last = x
-			}
-		}
-		if first < 0 {
-			continue
-		}
-		out = out.Union(image.Rect(r.Min.X+first/4, y, r.Min.X+last/4+1, y+1))
-	}
-	return out
-}
-
-// scanInk finds the bounding box of chrome pixels inside the viewport that
-// are not fully transparent. Blending only needs to look there.
-func (c *Compositor) scanInk() {
-	c.inkOK = true
-	c.ink = image.Rectangle{}
-	vp := c.vp.Intersect(c.chrome.Bounds())
-	if vp.Empty() {
-		return
-	}
-	minX, minY, maxX, maxY := vp.Max.X, vp.Max.Y, vp.Min.X, vp.Min.Y
-	for y := vp.Min.Y; y < vp.Max.Y; y++ {
-		o := c.chrome.PixOffset(vp.Min.X, y)
-		row := c.chrome.Pix[o : o+4*vp.Dx()]
-		first, last := -1, -1
-		for x := 0; x < len(row); x += 4 {
-			if row[x+3] != 0 {
-				if first < 0 {
-					first = x
-				}
-				last = x
-			}
-		}
+		first, last := inkSpan(c.chrome.Pix[o : o+4*r.Dx()])
 		if first < 0 {
 			continue
 		}
@@ -234,16 +230,24 @@ func (c *Compositor) scanInk() {
 			minY = y
 		}
 		maxY = y + 1
-		if px := vp.Min.X + first/4; px < minX {
+		if px := r.Min.X + first/4; px < minX {
 			minX = px
 		}
-		if px := vp.Min.X + last/4 + 1; px > maxX {
+		if px := r.Min.X + last/4 + 1; px > maxX {
 			maxX = px
 		}
 	}
 	if maxX > minX && maxY > minY {
-		c.ink = image.Rect(minX, minY, maxX, maxY)
+		return image.Rect(minX, minY, maxX, maxY)
 	}
+	return image.Rectangle{}
+}
+
+// scanInk finds the bounding box of chrome pixels inside the viewport that
+// are not fully transparent. Blending only needs to look there.
+func (c *Compositor) scanInk() {
+	c.inkOK = true
+	c.ink = c.inkIn(c.vp)
 }
 
 // SetPage installs new page pixels (the whole document or a prefix). The

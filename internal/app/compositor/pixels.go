@@ -164,11 +164,12 @@ func blendOver(dst, src *image.RGBA, r image.Rectangle) {
 		so, do := src.PixOffset(r.Min.X, y), dst.PixOffset(r.Min.X, y)
 		s, d := src.Pix[so:so+n], dst.Pix[do:do+n]
 		for i := 0; i+4 <= n; i += 4 {
-			a := uint32(s[i+3])
+			w := binary.LittleEndian.Uint32(s[i:])
+			a := w >> 24
 			switch a {
 			case 0:
 			case 255:
-				d[i], d[i+1], d[i+2], d[i+3] = s[i], s[i+1], s[i+2], 255
+				binary.LittleEndian.PutUint32(d[i:], w)
 			default:
 				inv := 255 - a
 				d[i] = uint8(uint32(s[i]) + mul255(uint32(d[i]), inv))

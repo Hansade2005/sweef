@@ -17,6 +17,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/net/html"
 
@@ -35,6 +36,9 @@ type tabEnv struct {
 	imgs map[string]image.Image
 	svgs map[string]string
 	lz   lazyState // Data Saver: lazy, skipped and forced images (lazy.go)
+	// sty carries computed styles from one layout pass to the next (a document's
+	// layout provider runs one pass at a time, under Doc's layout lock)
+	sty *render.Session
 }
 
 func (e *tabEnv) source(n *html.Node) BitmapSource {
@@ -216,6 +220,9 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 		return
 	}
 	env := &tabEnv{t: t, doc: doc, imgs: map[string]image.Image{}, svgs: map[string]string{}}
+	if !noStyleCache {
+		env.sty = render.NewSession()
+	}
 	t.ds.env.Store(env)
 	doc.SetLayoutProvider(func(width int) *fnet.Layout {
 		_, vh, dsf, _, _ := t.Viewport()
@@ -226,13 +233,23 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 			dsf = 1
 		}
 		var res *render.Result
+		tl0 := time.Now()
+		defer func() { t.layoutN.Add(1); t.layoutNs.Add(int64(time.Since(tl0))) }()
 		for round := 0; ; round++ {
 			env.lz.resetHints()
-			res = render.Layout(doc.Root, render.Options{
+			opts := render.Options{
 				Width: float64(width), Height: float64(vh), DPR: dsf,
 				ColorScheme: t.ColorSchemeName(), BaseURL: doc.BaseURL(),
-				Sheets: env.pageSheets(), Env: env,
-			})
+				Sheets: env.pageSheets(), Env: env, Session: env.sty,
+			}
+			res = render.Layout(doc.Root, opts)
+			if layoutCheck && env.sty != nil {
+				// SWEEF_LAYOUT_CHECK: the cached pass must equal a from-scratch one
+				opts.Session = nil
+				if d := render.DiffResults(res, render.Layout(doc.Root, opts)); d != "" {
+					panic("SWEEF_LAYOUT_CHECK: incremental layout differs from a full layout: " + d)
+				}
+			}
 			// Data Saver: admit images that came into range, put placeholders
 			// on withheld ones, then lay out again (no-op without a policy)
 			if round >= maxLazyRounds || !env.settleLazy(float64(vh)) {
@@ -339,3 +356,11 @@ func (t *Tab) paintPage(width, height int, dsf float64, full bool) (*image.RGBA,
 		Background: raster.Color{R: 1, G: 1, B: 1, A: 1},
 	}), true
 }
+
+// SWEEF_LAYOUT_CHECK=1 lays every document out a second time from scratch after
+// each (cached) layout and panics on the first difference in any box or
+// display-list op. SWEEF_NO_STYLE_CACHE=1 turns the cross-pass style cache off.
+var (
+	layoutCheck  = os.Getenv("SWEEF_LAYOUT_CHECK") != ""
+	noStyleCache = os.Getenv("SWEEF_NO_STYLE_CACHE") != ""
+)
