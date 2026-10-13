@@ -361,6 +361,21 @@
     }
     return path;
   }
+  // Inline event handler attributes (onclick="..."): compiled on first use and again when the attribute changes.
+  // The scope is the element, then the document, as in browsers (the form owner is left out).
+  var attrHandlers = new WeakMap();
+  function attributeHandler(el, type) {
+    var src = el.getAttribute('on' + type);
+    if (src === null || src === undefined) return undefined;
+    var per = attrHandlers.get(el);
+    if (!per) { per = Object.create(null); attrHandlers.set(el, per); }
+    var c = per[type];
+    if (c && c.src === src) return c.fn;
+    var fn = null;
+    try { fn = new Function('event', 'with (document) { with (this) { ' + src + '\n } }'); } catch (e) { reportError(e); }
+    per[type] = { src: src, fn: fn };
+    return fn;
+  }
   function invokeListeners(target, ev, phase) {
     var m = target[LISTENERS];
     var list = m && m[ev.type];
@@ -386,6 +401,7 @@
     // legacy on* handler runs with the bubble/target listeners
     if (phase !== 1 && !ev._stopNow) {
       var h = target[HANDLERS] && target[HANDLERS][ev.type];
+      if (h === undefined && target !== global && typeof target.getAttribute === 'function') h = attributeHandler(target, ev.type);
       if (typeof h === 'function') {
         try {
           var r = target === global && ev.type === 'error' && ev instanceof global.ErrorEvent ? h.call(target, ev.message, ev.filename, ev.lineno, ev.colno, ev.error) : h.call(target, ev);

@@ -17,6 +17,10 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - `docs/development.md` (package map and contracts), `docs/releasing.md`, and an ADR log in `docs/adr/`.
 - `appbench -open-profile` times the key that opens the omnibox dropdown and the key that closes it separately and
   writes a CPU profile.
+- Sound for the desktop browser: a pure-Go audio mixer with an `oto` device backend, per-tab audible indicator and mute,
+  and the audio clock driving `<video>`/`<audio>` and Web Audio (`docs/audio-output.md`).
+- Adaptive streaming: MSE rebuilt on parsed coded frames with a native player, decode-ahead and late-frame handling,
+  measured decode and dropped-frame numbers, and a per-site status table (`docs/media-streaming.md`); EME/DRM is not supported.
 
 ### Changed
 - README shows the real browser UI (first-run setup with the real browser logos, Sidekick, Data Saver, new tab, omnibox), rendered by `uipreview`.

@@ -19,18 +19,9 @@ import (
 	"sort"
 	"strconv"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 )
-
-func cpuTime() time.Duration {
-	var ru syscall.Rusage
-	if syscall.Getrusage(syscall.RUSAGE_SELF, &ru) != nil {
-		return 0
-	}
-	return time.Duration(ru.Utime.Nano() + ru.Stime.Nano())
-}
 
 type playbackReport struct {
 	W, H           float64
