@@ -61,6 +61,7 @@
   names('codecs', 'CompressionStream DecompressionStream TextEncoderStream TextDecoderStream');
   names('xpath', 'XPathEvaluator XPathExpression XPathResult XPathNSResolver');
   names('xpath', 'evaluate createExpression createNSResolver', g.Document.prototype, true);
+  names('urlpattern', 'URLPattern');
   Object.defineProperty(g, '__swPlatformLoad', { value: load });
   // V8 stack-trace API that libraries probe for.
   if (!Error.captureStackTrace) {
