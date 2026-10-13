@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"math"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 // Cache Storage of one origin, in the origin's ordered store (origin.go lists the key layout).
@@ -213,12 +215,8 @@ func (c *CacheStore) Delete(name string) bool {
 	return true
 }
 
-func cacheBytesKey(cid uint32) []byte {
-	k := make([]byte, 6)
-	k[0], k[1] = 0x00, 'C'
-	binary.BigEndian.PutUint32(k[2:], cid)
-	return k
-}
+// cacheBytesKey is the cache's byte count: the last key of the cache's entry range (see origin.go).
+func cacheBytesKey(cid uint32) []byte { return cacheKey(pCacheEnt, cid, math.MaxUint64) }
 
 func (c *CacheStore) cacheBytes(k *kvStore, cid uint32) int64 {
 	if v, ok := k.get(cacheBytesKey(cid)); ok {
@@ -297,7 +295,7 @@ func (q CacheQuery) methodOK() bool {
 func (c *CacheStore) entries(k *kvStore, cid uint32, q CacheQuery, limit int) []*CacheEntry {
 	var out []*CacheEntry
 	if q.URL == "" {
-		it := k.db.NewIterator(prefixRange(cachePrefix(pCacheEnt, cid)), nil)
+		it := k.db.NewIterator(&util.Range{Start: cachePrefix(pCacheEnt, cid), Limit: cacheBytesKey(cid)}, nil)
 		for it.Next() && (limit <= 0 || len(out) < limit) {
 			r := rbuf{b: it.Value()}
 			if e := decEntry(&r); r.err == nil {

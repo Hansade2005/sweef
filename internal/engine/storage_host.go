@@ -291,6 +291,10 @@ func (h *storageHost) fns() map[string]hostFn {
 			return []any{id, started}, nil
 		},
 		"idbCommit": func(a []any) (any, error) { return nil, m().Commit(argI(a, 0)) },
+		"idbDurability": func(a []any) (any, error) {
+			m().SetDurability(argI(a, 0), argB(a, 1)) // durability "strict": the commit waits for stable storage
+			return nil, nil
+		},
 		"idbAbort": func(a []any) (any, error) {
 			m().Abort(argI(a, 0))
 			return nil, nil

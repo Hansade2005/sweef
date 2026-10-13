@@ -609,10 +609,7 @@ func (d *Database) commitTx(t *Tx) error {
 		}
 	}
 	for _, g := range t.garbage {
-		b.Put(garbageKey(d.id, g[0], g[1]), nil)
-		if g[1] == iidAll {
-			b.Delete(stateKey(d.id, g[0]))
-		}
+		b.Put(garbageKey(d.id, g[0], g[1]), nil) // the store's state record is inside the range being dropped
 	}
 	for _, id := range t.freed {
 		b.Delete(blobKey(id))
@@ -639,7 +636,6 @@ func (d *Database) destroy() {
 			var freed int64
 			for _, st := range d.stores {
 				b.Put(garbageKey(d.id, st.id, iidAll), nil)
-				b.Delete(stateKey(d.id, st.id))
 				freed += st.bytes
 				for _, ix := range st.idx {
 					freed += ix.bytes
@@ -658,13 +654,8 @@ func (d *Database) destroy() {
 
 func regKey(name string) []byte { return append([]byte{pDBReg}, name...) }
 
-func stateKey(db, store uint32) []byte {
-	k := make([]byte, 9)
-	k[0] = pStoreState
-	binary.BigEndian.PutUint32(k[1:], db)
-	binary.BigEndian.PutUint32(k[5:], store)
-	return k
-}
+// stateKey is the key of a store's state record: the last key of the store's range (see origin.go).
+func stateKey(db, store uint32) []byte { return dataPrefix(db, store, iidState) }
 
 // encodeSchema is the registry record: the version, the database id and the schema of every store.
 func (d *Database) encodeSchema() []byte {
@@ -898,6 +889,7 @@ func (o *Origin) wipe(reason string) {
 	o.memBlobs = nil
 	o.memMu.Unlock()
 	o.nextIDv.Store(1)
+	o.idHigh.Store(0)
 	if o.dir != "" {
 		_ = os.RemoveAll(o.dir)
 	}

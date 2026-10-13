@@ -535,7 +535,10 @@
       names = names.filter(function (n, ix) { return names.indexOf(n) === ix; }).sort();
       var r = host('idbBegin', this._conn, names, mode === 'readonly' ? 0 : 1);
       var tx = new IDBTransaction(TOKEN, this, names, mode, r[0], !!r[1]);
-      if (options && options.durability) tx._durability = String(options.durability);
+      if (options && options.durability) {
+        tx._durability = String(options.durability);
+        if (tx._durability === 'strict' && mode === 'readwrite') H.idbDurability(tx._id, true); // synchronous write at commit
+      }
       return tx;
     }
   });

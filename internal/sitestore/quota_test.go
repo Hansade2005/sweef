@@ -435,3 +435,73 @@ func TestCacheAndOPFSCountAgainstTheSameQuota(t *testing.T) {
 		t.Fatalf("room freed by the smaller file: %v", err)
 	}
 }
+
+// Usage is not stored as a number of its own: it is recomputed from the records the data carries when a store
+// opens. After a restart it must come out exactly as it was, whatever mix of creates, overwrites, clears and
+// deletes got it there.
+func TestUsageIsExactAfterARestart(t *testing.T) {
+	root := t.TempDir()
+	m, _, _ := newQuotaManager(t, root, 1000*MiB, nil)
+	o := m.Origin("http://usage")
+	sink := &testSink{}
+	conn := open(t, o, "db", 1, sink, func(tx int64) {
+		_ = m.CreateStore(tx, "a", "", false, false)
+		_ = m.CreateStore(tx, "b", "", false, true)
+		_ = m.CreateIndex(tx, "a", "i", `"x"`, false, false, nil)
+	})
+	tx := begin(t, m, conn, ModeReadWrite, "a", "b")
+	for i := 0; i < 300; i++ {
+		m.Put(tx, "a", nk(float64(i)), strings.Repeat("a", 100+i), false, idxKeys("i", nk(float64(i%7))))
+		m.Put(tx, "b", "", strings.Repeat("b", 80<<10), false, nil) // blobs
+	}
+	if err := m.Commit(tx); err != nil {
+		t.Fatal(err)
+	}
+	tx = begin(t, m, conn, ModeReadWrite, "a", "b")
+	m.DeleteRange(tx, "a", Range{Lo: nk(10), Hi: nk(60)})
+	m.Put(tx, "a", nk(5), "shorter", false, idxKeys("i", nk(1)))
+	m.Clear(tx, "b")
+	m.Put(tx, "b", "", "after clear", false, nil)
+	if err := m.Commit(tx); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := o.Caches()
+	c.Open("one")
+	c.Open("two")
+	for i := 0; i < 20; i++ {
+		c.Put("one", CacheEntry{URL: fmt.Sprint("http://usage/", i), Method: "GET", Status: 200}, make([]byte, 1000*i))
+	}
+	c.Put("two", CacheEntry{URL: "http://usage/x", Method: "GET", Status: 200}, make([]byte, 100<<10))
+	c.DeleteEntries("one", CacheQuery{URL: "http://usage/3", Method: "GET"})
+	fs := o.OPFS()
+	fs.Get([]string{"f"}, false, true)
+	fs.Write([]string{"f"}, make([]byte, 123456))
+	o.WaitGC()
+	want := o.Usage()
+	if want.IndexedDB == 0 || want.Caches == 0 || want.OPFS == 0 {
+		t.Fatalf("expected all three kinds of use: %+v", want)
+	}
+	m.CloseConn(conn)
+	m.Shutdown()
+
+	m2, _, _ := newQuotaManager(t, root, 1000*MiB, nil)
+	o2 := m2.Origin("http://usage")
+	if _, err := o2.acquire(); err != nil { // opening the store recomputes the usage
+		t.Fatal(err)
+	}
+	if got := o2.Usage(); got != want {
+		t.Fatalf("usage after a restart %+v, before it %+v", got, want)
+	}
+	// deleting a whole cache and a whole database brings it back to nothing
+	c2, _ := o2.Caches()
+	c2.Delete("one")
+	c2.Delete("two")
+	fs2 := o2.OPFS()
+	fs2.Remove([]string{"f"}, false)
+	d, _ := o2.DB("db")
+	d.Delete(1, sink)
+	o2.WaitGC()
+	if u := o2.Usage(); u.Total != 0 {
+		t.Fatalf("usage after deleting everything: %+v", u)
+	}
+}

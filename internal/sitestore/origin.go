@@ -18,44 +18,54 @@ import (
 // byte that cannot occur in them.
 //
 //	00 'fmt'                          format mark (kv.go)
-//	00 'cnt'                          id counter (uvarint)
-//	00 'usg'                          usage: IndexedDB, Cache Storage, OPFS bytes (varints)
+//	00 'cnt'                          id high-water mark (uvarint): ids below it may have been handed out
 //	02 name                           database registry: schema record of an IndexedDB database
-//	03 db(4) store(4)                 store state: key generator, record count, bytes
 //	04 db(4) store(4) index(4)        garbage: a range of data that is deleted in the background
 //	06 blob(8)                        registry of blob files
 //	10 db(4) store(4) 0(4) pk         a record (value)
 //	10 db(4) store(4) 1(4) pk         reverse entry: the index keys of that record
 //	10 db(4) store(4) i(4) ik pk      index i entry (empty value), ordered by (index key, primary key)
+//	10 db(4) store(4) FFFFFFFE        store state: key generator, record count, bytes (see below)
 //	20 name                           Cache Storage: cache name -> id, creation sequence
 //	21 cache(4) seq(8)                a cache entry (metadata; the body is a blob)
+//	21 cache(4) FF..FF                the cache's byte count (see below)
 //	22 seq(8)                         caches in creation order -> name
 //	23 cache(4) url0 fullurl 0 seq(8) lookup of entries by URL
 //	30 dir(8) name                    OPFS: children of a directory
 //	31 id(8)                          OPFS: node
+//	33                                OPFS: bytes in use
+//
+// Every key that a commit rewrites (a store's state, a cache's byte count) lives at the end of the range of the
+// data it describes, never in a global place: an LSM tree builds tables from the keys of a batch, and one hot key far
+// from the data would stretch every table over the whole keyspace, defeat the cheap handling of sequential inserts and
+// make each compaction rewrite everything below. Usage is not stored at all: it is the sum of those records, computed
+// when the store opens (loadState), and kept in memory as the batches that change it commit.
 const (
-	pDBReg      = 0x02
-	pStoreState = 0x03
-	pGarbage    = 0x04
-	pBlob       = 0x06
-	pData       = 0x10
-	pCacheReg   = 0x20
-	pCacheEnt   = 0x21
-	pCacheOrd   = 0x22
-	pCacheURL   = 0x23
-	pOPFSKid    = 0x30
-	pOPFSNode   = 0x31
+	pDBReg     = 0x02
+	pGarbage   = 0x04
+	pBlob      = 0x06
+	pData      = 0x10
+	pCacheReg  = 0x20
+	pCacheEnt  = 0x21
+	pCacheOrd  = 0x22
+	pCacheURL  = 0x23
+	pOPFSKid   = 0x30
+	pOPFSNode  = 0x31
+	pOPFSUsage = 0x33
 
 	iidRecord  = 0
 	iidReverse = 1
-	iidFirst   = 2 // first id an index can have
-	iidAll     = 0xFFFFFFFF
+	iidFirst   = 2          // first id an index can have
+	iidState   = 0xFFFFFFFE // the store's state record, after everything else of the store
+	iidAll     = 0xFFFFFFFF // in a garbage record: the whole store
 )
 
-var (
-	keyCounters = []byte{0x00, 'c', 'n', 't'}
-	keyUsage    = []byte{0x00, 'u', 's', 'g'}
-)
+// idBlock is how many ids a persisted high-water mark covers: the key that holds it is written once per block, not per commit.
+const idBlock = 1024
+
+var keyCounters = []byte{0x00, 'c', 'n', 't'}
+
+var opfsUsageKey = []byte{pOPFSUsage}
 
 // Origin is the storage of one origin.
 type Origin struct {
@@ -83,6 +93,7 @@ type Origin struct {
 	commitM sync.Mutex // serialises batches (usage and counters are part of every one)
 
 	nextIDv  atomic.Uint64
+	idHigh   atomic.Uint64 // the persisted high-water mark of nextIDv
 	memMu    sync.Mutex
 	memBlobs map[uint64][]byte
 
@@ -201,28 +212,70 @@ func (o *Origin) StoreOpen() bool {
 	return o.kvs != nil
 }
 
-// loadState reads the counters, the usage and starts the background work an open store owes. Caller holds kvMu.
+// loadState reads the id mark, recomputes the usage and starts the background work an open store owes. Caller holds kvMu.
 func (o *Origin) loadState(k *kvStore) {
 	if v, ok := k.get(keyCounters); ok {
+		// ids up to the mark may have been used by commits we cannot see: continue above it
 		if n, c := binary.Uvarint(v); c > 0 && n >= o.nextIDv.Load() {
 			o.nextIDv.Store(n)
+			o.idHigh.Store(n)
 		}
 	}
-	if v, ok := k.get(keyUsage); ok {
-		var vals [3]int64
-		for i := range vals {
-			n, c := binary.Varint(v)
-			if c <= 0 {
-				break
-			}
-			vals[i], v = n, v[c:]
-		}
-		o.usageIDB.Store(vals[0])
-		o.usageCache.Store(vals[1])
-		o.usageOPFS.Store(vals[2])
-	}
+	o.recomputeUsage(k)
 	o.sweepBlobs(k)
 	o.startGCLocked(k)
+}
+
+// stateBytes is what a store's state record says its records and indexes cost.
+func stateBytes(v []byte) int64 {
+	r := rbuf{b: v}
+	_, _, n := r.i(), r.i(), r.i()
+	ni := int(r.u())
+	for j := 0; j < ni && r.err == nil; j++ {
+		r.u()
+		n += r.i()
+	}
+	if r.err != nil {
+		return 0
+	}
+	return n
+}
+
+// recomputeUsage sums the usage records the committed data carries: stores through the registry (a deleted
+// database's records are garbage waiting for the collector and do not count), caches through their registry, the
+// file system through its counter.
+func (o *Origin) recomputeUsage(k *kvStore) {
+	var idb, caches int64
+	it := k.db.NewIterator(prefixRange([]byte{pDBReg}), nil)
+	for it.Next() {
+		var d Database
+		if d.decodeSchema(it.Value()) != nil {
+			continue
+		}
+		for _, st := range d.stores {
+			if v, ok := k.get(stateKey(d.id, st.id)); ok {
+				idb += stateBytes(v)
+			}
+		}
+	}
+	it.Release()
+	it = k.db.NewIterator(prefixRange([]byte{pCacheReg}), nil)
+	for it.Next() {
+		if v := it.Value(); len(v) >= 4 {
+			if b, ok := k.get(cacheBytesKey(u32(v))); ok {
+				n, _ := binary.Varint(b)
+				caches += n
+			}
+		}
+	}
+	it.Release()
+	var opfs int64
+	if v, ok := k.get(opfsUsageKey); ok {
+		opfs, _ = binary.Varint(v)
+	}
+	o.usageIDB.Store(idb)
+	o.usageCache.Store(caches)
+	o.usageOPFS.Store(opfs)
 }
 
 func (o *Origin) allocID() uint64 { return o.nextIDv.Add(1) }
@@ -234,30 +287,31 @@ func (o *Origin) removeLegacy() {
 	}
 }
 
-// commitBatch adds the id counter and the usage change to a batch and writes it. Every write to the store
-// goes through here, so the usage record and the data it describes are always committed together.
+// commitBatch writes a batch and applies the usage change it carries to the in-memory counters (the usage
+// itself is recorded by the data: see the key layout). The id high-water mark and the file system's byte
+// count are the only extra keys it may add, and the first only once per block of ids.
 func (o *Origin) commitBatch(k *kvStore, b *leveldb.Batch, dIDB, dCache, dOPFS int64, sync bool) error {
 	o.commitM.Lock()
 	defer o.commitM.Unlock()
-	idb, cache, opfs := o.usageIDB.Load()+dIDB, o.usageCache.Load()+dCache, o.usageOPFS.Load()+dOPFS
-	if idb < 0 {
-		idb = 0
+	clamp := func(v int64) int64 {
+		if v < 0 {
+			return 0
+		}
+		return v
 	}
-	if cache < 0 {
-		cache = 0
+	idb, cache, opfs := clamp(o.usageIDB.Load()+dIDB), clamp(o.usageCache.Load()+dCache), clamp(o.usageOPFS.Load()+dOPFS)
+	if dOPFS != 0 {
+		b.Put(opfsUsageKey, binary.AppendVarint(nil, opfs))
 	}
-	if opfs < 0 {
-		opfs = 0
+	hw := o.idHigh.Load()
+	if next := o.nextIDv.Load(); next > hw {
+		hw = next + idBlock
+		b.Put(keyCounters, binary.AppendUvarint(nil, hw))
 	}
-	var u []byte
-	u = binary.AppendVarint(u, idb)
-	u = binary.AppendVarint(u, cache)
-	u = binary.AppendVarint(u, opfs)
-	b.Put(keyUsage, u)
-	b.Put(keyCounters, binary.AppendUvarint(nil, o.nextIDv.Load()))
 	if err := k.write(b, sync); err != nil {
 		return err
 	}
+	o.idHigh.Store(hw)
 	o.usageIDB.Store(idb)
 	o.usageCache.Store(cache)
 	o.usageOPFS.Store(opfs)
