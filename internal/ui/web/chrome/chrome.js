@@ -25,8 +25,17 @@
   buildWC(); $("sidebar").setAttribute("aria-label", S.f(S.agent.title));
 
   /* toasts ----------------------------------------------------------------- */
+  function notifyToast(p) {
+    var done = false, t = h("div.toast.notify", { role: "alert" }, icon("bell", 18), h("div.nt", h("b.trunc", { text: p.title || "" }), p.text ? h("span.trunc", { text: p.text }) : null, h("small.trunc", { text: SW.host(p.origin) })));
+    var kill = function (how) { if (done) return; done = true; if (how !== "click") post("notify.closed", { id: p.id, user: how === "user" }); t.classList.add("out"); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 220); };
+    t.appendChild(h("button", { text: S.perm.open, onclick: function () { post("notify.click", { id: p.id }); kill("click"); } }));
+    (p.actions || []).slice(0, 2).forEach(function (a) { t.appendChild(h("button", { text: a.title, onclick: function () { post("notify.action", { id: p.id, action: a.id }); kill("click"); } })); });
+    t.appendChild(h("button.x", { "aria-label": S.perm.dismiss, onclick: function () { kill("user"); } }, icon("close", 14)));
+    E.toasts.appendChild(t); while (E.toasts.children.length > 3) E.toasts.removeChild(E.toasts.firstChild);
+    if (!p.sticky) setTimeout(function () { kill("time"); }, 8000);
+  }
   function toast(text, kind, action) {
-    if (typeof text === "object") { var p = text; text = p.text; kind = p.kind; action = p.action; }
+    if (typeof text === "object") { var p = text; if (p.kind === "notify") return notifyToast(p); text = p.text; kind = p.kind; action = p.action; }
     var t = h("div.toast" + (kind ? "." + kind : ""), { role: "status" }, icon(kind === "error" ? "alert" : kind === "warn" ? "warn" : "check", 16), h("span", { text: text }));
     if (action) t.appendChild(h("button", { text: action.label, onclick: function () { if (action.type) post(action.type, action.payload || {}); kill(); } }));
     E.toasts.appendChild(t);
@@ -277,6 +286,8 @@
     (st().bookmarksBar || []).slice(0, 14).forEach(function (b) { bar.appendChild(h("button", { title: b.url, onclick: function () { post("nav.go", { tab: st().active, input: b.url }); } }, SW.favicon(b.url, b.favicon, b.title), h("span.trunc", { text: b.title || SW.host(b.url) }))); });
   }
 
+  function renderPerm() { if ((st().perm || {}).prompt || SW.permPop) SW.lazy(["/chrome/perm.css", "/chrome/perm.js"], function () { SW.permPop.sync(); }); }
+
   /* toolbar events --------------------------------------------------------- */
   E.back.addEventListener("click", function () { post("nav.back"); }); E.fwd.addEventListener("click", function () { post("nav.forward"); });
   E.reload.addEventListener("click", function () { post(field("loading", false) ? "nav.stop" : "nav.reload"); });
@@ -312,6 +323,18 @@
     });
     box.appendChild(h("p", { text: S.f(v === "allowed" ? S.vis.subAllowed : v === "blocked" ? S.vis.subBlocked : S.vis.subAsk) })); return box;
   }
+  function permRow(ps) {
+    var box = h("div"), open = false, P = S.perm;
+    var row = h("button.mi", { "aria-expanded": "false", onclick: function () { open = !open; row.setAttribute("aria-expanded", open); SW.clear(box); if (open) box.appendChild(choose()); } }, icon("bell", 18), h("span.grow", { text: P.label }), h("span.valpill" + (ps.state === "allowed" ? ".on" : ps.state === "blocked" ? ".off" : ""), { text: P.st[ps.state] }), icon("chevr", 16));
+    function choose() {
+      var c = h("div.vischoice", { role: "radiogroup", "aria-label": P.label });
+      [["ask", "", P.subAsk], ["allowed", "granted", P.subAllowed], ["blocked", "denied", P.subBlocked]].forEach(function (o) {
+        c.appendChild(h("button.mi", { role: "radio", "aria-checked": ps.state === o[0] ? "true" : "false", onclick: function () { ps.state = o[0]; post("perm.set", { origin: ps.origin, name: "notifications", state: o[1] }); closePop(); } }, h("span.grow", { text: P.st[o[0]] }), ps.state === o[0] ? icon("check", 16, "ck") : null));
+      });
+      c.appendChild(h("p", { text: ps.state === "allowed" ? P.subAllowed : ps.state === "blocked" ? P.subBlocked : P.subAsk })); return c;
+    }
+    return h("div", row, box);
+  }
   function openSiteInfo() {
     var url = field("url", ""), sec = field("security", {}) || {}, level = E.secbtn.className.replace(/^secbtn\s*/, "") || "none", info = secInfo(level), internal = level === "internal";
     var node = h("div.wide");
@@ -320,6 +343,8 @@
       var vis = h("div"), val = pageVis(), open = false;
       var row = h("button.mi", { "aria-expanded": "false", onclick: function () { open = !open; row.setAttribute("aria-expanded", open); SW.clear(vis); if (open) vis.appendChild(visChooser(function () { closePop(); })); } }, icon("spark", 18), h("span.grow", { text: S.f(S.vis.title) }), h("span.valpill" + (val === "allowed" ? ".on" : val === "blocked" ? ".off" : ""), { text: visText(val) }), icon("chevr", 16));
       node.appendChild(row); node.appendChild(vis);
+      var ps = (st().perm || {}).site;
+      if (ps) node.appendChild(permRow(ps));
       node.appendChild(h("div.sep"));
       node.appendChild(mi("cert", sec.certValid === false ? S.sec.certInvalid : S.sec.certValid, { on: function () { post("menu.open", { name: "certificate", origin: SW.origin(url) }); } }));
       node.appendChild(mi("cookie", S.sec.cookies, { on: function () { post("menu.open", { name: "cookies", origin: SW.origin(url) }); } }));
@@ -341,6 +366,7 @@
       h("div.zoomrow", icon("search", 18), h("span.grow", { text: S.menu.zoom }), h("button.ibtn.sm", { "aria-label": S.menu.zoomOut, onclick: function () { zoom(-1); } }, icon("minus", 16)), zv, h("button.ibtn.sm", { "aria-label": S.menu.zoomIn, onclick: function () { zoom(1); } }, icon("plus", 16)), h("button.ibtn.sm", { "aria-label": S.menu.fullscreen, onclick: function () { post("window.fullscreen"); closePop(); } }, icon("maxi", 16))),
       mi("search", S.menu.find, { kbd: SW.mod + "+F", on: openFind }), mi("cmd", S.menu.palette, { kbd: SW.mod + "+K", on: function () { SW.palette.open(); } }),
       mi("spark", sbOpen() ? S.f(S.menu.hideSidekick) : S.f(S.menu.sidekick), { kbd: SW.mod + "+Shift+A", on: function () { setSidebar(!sbOpen()); } }), h("div.sep"),
+      (st().perm || {}).available ? mi((st().perm || {}).dnd ? "belloff" : "bell", S.perm.dnd, { sub: (st().perm || {}).dnd ? S.perm.dndOn : null, on: function () { post("settings.set", { key: "notifications.dnd", value: !(st().perm || {}).dnd }); } }) : null,
       mi("gear", S.menu.settings, { on: page("sweef://settings") }), mi("info", S.f(S.menu.about), { on: page("sweef://settings#about") }), mi("flag", S.menu.reportSite, { on: function () { post("menu.open", { name: "reportSite" }); } }));
     openPop(E.menu, m, { role: "menu" });
   }
@@ -421,7 +447,7 @@
   /* wiring ----------------------------------------------------------------- */
   var first = true;
   SW.on("render", function () {
-    renderTabs(); renderToolbar(); applyLayout(); renderInc();
+    renderTabs(); renderToolbar(); applyLayout(); renderInc(); renderPerm();
     var s = st(), mx = s.window && s.window.maximized ? "1" : ""; if (mx) document.documentElement.setAttribute("data-maximized", "1"); else document.documentElement.removeAttribute("data-maximized");
     var mxb = $("wc").querySelector(".mx"); if (mxb && mxb._m !== !!mx) { mxb._m = !!mx; SW.clear(mxb); mxb.appendChild(icon(mx ? "restore" : "maxi", 14)); mxb.setAttribute("aria-label", mx ? S.win.restore : S.win.max); }
     sizeTabs();

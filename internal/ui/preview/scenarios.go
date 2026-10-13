@@ -216,6 +216,28 @@ func Scenarios() []Scenario {
 		Setup: `SW.sk.send("Compare the three best-reviewed trail shoes under $120");` + ev("action", "id", "a1", "label", "Searched the web", "detail", "best trail shoes under $120", "status", "ok", "ms", 842) + ev("action", "id", "a2", "label", "Read runnersworld.com", "status", "ok", "ms", 311) + ev("text", "text", "I compared three well-reviewed pairs: the **Speedgoat 5** at $119, the **Peregrine 13** at $110 and the **Challenger 7** at $104. The Challenger is the best all-rounder at the lowest price.") + ev("done", "ttft", 388, "tps", 82, "data", M{"bytes": 421_888, "savedEstimated": 1_310_720, "skipped": 41, "lite": true, "available": true})})
 	add(Scenario{Name: "data-sidekick-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "data", dataState(0.394, "standard")), Backdrop: "article",
 		Setup: `SW.sk.send("Summarise the pricing page");` + ev("text", "text", "The **Team** plan is $12 per seat per month, billed yearly.") + ev("done", "ttft", 402, "tps", 77, "data", M{"bytes": 96_256, "skipped": 6, "lite": true, "available": true})})
+	// ---- Notifications: the permission prompt, the site info entry, notification toasts, Do not disturb, settings
+	npSite := "https://news.example.com/world/tax-brackets"
+	npPerm := func(extra ...any) M {
+		m := M{"available": true, "dnd": false, "push": true, "default": "ask", "site": M{"origin": "https://news.example.com", "state": "ask"}}
+		for i := 0; i+1 < len(extra); i += 2 {
+			m[extra[i].(string)] = extra[i+1]
+		}
+		return m
+	}
+	npPrompt := M{"id": "perm1", "origin": "https://news.example.com", "host": "news.example.com", "kind": "notifications"}
+	add(Scenario{Name: "notif-prompt-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false, "url", npSite, "perm", npPerm("prompt", npPrompt)), Backdrop: "article"})
+	add(Scenario{Name: "notif-prompt-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "sidebar.open", false, "url", npSite, "perm", npPerm("prompt", npPrompt)), Backdrop: "article"})
+	add(Scenario{Name: "notif-siteinfo-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false, "url", npSite, "perm", npPerm("site", M{"origin": "https://news.example.com", "state": "allowed"})), Backdrop: "article",
+		Setup: `document.getElementById('secbtn').click();document.querySelectorAll('.pop .mi')[1].click();`})
+	add(Scenario{Name: "notif-siteinfo-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "sidebar.open", false, "url", npSite, "perm", npPerm("site", M{"origin": "https://news.example.com", "state": "blocked"})), Backdrop: "article",
+		Setup: `document.getElementById('secbtn').click();document.querySelectorAll('.pop .mi')[1].click();`})
+	add(Scenario{Name: "notif-toast-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "sidebar.open", false, "perm", npPerm()), Backdrop: "article",
+		Setup: holdToast(`__send("toast",{kind:"notify",id:"n1",title:"Mia: are we still on for six?",text:"I can book the table if you say yes.",origin:"https://chat.example.com",actions:[{id:"reply",title:"Reply"}]});__send("toast",{kind:"notify",id:"n2",title:"Your order has shipped",text:"Arrives Thursday.",origin:"https://grocer.example.com",sticky:true});`)})
+	add(Scenario{Name: "notif-menu-dnd-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false, "perm", npPerm("dnd", true)), Backdrop: "article", Setup: `document.getElementById('menubtn').click();`})
+	npSites := []M{{"origin": "https://chat.example.com", "state": "allowed"}, {"origin": "https://grocer.example.com", "state": "blocked"}, {"origin": "https://news.example.com", "state": "ask", "embargo": true}}
+	add(Scenario{Name: "notif-settings-light", Page: "settings/index.html", Query: "?s=notif", W: 1280, H: 800, State: with(light, "perm", npPerm("sites", npSites)), Setup: `SW.set("push.service","https://push.example.com");`})
+	add(Scenario{Name: "notif-settings-dark", Page: "settings/index.html", Query: "?s=notif", W: 1280, H: 800, State: with(dark, "perm", npPerm("sites", npSites, "dnd", true, "push", false))})
 	add(Scenario{Name: "error-dns", Page: "error/index.html", Query: "?kind=dns&url=https%3A%2F%2Fexample-typo.test%2Fhello", W: 1280, H: 800, State: light})
 	add(Scenario{Name: "error-cert-dark", Page: "error/index.html", Query: "?kind=cert&url=https%3A%2F%2Fexpired.example.com%2F&detail=certificate+expired+2026-03-01&open=1", W: 1280, H: 800, State: dark})
 	add(Scenario{Name: "error-offline", Page: "error/index.html", Query: "?kind=offline&url=https%3A%2F%2Fwww.wsj.com%2F", W: 1280, H: 800, State: light})
