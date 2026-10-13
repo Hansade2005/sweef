@@ -179,7 +179,7 @@ func buildVM(o Options) (*jsVM, error) {
 	}
 	mem := o.JSMemoryMiB
 	if mem <= 0 {
-		mem = 64
+		mem = 256
 	}
 	vm.SetMemoryLimit(uintptr(mem) << 20)
 	vm.SetMaxStackSize(1 << 20)
@@ -1182,7 +1182,7 @@ func (j *jsVM) registerHost() error {
 		{"now", func(a []any) (any, error) { return j.nowMs(), nil }},
 		{"http", func(a []any) (any, error) {
 			hdr := map[string]string{}
-			if m, ok := a[2].(map[string]any); ok {
+			if m, ok := normalizeJS(a[2]).(map[string]any); ok {
 				for k, v := range m {
 					hdr[k] = fmt.Sprint(v)
 				}
@@ -1190,6 +1190,13 @@ func (j *jsVM) registerHost() error {
 			body := ""
 			if len(a) > 3 && a[3] != nil {
 				body = argS(a, 3)
+			}
+			if len(a) > 4 && argB(a, 4) { // binary body, sent as base64
+				raw, err := base64.StdEncoding.DecodeString(body)
+				if err != nil {
+					return nil, fmt.Errorf("TypeError: bad request body")
+				}
+				body = string(raw)
 			}
 			return j.tab.httpForScript(argS(a, 0), argS(a, 1), hdr, body)
 		}},

@@ -24,7 +24,17 @@ func resolveURL(base, ref string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	r, err := url.Parse(strings.TrimSpace(ref))
+	ref = strings.TrimSpace(ref)
+	// "https:../x" against an https base is a relative reference (WHATWG special relative or authority state)
+	if i := strings.IndexByte(ref, ':'); i > 0 && strings.EqualFold(ref[:i], b.Scheme) {
+		switch strings.ToLower(b.Scheme) {
+		case "http", "https", "ws", "wss", "ftp":
+			if rest := ref[i+1:]; !strings.HasPrefix(rest, "//") && !strings.HasPrefix(rest, `\\`) {
+				ref = rest
+			}
+		}
+	}
+	r, err := url.Parse(ref)
 	if err != nil {
 		return "", err
 	}

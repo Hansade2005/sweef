@@ -14,8 +14,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,6 +53,22 @@ const probeJS = `(function () {
       return p;
     };
   });
+  safe(function () {
+    var of = window.fetch;
+    L.fetchLog = [];
+    window.fetch = function (input, init) {
+      var url = String(input && input.url || input), p = of.apply(this, arguments);
+      if (/videoplayback|googlevideo/.test(url)) {
+        var rec = { url: url.replace(/\?.*/, '').slice(-40), reqBytes: init && init.body && (init.body.byteLength || init.body.length) || 0 };
+        L.fetchLog.push(rec);
+        p.then(function (r) {
+          rec.status = r.status; rec.type = r.headers.get('content-type');
+          r.clone().arrayBuffer().then(function (b) { rec.bytes = b.byteLength; var u = new Uint8Array(b.slice(0, 8)); rec.head = Array.prototype.join.call(u, ','); var all = new Uint8Array(b), t = ''; for (var i = 0; i < Math.min(all.length, 400); i++) t += (all[i] >= 32 && all[i] < 127) ? String.fromCharCode(all[i]) : '.'; rec.text = t; }, function (e) { rec.err = String(e); });
+        }, function (e) { rec.err = String(e); });
+      }
+      return p;
+    };
+  });
   window.addEventListener('error', function (e) { L.jsErr.push(String(e.message) + ' @' + (e.filename || '') + ':' + e.lineno); });
   window.addEventListener('unhandledrejection', function (e) { L.jsErr.push('rejection: ' + String(e.reason && (e.reason.stack || e.reason))); });
 })();`
@@ -74,9 +93,26 @@ func main() {
 		console = flag.Bool("console", true, "print the page's console messages at the end")
 		ua      = flag.String("ua", "chrome", `user agent: "chrome" (a desktop Chrome string), "engine" (the engine's default) or a full string`)
 		eval    = flag.String("eval", "", "JavaScript to evaluate after the load and print (a diagnostic aid)")
+		evalEnd = flag.String("eval-end", "", "JavaScript to evaluate when the watch time is over and print")
+		serve   = flag.String("serve", "", "serve this HTML file at a local URL and load it (the -url flag is then ignored)")
+		referer = flag.String("referer", "", "Referer header for the first request (YouTube's embedded player refuses to run without one)")
+		jsMem   = flag.Int("js-mem", 0, "JavaScript heap limit in MiB (0 = the engine default)")
 		play    = flag.Bool("play", true, "call play() on the first <video> when nothing starts by itself")
 	)
 	flag.Parse()
+	if *serve != "" {
+		page, err := os.ReadFile(*serve)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(page)
+		}))
+		defer srv.Close()
+		*url = srv.URL + "/"
+	}
 	if *url == "" {
 		flag.Usage()
 		os.Exit(2)
@@ -87,6 +123,9 @@ func main() {
 	o := engine.DefaultOptions()
 	o.ViewportWidth, o.ViewportHeight = 1280, 760
 	o.SettleMs = *settle
+	if *jsMem > 0 {
+		o.JSMemoryMiB = *jsMem
+	}
 	e := engine.New(o)
 	defer e.Close()
 	t, err := e.NewTab("about:blank")
@@ -103,7 +142,11 @@ func main() {
 	}
 	t.AddInitScript(probeJS)
 	t0 := time.Now()
-	if err := t.Navigate(*url, nil); err != nil {
+	var hdr map[string]string
+	if *referer != "" {
+		hdr = map[string]string{"Referer": *referer}
+	}
+	if err := t.Navigate(*url, hdr); err != nil {
 		fmt.Println("navigate:", err)
 	}
 	fmt.Printf("loaded in %.1fs: %q\n", time.Since(t0).Seconds(), t.Title())
@@ -157,6 +200,10 @@ func main() {
 			}
 		}
 	}
+	if *evalEnd != "" {
+		raw, err := t.Evaluate(*evalEnd)
+		fmt.Printf("eval-end: %s %v\n", trunc(string(raw), 3000), err)
+	}
 	raw, _ := t.Evaluate(`JSON.stringify(window.__mediaProbe || {})`)
 	var js string
 	_ = json.Unmarshal(raw, &js)
@@ -175,6 +222,13 @@ func main() {
 	fmt.Printf("\nMediaSource.isTypeSupported probes (%d):\n", len(types))
 	for _, s := range types {
 		fmt.Println("  " + s)
+	}
+	if raw, err := t.Evaluate(`JSON.stringify((window.__mediaProbe||{}).fetchLog||[])`); err == nil {
+		var fl string
+		_ = json.Unmarshal(raw, &fl)
+		if fl != "" && fl != "[]" {
+			fmt.Printf("media fetches: %s\n", trunc(fl, 2500))
+		}
 	}
 	fmt.Printf("addSourceBuffer types: %v\n", p.SB)
 	fmt.Printf("mediaCapabilities.decodingInfo calls: %d\n", len(p.Dec))
@@ -196,14 +250,18 @@ func main() {
 				if n++; n > 25 {
 					break
 				}
-				fmt.Printf("  %s: %s\n", d["level"], trunc(strings.ReplaceAll(d["text"], "\n", " | "), 300))
+				fmt.Printf("  %s: %s\n", d["level"], trunc(strings.ReplaceAll(d["text"], "\n", " | "), consoleWidth))
 			}
 		}
 	}
 	if os.Getenv("MEDIASITE_NET") != "" {
 		fmt.Println("network:")
+		width, _ := strconv.Atoi(os.Getenv("MEDIASITE_NET"))
+		if width < 200 {
+			width = 200
+		}
 		for _, ev := range t.NetworkLog(0) {
-			fmt.Printf("  %v %v\n", ev.Kind, trunc(fmt.Sprint(ev.Data), 200))
+			fmt.Printf("  %v %v\n", ev.Kind, trunc(fmt.Sprint(ev.Data), width))
 		}
 	}
 	fmt.Println("failed requests:")
@@ -217,6 +275,13 @@ func main() {
 		}
 	}
 }
+
+var consoleWidth = func() int {
+	if n, _ := strconv.Atoi(os.Getenv("MEDIASITE_CONSOLE")); n > 0 {
+		return n
+	}
+	return 300
+}()
 
 func trunc(s string, n int) string {
 	if len(s) > n {

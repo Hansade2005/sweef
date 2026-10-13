@@ -224,13 +224,13 @@
   PROPS.playbackRate = {
     get: function () { return st(this).rate; },
     set: function (v) {
-      v = rateCheck(v); if (v < 0.0625 || v > 16) throw dex("Failed to set the 'playbackRate' property on 'HTMLMediaElement': The provided playback rate (" + v + ") is not in the supported playback range.", 'NotSupportedError');
+      v = rateCheck(v); if (v !== 0 && (v < 0.0625 || v > 16)) throw dex("Failed to set the 'playbackRate' property on 'HTMLMediaElement': The provided playback rate (" + v + ") is not in the supported playback range.", 'NotSupportedError');
       var s = st(this); if (s.rate !== v) { anchor(s); s.rate = v; qevAny(this, 'ratechange'); reschedule(this); }
     }
   };
   PROPS.defaultPlaybackRate = {
     get: function () { return st(this).defRate; },
-    set: function (v) { v = rateCheck(v); if (v < 0.0625 || v > 16) throw dex("Failed to set the 'defaultPlaybackRate' property on 'HTMLMediaElement': The provided playback rate (" + v + ") is not in the supported playback range.", 'NotSupportedError'); var s = st(this); if (s.defRate !== v) { s.defRate = v; qevAny(this, 'ratechange'); } }
+    set: function (v) { v = rateCheck(v); if (v !== 0 && (v < 0.0625 || v > 16)) throw dex("Failed to set the 'defaultPlaybackRate' property on 'HTMLMediaElement': The provided playback rate (" + v + ") is not in the supported playback range.", 'NotSupportedError'); var s = st(this); if (s.defRate !== v) { s.defRate = v; qevAny(this, 'ratechange'); } }
   };
   PROPS.preservesPitch = { get: function () { var s = st(this); return s.pp === undefined ? true : s.pp; }, set: function (v) { st(this).pp = !!v; } };
   PROPS.buffered = { get: function () { return makeRanges(bufferedList(st(this))); } };
@@ -1260,6 +1260,16 @@
   if (global.Navigator) {
     Object.defineProperty(global.Navigator.prototype, 'mediaDevices', { get: function () { return devices; }, configurable: true, enumerable: true });
     defMethod(global.Navigator.prototype, 'requestMediaKeySystemAccess', function () { return Promise.reject(dex('Unsupported keySystem or supportedConfigurations.', 'NotSupportedError')); });
+    // EME is not supported (docs/media-streaming.md), but the interfaces exist so that players which patch their
+    // prototypes (Shaka's polyfills) or test instanceof do not fail with a ReferenceError before they can ask
+    // for a key system and be refused.
+    ['MediaKeySystemAccess', 'MediaKeys', 'MediaKeyStatusMap'].forEach(function (name) {
+      var C = { [name]: function () { illegal(); } }[name]; tag(C, name); global[name] = C;
+    });
+    var MKS = function MediaKeySession() { illegal(); };
+    derive(MKS, EventTarget); tag(MKS, 'MediaKeySession'); global.MediaKeySession = MKS;
+    var MKME = function MediaKeyMessageEvent(type, init) { if (!(this instanceof MKME)) throw new TypeError("Failed to construct 'MediaKeyMessageEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."); return Reflect.construct(global.Event, [type, init], MKME); };
+    derive(MKME, global.Event); tag(MKME, 'MediaKeyMessageEvent'); global.MediaKeyMessageEvent = MKME;
     defMethod(global.Navigator.prototype, 'getUserMedia', function (c, ok, err) { devices.getUserMedia(c).then(ok, err); });
     defMethod(global.Navigator.prototype, 'webkitGetUserMedia', global.Navigator.prototype.getUserMedia);
   }

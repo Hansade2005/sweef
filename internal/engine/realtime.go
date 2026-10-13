@@ -273,7 +273,7 @@ func (j *jsVM) workerCreate(rawurl, src, typ string) (int64, error) {
 	reg("http", func(a []any) (any, error) {
 		hdr := map[string]string{}
 		if len(a) > 2 {
-			if m, ok := a[2].(map[string]any); ok {
+			if m, ok := normalizeJS(a[2]).(map[string]any); ok {
 				for k, v := range m {
 					hdr[k] = fmt.Sprint(v)
 				}

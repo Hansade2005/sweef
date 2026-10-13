@@ -1218,6 +1218,17 @@
   methods(SVGElement.prototype, { focus: HTMLElement.prototype.focus, blur: HTMLElement.prototype.blur, getBBox: function () { return this.getBoundingClientRect(); }, getScreenCTM: function () { return null; }, getCTM: function () { return null; }, createSVGPoint: function () { return { x: 0, y: 0, matrixTransform: function () { return this; } }; } });
   global.SVGSVGElement = makeClass('SVGSVGElement', SVGElement); TAG_CLASS.svg = global.SVGSVGElement;
   global.SVGGraphicsElement = SVGElement;
+  // SVG element interfaces by tag (pages test nodes with instanceof SVGPathElement and the like)
+  var SVG_CLASS = {};
+  var SVG_CLASSES = { SVGPathElement: 'path', SVGCircleElement: 'circle', SVGRectElement: 'rect', SVGEllipseElement: 'ellipse', SVGLineElement: 'line',
+    SVGPolylineElement: 'polyline', SVGPolygonElement: 'polygon', SVGGElement: 'g', SVGDefsElement: 'defs', SVGUseElement: 'use',
+    SVGSymbolElement: 'symbol', SVGTextElement: 'text', SVGTSpanElement: 'tspan', SVGImageElement: 'image', SVGClipPathElement: 'clippath',
+    SVGMaskElement: 'mask', SVGPatternElement: 'pattern', SVGLinearGradientElement: 'lineargradient', SVGRadialGradientElement: 'radialgradient',
+    SVGStopElement: 'stop', SVGMarkerElement: 'marker', SVGForeignObjectElement: 'foreignobject', SVGFilterElement: 'filter' };
+  Object.keys(SVG_CLASSES).forEach(function (name) {
+    var tag = SVG_CLASSES[name], C = makeClass(name, SVGElement);
+    global[name] = C; SVG_CLASS[tag] = C; if (!TAG_CLASS[tag]) TAG_CLASS[tag] = C;
+  });
 
   // ---- form controls: live value/checked accessors live on the SPECIFIC prototypes
   function liveValue(proto) {
@@ -1541,7 +1552,7 @@
       var local = qname.indexOf(':') >= 0 ? qname.split(':')[1] : qname;
       if (ns === XHTML_NS || ns === null || ns === '') return this.createElement(local, options);
       var id = sw.createElement(local.toLowerCase());
-      var C = ns === SVG_NS ? (local.toLowerCase() === 'svg' ? global.SVGSVGElement : SVGElement) : Element;
+      var C = ns === SVG_NS ? (local.toLowerCase() === 'svg' ? global.SVGSVGElement : SVG_CLASS[local.toLowerCase()] || SVGElement) : Element;
       var w = makeWrapper(id, C);
       w[NS] = ns; w[ORIG_TAG] = local;
       hostMutation('create', id);
@@ -2535,6 +2546,11 @@
   function parseURL(input, base) {
     input = String(input).trim().replace(/[\t\n\r]/g, '');
     var m = /^([a-zA-Z][a-zA-Z0-9+.-]*):(.*)$/.exec(input);
+    if (m && base !== undefined && SPECIAL[m[1].toLowerCase() + ':'] && !/^[\/\\]{2}/.test(m[2])) {
+      // "https:../x" against an https base is a relative reference (special relative or authority state)
+      var sb = null; try { sb = parseURL(base); } catch (e) { /* not a valid base */ }
+      if (sb && sb.protocol === m[1].toLowerCase() + ':') { input = m[2]; m = null; }
+    }
     var rec = { protocol: '', username: '', password: '', hostname: '', port: '', pathname: '', search: '', hash: '', opaque: false };
     var rest;
     if (m) { rec.protocol = m[1].toLowerCase() + ':'; rest = m[2]; }
@@ -2796,7 +2812,7 @@
     return null;
   }
   function defineBody(proto) {
-    getters(proto, { bodyUsed: { get: function () { return !!this._used; } }, body: { get: function () { if (this._body === null || this._body === undefined) return null; if (typeof this._body.getReader === 'function') return this._body; return bytesStream(utf8Encode(this._text())); } } });
+    getters(proto, { bodyUsed: { get: function () { return !!this._used; } }, body: { get: function () { if (this._body === null || this._body === undefined) return null; if (typeof this._body.getReader === 'function') return this._body; return bytesStream(this._rawBytes ? this._rawBytes.slice() : utf8Encode(this._text())); } } });
     methods(proto, {
       _text: function () { return bodyToString(this._body); },
       _consume: function () {
@@ -2866,17 +2882,35 @@
   }
   defineBody(Response.prototype);
   getters(Response.prototype, { ok: { get: function () { return this.status >= 200 && this.status < 300; } } });
-  methods(Response.prototype, { clone: function () { if (this._used) throw new TypeError("Failed to execute 'clone' on 'Response': Response body is already used"); var r = new Response(this._body, { status: this.status, statusText: this.statusText, headers: this.headers, url: this.url, type: this.type, redirected: this.redirected }); return r; } });
+  methods(Response.prototype, { clone: function () { if (this._used) throw new TypeError("Failed to execute 'clone' on 'Response': Response body is already used"); var r = new Response(this._body, { status: this.status, statusText: this.statusText, headers: this.headers, url: this.url, type: this.type, redirected: this.redirected }); if (this._rawBytes) Object.defineProperty(r, '_rawBytes', { value: this._rawBytes, writable: true }); return r; } });
   Response.error = function () { var r = new Response(null, { status: 200, type: 'error' }); Object.defineProperty(r, 'status', { value: 0 }); return r; };
   Response.redirect = function (url, status) { return new Response(null, { status: status || 302, headers: { location: new URL(url, currentURL()).href } }); };
   Response.json = function (data, init) { init = Object.assign({}, init || {}); var h = new Headers(init.headers); if (!h.has('content-type')) h.set('content-type', 'application/json'); init.headers = h; return new Response(JSON.stringify(data), init); };
   setTag(Response, 'Response'); global.Response = Response;
 
   // ---- fetch: an asynchronous request behind a Promise, started on a microtask
+  // The request body as the host takes it: text as a string, bytes (ArrayBuffer, typed array, Blob) as
+  // {bin: Uint8Array} so that they are not mangled by a trip through UTF-8.
+  function sendBody(body) {
+    if (body === null || body === undefined) return null;
+    if (body instanceof ArrayBuffer) return { bin: new Uint8Array(body) };
+    if (ArrayBuffer.isView(body)) return { bin: new Uint8Array(body.buffer, body.byteOffset, body.byteLength) };
+    if (body instanceof Blob) return { bin: body._bytes };
+    return bodyToString(body);
+  }
+  function bodyWire(body) {
+    if (body && typeof body === 'object' && body.bin) {
+      var u = body.bin, s = '';
+      for (var i = 0; i < u.length; i += 0x6000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x6000));
+      return [global.btoa(s), true];
+    }
+    return [body, false];
+  }
   function doHttp(method, url, headers, body) {
     var hobj = {};
     if (headers) headers.forEach(function (v, k) { hobj[k] = v; });
-    var r = sw.http(method, url, hobj, body);
+    var w = bodyWire(body);
+    var r = sw.http(method, url, hobj, w[0], w[1]);
     if (!r || typeof r !== 'object') throw new TypeError('Failed to fetch');
     return r;
   }
@@ -2887,7 +2921,8 @@
     var hobj = {};
     if (headers) headers.forEach(function (v, k) { hobj[k] = v; });
     var t;
-    try { t = sw.httpAsync(method, url, hobj, body, false); } catch (e) { cb(null, e); return; }
+    var w = bodyWire(body);
+    try { t = sw.httpAsync(method, url, hobj, w[0], false, w[1]); } catch (e) { cb(null, e); return; }
     if (t && typeof t === 'object') { cb(t); return; }
     httpCbs.set(t, cb);
   }
@@ -2917,7 +2952,7 @@
       if (req.signal) req.signal.addEventListener('abort', function () { aborted = true; reject(req.signal.reason); });
       queueMicrotaskImpl(function () {
         if (aborted) return;
-        doHttpAsync(req.method, req.url, req.headers, req._body === null ? null : bodyToString(req._body), function (r, e) {
+        doHttpAsync(req.method, req.url, req.headers, sendBody(req._body), function (r, e) {
           if (aborted) return;
           if (e) { reject(e instanceof Error ? new TypeError('Failed to fetch: ' + (e.message || e)) : new TypeError('Failed to fetch')); return; }
           if (!r || (!r.status && !r.body)) { reject(new TypeError('Failed to fetch')); return; }
@@ -2977,7 +3012,7 @@
         }
       }
     },
-    responseXML: { get: function () { if (this.readyState !== 4 || !/html|xml/.test(this._resHeaders.get('content-type') || '') && this.responseType !== 'document') return null; try { return new DOMParser().parseFromString(this._responseText, 'text/html'); } catch (e) { return null; } } }
+    responseXML: { get: function () { if (this.readyState !== 4 || !/html|xml/.test(this._resHeaders.get('content-type') || '') && this.responseType !== 'document') return null; try { var ct = this._resHeaders.get('content-type') || ''; return new DOMParser().parseFromString(this._responseText, /xml/.test(ct) && !/html/.test(ct) ? 'text/xml' : 'text/html'); } catch (e) { return null; } } }
   });
   methods(XMLHttpRequest.prototype, {
     open: function (method, url, async, user, password) {
@@ -2994,7 +3029,8 @@
       if (this.readyState !== 1 || this._sent) throw DOMException("Failed to execute 'send' on 'XMLHttpRequest': The object's state must be OPENED.", 'InvalidStateError');
       this._sent = true;
       if (this._method === 'GET' || this._method === 'HEAD') body = null;
-      var bodyStr = body === undefined || body === null ? null : bodyToString(body);
+      var bodyStr = body === undefined || body === null ? null : sendBody(body);
+      var bodyLen = bodyStr === null ? 0 : typeof bodyStr === 'string' ? bodyStr.length : bodyStr.bin.length;
       if (bodyStr !== null && !this._reqHeaders.has('content-type')) { var ct = bodyContentType(body); if (ct) this._reqHeaders.set('content-type', ct); }
       var self = this, url = this._url, method = this._method, headers = this._reqHeaders;
       fire(this, 'loadstart', {});
@@ -3002,7 +3038,7 @@
       var done = function (r, e) {
         if (self._aborted || self.readyState === 4) return;
         if (e) { xhrFail(self, 'error'); return; }
-        if (bodyStr !== null) { fire(self.upload, 'progress', { lengthComputable: true, loaded: bodyStr.length, total: bodyStr.length }); fire(self.upload, 'load', {}); fire(self.upload, 'loadend', {}); }
+        if (bodyStr !== null) { fire(self.upload, 'progress', { lengthComputable: true, loaded: bodyLen, total: bodyLen }); fire(self.upload, 'load', {}); fire(self.upload, 'loadend', {}); }
         if (!r || (!r.status && !r.body)) { xhrFail(self, 'error'); return; }
         xhrFinish(self, r, url);
       };
