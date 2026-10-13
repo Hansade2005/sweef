@@ -13,11 +13,11 @@
   "mem_mb": 16093,
   "chromium": "Chrome/141.0.7390.37",
   "chromium_ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
-  "sweef_commit": "45134a9, engine+net source hash 1bc087fd4fa6",
+  "sweef_commit": "456de4b, engine+net source hash 1bc087fd4fa6",
   "sweef_dirty": false,
   "policy_api": true,
   "network": "Cloud sandbox VM. All egress goes through the agent's HTTP CONNECT proxy; TLS is re-terminated by an egress gateway with its own CA (certificate chains therefore differ from the sites' real ones). Bandwidth and latency are not controlled or recorded.",
-  "upstream": "http://127.0.0.1:33071",
+  "upstream": "http://127.0.0.1:36505",
   "chromium_flags": [
    "--headless=new",
    "--no-sandbox",
@@ -21866,6 +21866,106 @@
       "out": 2248
      }
     ]
+   }
+  },
+  {
+   "site": "https://news.ycombinator.com/",
+   "mode": "sweef-off",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 16037,
+    "wire_out": 2282,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 109,
+    "requests": 3,
+    "cache_served": 0,
+    "ready_ms": 1090.457,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 1,
+     "Stylesheet": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "news.ycombinator.com",
+      "conns": 1,
+      "in": 16037,
+      "out": 2282
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://news.ycombinator.com/",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://news.ycombinator.com/hn.js?wfQ75QS9UtdHcfDAqQsg",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://news.ycombinator.com/news.css?wfQ75QS9UtdHcfDAqQsg",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 16076,
+     "wire_out": 2391,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 11756,
+    "wire_out": 2077,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 109,
+    "requests": 3,
+    "cache_served": 2,
+    "ready_ms": 1170.475,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 1,
+     "Stylesheet": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "news.ycombinator.com",
+      "conns": 1,
+      "in": 11756,
+      "out": 2077
+     }
+    ],
+    "engine": {
+     "wire_in": 11795,
+     "wire_out": 2186,
+     "cache_hit_bytes": 4462,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
    }
   }
  ],
