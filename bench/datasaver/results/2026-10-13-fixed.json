@@ -1,0 +1,311 @@
+{
+ "schema": 1,
+ "label": "fixed",
+ "started": "2026-10-13T03:10:26Z",
+ "complete": false,
+ "env": {
+  "date": "2026-10-13",
+  "go": "go1.26.0",
+  "os": "Ubuntu 24.04.5 LTS",
+  "kernel": "6.18.44-fc-v114",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 4,
+  "mem_mb": 16093,
+  "chromium": "Chrome/141.0.7390.37",
+  "chromium_ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+  "sweef_commit": "e5231da + uncommitted engine/net changes, engine+net source hash ca3273b83d9b",
+  "sweef_dirty": false,
+  "policy_api": true,
+  "network": "Cloud sandbox VM. All egress goes through the agent's HTTP CONNECT proxy; TLS is re-terminated by an egress gateway with its own CA (certificate chains therefore differ from the sites' real ones). Bandwidth and latency are not controlled or recorded.",
+  "upstream": "http://127.0.0.1:41367",
+  "chromium_flags": [
+   "--headless=new",
+   "--no-sandbox",
+   "--user-data-dir=\u003cfresh temp dir\u003e",
+   "--remote-debugging-port=0",
+   "--remote-allow-origins=*",
+   "--proxy-server=http://\u003crecorder 127.0.0.1:PORT\u003e",
+   "--window-size=1280,720",
+   "--disable-background-networking",
+   "--disable-sync",
+   "--disable-component-update",
+   "--disable-default-apps",
+   "--disable-domain-reliability",
+   "--disable-client-side-phishing-detection",
+   "--safebrowsing-disable-auto-update",
+   "--disable-breakpad",
+   "--metrics-recording-only",
+   "--no-pings",
+   "--no-first-run",
+   "--no-default-browser-check",
+   "--disable-search-engine-choice-screen",
+   "--password-store=basic",
+   "--disable-features=OptimizationHints,OptimizationGuideModelDownloading,Translate,MediaRouter,AutofillServerCommunication,CertificateTransparencyComponentUpdater,PrivacySandboxSettings4,InterestFeedContentSuggestions,CalculateNativeWinOcclusion"
+  ],
+  "sweef_opts": {
+   "DisableJS": false,
+   "DiskCacheMiB": 100,
+   "JSTimeoutMs": 5000,
+   "MaxCacheMiB": 32,
+   "SettleMs": 1500,
+   "UserAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Sweef/0.1",
+   "ViewportHeight": 720,
+   "ViewportWidth": 1280
+  }
+ },
+ "sites_sha256": "34ef46ad4b48cd3974c8d99948c838b4e5618c7ed5ef4d287f8aa15bb001df81",
+ "sites": [
+  {
+   "url": "https://en.wikipedia.org/wiki/Web_browser",
+   "reason": "reference article, long text with many thumbnails, server-rendered"
+  },
+  {
+   "url": "https://en.wikivoyage.org/wiki/Lisbon",
+   "reason": "travel guide article on a MediaWiki site, maps and photos"
+  },
+  {
+   "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "reason": "MDN reference page, modern docs site with JS"
+  },
+  {
+   "url": "https://docs.python.org/3/library/asyncio.html",
+   "reason": "static documentation page (Sphinx), almost no third parties"
+  },
+  {
+   "url": "https://go.dev/doc/effective_go",
+   "reason": "long single-page doc, light CSS and JS"
+  },
+  {
+   "url": "https://news.ycombinator.com/",
+   "reason": "Hacker News front page, tiny HTML, no images"
+  },
+  {
+   "url": "https://www.joelonsoftware.com/2000/04/06/things-you-should-never-do-part-i/",
+   "reason": "classic blog post that is routinely linked from Hacker News, WordPress theme"
+  },
+  {
+   "url": "https://github.com/golang/go",
+   "reason": "GitHub repository page, heavy JS app with server-rendered file list"
+  },
+  {
+   "url": "https://stackoverflow.com/questions/927358/how-do-i-undo-the-most-recent-local-commits-in-git",
+   "reason": "Stack Overflow question with answers, ads and trackers"
+  },
+  {
+   "url": "https://www.bbc.com/news",
+   "reason": "news front page, many images and scripts"
+  },
+  {
+   "url": "https://www.theguardian.com/environment/2019/may/06/human-society-under-urgent-threat-loss-of-earth-natural-life-un-report",
+   "reason": "news article with hero image, related links, ads"
+  },
+  {
+   "url": "https://www.npr.org/",
+   "reason": "news front page, image-heavy cards"
+  },
+  {
+   "url": "https://arstechnica.com/",
+   "reason": "tech news front page, ads and trackers"
+  },
+  {
+   "url": "https://www.theverge.com/",
+   "reason": "script-heavy news front page"
+  },
+  {
+   "url": "https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276",
+   "reason": "shopping category page, product grid with many images"
+  },
+  {
+   "url": "https://www.newegg.com/p/pl?d=laptop",
+   "reason": "second shopping category page, listing grid"
+  },
+  {
+   "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+   "reason": "long Discourse forum thread, JS app"
+  },
+  {
+   "url": "https://www.allrecipes.com/recipe/10813/best-chocolate-chip-cookies/",
+   "reason": "recipe blog page, ad-heavy"
+  },
+  {
+   "url": "https://forecast.weather.gov/MapClick.php?lat=40.7146\u0026lon=-74.0071",
+   "reason": "weather forecast page, government site, light"
+  },
+  {
+   "url": "https://www.lonelyplanet.com/japan",
+   "reason": "travel destination guide, image-heavy marketing page"
+  },
+  {
+   "url": "https://pypi.org/project/requests/",
+   "reason": "package index page, light server-rendered"
+  },
+  {
+   "url": "https://www.gov.uk/browse/driving",
+   "reason": "government text page, near-zero JS, plain baseline"
+  },
+  {
+   "url": "https://dev.to/",
+   "reason": "developer blog front page, feed of cards with images"
+  }
+ ],
+ "modes": [
+  "sweef-off",
+  "sweef-standard",
+  "sweef-strict",
+  "chromium",
+  "chromium-savedata"
+ ],
+ "modes_wanted": [
+  "sweef-off",
+  "sweef-standard",
+  "sweef-strict",
+  "chromium",
+  "chromium-savedata"
+ ],
+ "runs": 3,
+ "idle_sec": 5,
+ "cells": null,
+ "baselines": [
+  {
+   "mode": "sweef-off",
+   "run": 1,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-off",
+   "run": 2,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-off",
+   "run": 3,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-standard",
+   "run": 1,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-standard",
+   "run": 2,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-standard",
+   "run": 3,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-strict",
+   "run": 1,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-strict",
+   "run": 2,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-strict",
+   "run": 3,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "chromium",
+   "run": 1,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0,
+   "hosts": [
+    "www.google.com",
+    "accounts.google.com"
+   ],
+   "internal_in": 10533,
+   "internal_out": 4198
+  },
+  {
+   "mode": "chromium",
+   "run": 2,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0,
+   "hosts": [
+    "accounts.google.com",
+    "www.google.com"
+   ],
+   "internal_in": 13267,
+   "internal_out": 4198
+  },
+  {
+   "mode": "chromium",
+   "run": 3,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0,
+   "hosts": [
+    "www.google.com",
+    "accounts.google.com"
+   ],
+   "internal_in": 11741,
+   "internal_out": 4198
+  },
+  {
+   "mode": "chromium-savedata",
+   "run": 1,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0,
+   "hosts": [
+    "accounts.google.com",
+    "www.google.com"
+   ],
+   "internal_in": 11741,
+   "internal_out": 4198
+  },
+  {
+   "mode": "chromium-savedata",
+   "run": 2,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0,
+   "hosts": [
+    "www.google.com",
+    "accounts.google.com"
+   ],
+   "internal_in": 11876,
+   "internal_out": 4198
+  },
+  {
+   "mode": "chromium-savedata",
+   "run": 3,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0,
+   "hosts": [
+    "www.google.com",
+    "accounts.google.com"
+   ],
+   "internal_in": 11801,
+   "internal_out": 4198
+  }
+ ]
+}

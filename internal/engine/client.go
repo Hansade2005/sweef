@@ -18,7 +18,7 @@ func (e *Engine) client() *http.Client {
 	if e.httpClient == nil {
 		e.httpClient = &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: &meterRT{base: newTransport(&dc.data().wire, e.proxyFor(dc))},
+			Transport: e.newRoundTripper(&dc.data().wire, e.proxyFor(dc)),
 			Jar:       newCookieJar(),
 		}
 	}
@@ -48,7 +48,7 @@ func (e *Engine) clientFor(c *BrowserContext) *http.Client {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.httpClient == nil {
-		c.httpClient = &http.Client{Timeout: base.Timeout, Transport: &meterRT{base: newTransport(&c.data().wire, e.proxyFor(c))}, Jar: makeSimpleJar()}
+		c.httpClient = &http.Client{Timeout: base.Timeout, Transport: e.newRoundTripper(&c.data().wire, e.proxyFor(c)), Jar: makeSimpleJar()}
 	}
 	return c.httpClient
 }
@@ -59,10 +59,8 @@ func (c *BrowserContext) closeIdle() {
 	hc := c.httpClient
 	c.mu.Unlock()
 	if hc != nil {
-		if rt, ok := hc.Transport.(*meterRT); ok {
-			if ci, ok := rt.base.(interface{ CloseIdleConnections() }); ok {
-				ci.CloseIdleConnections()
-			}
+		if ci, ok := hc.Transport.(interface{ CloseIdleConnections() }); ok {
+			ci.CloseIdleConnections()
 		}
 	}
 }
@@ -74,4 +72,10 @@ func (e *Engine) proxyFor(c *BrowserContext) string {
 		return c.options.ProxyURL
 	}
 	return e.opts.ProxyURL
+}
+
+// newRoundTripper stacks the engine's transport: HTTP cache, then accounting and decoding, then the
+// counted, proxy-aware transport.
+func (e *Engine) newRoundTripper(w *wireCounters, proxyURL string) http.RoundTripper {
+	return &cacheRT{base: &meterRT{base: newTransport(w, proxyURL), capped: newTransportWindow(w, proxyURL, cappedStreamWindow)}, cache: e.res, eng: e}
 }

@@ -1,0 +1,17 @@
+=== attempt 1 2026-10-13T03:10:09Z 
+engine data policy API: present (building with -tags datasaver_engine)-tags datasaver_engine
+baseline sweef-off          run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-off          run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-off          run 3: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-standard     run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-standard     run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-standard     run 3: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-strict       run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-strict       run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-strict       run 3: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline chromium           run 1: page in=0 out=0 conns=0; browser-internal in=10533 out=4198 [www.google.com accounts.google.com]
+baseline chromium           run 2: page in=0 out=0 conns=0; browser-internal in=13267 out=4198 [accounts.google.com www.google.com]
+baseline chromium           run 3: page in=0 out=0 conns=0; browser-internal in=11741 out=4198 [www.google.com accounts.google.com]
+baseline chromium-savedata  run 1: page in=0 out=0 conns=0; browser-internal in=11741 out=4198 [accounts.google.com www.google.com]
+baseline chromium-savedata  run 2: page in=0 out=0 conns=0; browser-internal in=11876 out=4198 [www.google.com accounts.google.com]
+baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=11801 out=4198 [www.google.com accounts.google.com]

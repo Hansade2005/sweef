@@ -125,7 +125,19 @@ func countedDial(w *wireCounters) func(ctx context.Context, network, addr string
 // which a custom DialContext would otherwise turn off. proxyURL is the explicit
 // proxy ("" = environment), see proxyFunc.
 func newTransport(w *wireCounters, proxyURL string) *http.Transport {
-	return &http.Transport{
+	return newTransportWindow(w, proxyURL, 0)
+}
+
+// cappedStreamWindow is the HTTP/2 receive window of the transport used for requests with a size cap
+// (Data Saver image and script caps). Aborting such a response resets the stream, but the server has already
+// been allowed to send one window of body: with the default 4 MiB window a 1.4 MB image costs its full size
+// even though the cap said no (measured, see docs/data-saver-engine.md). A 64 KiB window bounds the waste per
+// skipped resource; images under the cap (200 KB by default) take a few round trips instead of one.
+const cappedStreamWindow = 64 << 10
+
+// newTransportWindow is newTransport with an explicit HTTP/2 per-stream receive window (0 = the default).
+func newTransportWindow(w *wireCounters, proxyURL string, streamWindow int) *http.Transport {
+	tr := &http.Transport{
 		Proxy:               proxyFunc(proxyURL),
 		MaxIdleConns:        16,
 		MaxIdleConnsPerHost: 4, // tiny boxes don't need Chromium's 256/host
@@ -133,6 +145,10 @@ func newTransport(w *wireCounters, proxyURL string) *http.Transport {
 		ForceAttemptHTTP2:   true,
 		DialContext:         countedDial(w),
 	}
+	if streamWindow > 0 {
+		tr.HTTP2 = &http.HTTP2Config{MaxReceiveBufferPerStream: streamWindow, MaxReceiveBufferPerConnection: 1 << 20}
+	}
+	return tr
 }
 
 // ---- per-request attribution ------------------------------------------------
@@ -149,14 +165,40 @@ type meterInfo struct {
 	pol  DataPolicy
 
 	// final hop, written by meterRT
+	maxBody  int64        // transfer-size cap of the request (0 = none), set before the request is made
 	declared atomic.Int64 // Content-Length as received (transfer size), -1 unknown
 	hdrBytes atomic.Int64
 	rawBytes atomic.Int64
+
+	// cache outcome of the final hop, written by cacheRT (httpcache_rt.go)
+	cachedXfer atomic.Int64 // what the stored response cost when it was downloaded
+	fromCache  atomic.Bool  // answered from the cache (hit, revalidated or stale-if-error)
+	cacheMu    sync.Mutex
+	cacheNote  string
+}
+
+func (mi *meterInfo) setCache(s string) {
+	mi.cacheMu.Lock()
+	mi.cacheNote = s
+	mi.cacheMu.Unlock()
+}
+
+// cacheState is how the cache treated the request: "hit", "revalidated", "stale-if-error", "miss: <why>",
+// "bypass" or "" (no cache involved).
+func (mi *meterInfo) cacheState() string {
+	mi.cacheMu.Lock()
+	defer mi.cacheMu.Unlock()
+	return mi.cacheNote
 }
 
 // meterRT measures every exchange that carries a meterInfo and decodes
 // Content-Encoding. Requests without one pass through untouched.
-type meterRT struct{ base http.RoundTripper }
+type meterRT struct {
+	base http.RoundTripper
+	// capped serves requests with a size cap (meterInfo.maxBody > 0) over connections with a small HTTP/2
+	// window, see cappedStreamWindow. nil = use base.
+	capped http.RoundTripper
+}
 
 func (m *meterRT) RoundTrip(req *http.Request) (*http.Response, error) {
 	mi, _ := req.Context().Value(meterKey).(*meterInfo)
@@ -177,14 +219,14 @@ func (m *meterRT) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Taking charge of Accept-Encoding means decoding it ourselves. Range
 	// requests stay as they are (the transport does not compress those).
 	if r2.Header.Get("Accept-Encoding") == "" && r2.Header.Get("Range") == "" && r2.Method != http.MethodHead {
-		if pol.Level != SaverOff {
-			r2.Header.Set("Accept-Encoding", "br, gzip")
-		} else {
-			r2.Header.Set("Accept-Encoding", "gzip") // what net/http sends by itself
-		}
+		r2.Header.Set("Accept-Encoding", "br, gzip") // every level: the engine decodes both itself
 	}
 	out := requestBytes(r2)
-	res, err := m.base.RoundTrip(r2)
+	rt := m.base
+	if mi.maxBody > 0 && m.capped != nil {
+		rt = m.capped
+	}
+	res, err := rt.RoundTrip(r2)
 	origin := r2.URL.Scheme + "://" + r2.URL.Host
 	if err != nil {
 		mi.charge(r2.URL.Scheme, origin, out, 0)
@@ -330,8 +372,10 @@ func withMeter(req *http.Request, c *BrowserContext, t *Tab, kind DataKind, pol 
 // reaches a transport that implements it, so without this the wrapper hid it and Engine.Close left
 // keep-alive connections (and their goroutines) behind.
 func (m *meterRT) CloseIdleConnections() {
-	if ci, ok := m.base.(interface{ CloseIdleConnections() }); ok {
-		ci.CloseIdleConnections()
+	for _, rt := range []http.RoundTripper{m.base, m.capped} {
+		if ci, ok := rt.(interface{ CloseIdleConnections() }); ok {
+			ci.CloseIdleConnections()
+		}
 	}
 }
 

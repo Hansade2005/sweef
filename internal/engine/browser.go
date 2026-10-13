@@ -50,7 +50,8 @@ type ContextOptions struct {
 	ColorScheme       string            `json:"colorScheme,omitempty"`
 	ExtraHeaders      map[string]string `json:"extraHTTPHeaders,omitempty"`
 	HTTPCredentials   *[2]string        `json:"-"`
-	ProxyURL          string            `json:"proxy,omitempty"`
+	ProxyURL          string            `json:"proxy,omitempty"` // overrides Options.ProxyURL and the environment for this context
+	AcceptLanguage    string            `json:"acceptLanguage,omitempty"`
 	StoragePath       string            `json:"storagePath,omitempty"` // load/save state JSON
 }
 
@@ -461,5 +462,19 @@ func (c *BrowserContext) userAgentOr(def string) string {
 	return def
 }
 
-// DeleteCache is a no-op marker kept for SDK parity (no HTTP cache to purge).
-func (c *BrowserContext) DeleteCache() {}
+// DeleteCache forgets the HTTP cache entries of this context. For the default context that includes the
+// on-disk cache, which is shared by the whole profile.
+func (c *BrowserContext) DeleteCache() {
+	if c.name == "default" {
+		c.eng.res.clear()
+		return
+	}
+	c.eng.res.purgeContext(c.ID)
+}
+
+// DropMemoryCache forgets the in-memory tier of the HTTP cache after writing out what is queued for disk, so
+// the next requests are served from the on-disk cache only: the state of a browser that was just restarted.
+func (e *Engine) DropMemoryCache() { e.res.dropMemory() }
+
+// ClearHTTPCache empties the HTTP cache of every context, the on-disk one included.
+func (e *Engine) ClearHTTPCache() { e.res.clear() }

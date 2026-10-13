@@ -39,6 +39,10 @@ type httpResp struct {
 	declared int64 // Content-Length as received (transfer size), -1 unknown
 	aborted  bool  // the size cap tripped; body is empty
 	synth    bool
+
+	fromCache  bool   // answered by the HTTP cache (hit, 304 revalidation or stale-if-error)
+	cachedXfer int64  // what the stored response cost when it was downloaded (for budgets and savings)
+	cacheState string // see meterInfo.cacheState
 }
 
 var (
@@ -105,7 +109,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", t.UserAgent())
-	req.Header.Set("Accept", "*/*")
+	t.setBrowserHeaders(req.Header, req.URL, kind, false)
 	for k, v := range t.ExtraHeaders() {
 		req.Header.Set(k, v)
 	}
@@ -119,6 +123,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 	start := time.Now()
 	req, mi := withMeter(req, t.Context(), t, kind, t.policy())
+	mi.maxBody = o.maxBody
 	res, err := t.eng.clientFor(t.Context()).Do(req)
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": abs, "error": err.Error()}})
@@ -126,8 +131,9 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	}
 	defer res.Body.Close()
 	declared := mi.declared.Load()
-	out := &httpResp{status: res.StatusCode, header: res.Header, declared: declared}
-	if o.maxBody > 0 && declared > o.maxBody {
+	out := &httpResp{status: res.StatusCode, header: res.Header, declared: declared,
+		fromCache: mi.fromCache.Load(), cachedXfer: mi.cachedXfer.Load(), cacheState: mi.cacheState()}
+	if o.maxBody > 0 && declared > o.maxBody && !out.fromCache {
 		// Early abort: nothing of the body is read; closing the response drops
 		// the connection. The bytes the server would have sent are not read.
 		out.aborted = true
@@ -135,7 +141,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 		t.noteAborted(declared - mi.rawBytes.Load())
 		out.xfer = mi.hdrBytes.Load() + mi.rawBytes.Load()
 		out.finalURL = res.Request.URL.String()
-		t.recordResponse(&rec, res, start)
+		t.recordResponse(&rec, res, start, out.cacheState)
 		return out, nil
 	}
 	const limit = int64(8 << 20)
@@ -164,11 +170,22 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	out.body = data
 	out.xfer = mi.hdrBytes.Load() + mi.rawBytes.Load()
 	out.finalURL = res.Request.URL.String()
-	t.recordResponse(&rec, res, start)
+	out.cacheState = mi.cacheState() // a redirect chain ends with the last hop's outcome
+	t.recordResponse(&rec, res, start, out.cacheState)
 	return out, nil
 }
 
-func (t *Tab) recordResponse(rec *fnet.RequestRecord, res *http.Response, start time.Time) {
+// recordResponse pushes the response event. cacheState ("hit", "revalidated", "miss: no-store", ...) is
+// recorded on the request headers under x-sweef-cache so the network log shows what the cache did.
+func (t *Tab) recordResponse(rec *fnet.RequestRecord, res *http.Response, start time.Time, cacheState string) {
+	if cacheState != "" {
+		h := make(map[string]string, len(rec.Headers)+1)
+		for k, v := range rec.Headers {
+			h[k] = v
+		}
+		h["x-sweef-cache"] = cacheState
+		rec.Headers = h
+	}
 	rec.Status = res.StatusCode
 	rec.FinalURL = res.Request.URL.String()
 	rec.DurationMs = time.Since(start).Milliseconds()

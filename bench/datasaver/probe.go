@@ -24,6 +24,7 @@ func probeMain(args []string) {
 	warm := fs.Bool("warm", true, "load a second time in the same context")
 	idle := fs.Duration("idle", 5*time.Second, "idle window after each load")
 	ua := fs.String("ua", "", "user agent (default: the engine's default)")
+	restart := fs.Bool("restart", false, "drop the in-memory cache between the visits (only the disk cache survives)")
 	allH := fs.Bool("headers", false, "print all request and response headers")
 	fs.Parse(args)
 	dir, _ := os.MkdirTemp("", "dsprobe-")
@@ -36,7 +37,7 @@ func probeMain(args []string) {
 	}
 	e := engine.New(o)
 	defer e.Close()
-	ctx := e.NewContext("probe", engine.ContextOptions{})
+	ctx := e.DefaultContext() // the context the app browses in: the only one with the on-disk cache
 	if err := applyPolicy(ctx, *mode); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -46,6 +47,9 @@ func probeMain(args []string) {
 		visits = 2
 	}
 	for v := 1; v <= visits; v++ {
+		if v == 2 && *restart {
+			e.DropMemoryCache()
+		}
 		before, _ := engineCounters(ctx)
 		start := time.Now()
 		t, err := e.NewTabInContext(ctx, *rawurl)
@@ -91,7 +95,7 @@ func probeMain(args []string) {
 				for k, val := range rr.ResponseHeaders {
 					rh[strings.ToLower(k)] = val
 				}
-				fmt.Printf("%-10s %-4s %3d %s%s\n", dec, rr.Method, rr.Status, trunc(rr.URL, 150), cond)
+				fmt.Printf("%-10s %-4s %3d %s%s  [%s]\n", dec, rr.Method, rr.Status, trunc(rr.URL, 150), cond, rr.Headers["x-sweef-cache"])
 				fmt.Printf("           resp: cc=%q exp=%q etag=%q lm=%q vary=%q age=%q ce=%q cl=%q ct=%q\n", rh["cache-control"], rh["expires"], trunc(rh["etag"], 24), rh["last-modified"], rh["vary"], rh["age"], rh["content-encoding"], rh["content-length"], trunc(rh["content-type"], 40))
 				if *allH {
 					printMap("  req ", req.Headers)

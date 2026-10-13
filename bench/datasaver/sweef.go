@@ -53,7 +53,7 @@ func sweefOptsForReport() map[string]any {
 		ua = sweefUA
 	}
 	return map[string]any{
-		"UserAgent": ua, "SettleMs": o.SettleMs, "MaxCacheMiB": o.MaxCacheMiB, "ViewportWidth": o.ViewportWidth,
+		"UserAgent": ua, "SettleMs": o.SettleMs, "MaxCacheMiB": o.MaxCacheMiB, "DiskCacheMiB": diskMiB(o), "ViewportWidth": o.ViewportWidth,
 		"ViewportHeight": o.ViewportHeight, "JSTimeoutMs": o.JSTimeoutMs, "DisableJS": o.DisableJS,
 	}
 }
@@ -143,9 +143,10 @@ func sweefVisit(e *engine.Engine, ctx *engine.BrowserContext, rec *Recorder, raw
 				if !ok {
 					continue
 				}
+				// the engine's cache outcome rides on the request headers: "hit" (no network), "revalidated" (a 304
+				// exchange), "miss: <why>"; every request, cached or not, has its own EvRequest
 				cached := rr.Headers["x-sweef-cache"] == "hit"
 				if cached {
-					v.Requests++ // cache hits push no EvRequest
 					v.CacheServed++
 				}
 				ct := ""
@@ -235,11 +236,14 @@ func childMain(args []string) {
 		fail(err.Error())
 	}
 	defer os.RemoveAll(cacheDir)
-	e := engine.New(sweefEngineOptions(cacheDir))
-	defer e.Close()
 	// Every request, WebSockets included, goes to the recorder through the engine's own proxy option.
-	ctx := e.NewContext("bench-"+strconv.FormatInt(time.Now().UnixNano(), 36), engine.ContextOptions{ProxyURL: "http://" + rec.Addr()})
-	out.Inject = "ContextOptions.ProxyURL"
+	opts := sweefEngineOptions(cacheDir)
+	opts.ProxyURL = "http://" + rec.Addr()
+	e := engine.New(opts)
+	defer e.Close()
+	// The default context is the one the desktop app browses in, and the only one with the on-disk HTTP cache.
+	ctx := e.DefaultContext()
+	out.Inject = "Options.ProxyURL"
 	level := strings.TrimPrefix(*mode, "sweef-")
 	if err := applyPolicy(ctx, level); err != nil {
 		fail(err.Error())
@@ -247,7 +251,8 @@ func childMain(args []string) {
 
 	out.Cold = sweefVisit(e, ctx, rec, *rawurl, *idle, *nav, *keep)
 	if *warm && out.Cold.OK {
-		closeIdle(ctx) // second visit must open its own connections, as a fresh browser process would
+		e.DropMemoryCache() // a browser restart: only the on-disk cache survives (Chromium's warm visit is a new process)
+		closeIdle(ctx)      // second visit must open its own connections, as a fresh browser process would
 		w := sweefVisit(e, ctx, rec, *rawurl, *idle, *nav, false)
 		out.Warm = &w
 	}
@@ -285,4 +290,12 @@ func closeIdle(ctx *engine.BrowserContext) {
 	if ci, ok := ctx.CountedTransport().(interface{ CloseIdleConnections() }); ok {
 		ci.CloseIdleConnections()
 	}
+}
+
+// diskMiB is the on-disk HTTP cache cap the engine will use for these options (0 means its default of 100).
+func diskMiB(o engine.Options) int {
+	if o.DiskCacheMiB == 0 {
+		return 100
+	}
+	return o.DiskCacheMiB
 }

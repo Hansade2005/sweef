@@ -102,8 +102,8 @@ func TestDataSaverHeadersAndEncodings(t *testing.T) {
 			ae := rq.Header.Get("Accept-Encoding")
 			switch level {
 			case SaverOff:
-				if sd != "" || ae != "gzip" {
-					t.Fatalf("off must look like before (Save-Data %q, Accept-Encoding %q) on %s", sd, ae, rq.Path)
+				if sd != "" || ae != "br, gzip" {
+					t.Fatalf("off sends no Save-Data but the same Accept-Encoding as every level (Save-Data %q, Accept-Encoding %q) on %s", sd, ae, rq.Path)
 				}
 			default:
 				if sd != "on" || ae != "br, gzip" {
@@ -119,9 +119,10 @@ func TestDataSaverHeadersAndEncodings(t *testing.T) {
 			t.Fatalf("%s: decoding failed: %+v", name, r)
 		}
 	}
-	// the 3.5 KB script travels as 68 bytes of brotli instead of its identity form
-	if std.in >= off.in-3000 {
-		t.Fatalf("brotli should save about 3.4 KB here: off=%d standard=%d", off.in, std.in)
+	// the 3.5 KB script travels as 68 bytes of brotli at every level (Accept-Encoding is br, gzip everywhere);
+	// the levels differ by the Save-Data header only
+	if d := std.in - off.in; d < -200 || d > 200 {
+		t.Fatalf("off and standard must cost about the same here: off=%d standard=%d", off.in, std.in)
 	}
 }
 
