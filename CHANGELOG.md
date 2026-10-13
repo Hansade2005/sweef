@@ -17,6 +17,8 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - `docs/development.md` (package map and contracts), `docs/releasing.md`, and an ADR log in `docs/adr/`.
 - `appbench -open-profile` times the key that opens the omnibox dropdown and the key that closes it separately and
   writes a CPU profile.
+- WebRTC on pion (pure Go): `RTCPeerConnection`, data channels, transceivers, stats; local IPs hidden behind mDNS by
+  default, no STUN unless the page configures it ([docs/webrtc.md](docs/webrtc.md)).
 
 ### Changed
 - The omnibox dropdown uses a lighter shadow (the `--sh-2` token plus a 1 px ring instead of `--sh-3`).
