@@ -8,7 +8,11 @@
 // See docs/capture.md for what each backend does and how it was checked.
 package platform
 
-import "github.com/sweefbrowser/sweef/internal/capture"
+import (
+	"os"
+
+	"github.com/sweefbrowser/sweef/internal/capture"
+)
 
 // Providers returns the providers that Register installed, for tools that list them.
 func Providers() []capture.Provider { return registered }
@@ -16,6 +20,10 @@ func Providers() []capture.Provider { return registered }
 var registered []capture.Provider
 
 func register(p capture.Provider) {
+	// An escape hatch for a misbehaving OS backend: SWEEF_NO_NATIVE_CAPTURE=1 leaves only the synthetic devices.
+	if os.Getenv("SWEEF_NO_NATIVE_CAPTURE") == "1" {
+		return
+	}
 	registered = append(registered, p)
 	capture.Register(p)
 }

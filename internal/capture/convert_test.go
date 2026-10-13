@@ -413,16 +413,20 @@ func TestFrameHelpers(t *testing.T) {
 	}
 }
 
-func BenchmarkDecodeMJPEG640x480(b *testing.B) {
-	img := image.NewRGBA(image.Rect(0, 0, 640, 480))
-	for y := 0; y < 480; y++ {
-		for x := 0; x < 640; x++ {
+func BenchmarkDecodeMJPEG640x480(b *testing.B)   { benchMJPEG(b, 640, 480) }
+func BenchmarkDecodeMJPEG1280x720(b *testing.B)  { benchMJPEG(b, 1280, 720) }
+func BenchmarkDecodeMJPEG1920x1080(b *testing.B) { benchMJPEG(b, 1920, 1080) }
+
+func benchMJPEG(b *testing.B, w, h int) {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
 			img.Set(x, y, color.RGBA{uint8(x), uint8(y), uint8(x ^ y), 255})
 		}
 	}
 	var buf bytes.Buffer
 	_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80})
-	d := NewFrame(640, 480)
+	d := NewFrame(w, h)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := DecodeMJPEG(d, buf.Bytes()); err != nil {
