@@ -2100,7 +2100,7 @@
     userAgent: { get: ua }, appVersion: { get: function () { return ua().replace(/^Mozilla\//, ''); } }, appName: { get: function () { return 'Netscape'; } }, appCodeName: { get: function () { return 'Mozilla'; } }, product: { get: function () { return 'Gecko'; } }, productSub: { get: function () { return '20030107'; } }, vendor: { get: function () { return ''; } }, vendorSub: { get: function () { return ''; } },
     language: { get: function () { return 'en-US'; } }, languages: { get: function () { return Object.freeze(['en-US', 'en']); } },
     platform: { get: function () { return viewport().mobile ? 'Linux armv8l' : 'Linux x86_64'; } },
-    onLine: { get: function () { return true; } }, cookieEnabled: { get: function () { return true; } }, doNotTrack: { get: function () { return null; } }, globalPrivacyControl: { get: function () { return false; } },
+    onLine: { get: function () { try { return sw.pwaOnline ? sw.pwaOnline() : true; } catch (e) { return true; } } }, cookieEnabled: { get: function () { return true; } }, doNotTrack: { get: function () { return null; } }, globalPrivacyControl: { get: function () { return false; } },
     hardwareConcurrency: { get: function () { return 1; } }, deviceMemory: { get: function () { return 1; } }, maxTouchPoints: { get: function () { return viewport().mobile ? 5 : 0; } },
     userAgentData: { get: function () { return undefined; } }, webdriver: { get: function () { return false; } }, pdfViewerEnabled: { get: function () { return false; } },
     plugins: { get: function () { var p = []; p.item = function () { return null; }; p.namedItem = function () { return null; }; p.refresh = function () { }; return p; } }, mimeTypes: { get: function () { var p = []; p.item = function () { return null; }; p.namedItem = function () { return null; }; return p; } },
@@ -2467,14 +2467,7 @@
   extend(global.EventSource, EventTarget); methods(global.EventSource.prototype, { close: function () { } }); defineHandlerProps(global.EventSource.prototype, ['open', 'message', 'error']);
   global.Worker = function Worker() { throw DOMException('Web Workers are not available in Sweef', 'NotSupportedError'); };
   global.SharedWorker = global.Worker;
-  function Notification(title, opts) { if (!(this instanceof Notification)) throw new TypeError("Constructor Notification requires 'new'"); EventTarget.call(this); this.title = String(title); Object.assign(this, { body: '', icon: '', tag: '', data: null, dir: 'auto', lang: '', silent: null }, opts || {}); }
-  extend(Notification, EventTarget);
-  methods(Notification.prototype, { close: function () { } });
-  defineHandlerProps(Notification.prototype, ['click', 'close', 'error', 'show']);
-  def(Notification, 'permission', { get: function () { return 'denied'; } });
-  Notification.requestPermission = function (cb) { if (cb) setTimeoutImpl(function () { cb('denied'); }, [], 0, false); return Promise.resolve('denied'); };
-  Notification.maxActions = 0;
-  setTag(Notification, 'Notification'); global.Notification = Notification;
+  // Notification: platformjs/pwa.js
   global.speechSynthesis = { speak: function () { }, cancel: function () { }, pause: function () { }, resume: function () { }, getVoices: function () { return []; }, speaking: false, pending: false, paused: false, addEventListener: function () { }, removeEventListener: function () { }, onvoiceschanged: null };
   global.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) { this.text = text; };
   global.CSS = { supports: function () { return false; }, escape: function (s) { return String(s).replace(/([\0-\x1f\x7f]|^-?\d)|^-$|[^\x80-￿\w-]/g, function (ch, asCode) { return asCode ? (ch === '\0' ? '�' : ch.slice(0, -1) + '\\' + ch.slice(-1).charCodeAt(0).toString(16) + ' ') : '\\' + ch; }); }, registerProperty: function () { }, px: function (v) { return v + 'px'; }, highlights: new Map() };

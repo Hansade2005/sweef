@@ -17,8 +17,7 @@ Tests: `sw_test.go`, `sw_lifecycle_test.go`, `sw_module_test.go`, `sw_leak_test.
 * `navigator.serviceWorker.register(url, {scope, type, updateViaCache})`, `getRegistration(clientURL)`,
   `getRegistrations()`, `ready`, `controller`, `startMessages()`, events `controllerchange`, `message`.
 * `ServiceWorkerRegistration`: `installing`, `waiting`, `active`, `scope`, `updateViaCache`, `update()`,
-  `unregister()`, `onupdatefound`. `navigationPreload`, `pushManager` and `showNotification` exist only as inert
-  stubs (see Not done).
+  `unregister()`, `onupdatefound`. `navigationPreload` is an inert stub; `pushManager`, `sync`, `periodicSync`, `showNotification` are real.
 * `ServiceWorker`: `scriptURL`, `state`, `postMessage(message, transfer)` (structured clone; `MessageChannel` ports can be
   transferred), `onstatechange`. State changes arrive one at a time and in order: `installing`, `installed`,
   `activating`, `activated`, `redundant`; `updatefound` fires when a new installing worker appears.
@@ -98,9 +97,8 @@ tab's console ring (`BrowserContext.ServiceWorkerConsole`).
 
 ## Not done (honest list)
 
-* **Push, Background Sync, Periodic Background Sync, Background Fetch, Notifications API from a worker**: none of them.
-  `registration.pushManager.subscribe()` rejects, `showNotification()` rejects, `registration.sync` / `periodicSync`
-  do not exist, there are no `push`, `sync`, `notificationclick` events.
+* **Background Fetch** does not exist. Push, Background Sync, Periodic Sync and notifications are described in
+  [push.md](push.md), [background-sync.md](background-sync.md) and [notifications.md](notifications.md).
 * **Navigation preload**: `registration.navigationPreload` is a stub that resolves and changes nothing;
   `FetchEvent.preloadResponse` resolves `undefined`.
 * **Navigations**: a redirect (3xx) answered by the worker is not followed; form `POST` navigations do not go through the
@@ -109,8 +107,7 @@ tab's console ring (`BrowserContext.ServiceWorkerConsole`).
   their requests are not controlled by a worker. There is no 24-hour update check on navigation: workers update on
   `register()` / `update()` only, and only the main script is compared (changes to imported scripts alone do not
   trigger an update). `updateViaCache` is stored and reported but the script fetch always bypasses the HTTP cache.
-* **`clients.openWindow()` and `WindowClient.navigate()` reject** (`NotAllowedError`); `focus()` resolves without
-  doing anything; `visibilityState` is always `visible`, `focused` always `false`; only window clients exist.
+* **Windows**: `clients.openWindow()`, `focus()` and `navigate()` work through the app but only after a notification click or a user gesture (see notifications.md); only window clients exist.
 * **Request fidelity**: the `Request` a fetch event sees carries the headers the page set (not the ones the engine adds
   on the wire), `credentials` is always `include`, `referrer` is empty, `signal` is never aborted, a body is a string
   (binary `FormData` / `Blob` bodies of requests are not forwarded). Responses are buffered, not streamed; opaque

@@ -248,6 +248,28 @@ func Scenarios() []Scenario {
 	add(Scenario{Name: "media-sharebar-dark", Page: "chrome/index.html", W: 1280, H: 800, State: live(dark, liveTabs, shareSes, []M{{"id": "s3", "tab": "t1", "host": "meet.example.com", "label": "Daily standup - Meet", "surface": "browser"}}), Backdrop: "article"})
 	add(Scenario{Name: "media-siteinfo-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(live(light, liveTabs, camMic, []M{}), "media.site.microphone", "block"), Backdrop: "article",
 		Setup: `document.getElementById('secbtn').click();`})
+	// ---- Notifications: the permission prompt, the site info entry, notification toasts, Do not disturb, settings
+	npSite := "https://news.example.com/world/tax-brackets"
+	npPerm := func(extra ...any) M {
+		m := M{"available": true, "dnd": false, "push": true, "default": "ask", "site": M{"origin": "https://news.example.com", "state": "ask"}}
+		for i := 0; i+1 < len(extra); i += 2 {
+			m[extra[i].(string)] = extra[i+1]
+		}
+		return m
+	}
+	npPrompt := M{"id": "perm1", "origin": "https://news.example.com", "host": "news.example.com", "kind": "notifications"}
+	add(Scenario{Name: "notif-prompt-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false, "url", npSite, "perm", npPerm("prompt", npPrompt)), Backdrop: "article"})
+	add(Scenario{Name: "notif-prompt-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "sidebar.open", false, "url", npSite, "perm", npPerm("prompt", npPrompt)), Backdrop: "article"})
+	add(Scenario{Name: "notif-siteinfo-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false, "url", npSite, "perm", npPerm("site", M{"origin": "https://news.example.com", "state": "allowed"})), Backdrop: "article",
+		Setup: `document.getElementById('secbtn').click();document.querySelectorAll('.pop .mi')[1].click();`})
+	add(Scenario{Name: "notif-siteinfo-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "sidebar.open", false, "url", npSite, "perm", npPerm("site", M{"origin": "https://news.example.com", "state": "blocked"})), Backdrop: "article",
+		Setup: `document.getElementById('secbtn').click();document.querySelectorAll('.pop .mi')[1].click();`})
+	add(Scenario{Name: "notif-toast-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "sidebar.open", false, "perm", npPerm()), Backdrop: "article",
+		Setup: holdToast(`__send("toast",{kind:"notify",id:"n1",title:"Mia: are we still on for six?",text:"I can book the table if you say yes.",origin:"https://chat.example.com",actions:[{id:"reply",title:"Reply"}]});__send("toast",{kind:"notify",id:"n2",title:"Your order has shipped",text:"Arrives Thursday.",origin:"https://grocer.example.com",sticky:true});`)})
+	add(Scenario{Name: "notif-menu-dnd-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "sidebar.open", false, "perm", npPerm("dnd", true)), Backdrop: "article", Setup: `document.getElementById('menubtn').click();`})
+	npSites := []M{{"origin": "https://chat.example.com", "state": "allowed"}, {"origin": "https://grocer.example.com", "state": "blocked"}, {"origin": "https://news.example.com", "state": "ask", "embargo": true}}
+	add(Scenario{Name: "notif-settings-light", Page: "settings/index.html", Query: "?s=notif", W: 1280, H: 800, State: with(light, "perm", npPerm("sites", npSites)), Setup: `SW.set("push.service","https://push.example.com");`})
+	add(Scenario{Name: "notif-settings-dark", Page: "settings/index.html", Query: "?s=notif", W: 1280, H: 800, State: with(dark, "perm", npPerm("sites", npSites, "dnd", true, "push", false))})
 	add(Scenario{Name: "error-dns", Page: "error/index.html", Query: "?kind=dns&url=https%3A%2F%2Fexample-typo.test%2Fhello", W: 1280, H: 800, State: light})
 	add(Scenario{Name: "error-cert-dark", Page: "error/index.html", Query: "?kind=cert&url=https%3A%2F%2Fexpired.example.com%2F&detail=certificate+expired+2026-03-01&open=1", W: 1280, H: 800, State: dark})
 	add(Scenario{Name: "error-offline", Page: "error/index.html", Query: "?kind=offline&url=https%3A%2F%2Fwww.wsj.com%2F", W: 1280, H: 800, State: light})

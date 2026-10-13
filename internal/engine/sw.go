@@ -701,6 +701,7 @@ func (m *swManager) unregister(reg *swReg) bool {
 	m.announce(origin, snap)
 	m.announceRemoved(reg, id)
 	m.persist(origin)
+	m.c.pwaRegistrationGone(origin, reg.scope) // its push subscription and sync registrations go with it
 	return true
 }
 

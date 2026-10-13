@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/app/state"
+	"github.com/sweefbrowser/sweef/internal/app/store"
+	"github.com/sweefbrowser/sweef/internal/notify"
 )
 
 // onUIMessage handles sweef.post(type, payload) from the chrome page, the
@@ -250,6 +252,40 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 		a.dataRemove(p.Kind, p.ID)
 	case "data.clear":
 		a.clearBrowsingData()
+	case "perm.answer":
+		p := decode[struct {
+			ID     string `json:"id"`
+			Answer string `json:"answer"`
+		}](raw)
+		a.answerPrompt(p.ID, p.Answer)
+	case "perm.set":
+		p := decode[struct {
+			Origin string `json:"origin"`
+			Name   string `json:"name"`
+			State  string `json:"state"` // granted | denied | "" (ask again)
+		}](raw)
+		if p.Name == "" {
+			p.Name = store.PermNotifications
+		}
+		a.setSitePermission(p.Origin, p.Name, p.State)
+	case "notify.click":
+		a.onNotifyEvent(notify.Event{Kind: notify.Click, ID: decode[idArg](raw).ID})
+	case "notify.action":
+		p := decode[struct {
+			ID     string `json:"id"`
+			Action string `json:"action"`
+		}](raw)
+		a.onNotifyEvent(notify.Event{Kind: notify.ActionClick, ID: p.ID, Action: p.Action})
+	case "notify.closed":
+		p := decode[struct {
+			ID   string `json:"id"`
+			User bool   `json:"user"`
+		}](raw)
+		reason := notify.ReasonTimeout
+		if p.User {
+			reason = notify.ReasonUser
+		}
+		a.onNotifyEvent(notify.Event{Kind: notify.Closed, ID: p.ID, Reason: reason})
 	case "downloads.open":
 		if it, ok := a.prof.Downloads.Get(decode[idArg](raw).ID); ok {
 			_ = a.win.OpenURL("file://" + it.Path)
@@ -369,6 +405,8 @@ func (a *App) onSetting(key string, v any) {
 		a.applyZoom()
 	case "data.level", "data.budget", "data.sites", "data.agentLite", "data.showMeter":
 		a.onDataSetting(key)
+	case "push.service", "notifications.default":
+		a.onPWASetting(key)
 	}
 	a.markState()
 }

@@ -11,6 +11,20 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ### Added
 - Real camera, microphone and tab/window capture for `getUserMedia`, `getDisplayMedia` and `enumerateDevices`: V4L2 cameras and PulseAudio/PipeWire microphones on Linux (pure Go), a permission prompt with per-site choices and in-use indicators, `SWEEF_FAKE_DEVICES=1` test devices and `capdemo`; Windows and macOS backends are included but unverified on hardware (`docs/capture.md`).
+
+- Notifications: `Notification`, `showNotification`/`getNotifications`, `notificationclick`/`notificationclose`,
+  `clients.openWindow`, `WindowClient.focus/navigate`, per-site permission with a prompt next to the address bar (quiet UI
+  without a gesture, pause after three dismissals), a site info entry, Do not disturb, Permissions API for notifications
+  and push. Delivery through `org.freedesktop.Notifications` on Linux (tested against a real `dbus-daemon`), balloon
+  notifications on Windows and `NSUserNotification` on macOS (compiled only), and an in-window toast otherwise
+  ([docs/notifications.md](docs/notifications.md)).
+- Web Push: `PushManager`, `PushSubscription`, `push` and `pushsubscriptionchange` events, RFC 8291 decryption and
+  RFC 8292 VAPID (checked against the RFC test vectors), an autopush client, and `sweef pushd`, a self-hostable push
+  relay. No push service is built in: set `SWEEF_PUSH_SERVICE` or the `push.service` setting
+  ([docs/push.md](docs/push.md)).
+- Background Sync (retry 5 min then 15 min, three attempts, `lastChance`), Periodic Background Sync (12 hour floor,
+  granted to bookmarked sites), `navigator.setAppBadge`, Web Locks across tabs and workers
+  ([docs/background-sync.md](docs/background-sync.md)).
 - Apache-2.0 `LICENSE` and `NOTICE`.
 - Contribution and project health files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `SUPPORT.md`,
   `GOVERNANCE.md`, `CODEOWNERS`, issue forms, pull request template, `Makefile`, `.editorconfig`.

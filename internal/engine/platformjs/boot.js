@@ -71,7 +71,9 @@
     ['es', L, 'DisposableStack AsyncDisposableStack SuppressedError', 0, 1],
     ['es', Error, 'captureStackTrace', 0, 1],
     ['intl', g.Intl, 'Locale', 0, 1],
-    ['sched', L, 'scheduler Scheduler TaskController TaskSignal TaskPriorityChangeEvent']
+    ['sched', L, 'scheduler Scheduler TaskController TaskSignal TaskPriorityChangeEvent'],
+    ['pwa', L, 'Notification NotificationEvent Permissions PermissionStatus PushManager PushSubscription PushSubscriptionOptions PushEvent PushMessageData PushSubscriptionChangeEvent SyncManager SyncEvent PeriodicSyncManager PeriodicSyncEvent Lock LockManager __pwa __pwaEvent __pwaDispatch'],
+    ['pwa', N, 'permissions locks setAppBadge clearAppBadge', 1]
   ];
   if (typeof Atomics === 'object') T.push(['es', Atomics, 'waitAsync', 0, 1]);
   if (g.HTMLVideoElement) T.push(['devices', g.HTMLVideoElement.prototype, 'requestPictureInPicture disablePictureInPicture', 1, 1]);

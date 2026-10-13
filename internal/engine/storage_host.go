@@ -102,6 +102,7 @@ func (c *BrowserContext) SiteStorage() *sitestore.Manager {
 
 // siteClose flushes the context's storage (and stops its service workers) when the context goes away.
 func (c *BrowserContext) siteClose() {
+	c.pwaShutdown()
 	c.swShutdown()
 	if m := c.site.mgr.Load(); m != nil {
 		m.Shutdown()

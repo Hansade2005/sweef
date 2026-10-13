@@ -111,13 +111,17 @@
   exportClass(Client, 'Client');
   function WindowClient(tok, d) {
     Client.call(this, tok, d);
-    Object.defineProperty(this, 'visibilityState', { value: d.visibilityState || 'visible', enumerable: true });
-    Object.defineProperty(this, 'focused', { value: !!d.focused, enumerable: true });
+    Object.defineProperty(this, 'visibilityState', { value: d.visibilityState || 'visible', enumerable: true, configurable: true });
+    Object.defineProperty(this, 'focused', { value: !!d.focused, enumerable: true, configurable: true });
   }
   WindowClient.prototype = Object.create(Client.prototype, { constructor: { value: WindowClient, writable: true, configurable: true } });
   defMethods(WindowClient.prototype, {
-    focus: function () { return Promise.resolve(this); },
-    navigate: function () { return Promise.reject(mkErr('NotAllowedError', 'Client.navigate() is not supported.')); }
+    focus: function () { var self = this; return hostCall('pwaClientFocus', this._id).then(function (d) { return d ? clientFor(d) : self; }); },
+    navigate: function (url) {
+      var abs;
+      try { abs = new global.URL(String(url), info.scriptURL).href; } catch (e) { return Promise.reject(new TypeError("Failed to execute 'navigate' on 'WindowClient': Invalid URL: " + url)); }
+      return hostCall('pwaClientNavigate', this._id, abs).then(function (d) { return d ? clientFor(d) : null; });
+    }
   });
   tag(WindowClient, 'WindowClient');
   exportClass(WindowClient, 'WindowClient');
@@ -125,9 +129,14 @@
   function clientFor(d) {
     var c = clientObjs.get(d.id);
     if (!c) { c = new WindowClient(hide, d); clientObjs.set(d.id, c); }
+    else { // the window may have been focused or hidden since the object was made
+      Object.defineProperty(c, 'visibilityState', { value: d.visibilityState || 'visible', enumerable: true, configurable: true });
+      Object.defineProperty(c, 'focused', { value: !!d.focused, enumerable: true, configurable: true });
+    }
     return c;
   }
 
+  function hostCall() { var a = Array.prototype.slice.call(arguments); return global.__pwa.call.apply(null, a); }
   function Clients() { throw new TypeError('Illegal constructor'); }
   defMethods(Clients.prototype, {
     get: function (id) {
@@ -140,7 +149,11 @@
         resolve(host('swClientsMatchAll', !!o.includeUncontrolled).map(clientFor));
       });
     },
-    openWindow: function () { return Promise.reject(mkErr('NotAllowedError', 'Clients.openWindow() is not supported.')); },
+    openWindow: function (url) {
+      var abs;
+      try { abs = new global.URL(String(url), info.scriptURL).href; } catch (e) { return Promise.reject(new TypeError("Failed to execute 'openWindow' on 'Clients': Invalid URL: " + url)); }
+      return hostCall('pwaOpenWindow', abs).then(function (d) { return d ? clientFor(d) : null; });
+    },
     claim: function () { return new Promise(function (resolve) { host('swClientsClaim'); resolve(); }); }
   });
   tag(Clients, 'Clients');
@@ -215,7 +228,10 @@
           ev = new ExtendableMessageEvent('message', { data: global.__swDe(p.data), origin: p.origin, source: src, ports: (p.ports || []).map(global.__swPorts.adopt) });
           break;
         }
-        default: done(id, { ok: true }); return 'ok';
+        default:
+          // push, sync, notification and periodic sync events are built by platformjs/pwa.js
+          ev = global.__pwaDispatch ? global.__pwaDispatch(kind, p) : null;
+          if (!ev) { done(id, { ok: true }); return 'ok'; }
       }
     } catch (e) { fail(id, e); return 'error'; }
     ev._live = true;

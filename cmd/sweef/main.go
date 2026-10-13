@@ -7,6 +7,7 @@
 //	sweef call <Method> ['{"json"}']    raw RPC over a running server
 //	sweef snapshot <url>            aria tree of a URL, JSON to stdout
 //	sweef eval <url> <expr>         run JS in a throwaway tab
+//	sweef pushd [--addr ...]        self-hostable Web Push relay (docs/push.md)
 //	sweef version / stats
 package main
 
@@ -62,6 +63,8 @@ func main() {
 		os.Exit(agent.RunCLI(args, os.Stdin, os.Stdout))
 	case "gui":
 		cmdGUI(args)
+	case "pushd":
+		cmdPushd(args)
 	case "version", "--version":
 		fmt.Println("sweef", version)
 	case "help", "-h", "--help":

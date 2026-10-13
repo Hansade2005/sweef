@@ -1265,36 +1265,18 @@
   ['enumerateDevices', 'getSupportedConstraints', 'getUserMedia', 'getDisplayMedia'].forEach(function (n) { Object.defineProperty(MediaDevices.prototype, n, { value: devices[n], writable: true, configurable: true, enumerable: true }); delete devices[n]; });
   global.MediaDevices = MediaDevices;
 
-  // ---- Permissions API for camera, microphone and display-capture (other names keep answering "prompt") ----
+  // ---- Permissions API for camera, microphone and display-capture ----------------------------------------------
+  // navigator.permissions itself lives in the platform layer (platformjs/pwa.js, which also answers notifications,
+  // push and sync); this file answers for its own names through __permHandlers and asks it to refresh live
+  // PermissionStatus objects when the user changes a decision.
   var PERM = { camera: 1, microphone: 1, 'display-capture': 1 };
-  var statuses = [];
-  function PermissionStatus() { illegal(); } derive(PermissionStatus, EventTarget); tag(PermissionStatus, 'PermissionStatus');
-  defGetter(PermissionStatus.prototype, 'state', function () { return this._p.state; });
-  defGetter(PermissionStatus.prototype, 'name', function () { return this._p.name; });
-  defGetter(PermissionStatus.prototype, 'onchange', function () { return this._p.onchange || null; }, function (f) {
-    var p = this._p; p.onchange = typeof f === 'function' ? f : null; var self = this;
-    if (!p.wired) { p.wired = true; this.addEventListener('change', function (e) { if (p.onchange) p.onchange.call(self, e); }); }
-  });
-  global.PermissionStatus = PermissionStatus;
   function permState(name) { if (!PERM[name]) return 'prompt'; try { return sw.capPerm(name) || 'prompt'; } catch (e) { return 'prompt'; } }
-  function permRefresh() {
-    statuses.slice().forEach(function (s) {
-      var n = permState(s._p.name);
-      if (n !== s._p.state) { s._p.state = n; s.dispatchEvent(new Event('change')); }
-    });
-  }
-  function Permissions() { illegal(); } tag(Permissions, 'Permissions');
-  defMethod(Permissions.prototype, 'query', function (desc) {
-    if (desc === null || typeof desc !== 'object' || typeof desc.name !== 'string') return Promise.reject(new TypeError("Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor'."));
-    var s = Object.create(PermissionStatus.prototype); EventTarget.call(s);
-    Object.defineProperty(s, '_p', { value: { name: desc.name, state: permState(desc.name), onchange: null, wired: false } });
-    if (PERM[desc.name]) { statuses.push(s); if (statuses.length > 64) statuses.shift(); }
-    return Promise.resolve(s);
-  });
-  global.Permissions = Permissions;
-  var permsObj = Object.create(Permissions.prototype);
+  (function () {
+    if (!global.__permHandlers) Object.defineProperty(global, '__permHandlers', { value: {}, configurable: true });
+    ['camera', 'microphone', 'display-capture'].forEach(function (n) { global.__permHandlers[n] = function () { return permState(n); }; });
+  })();
+  function permRefresh() { if (typeof global.__swPermRefresh === 'function') global.__swPermRefresh(); }
   if (global.Navigator) {
-    try { Object.defineProperty(global.Navigator.prototype, 'permissions', { get: function () { return permsObj; }, configurable: true, enumerable: true }); } catch (e) { /* keep the base stub */ }
     Object.defineProperty(global.Navigator.prototype, 'mediaDevices', { get: function () { return devices; }, configurable: true, enumerable: true });
     defMethod(global.Navigator.prototype, 'requestMediaKeySystemAccess', function () { return Promise.reject(dex('Unsupported keySystem or supportedConfigurations.', 'NotSupportedError')); });
     defMethod(global.Navigator.prototype, 'getUserMedia', function (c, ok, err) { devices.getUserMedia(c).then(ok, err); });
