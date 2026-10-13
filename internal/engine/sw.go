@@ -54,6 +54,7 @@ type swManager struct {
 	byWorker map[int64]*swWorker  // every worker that is not redundant
 	nextW    int64
 	nextR    int64
+	nextC    int64 // creation order of clients
 	closed   bool
 	quit     chan struct{}
 	wg       sync.WaitGroup
@@ -96,6 +97,7 @@ type swClient struct {
 	id  string
 	tab *Tab
 	url string
+	seq int64  // creation order: clients.matchAll lists the oldest first
 	reg *swReg // the registration controlling it, nil when uncontrolled
 }
 
