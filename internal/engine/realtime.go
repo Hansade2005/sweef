@@ -52,6 +52,19 @@ type realtime struct {
 	nextID      int64
 	sockets     map[int64]*websocket.Conn
 	workers     map[int64]*workerVM
+	closers     []func() // feature packages (webrtc.go) register their teardown here
+}
+
+// asyncHandlers let a feature deliver its own queued events without editing
+// drainAsync: registerAsyncHandler("kind", fn) from an init() in the feature's file.
+var asyncHandlers = map[string]func(j *jsVM, e asyncEvent){}
+
+func registerAsyncHandler(kind string, f func(j *jsVM, e asyncEvent)) { asyncHandlers[kind] = f }
+
+func (r *realtime) addCloser(f func()) {
+	r.mu.Lock()
+	r.closers = append(r.closers, f)
+	r.mu.Unlock()
 }
 
 func (j *jsVM) rt() *realtime {
@@ -91,9 +104,12 @@ func (r *realtime) id() int64 {
 // closeAll tears down sockets and workers when the page goes away.
 func (r *realtime) closeAll() {
 	r.mu.Lock()
-	socks, workers := r.sockets, r.workers
-	r.sockets, r.workers = map[int64]*websocket.Conn{}, map[int64]*workerVM{}
+	socks, workers, closers := r.sockets, r.workers, r.closers
+	r.sockets, r.workers, r.closers = map[int64]*websocket.Conn{}, map[int64]*workerVM{}, nil
 	r.mu.Unlock()
+	for _, f := range closers {
+		f()
+	}
 	for _, c := range socks {
 		c.Close()
 	}
@@ -473,6 +489,10 @@ func (j *jsVM) drainAsync() bool {
 		case "img":
 			if _, err := j.call("__swImgEvent", e.id, e.typ, e.code, atoiSafe(e.data)); err != nil {
 				j.tab.LogConsole("error", jsErrorText(err, "image "+e.typ))
+			}
+		default:
+			if h := asyncHandlers[e.kind]; h != nil {
+				h(j, e)
 			}
 		}
 	}
