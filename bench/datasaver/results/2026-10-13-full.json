@@ -66950,6 +66950,1838 @@
      "requests": 0
     }
    }
+  },
+  {
+   "site": "https://www.npr.org/",
+   "mode": "sweef-standard",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 2760053,
+    "wire_out": 129694,
+    "conns": 38,
+    "handshake_in": 1482,
+    "handshake_out": 4224,
+    "requests": 223,
+    "cache_served": 150,
+    "ready_ms": 35780.955,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Image": 12,
+     "Other": 155,
+     "Script": 27,
+     "Stylesheet": 4,
+     "XHR": 13
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "prod-eks-bundles.npr.org",
+      "conns": 4,
+      "in": 611043,
+      "out": 16176
+     },
+     {
+      "host": "npr.brightspotcdn.com",
+      "conns": 6,
+      "in": 589235,
+      "out": 13342
+     },
+     {
+      "host": "www.npr.org",
+      "conns": 1,
+      "in": 294765,
+      "out": 5432
+     },
+     {
+      "host": "js.stripe.com",
+      "conns": 1,
+      "in": 264666,
+      "out": 3637
+     },
+     {
+      "host": "cpftuhdzdstc5rz8x.ay.delivery",
+      "conns": 1,
+      "in": 209298,
+      "out": 3824
+     },
+     {
+      "host": "www.googletagmanager.com",
+      "conns": 1,
+      "in": 154356,
+      "out": 3566
+     },
+     {
+      "host": "cdn.piano.io",
+      "conns": 1,
+      "in": 150295,
+      "out": 2879
+     },
+     {
+      "host": "CPfTuHdzdsTC5RZ8x.ay.delivery",
+      "conns": 1,
+      "in": 127137,
+      "out": 2862
+     },
+     {
+      "host": "c.amazon-adsystem.com",
+      "conns": 1,
+      "in": 104693,
+      "out": 3046
+     },
+     {
+      "host": "cdn.cookielaw.org",
+      "conns": 2,
+      "in": 76410,
+      "out": 4727
+     },
+     {
+      "host": "securepubads.g.doubleclick.net",
+      "conns": 1,
+      "in": 44431,
+      "out": 2330
+     },
+     {
+      "host": "prod-eks-static-assets.npr.org",
+      "conns": 2,
+      "in": 22864,
+      "out": 4643
+     },
+     {
+      "host": "htlb.casalemedia.com",
+      "conns": 1,
+      "in": 17281,
+      "out": 5390
+     },
+     {
+      "host": "hbopenbid.pubmatic.com",
+      "conns": 1,
+      "in": 16126,
+      "out": 5719
+     },
+     {
+      "host": "fastlane.rubiconproject.com",
+      "conns": 1,
+      "in": 10471,
+      "out": 3196
+     },
+     {
+      "host": "hb.minutemedia-prebid.com",
+      "conns": 1,
+      "in": 5035,
+      "out": 6187
+     },
+     {
+      "host": "bids.concert.io",
+      "conns": 1,
+      "in": 4900,
+      "out": 6135
+     },
+     {
+      "host": "event.ay.delivery",
+      "conns": 1,
+      "in": 4829,
+      "out": 5840
+     },
+     {
+      "host": "web-video.ads.aps.amazon-adsystem.com",
+      "conns": 1,
+      "in": 6759,
+      "out": 3517
+     },
+     {
+      "host": "script.crazyegg.com",
+      "conns": 1,
+      "in": 7445,
+      "out": 1887
+     },
+     {
+      "host": "pbs-us-east.ay.delivery",
+      "conns": 1,
+      "in": 5251,
+      "out": 4035
+     },
+     {
+      "host": "ib.adnxs.com",
+      "conns": 1,
+      "in": 3321,
+      "out": 5949
+     },
+     {
+      "host": "api.rlcdn.com",
+      "conns": 1,
+      "in": 7314,
+      "out": 1920
+     },
+     {
+      "host": "direct.adsrvr.org",
+      "conns": 1,
+      "in": 3601,
+      "out": 5607
+     },
+     {
+      "host": "match.adsrvr.org",
+      "conns": 1,
+      "in": 4775,
+      "out": 1983
+     },
+     {
+      "host": "c.ltmsphrcl.net",
+      "conns": 1,
+      "in": 4747,
+      "out": 1947
+     },
+     {
+      "host": "gum.criteo.com",
+      "conns": 1,
+      "in": 4551,
+      "out": 1950
+     },
+     {
+      "host": "geolocation.onetrust.com",
+      "conns": 1,
+      "in": 4454,
+      "out": 1968
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://www.npr.org/",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cdn.cookielaw.org/opt-out/otCCPAiab.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cdn.cookielaw.org/consent/82089dfe-410c-4e1b-a7f9-698174b62a86/OtAutoBlock.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/33.935fc37b1d72a5ac1125.chunk.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.npr.org/9VwuPm63/o4iIhE8/QJKv3TZ/qL/QJhutcfOaL/P3giAQ/ZTEvc/hFFRSUT?v=bb0d1e6a-9ff9-4136-aac2-b3cde7f61721",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://CPfTuHdzdsTC5RZ8x.ay.delivery/manager/CPfTuHdzdsTC5RZ8x",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-static-assets.npr.org/static/javascript/lib/modernizr/modernizr.custom.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-static-assets.npr.org/static/javascript/lib/svg-loader.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://js.stripe.com/v3/",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cdn.cookielaw.org/consent/82089dfe-410c-4e1b-a7f9-698174b62a86/OtAutoBlock.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://cdn.cookielaw.org/opt-out/otCCPAiab.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-static-assets.npr.org/static/javascript/lib/modernizr/modernizr.custom.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/2700x2700+462+0/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-brigh…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 69513
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/5097x2867+0+265/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-brigh…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 40435
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/3024x3024+504+0/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-brigh…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 48819
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/6000x3375+0+313/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-brigh…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 56047
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/5310x5310+263+0/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-brigh…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 89420
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/5262x2960+0+99/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-bright…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 60599
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/3302x1857+0+172/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-brigh…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 26356
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/6000x3375+0+13/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-bright…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 36561
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/989x556+0+747/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-brights…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 34500
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/3313x1864+0+28/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-bright…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 26163
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/3000x1688+0+313/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-brigh…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 31792
+     },
+     {
+      "url": "https://npr.brightspotcdn.com/dims3/default/strip/false/crop/6456x3630+0+557/resize/300/quality/100/format/jpeg/?url=http%3A%2F%2Fnpr-brigh…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 26881
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-static-assets.npr.org/static/javascript/lib/svg-loader.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/33.935fc37b1d72a5ac1125.chunk.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://CPfTuHdzdsTC5RZ8x.ay.delivery/manager/CPfTuHdzdsTC5RZ8x",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://js.stripe.com/v3/",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.npr.org/9VwuPm63/o4iIhE8/QJKv3TZ/qL/QJhutcfOaL/P3giAQ/ZTEvc/hFFRSUT?v=bb0d1e6a-9ff9-4136-aac2-b3cde7f61721",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://geolocation.onetrust.com/cookieconsentpub/v1/geo/location/dnsfeed",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-MVD397M",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cdn.piano.io/api/tinypass.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://CPfTuHdzdsTC5RZ8x.ay.delivery/floorPrice/v5/CPfTuHdzdsTC5RZ8x?t=1791854231499\u0026d=www.npr.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cpftuhdzdstc5rz8x.ay.delivery/manager-script/CPfTuHdzdsTC5RZ8x.deploy?v=gPN92mpRsTkKePLZT",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c.amazon-adsystem.com/aax2/apstag.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cpftuhdzdstc5rz8x.ay.delivery/manager-script/yield-manager-script-v3.11.9-prod",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://CPfTuHdzdsTC5RZ8x.ay.delivery/client-v2.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://event.ay.delivery/pageview",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     },
+     {
+      "url": "https://cpftuhdzdstc5rz8x.ay.delivery/floorPrice/v5/CPfTuHdzdsTC5RZ8x?t=1791854231499\u0026d=www.npr.org",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://securepubads.g.doubleclick.net/pagead/ppub_config?ippd=www.npr.org",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://gum.criteo.com/sid/json?origin=prebid\u0026topUrl=https%3A%2F%2Fwww.npr.org%2F\u0026domain=www.npr.org\u0026cw=1\u0026lsw=1",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://api.rlcdn.com/api/identity/envelope?pid=14332",
+      "type": "Other",
+      "status": 401,
+      "encoded": 19
+     },
+     {
+      "url": "https://c.ltmsphrcl.net/id",
+      "type": "XHR",
+      "status": 200,
+      "encoded": 75
+     },
+     {
+      "url": "https://match.adsrvr.org/track/rid?ttd_pid=g2vej1n\u0026fmt=json",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://cdn.cookielaw.org/consent/82089dfe-410c-4e1b-a7f9-698174b62a86/82089dfe-410c-4e1b-a7f9-698174b62a86.json",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c.amazon-adsystem.com/bao-csm/aps-comm/aps_csm.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://web-video.ads.aps.amazon-adsystem.com/e/dtb/bid",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://script.crazyegg.com/pages/scripts/0127/0462.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://geolocation.onetrust.com/cookieconsentpub/v1/geo/location",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://pbs-us-east.ay.delivery/cookie_sync",
+      "type": "XHR",
+      "status": 200,
+      "encoded": 344
+     },
+     {
+      "url": "https://pbs-us-east.ay.delivery/openrtb2/auction?x-lz4=1",
+      "type": "Other",
+      "status": 400,
+      "encoded": 33
+     },
+     {
+      "url": "https://fastlane.rubiconproject.com/a/api/fastlane.json?account_id=9442\u0026site_id=509410\u0026zone_id=3047364\u0026size_id=15%3B15%3B15%3B15%3B15%3B2\u0026a…",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://ib.adnxs.com/openrtb2/prebidjs?member_id=9538",
+      "type": "Other",
+      "status": 204,
+      "encoded": -1
+     },
+     {
+      "url": "https://bids.concert.io/bids/prebid",
+      "type": "XHR",
+      "status": 400,
+      "encoded": 41
+     },
+     {
+      "url": "https://hbopenbid.pubmatic.com/translator?source=prebid-client",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://direct.adsrvr.org/bid/bidder/directsfdjxmqr",
+      "type": "XHR",
+      "status": 200,
+      "encoded": 0
+     },
+     {
+      "url": "https://htlb.casalemedia.com/openrtb/pbjs?s=922918",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://hb.minutemedia-prebid.com/hb-mm-multi",
+      "type": "XHR",
+      "status": 206,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/1.d5db187e233b224676cf.chunk.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/2.742e7fc7d725d8940340.chunk.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/3.bbc83bf0c524f8408380.chunk.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/4.a2dce8d20de8d79eefcc.chunk.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/82.66917cdfcb35f991637c.chunk.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-MVD397M",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://event.ay.delivery/error",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_medium-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/persistent_large-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://prod-eks-bundles.npr.org/dist/bundles/newsHomepage-css-9feb4759ae75579e8c3b.css",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     }
+    ],
+    "engine": {
+     "wire_in": 2761535,
+     "wire_out": 133918,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 387478,
+    "wire_out": 69966,
+    "conns": 16,
+    "handshake_in": 624,
+    "handshake_out": 1768,
+    "requests": 188,
+    "cache_served": 157,
+    "ready_ms": 27114.576,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 161,
+     "Script": 4,
+     "XHR": 11
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "www.npr.org",
+      "conns": 2,
+      "in": 294355,
+      "out": 7091
+     },
+     {
+      "host": "hbopenbid.pubmatic.com",
+      "conns": 2,
+      "in": 16200,
+      "out": 5791
+     },
+     {
+      "host": "hb.minutemedia-prebid.com",
+      "conns": 2,
+      "in": 5035,
+      "out": 6263
+     },
+     {
+      "host": "bids.concert.io",
+      "conns": 2,
+      "in": 4919,
+      "out": 6289
+     },
+     {
+      "host": "c.amazon-adsystem.com",
+      "conns": 2,
+      "in": 9265,
+      "out": 1915
+     },
+     {
+      "host": "htlb.casalemedia.com",
+      "conns": 2,
+      "in": 5705,
+      "out": 5370
+     },
+     {
+      "host": "event.ay.delivery",
+      "conns": 2,
+      "in": 4829,
+      "out": 5837
+     },
+     {
+      "host": "web-video.ads.aps.amazon-adsystem.com",
+      "conns": 2,
+      "in": 6758,
+      "out": 3567
+     },
+     {
+      "host": "cdn.cookielaw.org",
+      "conns": 2,
+      "in": 7124,
+      "out": 2300
+     },
+     {
+      "host": "ib.adnxs.com",
+      "conns": 1,
+      "in": 3323,
+      "out": 6004
+     },
+     {
+      "host": "pbs-us-east.ay.delivery",
+      "conns": 2,
+      "in": 5229,
+      "out": 4076
+     },
+     {
+      "host": "direct.adsrvr.org",
+      "conns": 1,
+      "in": 3538,
+      "out": 5680
+     },
+     {
+      "host": "securepubads.g.doubleclick.net",
+      "conns": 2,
+      "in": 6862,
+      "out": 2000
+     },
+     {
+      "host": "fastlane.rubiconproject.com",
+      "conns": 1,
+      "in": 5391,
+      "out": 3365
+     },
+     {
+      "host": "gum.criteo.com",
+      "conns": 1,
+      "in": 4491,
+      "out": 2124
+     },
+     {
+      "host": "geolocation.onetrust.com",
+      "conns": 2,
+      "in": 4454,
+      "out": 1992
+     },
+     {
+      "host": "match.adsrvr.org",
+      "conns": 1,
+      "in": 0,
+      "out": 31
+     },
+     {
+      "host": "c.ltmsphrcl.net",
+      "conns": 1,
+      "in": 0,
+      "out": 31
+     },
+     {
+      "host": "cdn.piano.io",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "js.stripe.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "prod-eks-bundles.npr.org",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "cpftuhdzdstc5rz8x.ay.delivery",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "CPfTuHdzdsTC5RZ8x.ay.delivery",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "api.rlcdn.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "www.googletagmanager.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "prod-eks-static-assets.npr.org",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "npr.brightspotcdn.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "script.crazyegg.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 388102,
+     "wire_out": 71144,
+     "cache_hit_bytes": 5373253,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
   }
  ],
  "baselines": [
