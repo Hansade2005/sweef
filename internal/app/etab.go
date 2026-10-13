@@ -520,6 +520,10 @@ func (a *App) onEngineEvent(ev engine.Event) {
 		if d, ok := ev.Data.(engine.Download); ok {
 			a.post(func() { a.onEngineDownload(e, d) })
 		}
+	case engine.EvAudio:
+		if st, ok := ev.Data.(engine.AudioState); ok {
+			a.post(func() { a.onTabAudio(e, st) })
+		}
 	case engine.EvDialog:
 		a.post(func() {
 			a.sendChrome(mToast, map[string]any{"text": "This page showed a dialog that was handled automatically", "kind": "info"})
