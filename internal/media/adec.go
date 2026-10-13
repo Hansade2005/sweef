@@ -64,6 +64,13 @@ func NewAudioDecoder(c TrackConfig) (AudioDecoder, error) {
 		return newOpusStream(h)
 	case "vorbis":
 		return newVorbisStream(c.Cfg)
+	case "mp3":
+		return newMP3Stream(c), nil
+	case "pcm_s16":
+		if c.Channels < 1 || c.Channels > 8 || c.SampleRate <= 0 {
+			return nil, ErrUnsupported
+		}
+		return newPCMStream(c), nil
 	}
 	return nil, ErrUnsupported
 }

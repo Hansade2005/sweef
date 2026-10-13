@@ -5,10 +5,12 @@ package engine
 
 import (
 	"math"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/audioout"
+	"github.com/sweefbrowser/sweef/internal/media"
 )
 
 func peakOf(pcm []float32) float32 {
@@ -229,4 +231,52 @@ func TestWebAudioDestinationReachesTheOutput(t *testing.T) {
 		t.Errorf("level %.3f, want about 0.4", pk)
 	}
 	evalJSON(t, tab, "ctx.close().then(function(){return 1})", nil)
+}
+
+// Every audio format the engine can decode plays through the output at the right pitch.
+func TestAudioElementFormatsReachTheOutput(t *testing.T) {
+	files := []string{"tone.wav", "tone.flac", "tone.aac", "tone.mp3", "tone.ogg", "opus_st.webm", "opus_st.mp4", "aac_st_ms.m4a"}
+	for _, f := range files {
+		f := f
+		t.Run(f, func(t *testing.T) {
+			_, sink := useRecordingSink(t)
+			tab := newMediaTab(t)
+			evalJSON(t, tab, `(function(){var a=document.createElement('audio');a.id='a';a.src='`+f+`';document.body.appendChild(a);var b=document.createElement('button');b.id='b';b.textContent='x';document.body.appendChild(b);return 1})()`, nil)
+			waitTrue(t, tab, "document.getElementById('a').readyState >= 3", 5*time.Second)
+			if err := tab.Click("#b"); err != nil {
+				t.Fatal(err)
+			}
+			var res string
+			evalJSON(t, tab, "document.getElementById('a').play().then(function(){return 'ok'},function(e){return e.name})", &res)
+			if res != "ok" {
+				t.Fatalf("play(): %s", res)
+			}
+			waitTrue(t, tab, "document.getElementById('a').currentTime > 0.8", 8*time.Second)
+			i0 := firstSound(sink.Recorded())
+			left := leftChannel(sink.Recorded())
+			if i0 < 0 || len(left) < i0+24000 {
+				t.Fatalf("no sound at the output: first %d of %d frames", i0, len(left))
+			}
+			// the pitch of what was played against the pitch of the decoded file
+			data, err := os.ReadFile("testdata/media/" + f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ref, err := media.DecodeAudio(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := hzOf(ref.Data[0][ref.SampleRate/10:ref.SampleRate/2], ref.SampleRate)
+			got := hzOf(left[i0+4800:i0+24000], 48000)
+			if math.Abs(got-want) > want*0.05 {
+				t.Errorf("heard %.0f Hz, the file decodes to %.0f Hz", got, want)
+			}
+			// the element clock follows the sound that was actually played
+			ct := jsNum(t, tab, "document.getElementById('a').currentTime")
+			played := float64(sink.Frames()-i0) / audioout.DeviceRate
+			if math.Abs(ct-played) > 0.3 {
+				t.Errorf("currentTime %.2f vs %.2f s of sound played", ct, played)
+			}
+		})
+	}
 }

@@ -231,18 +231,17 @@ func (m *mediaHost) playerFns(f map[string]hostFn) {
 		if r == nil || m.j.tab == nil {
 			return map[string]any{"ok": false}, nil
 		}
-		video, audio, err := media.OpenTracks(r.src, r.info)
+		set, err := media.OpenTrackSet(r.src, r.info)
 		if err != nil {
 			return map[string]any{"ok": false, "error": err.Error()}, nil
 		}
+		video, audio := set.Video, set.Audio
 		if video != nil && !media.HasNativeVideo(video.Config().CodecName) {
 			video = nil
 		}
 		if audio != nil {
-			if d, err := media.NewAudioDecoder(audio.Config()); err != nil {
+			if _, err := media.NewAudioDecoder(audio.Config()); err != nil {
 				audio = nil
-			} else {
-				_ = d
 			}
 		}
 		if video == nil && audio == nil {
@@ -257,7 +256,7 @@ func (m *mediaHost) playerFns(f map[string]hostFn) {
 			vs.mu.Unlock()
 			m.publish(node, vs)
 		}
-		m.setPlayer(node, newMediaPlayer(m.j.tab, node, fixedTracks{video, audio}, vs))
+		m.setPlayer(node, newMediaPlayer(m.j.tab, node, fixedTracks{video, audio, set.Done}, vs))
 		return map[string]any{"ok": true, "video": video != nil, "audio": audio != nil}, nil
 	}
 	// playerMSE(node, idsJSON, isVideo, w, h): a player over the SourceBuffers ids of a MediaSource

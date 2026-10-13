@@ -30,11 +30,26 @@ type trackSource interface {
 	EOS() bool
 }
 
-type fixedTracks struct{ v, a *media.TrackStore }
+// fixedTracks are the stores of a progressive file. While a background indexer or decoder is still
+// adding samples (done not nil) the file is not at its end yet.
+type fixedTracks struct {
+	v, a *media.TrackStore
+	done <-chan struct{}
+}
 
 func (f fixedTracks) Video() *media.TrackStore { return f.v }
 func (f fixedTracks) Audio() *media.TrackStore { return f.a }
-func (f fixedTracks) EOS() bool                { return true }
+func (f fixedTracks) EOS() bool {
+	if f.done == nil {
+		return true
+	}
+	select {
+	case <-f.done:
+		return true
+	default:
+		return false
+	}
+}
 
 // mediaFrameHook, when set (tests), is called whenever a player publishes a picture.
 var mediaFrameHook atomic.Pointer[func(node int64, pts float64, at time.Time)]
