@@ -809,7 +809,17 @@
   function scheduleLoadEvent(node) {
     if (slots(node).loadScheduled) return;
     slots(node).loadScheduled = true;
-    setTimeoutImpl(function () { slots(node).loadScheduled = false; if (node.localName !== 'img' || node.getAttribute('src')) fire(node, 'load', { bubbles: false, cancelable: false }); }, [], 0, false);
+    setTimeoutImpl(function () {
+      slots(node).loadScheduled = false;
+      if (node.localName === 'img') {
+        var src = node.getAttribute('src');
+        if (!src) return;
+        // A real request decides load or error and the natural size (imgload_prelude.js). Without it,
+        // every image in the document reported load, so onerror fallbacks never ran.
+        if (typeof global.__swImgStart === 'function' && global.__swImgStart(node, src)) return;
+      }
+      fire(node, 'load', { bubbles: false, cancelable: false });
+    }, [], 0, false);
   }
   function toNodes(args) {
     var out = [];

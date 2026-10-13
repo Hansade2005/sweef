@@ -4,8 +4,8 @@
  * `new Image().src = url` and `img.src = url` on a detached <img> ask Go for the
  * image (__sw.imageLoad); Go answers through __swImgEvent from the event-loop
  * pump, which dispatches load or error on the element and records the natural
- * size. Images that are in the document keep the base prelude's behaviour:
- * layout fetches them.
+ * size. Images in the document get the same load/error events through
+ * __swImgStart (layout still fetches them for painting).
  */
 (function (global) {
   'use strict';
@@ -63,6 +63,18 @@
     }
   });
 
+  // Called by the DOM prelude when an <img> that is in the document gets a src: real load/error events and natural size.
+  Object.defineProperty(global, '__swImgStart', {
+    configurable: true, writable: true, enumerable: false,
+    value: function (img, value) {
+      var v = String(value);
+      if (v === '' || /^data:/i.test(v)) return false;
+      if (String(img.getAttribute('loading') || '').toLowerCase() === 'lazy') return false;
+      start(img, v);
+      return true;
+    }
+  });
+
   Object.defineProperty(global, '__swImgEvent', {
     configurable: true, writable: true, enumerable: false,
     value: function (token, type, w, h) {
@@ -72,7 +84,7 @@
       var s = st(img);
       if (s.token !== token) return false; // src was set again meanwhile
       s.done = true;
-      if (type === 'load') { s.w = w | 0; s.h = h | 0; }
+      if (type === 'load') { s.w = w | 0; s.h = h | 0; } else { s.w = s.h = 0; }
       img.dispatchEvent(new global.Event(type));
       return true;
     }

@@ -181,7 +181,8 @@ func (c *ctx) replacedIntrinsic(b *lbox) (float64, float64) {
 	if wv, ok := c.specW(b, st.Width, 0); ok && st.Width.K == style.LPx {
 		return wv, wv
 	}
-	w, _ := c.replacedUsedSize(b, 0, -1, false)
+	// -1: no containing block yet, so a percentage max-width must not clamp the intrinsic size to 0
+	w, _ := c.replacedUsedSize(b, -1, -1, false)
 	return w, w
 }
 

@@ -91,7 +91,7 @@ func (c *ctx) outerIntrinsic(k *lbox, wantMin bool) float64 {
 	default:
 		if wantMin {
 			w = c.minContent(k) + extra
-			if k.inner == iReplaced && st.Width.K == style.LPct {
+			if k.inner == iReplaced && (st.Width.K == style.LPct || st.MaxWidth.K == style.LPct) {
 				w = extra
 			}
 		} else {
