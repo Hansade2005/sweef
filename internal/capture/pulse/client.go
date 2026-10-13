@@ -78,6 +78,7 @@ type Conn struct {
 	tag     uint32
 	pending map[uint32]chan reply
 	streams map[uint32]*recStream
+	play    map[uint32]*PlayStream
 	orphans map[uint32][][]byte // data that arrived between a stream's reply and its registration
 	closed  bool
 	err     error
@@ -134,7 +135,7 @@ func Dial(o Options) (*Conn, error) {
 	if nc == nil {
 		return nil, ErrNoServer
 	}
-	c := &Conn{c: nc, pending: map[uint32]chan reply{}, streams: map[uint32]*recStream{}, orphans: map[uint32][][]byte{}, done: make(chan struct{})}
+	c := &Conn{c: nc, pending: map[uint32]chan reply{}, streams: map[uint32]*recStream{}, play: map[uint32]*PlayStream{}, orphans: map[uint32][][]byte{}, done: make(chan struct{})}
 	go c.readLoop()
 	_ = nc.SetDeadline(time.Time{})
 
@@ -272,6 +273,19 @@ func (c *Conn) readLoop() {
 			if s != nil {
 				s.finish(errors.New("pulse: the source went away"))
 			}
+		case cmdRequest:
+			chn, n := r.u32(), r.u32()
+			if s := c.playStream(chn); s != nil && r.err == nil {
+				s.addRequest(int(n))
+			}
+		case cmdUnderflow:
+			if s := c.playStream(r.u32()); s != nil {
+				s.underflows.Add(1)
+			}
+		case cmdPlaybackStreamKilled:
+			if s := c.playStream(r.u32()); s != nil {
+				s.finish(errors.New("pulse: the playback stream was killed (device removed or moved)"))
+			}
 		default:
 			// subscription events, buffer attribute changes, suspend/move notifications: not needed
 		}
@@ -292,10 +306,15 @@ func (c *Conn) shutdown(err error) {
 	c.err = err
 	streams := c.streams
 	c.streams = map[uint32]*recStream{}
+	plays := c.play
+	c.play = map[uint32]*PlayStream{}
 	close(c.done)
 	c.mu.Unlock()
 	_ = c.c.Close()
 	for _, s := range streams {
+		s.finish(fmt.Errorf("pulse: connection to the server ended: %w", err))
+	}
+	for _, s := range plays {
 		s.finish(fmt.Errorf("pulse: connection to the server ended: %w", err))
 	}
 }

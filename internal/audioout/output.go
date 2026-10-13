@@ -3,6 +3,7 @@ package audioout
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"strings"
@@ -305,12 +306,15 @@ func Default() *Output {
 		defOut = mustOutput(NewNullBackend())
 		return defOut
 	}
-	if b, err := openDeviceBackend(deviceOpenTimeout); err == nil {
-		if o, err := NewOutput(b); err == nil {
+	b, err := openDeviceBackend(deviceOpenTimeout)
+	if err == nil {
+		var o *Output
+		if o, err = NewOutput(b); err == nil {
 			defOut = o
 			return o
 		}
 	}
+	log.Printf("audio: no sound output (%v); playing silently", err)
 	defOut = mustOutput(NewNullBackend())
 	return defOut
 }
