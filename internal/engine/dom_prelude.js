@@ -2812,7 +2812,7 @@
     if (!(this instanceof Request)) throw new TypeError("Failed to construct 'Request': Please use the 'new' operator");
     init = init || {};
     var url, method = 'GET', headers = null, body = null, extra = {};
-    if (input instanceof Request) { url = input.url; method = input.method; headers = new Headers(input.headers); body = input._body; extra = { mode: input.mode, credentials: input.credentials, cache: input.cache, redirect: input.redirect, referrer: input.referrer, integrity: input.integrity, signal: input.signal }; }
+    if (input instanceof Request) { url = input.url; method = input.method; headers = new Headers(input.headers); body = input._body; extra = { mode: input.mode, credentials: input.credentials, cache: input.cache, redirect: input.redirect, referrer: input.referrer, integrity: input.integrity, signal: input.signal, destination: input.destination }; }
     else url = new URL(String(input), currentURL()).href;
     if (init.method !== undefined) method = String(init.method).toUpperCase() === String(init.method).toUpperCase() && /^(get|post|put|delete|head|options|patch)$/i.test(init.method) ? String(init.method).toUpperCase() : String(init.method);
     if (init.headers !== undefined) headers = new Headers(init.headers);
@@ -2827,7 +2827,7 @@
     var self = this;
     ['mode', 'credentials', 'cache', 'redirect', 'referrer', 'integrity', 'keepalive', 'priority'].forEach(function (k) { var dflt = { mode: 'cors', credentials: 'same-origin', cache: 'default', redirect: 'follow', referrer: 'about:client', integrity: '', keepalive: false, priority: 'auto' }[k]; Object.defineProperty(self, k, { value: init[k] !== undefined ? init[k] : extra[k] !== undefined ? extra[k] : dflt, enumerable: true }); });
     Object.defineProperty(this, 'signal', { value: init.signal || extra.signal || new AbortSignal(), enumerable: true });
-    Object.defineProperty(this, 'destination', { value: '', enumerable: true });
+    Object.defineProperty(this, 'destination', { value: init.__destination !== undefined ? String(init.__destination) : extra.destination || '', enumerable: true }); // __destination: set by the service worker host for the requests it hands to fetch events
     Object.defineProperty(this, 'referrerPolicy', { value: init.referrerPolicy || '', enumerable: true });
   }
   defineBody(Request.prototype);

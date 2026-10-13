@@ -340,6 +340,7 @@ func (j *jsVM) close() {
 	if j.realtime != nil {
 		j.realtime.closeAll()
 	}
+	runCloseHooks(j)
 	j.vm.SetModuleLoader(nil, nil)
 	j.vm.Close()
 	for _, h := range j.closeHooks {

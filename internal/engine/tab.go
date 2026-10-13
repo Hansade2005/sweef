@@ -156,6 +156,7 @@ type Tab struct {
 	downloads      []Download
 
 	ds tabDS // Data Saver state (datasaver.go)
+	sw tabSW // service worker control of the document (sw_intercept.go)
 
 	asyncImg   atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
 	imgSem     chan struct{}             // images fetched at once
@@ -204,6 +205,7 @@ func (t *Tab) Context() *BrowserContext {
 
 func (t *Tab) close() {
 	if t.closed.CompareAndSwap(false, true) {
+		t.swDocumentGone()
 		dropBitmapSources(t.ID)
 		if env := t.ds.env.Load(); env != nil {
 			env.fonts.close() // releases the document's web font set
@@ -261,6 +263,9 @@ func (t *Tab) NavigateProgressive(rawurl string, headers map[string]string) erro
 }
 
 func (t *Tab) navigate(rawurl string, headers map[string]string, progressive bool) error {
+	if t.sw.noNav {
+		return fmt.Errorf("navigation is not available here")
+	}
 	u, err := url.Parse(rawurl)
 	if err != nil {
 		return fmt.Errorf("bad url %q: %w", rawurl, err)
@@ -324,10 +329,21 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		}
 		return &fetchResult{body: string(data), finalURL: u.String(), status: 200}, nil
 	}
+	t.swPrepareNavigation(u.String())
 	synth, method, target, hdrs, _, err := t.routedRequest("GET", u.String(), headers, "")
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": u.String(), "error": err.Error()}})
 		return nil, err
+	}
+	if synth == nil && method == "GET" { // a service worker may answer the navigation
+		sres, handled, serr := t.swNavigation(target, hdrs)
+		if handled {
+			if serr != nil {
+				t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": target, "error": serr.Error()}})
+				return nil, serr
+			}
+			synth = sres
+		}
 	}
 	rec := fnet.RequestRecord{Method: method, URL: target}
 	start := time.Now()
@@ -463,6 +479,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	old := t.js
 	t.js = nil
 	t.mu.Unlock()
+	t.swDocumentCommitted(finalURL)
 	// Freeing every object the previous page allocated takes milliseconds;
 	// nothing can reach the old VM any more, so do it off the critical path.
 	if old != nil {
