@@ -113,6 +113,8 @@
   names('devices', 'orientation', g.Screen.prototype, true);
   names('devices', 'hasStorageAccess requestStorageAccess pictureInPictureEnabled pictureInPictureElement exitPictureInPicture', g.Document.prototype, true);
   if (g.HTMLVideoElement) names('devices', 'requestPictureInPicture disablePictureInPicture', g.HTMLVideoElement.prototype, true);
+  names('opfs', 'FileSystemHandle FileSystemFileHandle FileSystemDirectoryHandle FileSystemWritableFileStream StorageManager showOpenFilePicker showSaveFilePicker showDirectoryPicker');
+  names('opfs', 'storage', g.Navigator.prototype, true);
   names('es', 'fromAsync', Array, false, true);
   names('es', 'dispose asyncDispose', Symbol, false, true);
   names('es', 'DisposableStack AsyncDisposableStack SuppressedError', g, false, true);

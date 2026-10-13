@@ -2719,8 +2719,8 @@
     (parts || []).forEach(function (p) { var b = p instanceof Blob ? p._bytes : toBytes(typeof p === 'string' || p instanceof ArrayBuffer || ArrayBuffer.isView(p) ? p : String(p)); chunks.push(b); total += b.length; });
     var bytes = new Uint8Array(total), off = 0;
     chunks.forEach(function (c) { bytes.set(c, off); off += c.length; });
-    Object.defineProperty(this, '_bytes', { value: bytes });
-    Object.defineProperty(this, 'size', { value: total, enumerable: true });
+    Object.defineProperty(this, '_bytes', { value: bytes, configurable: true });
+    Object.defineProperty(this, 'size', { value: total, enumerable: true, configurable: true });
     Object.defineProperty(this, 'type', { value: String((opts && opts.type) || '').toLowerCase(), enumerable: true });
   }
   Blob.prototype = {

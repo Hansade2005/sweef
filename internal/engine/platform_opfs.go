@@ -91,6 +91,8 @@ func (j *jsVM) opfsHost(f map[string]hostFn) {
 		op, parts := argS(a, 0), opfsSplit(argS(a, 1))
 		now := time.Now().UnixMilli()
 		switch op {
+		case "usage":
+			return map[string]any{"usage": o.total(o.root), "quota": opfsQuota}, nil
 		case "stat":
 			n := o.walk(parts)
 			if n == nil {
