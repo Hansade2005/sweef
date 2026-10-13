@@ -27,6 +27,7 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - WebRTC video and audio: a pure Go VP8 encoder, VP8 and Opus send and receive with jitter buffers, NACK/PLI and bandwidth estimation, `getStats` media entries ([docs/webrtc.md](docs/webrtc.md), [docs/webrtc-interop.md](docs/webrtc-interop.md)).
 
 ### Changed
+- The release binary-size budget is 40 MiB (was 32 MiB): WebRTC (pion), WebAssembly (wazero) and the web platform layer add about 12 MiB. The stripped linux/amd64 build is about 34.7 MiB.
 - README shows the real browser UI (first-run setup with the real browser logos, Sidekick, Data Saver, new tab, omnibox), rendered by `uipreview`.
 - The omnibox dropdown uses a lighter shadow (the `--sh-2` token plus a 1 px ring instead of `--sh-3`).
 

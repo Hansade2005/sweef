@@ -7,7 +7,6 @@ import (
 	"math"
 	"runtime"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -547,12 +546,4 @@ func TestWebRTCCallCPU(t *testing.T) {
 			t.Logf("%dx%d@30 send+receive in one process: %.2f cores busy (%.1f fps shown), encode %.1f ms/frame average (%.0f frames)", c.w, c.h, cores, float64(n1-n0)/6, encMs, frames)
 		})
 	}
-}
-
-func procCPU() time.Duration {
-	var ru syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
-		return 0
-	}
-	return time.Duration(ru.Utime.Nano() + ru.Stime.Nano())
 }

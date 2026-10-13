@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -42,7 +43,7 @@ type fakeSource struct {
 
 func newFake(t *testing.T) *fakeServer {
 	t.Helper()
-	dir, err := filepath.EvalSymlinks(t.TempDir())
+	dir, err := shortTempDir(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -656,4 +657,19 @@ func TestOpenCloseNoLeaks(t *testing.T) {
 	if n := runtime.NumGoroutine(); n > before+8 {
 		t.Fatalf("goroutines %d -> %d", before, n)
 	}
+}
+
+// shortTempDir returns a temp directory with a short path: unix socket paths are limited to about 104 bytes on
+// macOS (and 108 on Linux), and t.TempDir() under macOS's /var/folders/... exceeds that.
+func shortTempDir(t *testing.T) (string, error) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake PulseAudio server uses unix sockets and Linux semantics")
+	}
+	dir, err := os.MkdirTemp("/tmp", "sw")
+	if err != nil {
+		return "", err
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return filepath.EvalSymlinks(dir)
 }
