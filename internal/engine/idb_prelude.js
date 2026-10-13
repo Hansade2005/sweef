@@ -222,8 +222,10 @@
   }
   function inject(value, path, key) {
     var parts = path.split('.');
+    // a key path is page-controlled: never walk or create the names that reach Object.prototype
+    for (var j = 0; j < parts.length; j++) if (parts[j] === '__proto__' || parts[j] === 'constructor' || parts[j] === 'prototype') return;
     for (var i = 0; i < parts.length - 1; i++) {
-      if (!(parts[i] in value)) value[parts[i]] = {};
+      if (!Object.prototype.hasOwnProperty.call(value, parts[i])) Object.defineProperty(value, parts[i], { value: {}, writable: true, enumerable: true, configurable: true });
       value = value[parts[i]];
     }
     Object.defineProperty(value, parts[parts.length - 1], { value: key, writable: true, enumerable: true, configurable: true });

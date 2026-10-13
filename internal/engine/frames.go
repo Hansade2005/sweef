@@ -395,7 +395,7 @@ func (c *Tab) loadFrameURL(src string) {
 	abs, err := resolveURL(base, src)
 	lower := strings.ToLower(strings.TrimSpace(abs))
 	switch {
-	case err != nil, strings.HasPrefix(lower, "javascript:"), strings.HasPrefix(lower, "blob:"):
+	case err != nil, strings.HasPrefix(lower, "javascript:"), strings.HasPrefix(lower, "vbscript:"), strings.HasPrefix(lower, "blob:"):
 		c.setFrameDocument("<!doctype html><html><head></head><body></body></html>", "about:blank")
 		return
 	case strings.HasPrefix(lower, "data:"):

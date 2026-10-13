@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"math/bits"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -346,7 +347,7 @@ func wasmToF64(v any) float64 {
 func wasmEncode(t byte, v any) uint64 {
 	switch t {
 	case wvI32:
-		return api.EncodeI32(int32(wasmToI64(v)))
+		return api.EncodeI32(int32(uint32(uint64(wasmToI64(v)) & math.MaxUint32))) // wasm i32 wraps modulo 2^32
 	case wvI64:
 		return uint64(wasmToI64(v))
 	case wvF32:
@@ -1026,7 +1027,7 @@ func (h *wasmHost) funcRefValue(a []any, i int) (uintptr, error) {
 	case s == "":
 		return 0, nil
 	case strings.HasPrefix(s, "ref:"):
-		n, _ := strconv.ParseUint(s[4:], 10, 64)
+		n, _ := strconv.ParseUint(s[4:], 10, bits.UintSize)
 		return uintptr(n), nil
 	}
 	parts := strings.SplitN(s, ":", 2)
@@ -1034,12 +1035,13 @@ func (h *wasmHost) funcRefValue(a []any, i int) (uintptr, error) {
 		return 0, errors.New("bad function reference")
 	}
 	tok, _ := strconv.Atoi(parts[0])
-	fi, _ := strconv.Atoi(parts[1])
+	fi64, _ := strconv.ParseUint(parts[1], 10, 32)
+	fi := uint32(fi64)
 	inst := h.insts[tok]
 	if inst == nil {
 		return 0, errors.New("function belongs to a released instance")
 	}
-	ref := engineRef(inst.mod, uint32(fi))
+	ref := engineRef(inst.mod, fi)
 	if ref == 0 {
 		return 0, errors.New("cannot take a reference to this function")
 	}

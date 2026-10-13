@@ -720,7 +720,7 @@ func (h *rtcHost) hostGenCert(a []any) (any, error) {
 	switch argS(a, 0) {
 	case "RSA":
 		bits := int(argI(a, 1))
-		if bits < 1024 || bits > 4096 {
+		if bits < 2048 || bits > 4096 { // never below 2048 bits
 			bits = 2048
 		}
 		key, err = rsa.GenerateKey(rand.Reader, bits)
