@@ -269,3 +269,4 @@ baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=
 [246/345] sweef-standard     run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 1322773 warm=   89846 req= 47 ready= 7466ms ok
 [247/345] sweef-strict       run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold=  361626 warm=   55849 req= 34 ready= 1454ms ok
 [248/345] chromium           run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265150 warm=  163650 req=113 ready= 6191ms ok
+[249/345] chromium-savedata  run 2 https://discuss.python.org/t/pep-703-making-the-global-inte… cold= 2265147 warm=  163740 req=113 ready= 6064ms ok
