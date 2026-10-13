@@ -1340,6 +1340,7 @@
   evHandlers(MediaSource, ['sourceopen', 'sourceended', 'sourceclose']);
   defGetter(MediaSource.prototype, 'readyState', function () { return msr(this).ready; });
 
+  function copyRanges(l) { var o = []; if (l) for (var i = 0; i < l.length; i++) o.push([+l[i][0], +l[i][1]]); return o; }
   function highestEnd(r) { var mx = 0; r.bufs.forEach(function (b) { var l = b._r.ranges; if (l.length && l[l.length - 1][1] > mx) mx = l[l.length - 1][1]; }); return mx; }
   function anyUpdating(r) { return r.bufs.some(function (b) { return b._r.updating; }); }
 
@@ -1563,13 +1564,13 @@
     function finish() {
       if (r.removed || r.token !== tok) return; // aborted or removed meanwhile
       r.updating = false;
-      if (!res.ok) { // the append error algorithm
-        fire(sb, 'error'); fire(sb, 'updateend');
+      if (!res.ok) { // the append error algorithm: the events are queued, the end of stream algorithm runs at once
+        task(function () { fire(sb, 'error'); fire(sb, 'updateend'); });
         if (mr.ready === 'open' || mr.ready === 'ended') { mr.ready = 'open'; endStream(ms, 'decode'); }
         return;
       }
       if (res.init) sbInit(sb, res.init);
-      if (res.buffered) r.ranges = res.buffered;
+      if (res.buffered) r.ranges = copyRanges(res.buffered);
       var mx = highestEnd(mr);
       if (isFinite(mr.dur) && mx > mr.dur && mr.ready === 'open') setMSDuration(ms, mx);
       fire(sb, 'update'); fire(sb, 'updateend');
@@ -1601,7 +1602,7 @@
       _setTimeout(function () {
         task(function () {
           if (r.removed || r.token !== tok) return;
-          try { r.ranges = sw.mseRemove(r.id, start, end) || []; } catch (e) { /* ignore */ }
+          try { r.ranges = copyRanges(sw.mseRemove(r.id, start, end)); } catch (e) { /* ignore */ }
           r.updating = false; fire(sb, 'update'); fire(sb, 'updateend');
           if (mr.el) msUpdate(mr.el);
         });

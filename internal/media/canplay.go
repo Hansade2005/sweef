@@ -173,8 +173,14 @@ func CanPlayType(mime string) string {
 		return rule.def
 	}
 	maybe := false
+	nv, na := 0, 0
 	for _, c := range codecs {
 		ci := classifyCodec(c)
+		if ci.kind == "video" {
+			nv++
+		} else if ci.kind == "audio" {
+			na++
+		}
 		if ci.class == ccUnknown || ci.class == ccNo {
 			return ""
 		}
@@ -210,6 +216,9 @@ func CanPlayType(mime string) string {
 				return ""
 			}
 		}
+	}
+	if nv > 1 || na > 1 {
+		return "" // a container carries one video and one audio codec here
 	}
 	if maybe {
 		return "maybe"

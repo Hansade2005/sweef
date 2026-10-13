@@ -466,3 +466,17 @@ func (t *TrackStore) Index(dts float64) int {
 	}
 	return -1
 }
+
+// CountPTS counts the samples presented in (after, upTo].
+func (t *TrackStore) CountPTS(after, upTo float64) int {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	lo := sort.Search(len(t.s), func(i int) bool { return t.s[i].DTS > after-t.maxCTO-1e-9 })
+	n := 0
+	for i := lo; i < len(t.s) && t.s[i].DTS <= upTo-t.minCTO+1e-9; i++ {
+		if p := t.s[i].PTS; p > after+1e-9 && p <= upTo+1e-9 {
+			n++
+		}
+	}
+	return n
+}

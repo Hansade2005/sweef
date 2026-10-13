@@ -36,6 +36,9 @@ func (f fixedTracks) Video() *media.TrackStore { return f.v }
 func (f fixedTracks) Audio() *media.TrackStore { return f.a }
 func (f fixedTracks) EOS() bool                { return true }
 
+// mediaFrameHook, when set (tests), is called whenever a player publishes a picture.
+var mediaFrameHook atomic.Pointer[func(node int64, pts float64, at time.Time)]
+
 // PlayerStats are the counters behind getVideoPlaybackQuality().
 type PlayerStats struct {
 	Total, Dropped, Corrupted int64
@@ -650,10 +653,9 @@ func (p *mediaPlayer) videoLoop() {
 			lastPic = pic
 			// frames that fell due since the last picture and were skipped count as dropped
 			n := int64(1)
-			if haveShown {
-				a, b := vstore.Index(shown.DTS), vstore.Index(want.DTS)
-				if a >= 0 && b > a {
-					n = int64(b - a)
+			if haveShown && want.PTS > shown.PTS {
+				if c := vstore.CountPTS(shown.PTS, want.PTS); c > 1 {
+					n = int64(c)
 				}
 			}
 			p.total.Add(n)
@@ -661,6 +663,9 @@ func (p *mediaPlayer) videoLoop() {
 				p.dropped.Add(n - 1)
 			}
 			p.vs.setPicture(pic)
+			if h := mediaFrameHook.Load(); h != nil {
+				(*h)(p.node, want.PTS, time.Now())
+			}
 			p.tab.videoFrameReady()
 		}
 		shown, haveShown = want, true

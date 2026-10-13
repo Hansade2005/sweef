@@ -82,6 +82,7 @@ type TestSink struct {
 	stop     chan struct{}
 	done     chan struct{}
 	pulls    int
+	started  time.Time // wall time of the first chunk (real-time mode)
 }
 
 // NewTestSink returns a manual-mode sink with a virtual clock and no
@@ -135,6 +136,9 @@ func (t *TestSink) Start(pull func([]float32)) error {
 	go func() {
 		defer close(t.done)
 		start := time.Now()
+		t.mu.Lock()
+		t.started = start
+		t.mu.Unlock()
 		var sent int64
 		tk := time.NewTicker(5 * time.Millisecond)
 		defer tk.Stop()
@@ -174,6 +178,14 @@ func (t *TestSink) Advance(d time.Duration) {
 		t.now = t.now.Add(10 * time.Millisecond)
 		t.mu.Unlock()
 	}
+}
+
+// FrameTime is the wall time at which recorded device frame i was handed to
+// the (virtual) speaker, in real-time mode: the sink's start plus i/DeviceRate.
+func (t *TestSink) FrameTime(i int) time.Time {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.started.Add(time.Duration(i) * time.Second / DeviceRate)
 }
 
 // Frames is the number of device frames recorded so far.
