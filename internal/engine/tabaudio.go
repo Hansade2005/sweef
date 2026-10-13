@@ -105,12 +105,17 @@ func (t *Tab) notifyUpdate() {
 }
 
 // videoFrameReady marks a new video picture: the document's paint counter
-// moves (layout stays cached) and the window is asked to repaint.
-func (t *Tab) videoFrameReady() {
+// moves (layout stays cached) and the window is asked to repaint. relayout
+// is set when the picture's size changed, which can change the element's
+// intrinsic size and so the layout.
+func (t *Tab) videoFrameReady(relayout bool) {
 	t.mu.RLock()
 	d := t.dom
 	t.mu.RUnlock()
 	if d != nil {
+		if relayout {
+			d.Touch()
+		}
 		d.TouchPaint()
 	}
 	t.notifyUpdate()

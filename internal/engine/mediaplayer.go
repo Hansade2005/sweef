@@ -662,11 +662,11 @@ func (p *mediaPlayer) videoLoop() {
 			if n > 1 && playing {
 				p.dropped.Add(n - 1)
 			}
-			p.vs.setPicture(pic)
+			resized := p.vs.setPicture(pic)
 			if h := mediaFrameHook.Load(); h != nil {
 				(*h)(p.node, want.PTS, time.Now())
 			}
-			p.tab.videoFrameReady()
+			p.tab.videoFrameReady(resized)
 		}
 		shown, haveShown = want, true
 	}

@@ -187,15 +187,17 @@ func (v *videoSource) Bitmap() image.Image {
 	return v.poster
 }
 
-// setPicture shows a decoded picture.
-func (v *videoSource) setPicture(p media.Picture) {
+// setPicture shows a decoded picture and reports whether its size differs from the previous one.
+func (v *videoSource) setPicture(p media.Picture) (resized bool) {
 	v.mu.Lock()
 	v.pic, v.hasPic, v.frame = p, true, nil
 	if w, h := p.Size(); w > 0 {
+		resized = w != v.w || h != v.h
 		v.w, v.h = w, h
 	}
 	v.seq++
 	v.mu.Unlock()
+	return resized
 }
 
 func (v *videoSource) Size() (int, int) {

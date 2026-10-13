@@ -39,14 +39,21 @@
   }
   // Agent actions reach the page through these Go-called entry points; page
   // code calling el.click() does not.
-  ['__swDispatch', '__swDispatchKey', '__swMouse', '__swTouch', '__swDrag', '__swWheel', '__swSetValueFromGo'].forEach(function (n) {
+  // Only real gestures count: button press/release/click, key presses and touches. Moving the pointer, scrolling
+  // and script-dispatched events do not activate the page.
+  var GESTURE = /^(click|mousedown|mouseup|pointerdown|pointerup|keydown|keyup|touchstart|touchend|dblclick|contextmenu)$/;
+  ['__swDispatch', '__swDispatchKey', '__swMouse', '__swTouch', '__swDrag', '__swSetValueFromGo'].forEach(function (n) {
     var orig = global[n];
     if (typeof orig !== 'function') return;
     try {
       Object.defineProperty(global, n, {
         value: function (a, b) {
-          var t = (n === '__swDispatch') ? b : (n === '__swMouse' ? a : n);
-          if (n !== '__swWheel' && (n !== '__swDispatch' || /^(click|mousedown|mouseup|pointerdown|pointerup|keydown|keyup|touchstart|touchend|dblclick|contextmenu)$/.test(String(t)))) grantActivation();
+          var gesture;
+          if (n === '__swDispatch') gesture = GESTURE.test(String(b));
+          else if (n === '__swMouse') gesture = GESTURE.test(String(a));
+          else if (n === '__swTouch') gesture = GESTURE.test(String(b));
+          else gesture = true; // key presses, drags, values typed by the agent
+          if (gesture) grantActivation();
           return orig.apply(this, arguments);
         }, writable: true, configurable: true, enumerable: false
       });
