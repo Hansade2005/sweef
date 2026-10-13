@@ -426,12 +426,12 @@ func Damage(old, cur *ListInfo) (bands []Band, ok bool) {
 	}
 	for i, m := range ma {
 		if !m {
-			bands = append(bands, Band{old.Bounds[i].Y0, old.Bounds[i].Y1})
+			bands = append(bands, Band{old.Bounds[i].Y0, old.Bounds[i].Y1, old.Bounds[i].X0, old.Bounds[i].X1})
 		}
 	}
 	for i, m := range mb {
 		if !m {
-			bands = append(bands, Band{cur.Bounds[i].Y0, cur.Bounds[i].Y1})
+			bands = append(bands, Band{cur.Bounds[i].Y0, cur.Bounds[i].Y1, cur.Bounds[i].X0, cur.Bounds[i].X1})
 		}
 	}
 	bands = mergeBands(bands)
@@ -449,7 +449,7 @@ func Damage(old, cur *ListInfo) (bands []Band, ok bool) {
 				}
 				for _, bd := range bands {
 					if b.Y0 < bd.Y1 && bd.Y0 < b.Y1 && (b.Y0 < bd.Y0 || b.Y1 > bd.Y1) {
-						bands = mergeBands(append(bands, Band{b.Y0, b.Y1}))
+						bands = mergeBands(append(bands, Band{b.Y0, b.Y1, b.X0, b.X1}))
 						grew = true
 						break
 					}
@@ -469,7 +469,9 @@ func Damage(old, cur *ListInfo) (bands []Band, ok bool) {
 }
 
 // Band is a range of device rows.
-type Band struct{ Y0, Y1 int }
+// Band is a range of device rows, and the columns [X0,X1) of them that were
+// repainted (X1 == 0: the whole width, for bands made by Damage).
+type Band struct{ Y0, Y1, X0, X1 int }
 
 // mergeBands sorts bands and merges those that overlap or nearly touch.
 func mergeBands(bs []Band) []Band {
@@ -486,6 +488,7 @@ func mergeBands(bs []Band) []Band {
 	for _, b := range out {
 		if n := len(m); n > 0 && b.Y0 <= m[n-1].Y1+gap {
 			m[n-1].Y1 = max(m[n-1].Y1, b.Y1)
+			m[n-1].X0, m[n-1].X1 = min(m[n-1].X0, b.X0), max(m[n-1].X1, b.X1)
 		} else {
 			m = append(m, b)
 		}
@@ -583,7 +586,7 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 	}
 	if !ok || rows*10 > cv.Surf.H()*6 {
 		cv.paint(list, info)
-		return []Band{{cv.Surf.R.Y0, cv.Surf.R.Y1}}, true
+		return []Band{{cv.Surf.R.Y0, cv.Surf.R.Y1, cv.Surf.R.X0, cv.Surf.R.X1}}, true
 	}
 	cv.Info = info
 	lcp := 0
@@ -596,8 +599,10 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 	if cv.snap != nil && !(cv.snapN <= len(list) && info.Pre[cv.snapN] == cv.snapPre) {
 		cv.snap = nil // the part under the snapshot changed
 	}
-	for _, b := range bands {
-		region := IRect{cv.Surf.R.X0, b.Y0, cv.Surf.R.X1, b.Y1}
+	for bi := range bands {
+		b := &bands[bi]
+		region := narrow(info, *b, cv.Surf.R)
+		b.X0, b.X1 = region.X0, region.X1
 		if cv.snap != nil {
 			SnapUsed.Add(1)
 			for y := b.Y0; y < b.Y1; y++ {
@@ -743,4 +748,35 @@ func (p *Painter) runRegion(list []render.Op, info *ListInfo, region IRect, star
 	for p.c.LayerDepth() > 0 {
 		p.c.EndLayer(1, SourceOver)
 	}
+}
+
+// narrow returns the rectangle to repaint for a damaged band: the columns the
+// changed ops cover, widened until no op that reaches the band crosses its left
+// or right edge unless clipping it there is exact. Whole rows used to be
+// repainted because the scan converter handles a shape that crosses the clip's
+// left or right edge slightly differently from one that does not (the part
+// outside is folded into the edge column), and a full paint shows that only at
+// the real surface edges. Shapes made of vertical and horizontal edges only
+// (plain rectangles, rectangular clips) are not affected, so those may cross;
+// every other op is repainted whole or not at all.
+func narrow(info *ListInfo, b Band, surf IRect) IRect {
+	x0, x1 := b.X0, b.X1
+	if x1 <= x0 {
+		return IRect{surf.X0, b.Y0, surf.X1, b.Y1}
+	}
+	x0, x1 = max(x0-damagePad, surf.X0), min(x1+damagePad, surf.X1)
+	for changed := true; changed; {
+		changed = false
+		for i, bo := range info.Bounds {
+			if bo.X1 <= bo.X0 || bo.Y1 <= b.Y0 || bo.Y0 >= b.Y1 || info.Exact[i] {
+				continue
+			}
+			if (bo.X0 < x0 && bo.X1 > x0) || (bo.X0 < x1 && bo.X1 > x1) {
+				nx0, nx1 := min(x0, bo.X0), max(x1, bo.X1)
+				x0, x1 = max(nx0, surf.X0), min(nx1, surf.X1)
+				changed = true
+			}
+		}
+	}
+	return IRect{x0, b.Y0, x1, b.Y1}
 }

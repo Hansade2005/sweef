@@ -44,7 +44,11 @@ func (t *Tab) paintIncremental(list []render.Op, w, h int, dpr float64, env rast
 		return &image.RGBA{}
 	}
 	// the caller installs one rectangle: the hull of the repainted bands
-	return copyRGBA(cv.Image(), image.Rect(cv.Surf.R.X0, bands[0].Y0, cv.Surf.R.X1, bands[len(bands)-1].Y1))
+	hull := image.Rect(bands[0].X0, bands[0].Y0, bands[0].X1, bands[0].Y1)
+	for _, b := range bands[1:] {
+		hull = hull.Union(image.Rect(b.X0, b.Y0, b.X1, b.Y1))
+	}
+	return copyRGBA(cv.Image(), hull)
 }
 
 // SWEEF_INCR_CHECK=1 compares every incremental paint with a full paint of the
