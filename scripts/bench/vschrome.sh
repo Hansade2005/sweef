@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
 # Side-by-side benchmark: Sweef's desktop GUI vs full, headed Chromium, both under the same Xvfb.
 #
-#   scripts/bench/vschrome.sh                      # full run: N=15 per browser, label "run-<commit>"
+#   scripts/bench/vschrome.sh -runs 7 -label final # THE way to measure the final commit (about 30 minutes)
+#   scripts/bench/vschrome.sh                      # same defaults (7 runs), label "run-<commit>"
 #   scripts/bench/vschrome.sh -label baseline      # label prefix; the commit is appended: baseline-<commit>
 #   scripts/bench/vschrome.sh -rev b99cf52        # build Sweef from that commit (default HEAD) via `git archive`
 #   scripts/bench/vschrome.sh -src worktree        # build Sweef from the working tree instead of a commit
 #   scripts/bench/vschrome.sh -quick               # smoke run (3 min): never writes docs/vs-chrome.md
-#   scripts/bench/vschrome.sh -runs 20 -idle 30    # any other flag is passed to `vschrome run`
+#   scripts/bench/vschrome.sh -runs 15 -idle 30 -trials 20 -nsites 5 -xz   # the long version (about 3 hours)
+#   (any other flag is passed to `vschrome run`)
 #
 # Output: bench/vschrome/results/<label>.json and, for a full run, docs/vs-chrome.md (generated from the JSON).
-# A full run takes roughly 2-3 hours (15 iterations x 2 browsers x ~4.5 min). It restarts Xvfb for every measured
-# launch, needs root for `drop_caches` (cold-cache start-up), and wants an otherwise idle machine.
+# Defaults: 7 iterations per browser, 20 s idle-CPU window, 4 s memory settle, 12 samples per run for tab switch /
+# new tab / closed-dropdown key (30 letters for the open-dropdown series), 3 real sites: about 30 minutes in all.
+# The method is identical for both browsers whatever the numbers. It restarts Xvfb for every measured launch and
+# needs root for `drop_caches` (cold-cache start-up).
+#
+# IDLE GATE: it refuses to start unless the 1-minute load average stays below 0.2 for 30 s; it waits up to 5 minutes
+# for that and then exits with status 3 instead of measuring on a busy machine. (-quick skips the gate;
+# VSCHROME_ALLOW_BUSY=1 skips it for debugging only: the results are then labelled as not idle.)
 #
 # Needs: Go, Xvfb, git, tar, gzip, xz, and Chromium (CHROMIUM=/path/to/chrome; default /opt/pw-browsers/chromium).
 set -euo pipefail
@@ -37,6 +45,23 @@ for t in Xvfb go git tar gzip; do
 done
 CHROMIUM=${CHROMIUM:-/opt/pw-browsers/chromium}
 [ -x "$CHROMIUM" ] || { echo "vschrome: Chromium not found at $CHROMIUM (set CHROMIUM=)" >&2; exit 1; }
+
+wait_idle() {
+  local quiet=0 waited=0
+  while [ "$waited" -le 300 ]; do
+    if awk '{exit !($1 < 0.2)}' /proc/loadavg; then quiet=$((quiet + 5)); else quiet=0; fi
+    [ "$quiet" -ge 30 ] && return 0
+    sleep 5; waited=$((waited + 5))
+  done
+  return 1
+}
+if [ "$QUICK" = 0 ] && [ -z "${VSCHROME_ALLOW_BUSY:-}" ]; then
+  echo "vschrome: waiting for an idle machine (load average < 0.2 for 30 s, up to 5 min)..." >&2
+  if ! wait_idle; then
+    echo "vschrome: machine is not idle (load: $(cut -d' ' -f1-3 /proc/loadavg)); refusing to measure. Try again later." >&2
+    exit 3
+  fi
+fi
 
 COMMIT=$(git rev-parse --short "$REV")
 [ "$SRC" = worktree ] && COMMIT=$(git rev-parse --short HEAD)

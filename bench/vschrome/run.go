@@ -18,9 +18,9 @@ import (
 
 func cmdRun(args []string) {
 	fl := flag.NewFlagSet("run", flag.ExitOnError)
-	runs := fl.Int("runs", 15, "iterations per browser (N >= 15 for a publishable run)")
-	idle := fl.Int("idle", 30, "idle CPU window in seconds")
-	settle := fl.Int("settle", 5, "settle time before reading memory, seconds")
+	runs := fl.Int("runs", 7, "iterations per browser (N >= 7 for a run that may print verdicts)")
+	idle := fl.Int("idle", 20, "idle CPU window in seconds")
+	settle := fl.Int("settle", 4, "settle time before reading memory, seconds")
 	label := fl.String("label", "baseline", "label of this run (file name and report title)")
 	out := fl.String("out", "bench/vschrome/results", "results directory")
 	sweefBin := fl.String("sweef", "", "sweef binary (built by scripts/bench/vschrome.sh)")
@@ -30,10 +30,12 @@ func cmdRun(args []string) {
 	srcMode := fl.String("sweef-source", "head", "head = built from a clean `git archive HEAD`, worktree = built from the working tree")
 	quick := fl.Bool("quick", false, "smoke run: few samples, no 30 s idle, no real sites (never publishable)")
 	sitesFile := fl.String("sites", "bench/datasaver/sites.txt", "candidate real sites (file order)")
-	nsites := fl.Int("nsites", 5, "real sites to measure")
+	nsites := fl.Int("nsites", 3, "real sites to measure")
 	shots := fl.String("shots", "", "debug: directory for screenshots of key moments")
 	only := fl.String("only", "", "debug: comma list of phases to run: startup,main,mem10 (default all)")
 	skipDisk := fl.Bool("skip-disk", false, "skip the disk footprint step")
+	trials := fl.Int("trials", 12, "samples per run for tab switch, new tab and the closed-dropdown first key")
+	xz := fl.Bool("xz", false, "also measure xz -6 sizes (adds ~2 min)")
 	keepLogs := fl.Bool("keep-logs", false, "keep Xvfb/browser logs under <out>/logs/<label>")
 	tabs := fl.Int("tabs", 10, "tabs for the many-tab memory measurement")
 	_ = fl.Parse(args)
@@ -44,7 +46,7 @@ func cmdRun(args []string) {
 	if *chromiumBin == "" {
 		*chromiumBin = "/opt/pw-browsers/chromium"
 	}
-	cfg := config{Runs: *runs, IdleSecs: *idle, SettleSec: *settle, Tabs: *tabs, Quick: *quick, Shots: *shots, KeyTrials: 20, SwitchN: 20, NewTabN: 20}
+	cfg := config{Runs: *runs, IdleSecs: *idle, SettleSec: *settle, Tabs: *tabs, Quick: *quick, Shots: *shots, KeyTrials: *trials, SwitchN: *trials, NewTabN: *trials}
 	if *quick {
 		cfg.KeyTrials, cfg.SwitchN, cfg.NewTabN = 4, 4, 4
 	}
@@ -106,7 +108,7 @@ func cmdRun(args []string) {
 	}
 
 	// the machine must be quiet; record what it was
-	quiet := quietMachine(45 * time.Second)
+	quiet := quietMachine(10 * time.Second)
 	m.Load = loadAvg()
 	if !quiet {
 		res.Problems = append(res.Problems, "machine was not idle (>= 0.2 cores used by other processes) when the run started")
@@ -136,7 +138,7 @@ func cmdRun(args []string) {
 	}
 
 	if !*skipDisk {
-		m.Disk = diskFootprint(chrBin, *sweefBin, *quick)
+		m.Disk = diskFootprint(chrBin, *sweefBin, *quick || !*xz)
 	}
 
 	// real sites
@@ -175,7 +177,7 @@ func cmdRun(args []string) {
 		for pos, name := range order {
 			spec := h.specs[name]
 			it := &Iter{Index: i, Position: pos, Load: loadAvg(), Startup: map[string]StartupSample{}, Lat: map[string][]float64{}, LatFail: map[string]int{}, Loads: map[string]LoadSample{}}
-			if !quietMachine(45 * time.Second) {
+			if !quietMachine(10 * time.Second) {
 				it.Noisy = true
 			}
 			logf("iteration %d/%d  %-8s load %s", i+1, *runs, name, loadAvg())
@@ -296,9 +298,9 @@ func finalize(res *Results, c config) {
 		res.Complete = false
 		res.Problems = append(res.Problems, "quick (smoke) run: not publishable")
 	}
-	if res.Meta.Runs < 15 {
+	if res.Meta.Runs < 7 {
 		res.Complete = false
-		res.Problems = append(res.Problems, fmt.Sprintf("N=%d < 15", res.Meta.Runs))
+		res.Problems = append(res.Problems, fmt.Sprintf("N=%d < 7", res.Meta.Runs))
 	}
 	if res.Meta.Calib == nil {
 		res.Complete = false

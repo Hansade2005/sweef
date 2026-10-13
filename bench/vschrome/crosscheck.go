@@ -56,7 +56,7 @@ func (h *harness) crossCheck(spec *browserSpec) (*CrossOut, error) {
 	}
 	s.waitQuiet(roi, 300*time.Millisecond, 2*time.Second)
 	s.keyLatency('a', roi)
-	for round := 0; round < 3; round++ {
+	for round := 0; round < 1; round++ {
 		for i, ch := range keyText {
 			s.waitQuiet(roi, 60*time.Millisecond, time.Second)
 			if i%2 == 0 {

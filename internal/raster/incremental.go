@@ -37,13 +37,14 @@ import (
 // ListInfo is the analysis of one display list.
 type ListInfo struct {
 	OK     bool
-	Key    []uint64 // content + context key per op
-	Bounds []IRect  // device bounds (a group's bounds for push ops)
-	Pair   []int32  // push -> matching pop index (and pop -> push), else -1
-	Wide   []bool   // damage touching this op / group must grow to its bounds
-	Desc   []string // op type names (SWEEF_NARROW_DEBUG)
-	Exact  []bool   // painting the op under a horizontal clip gives the same pixels as unclipped (see narrow)
-	Pre    []uint64 // Pre[i] hashes Key[:i]: equal prefixes paint equal intermediate surfaces
+	Key    []uint64     // content + context key per op
+	Bounds []IRect      // device bounds (a group's bounds for push ops)
+	Pair   []int32      // push -> matching pop index (and pop -> push), else -1
+	Wide   []bool       // damage touching this op / group must grow to its bounds
+	Desc   []string     // op type names (SWEEF_NARROW_DEBUG)
+	Exact  []bool       // painting the op under a horizontal clip gives the same pixels as unclipped (see narrow)
+	Corner []cornerSpan // like Exact, unless the clip edge cuts the curved ends of the op (see cornerZone)
+	Pre    []uint64     // Pre[i] hashes Key[:i]: equal prefixes paint equal intermediate surfaces
 	Surf   IRect
 }
 
@@ -180,12 +181,56 @@ func shadowBounds(o render.BoxShadow) render.Rect {
 	return render.Rect{X: o.Rect.X - o.Spread + o.DX - e, Y: o.Rect.Y - o.Spread + o.DY - e, W: o.Rect.W + 2*o.Spread + 2*e, H: o.Rect.H + 2*o.Spread + 2*e}
 }
 
+// shadowWholeSurface reports whether boxShadow computes the coverage of o for
+// the whole surface (rather than for the current clip): its mask must not be
+// larger than shadowMaskMax, a bound taken here on the shadow's device box.
+func shadowWholeSurface(o render.BoxShadow, m Matrix) bool {
+	sigma := math.Max(0, o.Blur) / 2 * m.MaxScale()
+	pad := int(math.Ceil(sigma*3)) + 1
+	r := o.Rect
+	if !o.Inset {
+		r = render.Rect{X: r.X + o.DX - o.Spread, Y: r.Y + o.DY - o.Spread, W: r.W + 2*o.Spread, H: r.H + 2*o.Spread}
+	}
+	if r.W <= 0 || r.H <= 0 {
+		return true // nothing is drawn
+	}
+	w, h := r.W*m.MaxScale()+float64(2*pad+4), r.H*m.MaxScale()+float64(2*pad+4)
+	return w*h <= shadowMaskMax/2
+}
+
+// cornerSpan marks the device columns where the outline of a rounded
+// rectangle is curved: (Lo0, Lo1) at its left end and (Hi0, Hi1) at its right
+// end. Between them the outline has only horizontal and vertical edges, so a
+// vertical clip edge there cuts the shape exactly like a plain rectangle.
+// The zero value means "no such guarantee".
+type cornerSpan struct{ Lo0, Lo1, Hi0, Hi1 int }
+
+func (c cornerSpan) ok() bool { return c.Hi1 > c.Lo0 }
+
+// cornerZone is the cornerSpan of a rounded rectangle (zero when it has square
+// corners, where Exact says it all, or the transform is not axis aligned).
+func cornerZone(r render.Rect, rad render.Radii, m Matrix, surf IRect) cornerSpan {
+	if rad.IsZero() || m[1] != 0 || m[2] != 0 || !hasRect(r) {
+		return cornerSpan{}
+	}
+	mx := 0.0
+	for _, c := range rad {
+		mx = math.Max(mx, math.Max(c[0], c[1]))
+	}
+	b := devRect(m, r, IRect{-1 << 30, -1 << 30, 1 << 30, 1 << 30})
+	z := int(math.Ceil(mx*m.MaxScale())) + damagePad + 1
+	if b.Empty() || z < 0 || z > 1<<20 || b.X1-b.X0 > 1<<20 {
+		return cornerSpan{}
+	}
+	return cornerSpan{b.X0, b.X0 + z + damagePad, b.X1 - z - damagePad, b.X1}
+}
+
 func hasRect(r render.Rect) bool { return r.W > 0 && r.H > 0 }
 
 // Analyze builds the ListInfo of list for a w x h device-pixel surface.
 func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 	n := len(list)
-	in := &ListInfo{Key: make([]uint64, n), Bounds: make([]IRect, n), Pair: make([]int32, n), Wide: make([]bool, n), Exact: make([]bool, n), Desc: descs(list), Pre: make([]uint64, n+1), Surf: IRect{0, 0, w, h}}
+	in := &ListInfo{Key: make([]uint64, n), Bounds: make([]IRect, n), Pair: make([]int32, n), Wide: make([]bool, n), Exact: make([]bool, n), Corner: make([]cornerSpan, n), Desc: descs(list), Pre: make([]uint64, n+1), Surf: IRect{0, 0, w, h}}
 	ctm := Scale(dpr, dpr)
 	var ctx uint64
 	var stack []groupRec
@@ -241,6 +286,7 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 			// a plain rectangle has only vertical and horizontal edges: the scan
 			// converter treats them the same with and without a horizontal clip
 			in.Exact[i] = o.Radii.IsZero() && ctm[1] == 0 && ctm[2] == 0
+			in.Corner[i] = cornerZone(o.Rect, o.Radii, ctm, in.Surf)
 		case render.Border:
 			leaf(o.Rect, false)
 		case render.TextRun:
@@ -250,11 +296,18 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 		case render.Gradient:
 			leaf(o.Rect, false)
 			in.Exact[i] = o.Radii.IsZero() && ctm[1] == 0 && ctm[2] == 0
+			in.Corner[i] = cornerZone(o.Rect, o.Radii, ctm, in.Surf)
 		case render.BoxShadow:
 			leaf(shadowBounds(o), false)
 			// without blur and corners it is built from rectangles only (a
 			// window-sized 1px inset frame is the usual case)
 			in.Exact[i] = o.Radii.IsZero() && o.Blur == 0 && ctm[1] == 0 && ctm[2] == 0
+			// otherwise it is a blend of a coverage mask that boxShadow computes
+			// over the whole surface (so it does not depend on the clip), as long
+			// as the mask is small enough to be computed that way
+			if !in.Exact[i] && ctm[1] == 0 && ctm[2] == 0 {
+				in.Exact[i] = shadowWholeSurface(o, ctm)
+			}
 		case render.Scrollbar:
 			leaf(o.Rect, false)
 		case render.ScrollCorner:
@@ -262,8 +315,10 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 		case render.SVGDraw:
 			leaf(o.Dst, true)
 		case render.PushClip:
+			zc := cornerZone(o.Rect, o.Radii, ctm, in.Surf)
 			push(i, sig, o.Rect, true, false, 0, false)
 			in.Exact[i] = o.Radii.IsZero() && ctm[1] == 0 && ctm[2] == 0
+			in.Corner[i] = zc
 		case render.PushLayer:
 			px, fok := filterReach(o.Filter)
 			if !fok {
@@ -303,6 +358,7 @@ func Analyze(list []render.Op, w, h int, dpr float64) *ListInfo {
 			}
 			in.Bounds[g.idx], in.Bounds[i] = b, b
 			in.Exact[i] = in.Exact[g.idx]
+			in.Corner[i] = in.Corner[g.idx]
 			in.Wide[g.idx] = g.wide
 			in.Pair[g.idx], in.Pair[i] = int32(i), int32(g.idx)
 			add(b)
@@ -778,7 +834,31 @@ func narrow(info *ListInfo, b Band, surf IRect) IRect {
 			if bo.X1 <= bo.X0 || bo.Y1 <= b.Y0 || bo.Y0 >= b.Y1 || info.Exact[i] {
 				continue
 			}
-			if (bo.X0 < x0 && bo.X1 > x0) || (bo.X0 < x1 && bo.X1 > x1) {
+			cross := (bo.X0 < x0 && bo.X1 > x0) || (bo.X0 < x1 && bo.X1 > x1)
+			if cz := info.Corner[i]; cz.ok() && cross {
+				// only an edge inside the curved ends matters: move it out of them
+				// (to the straight part of the outline, or to the outside of the op)
+				nx0, nx1 := x0, x1
+				switch {
+				case x0 > cz.Lo0 && x0 < cz.Lo1:
+					nx0 = cz.Lo0
+				case x0 > cz.Hi0 && x0 < cz.Hi1:
+					nx0 = cz.Hi0
+				}
+				switch {
+				case x1 > cz.Lo0 && x1 < cz.Lo1:
+					nx1 = cz.Lo1
+				case x1 > cz.Hi0 && x1 < cz.Hi1:
+					nx1 = cz.Hi1
+				}
+				nx0, nx1 = max(nx0, surf.X0), min(nx1, surf.X1)
+				if nx0 != x0 || nx1 != x1 {
+					x0, x1 = nx0, nx1
+					changed = true
+				}
+				continue
+			}
+			if cross {
 				nx0, nx1 := min(x0, bo.X0), max(x1, bo.X1)
 				if dbgNarrow {
 					println("narrow: op", i, info.Desc[i], "widens", x0, x1, "to", nx0, nx1, "band", b.Y0, b.Y1)
