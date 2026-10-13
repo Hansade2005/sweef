@@ -140,6 +140,12 @@ func TestOpenCloseHundredTimesLeaksNothing(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	g1, f1, h1 := runtime.NumGoroutine(), openFDs(), heapAfterGC()
+	// pooled memtables and block buffers are released a moment after Close and the heap baseline depends on what
+	// other tests left behind: give the heap a few chances to settle before calling growth a leak
+	for i := 0; i < 8 && int64(h1)-int64(h0) > 8<<20; i++ {
+		time.Sleep(300 * time.Millisecond)
+		h1 = heapAfterGC()
+	}
 	if g1 > g0+2 {
 		buf := make([]byte, 1<<16)
 		t.Fatalf("goroutines: %d -> %d after 100 open/close cycles\n%s", g0, g1, buf[:runtime.Stack(buf, true)])

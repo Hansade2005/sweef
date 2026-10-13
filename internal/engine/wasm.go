@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"math/bits"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -1027,7 +1026,10 @@ func (h *wasmHost) funcRefValue(a []any, i int) (uintptr, error) {
 	case s == "":
 		return 0, nil
 	case strings.HasPrefix(s, "ref:"):
-		n, _ := strconv.ParseUint(s[4:], 10, bits.UintSize)
+		n, err := strconv.ParseUint(s[4:], 10, 64)
+		if err != nil || n > uint64(^uintptr(0)) {
+			return 0, errors.New("bad function reference")
+		}
 		return uintptr(n), nil
 	}
 	parts := strings.SplitN(s, ":", 2)

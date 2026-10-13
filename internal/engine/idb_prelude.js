@@ -223,12 +223,16 @@
   function inject(value, path, key) {
     var parts = path.split('.');
     // a key path is page-controlled: never walk or create the names that reach Object.prototype
-    for (var j = 0; j < parts.length; j++) if (parts[j] === '__proto__' || parts[j] === 'constructor' || parts[j] === 'prototype') return;
-    for (var i = 0; i < parts.length - 1; i++) {
-      if (!Object.prototype.hasOwnProperty.call(value, parts[i])) Object.defineProperty(value, parts[i], { value: {}, writable: true, enumerable: true, configurable: true });
-      value = value[parts[i]];
+    for (var i = 0; i < parts.length; i++) {
+      var part = parts[i];
+      if (part === '__proto__' || part === 'constructor' || part === 'prototype') return;
+      if (i === parts.length - 1) {
+        Object.defineProperty(value, part, { value: key, writable: true, enumerable: true, configurable: true });
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(value, part)) Object.defineProperty(value, part, { value: {}, writable: true, enumerable: true, configurable: true });
+      value = value[part];
     }
-    Object.defineProperty(value, parts[parts.length - 1], { value: key, writable: true, enumerable: true, configurable: true });
   }
 
   // ---- structured clone to/from a JSON string ---------------------------------------------------
