@@ -58,7 +58,7 @@ func TestMuteKeepsClock(t *testing.T) {
 	s.Write(sine(440, DeviceRate, DeviceRate/2, 2, 0.8))
 	s.Play()
 	sink.Advance(200 * time.Millisecond)
-	if pk := sink.Peak(chunkFrames*2, sink.Frames()); pk != 0 {
+	if pk := sink.Peak(0, sink.Frames()); pk != 0 { // from the very first chunk: no fade-in from full volume
 		t.Fatalf("muted stream leaked audio: peak %v", pk)
 	}
 	if p := s.Position(); p < 190*time.Millisecond || p > 210*time.Millisecond {
@@ -289,7 +289,7 @@ func TestNullBackendRunsInRealTime(t *testing.T) {
 	time.Sleep(400 * time.Millisecond)
 	p := s.Position()
 	el := time.Since(t0)
-	if d := p - el; d < -40*time.Millisecond || d > 40*time.Millisecond {
+	if d := p - (el - s.Latency()); d < -40*time.Millisecond || d > 40*time.Millisecond { // the heard position trails the wall clock by the device latency
 		t.Fatalf("null sink clock %v vs wall %v (off by %v)", p, el, d)
 	}
 }

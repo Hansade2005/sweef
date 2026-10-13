@@ -352,6 +352,9 @@ func (s *Stream) mix(dst []float32, frames int, now time.Time) bool {
 	}
 	target *= grp
 	g0 := s.curGain
+	if g0 < 0 {
+		g0 = target
+	}
 	s.curGain = target
 
 	var pk float32

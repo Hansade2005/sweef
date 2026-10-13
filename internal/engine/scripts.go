@@ -89,6 +89,7 @@ func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {
 		j.jobs()
 	} else {
 		_, _ = j.runCached(src, name)
+		j.jobs() // microtask checkpoint: the next script must see what promise callbacks of this one set up
 	}
 	bc := j.bcState
 	t.tspan("script.exec", name+" "+itoa(len(src))+"B bytecode:"+bc, te)

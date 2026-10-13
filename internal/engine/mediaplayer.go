@@ -12,6 +12,7 @@ package engine
 // volume) and reads the clock; nothing here calls into the VM.
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -85,6 +86,7 @@ type mediaPlayer struct {
 	aDone    bool // audio ran out before the video: wall clock continues
 	aBase    time.Duration
 	aT0      float64
+	keep     bool // paused with the audio loop and stream intact: play() can continue without a restart
 	stream   *audioout.Stream
 	audioEnd chan struct{} // closed when the current audio loop returned
 
@@ -143,7 +145,15 @@ func (p *mediaPlayer) Close() {
 // Play starts (or restarts) playback at media time pos.
 func (p *mediaPlayer) Play(pos, rate float64) {
 	p.mu.Lock()
-	p.restartLocked(pos, rate, true)
+	if p.keep && !p.playing && p.stream != nil && rate == p.rate && math.Abs(pos-p.pos) < 0.002 {
+		// resume where the pause left off: the queued audio is still right, no flush and no new start-up delay
+		p.keep = false
+		p.playing = true
+		p.wall = time.Now()
+		p.stream.Play()
+	} else {
+		p.restartLocked(pos, rate, true)
+	}
 	p.mu.Unlock()
 	p.force.Store(true)
 	p.kick()
@@ -153,7 +163,13 @@ func (p *mediaPlayer) Play(pos, rate float64) {
 func (p *mediaPlayer) Pause() float64 {
 	p.mu.Lock()
 	t := p.clockLocked()
-	p.restartLocked(t, p.rate, false)
+	if p.playing && p.aStarted && !p.aDone && p.stream != nil && !p.closed.Load() {
+		// keep the audio loop and the queued audio: pausing only stops consumption
+		p.stream.Pause()
+		p.pos, p.playing, p.keep = t, false, true
+	} else {
+		p.restartLocked(t, p.rate, false)
+	}
 	p.mu.Unlock()
 	p.kick()
 	return t
@@ -219,6 +235,7 @@ func (p *mediaPlayer) SetRouted(on bool) {
 // restartLocked re-anchors the clock and restarts the audio loop.
 func (p *mediaPlayer) restartLocked(pos, rate float64, playing bool) {
 	p.gen++
+	p.keep = false
 	if p.stream != nil {
 		p.stream.Pause()
 		p.stream.Flush()

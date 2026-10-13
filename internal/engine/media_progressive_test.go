@@ -235,7 +235,7 @@ func TestWebAudioDestinationReachesTheOutput(t *testing.T) {
 
 // Every audio format the engine can decode plays through the output at the right pitch.
 func TestAudioElementFormatsReachTheOutput(t *testing.T) {
-	files := []string{"tone.wav", "tone.flac", "tone.aac", "tone.mp3", "tone.ogg", "opus_st.webm", "opus_st.mp4", "aac_st_ms.m4a"}
+	files := []string{"tone.wav", "tone.flac", "tone.aac", "play_tone.mp3", "play_tone.ogg", "opus_st.webm", "opus_st.mp4", "aac_st_ms.m4a"}
 	for _, f := range files {
 		f := f
 		t.Run(f, func(t *testing.T) {

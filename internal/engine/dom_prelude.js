@@ -2796,15 +2796,30 @@
     return null;
   }
   function defineBody(proto) {
-    getters(proto, { bodyUsed: { get: function () { return !!this._used; } }, body: { get: function () { if (this._body === null || this._body === undefined) return null; return bytesStream(utf8Encode(this._text())); } } });
+    getters(proto, { bodyUsed: { get: function () { return !!this._used; } }, body: { get: function () { if (this._body === null || this._body === undefined) return null; if (typeof this._body.getReader === 'function') return this._body; return bytesStream(utf8Encode(this._text())); } } });
     methods(proto, {
       _text: function () { return bodyToString(this._body); },
-      _consume: function () { if (this._used) return Promise.reject(new TypeError('Failed to execute \'text\' on \'' + this.constructor.name + '\': body stream already read')); this._used = true; return Promise.resolve(this._text()); },
+      _consume: function () {
+        if (this._used) return Promise.reject(new TypeError('Failed to execute \'text\' on \'' + this.constructor.name + '\': body stream already read'));
+        this._used = true;
+        var self = this, b = this._body;
+        if (b && typeof b.getReader === 'function') {
+          var rd = b.getReader(), parts = [], total = 0;
+          var pump = function () { return rd.read().then(function (r) {
+            if (r.done) { var all = new Uint8Array(total), o = 0; parts.forEach(function (p) { all.set(p, o); o += p.length; }); self._rawBytes = all; return utf8Decode(all); }
+            var v = r.value, u = typeof v === 'string' ? utf8Encode(v) : v instanceof ArrayBuffer ? new Uint8Array(v) : ArrayBuffer.isView(v) ? new Uint8Array(v.buffer, v.byteOffset, v.byteLength) : null;
+            if (!u) throw new TypeError('Received non-Uint8Array chunk');
+            parts.push(u); total += u.length; return pump();
+          }); };
+          return pump();
+        }
+        return Promise.resolve(this._text());
+      },
       text: function () { return this._consume(); },
       json: function () { return this._consume().then(function (t) { return JSON.parse(t); }); },
-      arrayBuffer: function () { var raw = this._rawBytes; return this._consume().then(function (t) { return raw ? raw.slice().buffer : utf8Encode(t).buffer; }); },
-      bytes: function () { var raw = this._rawBytes; return this._consume().then(function (t) { return raw ? raw.slice() : utf8Encode(t); }); },
-      blob: function () { var type = this.headers.get('content-type') || '', raw = this._rawBytes; return this._consume().then(function (t) { return new Blob([raw || t], { type: type }); }); },
+      arrayBuffer: function () { var self = this; return this._consume().then(function (t) { var raw = self._rawBytes; return raw ? raw.slice().buffer : utf8Encode(t).buffer; }); },
+      bytes: function () { var self = this; return this._consume().then(function (t) { var raw = self._rawBytes; return raw ? raw.slice() : utf8Encode(t); }); },
+      blob: function () { var type = this.headers.get('content-type') || '', self = this; return this._consume().then(function (t) { var raw = self._rawBytes; return new Blob([raw || t], { type: type }); }); },
       formData: function () { var type = this.headers.get('content-type') || ''; return this._consume().then(function (t) { var fd = new FormData(); if (/urlencoded/.test(type)) new URLSearchParams(t).forEach(function (v, k) { fd.append(k, v); }); return fd; }); }
     });
   }

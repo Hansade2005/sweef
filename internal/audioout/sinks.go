@@ -25,8 +25,11 @@ func NewNullBackend() Backend {
 	return &nullBackend{stop: make(chan struct{}), done: make(chan struct{})}
 }
 
-func (n *nullBackend) Name() string           { return "null" }
-func (n *nullBackend) Latency() time.Duration { return 0 }
+func (n *nullBackend) Name() string { return "null" }
+
+// Latency models a typical output path (the same 80 ms the oto backend assumes), so playback started on a machine
+// without a sound card starts its clock at about the same moment it would with one.
+func (n *nullBackend) Latency() time.Duration { return 80 * time.Millisecond }
 func (n *nullBackend) Now() time.Time         { return time.Now() }
 func (n *nullBackend) Real() bool             { return false }
 

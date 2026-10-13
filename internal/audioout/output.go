@@ -120,7 +120,7 @@ func (o *Output) Open(rate, channels int, group *Group) *Stream {
 	s := &Stream{
 		o: o, g: group, inCh: channels, inRate: float64(rate), speed: 1,
 		ring: make([]float32, capFrames*DeviceChannels), capFrames: capFrames,
-		vol: 1, curGain: 1,
+		vol: 1, curGain: -1, // -1: no gain yet, the first pull starts at the target (no fade-in from full volume)
 		conv: newConverter(float64(rate), channels),
 	}
 	s.cond = sync.NewCond(&s.mu)
