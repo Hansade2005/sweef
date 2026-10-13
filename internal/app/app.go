@@ -312,6 +312,10 @@ func (a *App) Idle() bool {
 		if t, ok := a.model.Tab(id); ok && t.Loading {
 			return false
 		}
+		// web fonts still downloading re-layout the page when they arrive, so the page is not settled yet
+		if e := a.page(id); e != nil && e.t != nil && e.t.FontsPending() > 0 {
+			return false
+		}
 	}
 	return a.chromeLoaded.Load()
 }
