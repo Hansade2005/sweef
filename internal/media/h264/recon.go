@@ -246,9 +246,25 @@ func (d *Decoder) mcRect(r rect) {
 			logWD = 5
 		}
 		src := c * 256
+		// a single explicitly weighted prediction whose weight is 1 and offset 0 (x264 sends weights for planes
+		// that did not change) is a plain copy
+		identity := false
+		if mode == 1 && nUse == 1 {
+			l := 0
+			if !used[0] {
+				l = 1
+			}
+			identity = wt[l] == 1<<uint(logWD) && ofs[l] == 0
+		}
 		for y := 0; y < ph; y++ {
 			dd := dst[off+y*ds : off+y*ds+pw]
 			switch {
+			case identity:
+				l := 0
+				if !used[0] {
+					l = 1
+				}
+				copy(dd, d.pred[l][src+y*16:src+y*16+pw])
 			case nUse == 2 && mode == 0:
 				a := d.pred[0][src+y*16:]
 				b := d.pred[1][src+y*16:]
@@ -269,16 +285,17 @@ func (d *Decoder) mcRect(r rect) {
 				if !used[0] {
 					l = 1
 				}
-				a := d.pred[l][src+y*16:]
-				w0, o := wt[l], ofs[l]
-				for x := range dd {
-					var v int
-					if logWD >= 1 {
-						v = ((int(a[x])*w0 + (1 << uint(logWD-1))) >> uint(logWD)) + o
-					} else {
-						v = int(a[x])*w0 + o
+				a := d.pred[l][src+y*16 : src+y*16+len(dd)]
+				w0, o := int32(wt[l]), int32(ofs[l])
+				if logWD >= 1 {
+					sh, rnd := uint(logWD), int32(1)<<uint(logWD-1)
+					for x := range dd {
+						dd[x] = clipPix(((int32(a[x])*w0+rnd)>>sh)+o, int32(maxv))
 					}
-					dd[x] = clipPix(int32(v), maxv)
+				} else {
+					for x := range dd {
+						dd[x] = clipPix(int32(a[x])*w0+o, int32(maxv))
+					}
 				}
 			default:
 				l := 0

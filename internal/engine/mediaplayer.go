@@ -583,12 +583,14 @@ const (
 	aheadMax    = 6                      // pictures decoded ahead of the clock
 	aheadWindow = 400 * time.Millisecond // how far ahead of the clock (media time at rate 1) the decoder may run
 	// A late decoder: a picture that is decoded late is still shown (video that moves, behind the sound, beats a
-	// frozen frame). Once the clock is resyncLag seconds ahead of the next sample to decode, decoding skips
-	// ahead to the first key frame due within resyncWait seconds (if there is none, it keeps going late).
-	// Pictures that were skipped count as dropped, which is what a page that adapts its quality to
-	// getVideoPlaybackQuality() needs to see.
-	resyncLag  = 0.5
-	resyncWait = 2.5
+	// frozen frame). When the clock is more than resyncLag seconds ahead of the next sample to decode, decoding
+	// skips ahead to the latest key frame that is already due, which cuts the delay to the age of that key
+	// frame and never freezes the picture. Only when the delay passes resyncPanic seconds with no such key
+	// frame does it wait for one that is due within resyncWait seconds. Pictures that were skipped count as
+	// dropped, which is what a page that adapts its quality to getVideoPlaybackQuality() needs to see.
+	resyncLag   = 0.25
+	resyncPanic = 1.5
+	resyncWait  = 2.5
 )
 
 // videoLoop shows the picture that is due at the player's clock.
@@ -708,11 +710,16 @@ func (p *mediaPlayer) videoLoop() {
 			if want.DTS != shown.DTS && stepOK && want.DTS > decDTS {
 				lag := t - nxt.PTS
 				if lag > resyncLag {
-					// hopelessly behind: skip to the first key frame at or after the clock
-					if k, ok3 := nextKeyFrom(vstore, nxt, t); ok3 && k.DTS != nxt.DTS && k.PTS-t <= resyncWait {
-						dec.Reset()
+					if k, ok3 := lastKeyDue(vstore, nxt, t); ok3 && k.DTS != nxt.DTS {
+						dec.Reset() // behind: continue from the newest key frame that is already due
 						ready = ready[:0]
 						nxt = k
+					} else if lag > resyncPanic {
+						if k, ok3 := nextKeyFrom(vstore, nxt, t); ok3 && k.DTS != nxt.DTS && k.PTS-t <= resyncWait {
+							dec.Reset() // far behind and no key frame due: wait for the next one
+							ready = ready[:0]
+							nxt = k
+						}
 					}
 				}
 				data, err := nxt.Bytes()
@@ -855,4 +862,26 @@ func nextKeyFrom(vs *media.TrackStore, from media.Sample, clock float64) (media.
 		s = nx
 	}
 	return media.Sample{}, false
+}
+
+// lastKeyDue returns the newest sync sample, at or after from in decode order, whose presentation time has
+// already come (it is not after the clock).
+func lastKeyDue(vs *media.TrackStore, from media.Sample, clock float64) (media.Sample, bool) {
+	var best media.Sample
+	found := false
+	s := from
+	for i := 0; i < 4000; i++ {
+		if s.Key && s.PTS <= clock {
+			best, found = s, true
+		}
+		if s.PTS > clock+1 {
+			break
+		}
+		nx, ok, gap := vs.Next(s.DTS)
+		if !ok || gap {
+			break
+		}
+		s = nx
+	}
+	return best, found
 }
