@@ -132,8 +132,10 @@ func TestPlaybackNoDropsWithBFrames(t *testing.T) {
 	if r.Total < 60 {
 		t.Fatalf("only %.0f frames in %.1f s of playback (30 fps clip)", r.Total, r.Wall.Seconds())
 	}
-	// the loop restarts decoding from the first key frame once per pass; nothing else may be dropped
-	if r.Dropped > 3 || rate > 5 {
+	// the loop restarts decoding from the first key frame once per pass (about three passes here), which can
+	// cost a frame or two each time; decoding every frame again from the key frame, as the first version of
+	// the player did with B-frames, dropped 40%
+	if r.Dropped > 8 || rate > 12 {
 		t.Errorf("%.0f of %.0f frames dropped (%.1f%%) on a clip a core decodes many times over", r.Dropped, r.Total, rate)
 	}
 	if m := quantile(r.LateMS, 1); m > 150 {
