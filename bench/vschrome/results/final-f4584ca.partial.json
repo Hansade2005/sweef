@@ -1,0 +1,954 @@
+{
+ "meta": {
+  "label": "final-f4584ca",
+  "date": "2026-10-13 10:59 UTC",
+  "sweef_commit": "f4584ca",
+  "sweef_tree_dirty": false,
+  "sweef_source": "head",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 4,
+  "mem_mib": 16093,
+  "kernel": "6.18.44-fc-v114",
+  "xvfb": "2:21.1.12-1ubuntu1.8",
+  "xvfb_args": "Xvfb :N -screen 0 1920x1080x24 -ac -nolisten tcp -noreset (no window manager, no compositor; a new server for every measured launch)",
+  "go": "go1.26.0",
+  "loadavg_at_start": "0.64 0.74 2.01 1/110 23820",
+  "browsers": {
+   "chromium": {
+    "name": "Chromium (Playwright build, headed, full browser UI)",
+    "version": "Chromium 141.0.7390.37",
+    "binary": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
+    "args": [
+     "--no-sandbox",
+     "--test-type",
+     "--user-data-dir=\u003ctmp profile\u003e",
+     "--window-size=1280,800",
+     "--window-position=0,0",
+     "--no-first-run",
+     "--no-default-browser-check",
+     "--password-store=basic",
+     "--disable-search-engine-choice-screen",
+     "--disable-background-networking",
+     "--disable-sync",
+     "--disable-component-update",
+     "--disable-default-apps",
+     "--disable-breakpad",
+     "--metrics-recording-only",
+     "--no-pings",
+     "--proxy-server=http://\u003crecorder\u003e"
+    ],
+    "note": "Playwright's Chromium build, NOT branded Google Chrome: no Google services, no sync, no API keys, no proprietary codecs/DRM. The same Blink/V8/Skia core and the same browser UI code."
+   },
+   "sweef": {
+    "name": "Sweef desktop GUI (`sweef gui`, native X11 window)",
+    "version": "sweef 0.1.0",
+    "binary": "/tmp/vschrome-build-k4y6g8/sweef",
+    "args": [
+     "gui",
+     "--profile",
+     "\u003ctmp profile\u003e",
+     "--no-restore",
+     "--size",
+     "1280x800"
+    ],
+    "note": "built from head at f4584ca, -trimpath -ldflags='-s -w'; profile pre-seeded with onboarding.done=true"
+   }
+  },
+  "runs": 7,
+  "quick": false,
+  "idle_cpu_seconds": 20,
+  "memory_settle_seconds": 4,
+  "window": "1280x800",
+  "tabs_for_memory": 10,
+  "real_sites": [
+   "https://en.wikipedia.org/wiki/Web_browser",
+   "https://en.wikivoyage.org/wiki/Lisbon",
+   "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching"
+  ],
+  "calibration": {
+   "damage_p50_ms": 0.102,
+   "damage_p99_ms": 0.766,
+   "poll_p50_ms": 0.124,
+   "poll_p99_ms": 2.083,
+   "n": 200
+  },
+  "detector_cross_check": {
+   "chromium": {
+    "damage_ms": [
+     9.651093,
+     9.755795,
+     6.994046,
+     8.072815,
+     8.709253,
+     10.590145,
+     9.696672,
+     8.634674,
+     8.665545,
+     8.973788,
+     7.653725,
+     9.827172,
+     8.498388,
+     8.41245,
+     11.008066
+    ],
+    "poll_ms": [
+     12.030967,
+     7.643359,
+     8.619694,
+     9.787861,
+     11.818462,
+     7.122568,
+     7.971251,
+     10.044941,
+     8.44114,
+     7.538684,
+     7.09603,
+     7.654195,
+     9.833341,
+     9.749541,
+     9.797808
+    ]
+   },
+   "sweef": {
+    "damage_ms": [
+     21.602743,
+     5.149539,
+     7.171175,
+     5.265046,
+     6.477035,
+     5.061774,
+     5.812393,
+     6.464781,
+     7.727915,
+     6.533742,
+     5.498636,
+     7.053977,
+     8.963385,
+     5.964448,
+     6.33809
+    ],
+    "poll_ms": [
+     6.452846,
+     9.584735,
+     5.488559,
+     7.010104,
+     4.776971,
+     5.444762,
+     5.168188,
+     5.673747,
+     5.747255,
+     4.619413,
+     6.748049,
+     6.289111,
+     5.084275,
+     12.909428,
+     6.248689
+    ]
+   }
+  },
+  "disk": {
+   "chromium": {
+    "path": "/opt/pw-browsers/chromium-1194/chrome-linux",
+    "files": 466,
+    "apparent_bytes": 624734779,
+    "on_disk_bytes": 625750016,
+    "gzip6_bytes": 182384611,
+    "xz6_bytes": 0,
+    "note": "the whole Playwright Chromium install directory (chrome, resources, locales, helpers); shared system libraries are not counted for either browser"
+   },
+   "sweef": {
+    "path": "/tmp/vschrome-build-k4y6g8/sweef",
+    "files": 1,
+    "apparent_bytes": 26091785,
+    "on_disk_bytes": 26095616,
+    "gzip6_bytes": 10750144,
+    "xz6_bytes": 0,
+    "note": "the single sweef binary (fonts, chrome UI, engine are embedded); shared system libraries (libc only) are not counted"
+   }
+  },
+  "env_notes": {
+   "priority": "nice -10 for the harness, Xvfb and both browsers",
+   "proxy": "browsers reach the network through a recording CONNECT proxy in front of the sandbox egress proxy; loopback is not proxied by either browser"
+  },
+  "started_at": "2026-10-13T10:59:20Z"
+ },
+ "results": {
+  "chromium": {
+   "iterations": [
+    {
+     "index": 0,
+     "position": 0,
+     "loadavg_at_start": "0.32 0.62 1.77 1/112 24550",
+     "cpu_stall_pct": 1.8035150650617473,
+     "startup": {
+      "cold_fresh_profile": {
+       "ok": true,
+       "window_mapped_ms": 759.800293,
+       "first_ui_ms": 933.799548,
+       "newtab_ready_ms": 1108.645073
+      },
+      "warm_fresh_profile": {
+       "ok": true,
+       "window_mapped_ms": 299.809546,
+       "first_ui_ms": 453.306956,
+       "newtab_ready_ms": 562.855758
+      },
+      "warm_used_profile": {
+       "ok": true,
+       "window_mapped_ms": 321.655837,
+       "first_ui_ms": 425.400219,
+       "newtab_ready_ms": 567.883616
+      }
+     },
+     "mem_1_tab": {
+      "pss_kib": 384740,
+      "rss_kib": 922644,
+      "procs": 11,
+      "pss_kib_by_process": {
+       "browser": 143058,
+       "chrome_crashpad": 2242,
+       "gpu-process": 80063,
+       "renderer": 80410,
+       "utility:NetworkService": 38036,
+       "utility:StorageService": 10988,
+       "zygote": 29943
+      },
+      "tabs": 1
+     },
+     "mem_10_tabs": {
+      "pss_kib": 515919,
+      "rss_kib": 1854912,
+      "procs": 19,
+      "pss_kib_by_process": {
+       "browser": 144715,
+       "chrome_crashpad": 2252,
+       "gpu-process": 77945,
+       "renderer": 221854,
+       "utility:NetworkService": 34952,
+       "utility:StorageService": 7519,
+       "zygote": 26682
+      },
+      "tabs": 10
+     },
+     "idle_cpu": {
+      "ok": true,
+      "window_s": 20,
+      "tree_cpu_s": 0.02,
+      "xvfb_cpu_s": 0,
+      "foreign_cpu_s": 1.42,
+      "max_procs": 11
+     },
+     "latency_ms": {
+      "key_dropdown_closed": [
+       13.459656,
+       15.412518,
+       12.236704,
+       14.157879,
+       11.59274,
+       15.669503,
+       16.63001,
+       11.937696,
+       12.896758,
+       14.701325,
+       11.879021,
+       17.198452
+      ],
+      "key_dropdown_open": [
+       11.698092,
+       10.48599,
+       8.498141,
+       8.058323,
+       8.234721,
+       9.794388,
+       8.857094,
+       8.866397,
+       8.463107,
+       9.333953,
+       8.827173,
+       10.465398,
+       10.154064,
+       8.661366,
+       15.160724,
+       10.674765,
+       10.81539,
+       8.66492,
+       10.359362,
+       8.745949,
+       12.829334,
+       8.350731,
+       10.295531,
+       8.685592,
+       8.390749,
+       9.070976,
+       10.180749,
+       9.422068,
+       8.406794,
+       8.067241
+      ],
+      "new_tab": [
+       40.722215,
+       49.40232,
+       46.056065,
+       56.514391,
+       47.505804,
+       41.15166,
+       42.587018,
+       61.050396,
+       49.6352,
+       47.261775,
+       47.766584,
+       54.525112
+      ],
+      "new_tab_content": [
+       40.722215,
+       49.40232,
+       46.056065,
+       56.514391,
+       47.505804,
+       41.15166,
+       42.587018,
+       61.050396,
+       49.6352,
+       47.261775,
+       47.766584,
+       54.525112
+      ],
+      "tab_switch": [
+       19.370159,
+       21.281533,
+       22.00878,
+       16.297614,
+       15.753793,
+       16.570362,
+       16.709923,
+       15.850981,
+       13.565705,
+       19.32994,
+       18.734841,
+       18.147925
+      ],
+      "tab_switch_content": [
+       19.370159,
+       21.281533,
+       22.00878,
+       16.297614,
+       15.753793,
+       16.570362,
+       16.709923,
+       15.850981,
+       13.565705,
+       19.32994,
+       18.734841,
+       18.147925
+      ]
+     },
+     "latency_missed": {},
+     "loads": {
+      "article": {
+       "ok": true,
+       "first_content_ms": 58.579188,
+       "load_event_ms": 42.483225,
+       "visually_settled_ms": 58.579188,
+       "last_byte_ms": 123.873444,
+       "wire_in_bytes": 71520,
+       "wire_out_bytes": 1245,
+       "conns": 0,
+       "requests": 1,
+       "request_paths": {
+        "/article": 1
+       }
+      },
+      "heavy": {
+       "ok": true,
+       "first_content_ms": 73.12518,
+       "load_event_ms": 80.780645,
+       "visually_settled_ms": 81.797951,
+       "last_byte_ms": 110.85796,
+       "wire_in_bytes": 1203063,
+       "wire_out_bytes": 10348,
+       "conns": 0,
+       "requests": 17,
+       "request_paths": {
+        "/css/site.css": 1,
+        "/heavy": 1,
+        "/img/p0.jpg": 1,
+        "/img/p1.png": 1,
+        "/img/p10.jpg": 1,
+        "/img/p11.png": 1,
+        "/img/p2.jpg": 1,
+        "/img/p3.png": 1,
+        "/img/p4.jpg": 1,
+        "/img/p5.png": 1,
+        "/img/p6.jpg": 1,
+        "/img/p7.png": 1,
+        "/img/p8.jpg": 1,
+        "/img/p9.png": 1,
+        "/js/a.js": 1,
+        "/js/b.js": 1,
+        "/js/c.js": 1
+       }
+      },
+      "real1": {
+       "ok": true,
+       "first_content_ms": 652.830224,
+       "load_event_ms": -1,
+       "visually_settled_ms": 1020.014542,
+       "last_byte_ms": 1443.602306,
+       "wire_in_bytes": 605706,
+       "wire_out_bytes": 25370,
+       "conns": 10
+      },
+      "real2": {
+       "ok": true,
+       "first_content_ms": 717.752043,
+       "load_event_ms": -1,
+       "visually_settled_ms": 1427.25667,
+       "last_byte_ms": 1675.161725,
+       "wire_in_bytes": 1583422,
+       "wire_out_bytes": 43359,
+       "conns": 20
+      },
+      "real3": {
+       "ok": true,
+       "first_content_ms": 814.26072,
+       "load_event_ms": -1,
+       "visually_settled_ms": 1160.893617,
+       "last_byte_ms": 2432.731268,
+       "wire_in_bytes": 614785,
+       "wire_out_bytes": 21823,
+       "conns": 7
+      },
+      "spa": {
+       "ok": true,
+       "first_content_ms": 115.04074,
+       "load_event_ms": 22.783188,
+       "rendered_ms": 30.979599,
+       "visually_settled_ms": 115.04074,
+       "last_byte_ms": 115.041749,
+       "wire_in_bytes": 129383,
+       "wire_out_bytes": 3385,
+       "conns": 0,
+       "requests": 4,
+       "request_paths": {
+        "/api/items": 1,
+        "/css/spa.css": 1,
+        "/js/spa.js": 1,
+        "/spa": 1
+       }
+      }
+     },
+     "complete": true
+    }
+   ]
+  },
+  "sweef": {
+   "iterations": [
+    {
+     "index": 0,
+     "position": 1,
+     "loadavg_at_start": "0.37 0.55 1.58 2/135 25850",
+     "cpu_stall_pct": 0.8272407111260099,
+     "startup": {
+      "cold_fresh_profile": {
+       "ok": true,
+       "window_mapped_ms": 37.519802,
+       "first_ui_ms": 532.154271,
+       "newtab_ready_ms": 739.206607
+      },
+      "warm_fresh_profile": {
+       "ok": true,
+       "window_mapped_ms": 13.140496,
+       "first_ui_ms": 368.815011,
+       "newtab_ready_ms": 614.700294
+      },
+      "warm_used_profile": {
+       "ok": true,
+       "window_mapped_ms": 18.475207,
+       "first_ui_ms": 292.257073,
+       "newtab_ready_ms": 519.841463
+      }
+     },
+     "mem_1_tab": {
+      "pss_kib": 103531,
+      "rss_kib": 106948,
+      "procs": 1,
+      "pss_kib_by_process": {
+       "sweef": 103531
+      },
+      "tabs": 1
+     },
+     "mem_10_tabs": {
+      "pss_kib": 266316,
+      "rss_kib": 269736,
+      "procs": 1,
+      "pss_kib_by_process": {
+       "sweef": 266316
+      },
+      "tabs": 10
+     },
+     "idle_cpu": {
+      "ok": true,
+      "window_s": 20,
+      "tree_cpu_s": 0,
+      "xvfb_cpu_s": 0,
+      "foreign_cpu_s": 0.45,
+      "max_procs": 1
+     },
+     "latency_ms": {
+      "key_dropdown_closed": [
+       13.929175,
+       13.933963,
+       14.27862,
+       18.534081,
+       14.074216,
+       18.151671,
+       14.734173,
+       14.879309,
+       17.162434,
+       14.7236,
+       20.475744,
+       14.694559
+      ],
+      "key_dropdown_open": [
+       16.782733,
+       5.016735,
+       5.359114,
+       5.307744,
+       4.858732,
+       4.36837,
+       4.374394,
+       5.398464,
+       6.493339,
+       4.974201,
+       5.905475,
+       4.6154,
+       5.834909,
+       6.536995,
+       5.491304,
+       4.761319,
+       4.267141,
+       4.336226,
+       4.650463,
+       4.582998,
+       4.427431,
+       5.402282,
+       5.054063,
+       4.730345,
+       6.18787,
+       4.963287,
+       6.254878,
+       5.252893,
+       7.061721,
+       5.147084
+      ],
+      "new_tab": [
+       11.263265,
+       6.547605,
+       8.151864,
+       6.559803,
+       6.165214,
+       7.425347,
+       5.771834,
+       5.313984,
+       6.065251,
+       9.068959,
+       4.993791,
+       6.775407
+      ],
+      "new_tab_content": [
+       11.263265,
+       6.547605,
+       8.151864,
+       6.559803,
+       6.165214,
+       7.425347,
+       5.771834,
+       5.313984,
+       6.065251,
+       9.068959,
+       4.993791,
+       6.775407
+      ],
+      "tab_switch": [
+       4.928613,
+       6.215945,
+       5.069183,
+       4.42881,
+       5.869981,
+       5.996174,
+       16.585801,
+       4.093507,
+       4.642505,
+       5.234824,
+       3.817015,
+       4.201983
+      ],
+      "tab_switch_content": [
+       4.928613,
+       6.215945,
+       5.069183,
+       4.42881,
+       5.869981,
+       5.996174,
+       16.585801,
+       4.093507,
+       4.642505,
+       5.234824,
+       3.817015,
+       4.201983
+      ]
+     },
+     "latency_missed": {},
+     "loads": {
+      "article": {
+       "ok": true,
+       "first_content_ms": 81.915062,
+       "load_event_ms": 78.943033,
+       "visually_settled_ms": 81.915062,
+       "last_byte_ms": 197.421033,
+       "wire_in_bytes": 71520,
+       "wire_out_bytes": 933,
+       "conns": 0,
+       "requests": 1,
+       "request_paths": {
+        "/article": 1
+       }
+      },
+      "heavy": {
+       "ok": true,
+       "first_content_ms": 187.897809,
+       "load_event_ms": 338.407909,
+       "visually_settled_ms": 330.447008,
+       "last_byte_ms": 402.721433,
+       "wire_in_bytes": 1203063,
+       "wire_out_bytes": 8062,
+       "conns": 7,
+       "requests": 17,
+       "request_paths": {
+        "/css/site.css": 1,
+        "/heavy": 1,
+        "/img/p0.jpg": 1,
+        "/img/p1.png": 1,
+        "/img/p10.jpg": 1,
+        "/img/p11.png": 1,
+        "/img/p2.jpg": 1,
+        "/img/p3.png": 1,
+        "/img/p4.jpg": 1,
+        "/img/p5.png": 1,
+        "/img/p6.jpg": 1,
+        "/img/p7.png": 1,
+        "/img/p8.jpg": 1,
+        "/img/p9.png": 1,
+        "/js/a.js": 1,
+        "/js/b.js": 1,
+        "/js/c.js": 1
+       }
+      },
+      "real1": {
+       "ok": true,
+       "first_content_ms": 1562.882587,
+       "load_event_ms": -1,
+       "visually_settled_ms": 1562.882587,
+       "last_byte_ms": 3235.516206,
+       "wire_in_bytes": 554054,
+       "wire_out_bytes": 29793,
+       "conns": 10
+      },
+      "real2": {
+       "ok": true,
+       "first_content_ms": 1755.039997,
+       "load_event_ms": -1,
+       "visually_settled_ms": 1755.039997,
+       "last_byte_ms": 2724.244173,
+       "wire_in_bytes": 1525382,
+       "wire_out_bytes": 36393,
+       "conns": 4
+      },
+      "real3": {
+       "ok": true,
+       "first_content_ms": 827.502052,
+       "load_event_ms": -1,
+       "visually_settled_ms": 4193.985598,
+       "last_byte_ms": 4295.774859,
+       "wire_in_bytes": 570674,
+       "wire_out_bytes": 23544,
+       "conns": 7
+      },
+      "spa": {
+       "ok": true,
+       "first_content_ms": 27.358736,
+       "load_event_ms": 306.021305,
+       "rendered_ms": 177.798726,
+       "visually_settled_ms": 307.396538,
+       "last_byte_ms": 422.023234,
+       "wire_in_bytes": 129383,
+       "wire_out_bytes": 2536,
+       "conns": 0,
+       "requests": 4,
+       "request_paths": {
+        "/api/items": 1,
+        "/css/spa.css": 1,
+        "/js/spa.js": 1,
+        "/spa": 1
+       }
+      }
+     },
+     "complete": true
+    },
+    {
+     "index": 1,
+     "position": 0,
+     "loadavg_at_start": "0.22 0.41 1.39 2/117 25961",
+     "cpu_stall_pct": 0.8202752992180676,
+     "startup": {
+      "cold_fresh_profile": {
+       "ok": true,
+       "window_mapped_ms": 37.656007,
+       "first_ui_ms": 475.868307,
+       "newtab_ready_ms": 723.244943
+      },
+      "warm_fresh_profile": {
+       "ok": true,
+       "window_mapped_ms": 17.506779,
+       "first_ui_ms": 391.434686,
+       "newtab_ready_ms": 576.068036
+      },
+      "warm_used_profile": {
+       "ok": true,
+       "window_mapped_ms": 17.774047,
+       "first_ui_ms": 311.88228,
+       "newtab_ready_ms": 524.22686
+      }
+     },
+     "mem_1_tab": {
+      "pss_kib": 103220,
+      "rss_kib": 106640,
+      "procs": 1,
+      "pss_kib_by_process": {
+       "sweef": 103220
+      },
+      "tabs": 1
+     },
+     "mem_10_tabs": {
+      "pss_kib": 266392,
+      "rss_kib": 269812,
+      "procs": 1,
+      "pss_kib_by_process": {
+       "sweef": 266392
+      },
+      "tabs": 10
+     },
+     "idle_cpu": {
+      "ok": true,
+      "window_s": 20,
+      "tree_cpu_s": 0,
+      "xvfb_cpu_s": 0,
+      "foreign_cpu_s": 0.43,
+      "max_procs": 1
+     },
+     "latency_ms": {
+      "key_dropdown_closed": [
+       16.579292,
+       16.269827,
+       14.182469,
+       16.911316,
+       15.56856,
+       17.025959,
+       14.647898,
+       14.953534,
+       16.03146,
+       14.028243,
+       17.536717,
+       15.471528
+      ],
+      "key_dropdown_open": [
+       14.375868,
+       4.925715,
+       4.334521,
+       5.684127,
+       6.12973,
+       4.302163,
+       4.673751,
+       5.579617,
+       4.446073,
+       4.172669,
+       4.466525,
+       4.677456,
+       5.759485,
+       6.17848,
+       4.430672,
+       4.789875,
+       4.537718,
+       5.496367,
+       6.508414,
+       4.848685,
+       6.028035,
+       6.197344,
+       10.34604,
+       5.064337,
+       4.614798,
+       5.664043,
+       5.471248,
+       6.568537,
+       4.468368,
+       4.991443
+      ],
+      "new_tab": [
+       8.912355,
+       7.55416,
+       8.818642,
+       6.574081,
+       7.96327,
+       10.722589,
+       11.206471,
+       9.161156,
+       7.480888,
+       8.350401,
+       5.238829,
+       10.526733
+      ],
+      "new_tab_content": [
+       8.912355,
+       7.55416,
+       8.818642,
+       6.574081,
+       7.96327,
+       10.722589,
+       11.206471,
+       9.161156,
+       7.480888,
+       8.350401,
+       5.238829,
+       10.526733
+      ],
+      "tab_switch": [
+       5.069258,
+       5.045281,
+       6.811816,
+       7.127303,
+       7.539515,
+       3.933196,
+       4.863337,
+       5.623967,
+       3.704746,
+       5.170408,
+       5.163164,
+       5.401598
+      ],
+      "tab_switch_content": [
+       5.069258,
+       5.045281,
+       6.811816,
+       7.127303,
+       7.539515,
+       3.933196,
+       4.863337,
+       5.623967,
+       3.704746,
+       5.170408,
+       5.163164,
+       5.401598
+      ]
+     },
+     "latency_missed": {},
+     "loads": {
+      "article": {
+       "ok": true,
+       "first_content_ms": 76.41235,
+       "load_event_ms": 74.306596,
+       "visually_settled_ms": 76.41235,
+       "last_byte_ms": 191.456233,
+       "wire_in_bytes": 71520,
+       "wire_out_bytes": 934,
+       "conns": 0,
+       "requests": 1,
+       "request_paths": {
+        "/article": 1
+       }
+      },
+      "heavy": {
+       "ok": true,
+       "first_content_ms": 186.87003,
+       "load_event_ms": 328.124837,
+       "visually_settled_ms": 322.839689,
+       "last_byte_ms": 443.100483,
+       "wire_in_bytes": 1203063,
+       "wire_out_bytes": 8063,
+       "conns": 7,
+       "requests": 17,
+       "request_paths": {
+        "/css/site.css": 1,
+        "/heavy": 1,
+        "/img/p0.jpg": 1,
+        "/img/p1.png": 1,
+        "/img/p10.jpg": 1,
+        "/img/p11.png": 1,
+        "/img/p2.jpg": 1,
+        "/img/p3.png": 1,
+        "/img/p4.jpg": 1,
+        "/img/p5.png": 1,
+        "/img/p6.jpg": 1,
+        "/img/p7.png": 1,
+        "/img/p8.jpg": 1,
+        "/img/p9.png": 1,
+        "/js/a.js": 1,
+        "/js/b.js": 1,
+        "/js/c.js": 1
+       }
+      },
+      "real1": {
+       "ok": true,
+       "first_content_ms": 818.166277,
+       "load_event_ms": -1,
+       "visually_settled_ms": 1262.263921,
+       "last_byte_ms": 2916.391031,
+       "wire_in_bytes": 564046,
+       "wire_out_bytes": 29816,
+       "conns": 10
+      },
+      "real2": {
+       "ok": true,
+       "first_content_ms": 1822.892314,
+       "load_event_ms": -1,
+       "visually_settled_ms": 1822.892314,
+       "last_byte_ms": 2741.664168,
+       "wire_in_bytes": 2816128,
+       "wire_out_bytes": 39223,
+       "conns": 4
+      },
+      "real3": {
+       "ok": true,
+       "first_content_ms": 557.370229,
+       "load_event_ms": -1,
+       "visually_settled_ms": 3524.355359,
+       "last_byte_ms": 3677.533122,
+       "wire_in_bytes": 570516,
+       "wire_out_bytes": 23586,
+       "conns": 7
+      },
+      "spa": {
+       "ok": true,
+       "first_content_ms": 24.862014,
+       "load_event_ms": 299.066177,
+       "rendered_ms": 180.50492,
+       "visually_settled_ms": 300.860585,
+       "last_byte_ms": 413.992382,
+       "wire_in_bytes": 129383,
+       "wire_out_bytes": 2537,
+       "conns": 0,
+       "requests": 4,
+       "request_paths": {
+        "/api/items": 1,
+        "/css/spa.css": 1,
+        "/js/spa.js": 1,
+        "/spa": 1
+       }
+      }
+     },
+     "complete": true
+    }
+   ]
+  }
+ },
+ "complete": false
+}
