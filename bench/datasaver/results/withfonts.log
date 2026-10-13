@@ -50,3 +50,5 @@ engine data policy API: present (building with -tags datasaver_engine)-tags data
 [36/230] sweef-standard     run 2 https://docs.python.org/3/library/asyncio.html               cold=  109361 warm=   18305 req= 21 ready= 5492ms ok
 [37/230] sweef-strict       run 2 https://docs.python.org/3/library/asyncio.html               cold=   68270 warm=   26375 req= 20 ready= 3731ms ok
 [38/230] chromium           run 2 https://docs.python.org/3/library/asyncio.html               cold=   53977 warm=   11922 req= 20 ready= 1222ms ok
+=== attempt 1 2026-10-13T12:59:19Z resuming bench/datasaver/results/2026-10-13-withfonts.json
+engine data policy API: present (building with -tags datasaver_engine)-tags datasaver_engine
