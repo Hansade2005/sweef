@@ -168,6 +168,7 @@ type Tab struct {
 	progMode   atomic.Bool               // the current navigation is progressive: page-initiated navigations are too
 	tr         atomic.Pointer[loadTrace] // timeline of the current navigation (loadtrace.go)
 	traceNet   atomic.Bool               // record DNS/connect/TLS/first byte of every request
+	audio      tabAudio                  // mix group, mute and audible state (tabaudio.go)
 }
 
 func newTab(e *Engine, id string) *Tab {
@@ -205,6 +206,7 @@ func (t *Tab) Context() *BrowserContext {
 func (t *Tab) close() {
 	if t.closed.CompareAndSwap(false, true) {
 		dropBitmapSources(t.ID)
+		t.closeAudio()
 		if env := t.ds.env.Load(); env != nil {
 			env.fonts.close() // releases the document's web font set
 		}

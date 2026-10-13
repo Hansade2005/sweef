@@ -405,3 +405,6 @@ func (m *mediaHost) storePCMRaw(ch [][]float32, rate int) map[string]any {
 	}
 	return m.storePCMData(cp, rate)
 }
+
+// waShutdown releases the device output of every Web Audio context.
+func (m *mediaHost) waShutdown() {}

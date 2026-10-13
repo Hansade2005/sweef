@@ -444,3 +444,25 @@ func NewSample(dts, pts, dur float64, key bool, data []byte) Sample {
 func NewLazySample(dts, pts, dur float64, key bool, size int, load func() ([]byte, error)) Sample {
 	return Sample{DTS: dts, PTS: pts, Dur: dur, Key: key, Size: size, load: load}
 }
+
+// Prev returns the last sample before dts in decode order.
+func (t *TrackStore) Prev(dts float64) (Sample, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	i := sort.Search(len(t.s), func(i int) bool { return t.s[i].DTS >= dts-1e-9 }) - 1
+	if i < 0 {
+		return Sample{}, false
+	}
+	return t.s[i], true
+}
+
+// Index is the decode-order position of the sample at dts, or -1.
+func (t *TrackStore) Index(dts float64) int {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	i := sort.Search(len(t.s), func(i int) bool { return t.s[i].DTS >= dts-1e-6 })
+	if i < len(t.s) && t.s[i].DTS <= dts+1e-6 {
+		return i
+	}
+	return -1
+}

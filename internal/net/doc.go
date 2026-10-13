@@ -35,6 +35,7 @@ type Doc struct {
 
 	// mutGen counts tree mutations; layout results are cached per value.
 	mutGen         atomic.Uint64
+	paintGen       atomic.Uint64 // repaint-only changes (video frames), see TouchPaint
 	layoutMu       sync.Mutex
 	layoutCache    *Layout
 	layoutCacheW   int

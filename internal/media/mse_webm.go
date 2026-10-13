@@ -22,6 +22,7 @@ type webmParser struct {
 	clusterEn int // bytes of the cluster body still to come; -1 when its size is unknown
 
 	last map[int]*codedFrame // one frame per track held back until its duration is known
+	held []codedFrame        // frames of a known-size cluster, released when the whole cluster has arrived
 	dur  map[int]float64     // last known duration per track
 }
 
@@ -30,6 +31,7 @@ func newWebMParser() *webmParser {
 }
 
 func (p *webmParser) reset() {
+	p.held = nil
 	p.pending = nil
 	p.inCluster = false
 	p.last = map[int]*codedFrame{}
@@ -122,7 +124,13 @@ func (p *webmParser) feed(data []byte) (*initSegment, []codedFrame, error) {
 			off += hdr + int(sz)
 			continue
 		}
-		// inside a cluster
+		// inside a cluster. Frames of a cluster of known size are released together once it is complete (like
+		// Chromium's parser, which also only reports a cluster when it has seen all of it); frames of a live
+		// cluster of unknown size are released as they arrive.
+		dst := &frames
+		if p.clusterEn >= 0 {
+			dst = &p.held
+		}
 		if p.clusterEn < 0 && (id == idCluster || id == idCues || id == 0x1254C367 /* Tags */ || id == idSeekHead || id == idTracks || id == idInfo) {
 			p.endCluster(&frames)
 			continue
@@ -139,7 +147,7 @@ func (p *webmParser) feed(data []byte) (*initSegment, []codedFrame, error) {
 			p.clusterTC = ebmlUint(body)
 		case idSimpleBlock:
 			if blk, ok := decodeBlock(body); ok {
-				p.block(&frames, blk, blk.Key, 0, int64(p.clusterTC))
+				p.block(dst, blk, blk.Key, 0, int64(p.clusterTC))
 			}
 		case idBlockGroup:
 			var blk WebMBlock
@@ -157,22 +165,25 @@ func (p *webmParser) feed(data []byte) (*initSegment, []codedFrame, error) {
 				}
 			}
 			if have {
-				p.block(&frames, blk, !ref, dur, int64(p.clusterTC))
+				p.block(dst, blk, !ref, dur, int64(p.clusterTC))
 			}
 		}
 		off += hdr + int(sz)
 		if p.clusterEn >= 0 {
 			p.clusterEn -= hdr + int(sz)
 			if p.clusterEn <= 0 {
-				p.endCluster(&frames)
+				p.endCluster(dst)
+				frames = append(frames, p.held...)
+				p.held = nil
 			}
 		}
 	}
 done:
 	p.pending = append([]byte(nil), p.pending[off:]...)
-	// hold-back frames are released at the end of every append so buffered
-	// ranges include them; their duration is an estimate until the next one
-	p.flush(&frames)
+	if p.inCluster && p.clusterEn < 0 {
+		// live cluster: release the held-back frames now; their duration is an estimate until the next one
+		p.flush(&frames)
+	}
 	return init, frames, nil
 }
 

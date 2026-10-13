@@ -126,6 +126,9 @@ func (b *MSEBuffer) SetMode(sequence bool) {
 func (b *MSEBuffer) SetTimestampOffset(v float64) {
 	b.mu.Lock()
 	b.tso = v
+	if b.sequence {
+		b.groupStart, b.groupStartSet = v, true
+	}
 	b.mu.Unlock()
 }
 

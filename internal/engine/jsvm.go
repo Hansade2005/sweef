@@ -158,6 +158,9 @@ type jsVM struct {
 	rtOnce   sync.Once
 	realtime *realtime // WebSockets and Workers (lazily created)
 
+	closerMu sync.Mutex
+	closers  []func() // run when the VM closes (media players, audio streams); they must not call into the VM
+
 	pendingNav  string
 	scriptQueue []int64        // script element ids inserted by page code
 	executed    map[int64]bool // scripts already run
@@ -334,11 +337,25 @@ func (j *jsVM) close() {
 		return
 	}
 	j.closed = true
+	j.closerMu.Lock()
+	cl := j.closers
+	j.closers = nil
+	j.closerMu.Unlock()
+	for _, f := range cl {
+		f()
+	}
 	if j.realtime != nil {
 		j.realtime.closeAll()
 	}
 	j.vm.SetModuleLoader(nil, nil)
 	j.vm.Close()
+}
+
+// onClose registers f to run when the VM closes.
+func (j *jsVM) onClose(f func()) {
+	j.closerMu.Lock()
+	defer j.closerMu.Unlock()
+	j.closers = append(j.closers, f)
 }
 
 func (j *jsVM) nowMs() float64 { return float64(time.Since(j.start).Microseconds()) / 1000 }
