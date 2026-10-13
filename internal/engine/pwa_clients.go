@@ -92,7 +92,7 @@ func (h *pwaHost) clientFns(f map[string]hostFn) {
 		m.mu.Lock()
 		c := m.clients[id]
 		m.mu.Unlock()
-		if c == nil || siteOriginOf(c.url) != rt.w.reg.origin {
+		if c == nil || c.key != rt.w.reg.origin {
 			return nil, &swError{"InvalidStateError", "The client is gone."}
 		}
 		if !st.openAllowed(regKey(rt.w.reg.origin, rt.w.reg.scope)) && !c.tab.UserActive() {
@@ -118,7 +118,7 @@ func (h *pwaHost) clientFns(f map[string]hostFn) {
 		c := m.clients[id]
 		m.mu.Unlock()
 		reg := rt.w.reg
-		if c == nil || siteOriginOf(c.url) != reg.origin {
+		if c == nil || c.key != reg.origin {
 			return nil, &swError{"InvalidStateError", "The client is gone."}
 		}
 		if c.reg != reg {
@@ -140,7 +140,7 @@ func (h *pwaHost) clientFns(f map[string]hostFn) {
 				return
 			}
 			nc := st.waitClient(tab, oldID)
-			if nc == nil || siteOriginOf(nc.url) != reg.origin {
+			if nc == nil || nc.key != reg.origin {
 				h.reply(token, nil, nil)
 				return
 			}

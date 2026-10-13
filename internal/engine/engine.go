@@ -53,6 +53,7 @@ type Options struct {
 	StorageDir       string // profile storage root of the default context: IndexedDB, Cache Storage, service workers ("" = memory only; other contexts: ContextOptions.StorageDir)
 	StorageQuotaMiB  int    // hard cap per origin for all site storage in MiB (0 = 20% of the budget)
 	StorageBudgetMiB int    // global budget of all origins in MiB (0 = 60% of the profile volume's free space, at most 64 GiB); see docs/storage.md
+	DisableFrames    bool   // do not load <iframe> documents (frames.go): pages see no content window, as before frames existed
 }
 
 func DefaultOptions() Options {

@@ -263,6 +263,7 @@ func New(cfg Config) (*App, error) {
 	// navigator.storage.persist(): bookmarked sites and sites the person agrees to; everyone else is refused
 	a.eng.DefaultContext().SiteStorage().SetPersistPolicy(a.storagePersistPolicy)
 	a.initDataSaver()
+	a.applyCookiePolicy(a.eng.DefaultContext())
 	a.initPWA()
 	// the app's own HTTP clients count toward "used" like page traffic
 	if ct := a.eng.DefaultContext().CountedTransport(); ct != nil {

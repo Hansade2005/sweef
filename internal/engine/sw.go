@@ -97,6 +97,7 @@ type swClient struct {
 	id  string
 	tab *Tab
 	url string
+	key string // the storage key of the document: its origin, plus the top-level site when it is embedded (partition.go)
 	seq int64  // creation order: clients.matchAll lists the oldest first
 	reg *swReg // the registration controlling it, nil when uncontrolled
 }
@@ -249,12 +250,13 @@ func (m *swManager) change(r *swReg, fn func()) {
 
 func regKey(origin, scope string) string { return origin + "|" + scope }
 
-// lookupLocked finds the registration with the longest scope that is a prefix of rawurl.
-func (m *swManager) lookupLocked(rawurl string) *swReg {
-	origin := siteOriginOf(rawurl)
-	if origin == "" {
+// lookupLocked finds the registration with the longest scope that is a prefix of rawurl, among those of the
+// storage key (a registration made by an embedded document is only visible to documents embedded the same way).
+func (m *swManager) lookupLocked(key, rawurl string) *swReg {
+	if siteOriginOf(rawurl) == "" || key == "" {
 		return nil
 	}
+	origin := key
 	u := rawurl
 	if i := strings.IndexByte(u, '#'); i >= 0 {
 		u = u[:i]
@@ -269,15 +271,14 @@ func (m *swManager) lookupLocked(rawurl string) *swReg {
 }
 
 // lookup is lookupLocked for callers that do not hold the lock; it loads the origin's persisted registrations first.
-func (m *swManager) lookup(rawurl string) *swReg {
-	origin := siteOriginOf(rawurl)
-	if origin == "" {
+func (m *swManager) lookup(key, rawurl string) *swReg {
+	if siteOriginOf(rawurl) == "" || key == "" {
 		return nil
 	}
-	m.ensure(origin)
+	m.ensure(key)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.lookupLocked(rawurl)
+	return m.lookupLocked(key, rawurl)
 }
 
 // ---- registration -----------------------------------------------------------------------------------------------
@@ -342,8 +343,8 @@ func maxScopePath(scriptURL string, allowed string) string {
 }
 
 // fetchScript downloads a worker script (bypassing the HTTP cache) and checks its status and type.
-func (m *swManager) fetchScript(scriptURL string) (string, map[string][]string, error) {
-	t := m.sysTab(siteOriginOf(scriptURL))
+func (m *swManager) fetchScript(key, scriptURL string) (string, map[string][]string, error) {
+	t := m.sysTab(key)
 	r, err := t.httpDo(httpOpts{method: "GET", url: scriptURL, kind: KindScript, headers: map[string]string{"Cache-Control": "max-age=0", "Service-Worker": "script"}})
 	if err != nil {
 		return "", nil, swErr("TypeError", "Failed to register a ServiceWorker: A bad HTTP response code or network error occurred while fetching the script ('%s'): %v", scriptURL, err)
@@ -360,8 +361,8 @@ func (m *swManager) fetchScript(scriptURL string) (string, map[string][]string, 
 }
 
 // register runs the Register and Update algorithms for navigator.serviceWorker.register().
-func (m *swManager) register(scriptURL, scope, typ, uvc string) (map[string]any, error) {
-	origin := siteOriginOf(scriptURL)
+func (m *swManager) register(storageKey, scriptURL, scope, typ, uvc string) (map[string]any, error) {
+	origin := storageKey
 	m.ensure(origin)
 	key := regKey(origin, scope)
 	m.mu.Lock()
@@ -389,7 +390,7 @@ func (m *swManager) register(scriptURL, scope, typ, uvc string) (map[string]any,
 			return snap, nil
 		}
 	}
-	src, hdr, err := m.fetchScript(scriptURL)
+	src, hdr, err := m.fetchScript(origin, scriptURL)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +455,7 @@ func (m *swManager) update(reg *swReg) error {
 	}
 	scriptURL, typ := reg.scriptURL, reg.typ
 	m.mu.Unlock()
-	src, _, err := m.fetchScript(scriptURL)
+	src, _, err := m.fetchScript(reg.origin, scriptURL)
 	if err != nil {
 		return err
 	}
@@ -740,7 +741,7 @@ func (c *BrowserContext) swUnregisterAll(origin string) {
 	m.mu.Lock()
 	var regs []*swReg
 	for _, r := range m.regs {
-		if origin == "" || r.origin == origin {
+		if origin == "" || keyMatches(r.origin, origin) {
 			regs = append(regs, r)
 		}
 	}
@@ -816,7 +817,8 @@ func (m *swManager) sysTab(origin string) *Tab {
 	t := newTab(m.c.eng, "sw-sys")
 	t.ctx = m.c
 	t.sw.noNav = true
-	t.url, _ = url.Parse(origin + "/")
+	t.bc = partCtxFor(origin) // the script of a partitioned registration is fetched with the partition's cookies
+	t.url, _ = url.Parse(keyOrigin(origin) + "/")
 	if m.sys == nil {
 		m.sys = map[string]*Tab{}
 	}
@@ -936,7 +938,7 @@ func (m *swManager) ensure(origin string) {
 	defer m.mu.Unlock()
 	for _, p := range list {
 		src, ok := read(p.Script)
-		if !ok || siteOriginOf(p.Scope) != origin || m.regs[regKey(origin, p.Scope)] != nil {
+		if !ok || siteOriginOf(p.Scope) != keyOrigin(origin) || m.regs[regKey(origin, p.Scope)] != nil {
 			continue
 		}
 		m.nextR++

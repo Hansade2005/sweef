@@ -102,8 +102,8 @@ tab's console ring (`BrowserContext.ServiceWorkerConsole`).
 * **Navigation preload**: `registration.navigationPreload` is a stub that resolves and changes nothing;
   `FetchEvent.preloadResponse` resolves `undefined`.
 * **Navigations**: a redirect (3xx) answered by the worker is not followed; form `POST` navigations do not go through the
-  worker; a hard reload (cache bypass) is not told apart and goes through the worker like any navigation; iframes are
-  not loaded by this engine at all. Dedicated `Worker`s and
+  worker; a hard reload (cache bypass) is not told apart and goes through the worker like any navigation; frames are loaded
+  (`frames.go`) and are controlled by the registration of their own storage key. Dedicated `Worker`s and
   their requests are not controlled by a worker. There is no 24-hour update check on navigation: workers update on
   `register()` / `update()` only, and only the main script is compared (changes to imported scripts alone do not
   trigger an update). `updateViaCache` is stored and reported but the script fetch always bypasses the HTTP cache.
@@ -115,8 +115,9 @@ tab's console ring (`BrowserContext.ServiceWorkerConsole`).
 * **Lifetime**: no termination of idle workers and no per-event lifetime limits other than the 30 s timeouts above;
   `waitUntil` on a `fetch` event does not extend anything because nothing is shut down. `ServiceWorker.onerror` is not
   fired for runtime errors; they go to the worker console and the worker's own `error` event.
-* **`BroadcastChannel`** is the engine's existing no-op, so workers and pages cannot talk through it; use
-  `postMessage` and `MessageChannel`.
+* **Partitioning**: a registration made from an embedded (third-party) document is keyed by (origin, top-level site) and is
+  invisible to the same origin under another site and to its first-party self ([storage-partitioning.md](storage-partitioning.md)).
+  `BroadcastChannel`, `SharedWorker` and `navigator.locks` work between pages and workers of one key.
 
 ## Measured
 

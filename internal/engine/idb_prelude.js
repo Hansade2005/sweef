@@ -242,8 +242,14 @@
   }
   var ERR_NAMES = ['Error', 'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError'];
   function cloneFail(what) { return mkErr('DataCloneError', (what || 'value') + ' could not be cloned.'); }
-  function ser(value) {
+  // xports: the MessagePorts of a postMessage transfer list. A port inside the value is replaced by its index;
+  // anywhere else it cannot be cloned.
+  var NATIVE_B64 = typeof Uint8Array.prototype.toBase64 === 'function' && typeof Uint8Array.fromBase64 === 'function';
+  function ser(value, xports) {
     var ids = new Map(), next = 0;
+    // messages (xports given) carry binary data as base64, which the engine converts natively; stored values keep
+    // the byte-per-character form their files were written in
+    var b64 = !!xports && NATIVE_B64;
     function node(v) {
       switch (typeof v) {
         case 'undefined': return ['u'];
@@ -264,7 +270,14 @@
       var id = next++;
       if (v instanceof Date) { ids.set(v, id); return ['d', id, v.getTime() === v.getTime() ? v.getTime() : null]; }
       if (v instanceof RegExp) { ids.set(v, id); return ['r', id, v.source, v.flags]; }
-      if (v instanceof ArrayBuffer) { ids.set(v, id); return ['AB', id, binStr(new Uint8Array(v))]; }
+      if (typeof SharedArrayBuffer === 'function' && v instanceof SharedArrayBuffer) throw cloneFail('#<SharedArrayBuffer>');
+      if (global.MessagePort && v instanceof global.MessagePort) {
+        var pi = xports ? xports.indexOf(v) : -1;
+        if (pi < 0) throw cloneFail('#<MessagePort>');
+        ids.set(v, id);
+        return ['P', id, pi];
+      }
+      if (v instanceof ArrayBuffer) { ids.set(v, id); return b64 ? ['A6', id, new Uint8Array(v).toBase64()] : ['AB', id, binStr(new Uint8Array(v))]; }
       if (ArrayBuffer.isView(v)) {
         ids.set(v, id);
         var isDV = v instanceof DataView;
@@ -272,9 +285,9 @@
       }
       if (global.Blob && v instanceof global.Blob) {
         ids.set(v, id);
-        var raw = binStr(v._bytes || new Uint8Array(0));
-        if (global.File && v instanceof global.File) return ['F', id, v.name, v.type, v.lastModified, raw];
-        return ['Bl', id, v.type, raw];
+        var bytes = v._bytes || new Uint8Array(0), raw = b64 ? bytes.toBase64() : binStr(bytes);
+        if (global.File && v instanceof global.File) return [b64 ? 'F6' : 'F', id, v.name, v.type, v.lastModified, raw];
+        return [b64 ? 'B6' : 'Bl', id, v.type, raw];
       }
       if (v instanceof Promise || v instanceof WeakMap || v instanceof WeakSet || (global.WeakRef && v instanceof global.WeakRef)) throw cloneFail('#<' + (v.constructor && v.constructor.name || 'Object') + '>');
       if (v instanceof Boolean) { ids.set(v, id); return ['W', id, 'B', v.valueOf()]; }
@@ -310,7 +323,7 @@
     }
     return JSON.stringify(node(value));
   }
-  function de(s) {
+  function de(s, xports) {
     var objs = [];
     function build(n) {
       if (n === null || typeof n !== 'object') return n;
@@ -321,13 +334,17 @@
         case '#': return objs[n[1]];
         case 'd': return (objs[n[1]] = new Date(n[2] === null ? NaN : n[2]));
         case 'r': return (objs[n[1]] = new RegExp(n[2], n[3]));
+        case 'P': return (objs[n[1]] = xports && xports[n[2]]);
         case 'AB': { var u = strBin(n[2]); return (objs[n[1]] = u.buffer); }
+        case 'A6': return (objs[n[1]] = Uint8Array.fromBase64(n[2]).buffer);
         case 'TA': {
           var buf = build(n[3]), C = n[2] === 'DataView' ? DataView : global[n[2]];
           return (objs[n[1]] = n[2] === 'DataView' ? new DataView(buf, n[4], n[5]) : new C(buf, n[4], n[5]));
         }
         case 'Bl': { var b = new global.Blob([strBin(n[3])], { type: n[2] }); return (objs[n[1]] = b); }
+        case 'B6': return (objs[n[1]] = new global.Blob([Uint8Array.fromBase64(n[3])], { type: n[2] }));
         case 'F': { var f = new global.File([strBin(n[5])], n[2], { type: n[3], lastModified: n[4] }); return (objs[n[1]] = f); }
+        case 'F6': return (objs[n[1]] = new global.File([Uint8Array.fromBase64(n[5])], n[2], { type: n[3], lastModified: n[4] }));
         case 'W': return (objs[n[1]] = n[2] === 'B' ? new Boolean(n[3]) : n[2] === 'N' ? new Number(build(n[3])) : new String(n[3]));
         case 'E': {
           var E = global[n[2]] || Error, e = new E(n[3]);

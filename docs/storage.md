@@ -10,7 +10,7 @@ Code: `internal/sitestore` (the data: key encoding, the ordered store, records, 
 
 ## Supported surface
 
-**IndexedDB** (pages and service workers; not dedicated `Worker`s, see Limits)
+**IndexedDB** (pages, dedicated and shared workers, service workers)
 
 * `indexedDB.open(name, version)`, `deleteDatabase`, `databases()`, `cmp`; `IDBOpenDBRequest` with `upgradeneeded`,
   `blocked`, `success`, `error`; `IDBVersionChangeEvent`. Opening a higher version fires `versionchange` at the other
@@ -168,19 +168,17 @@ Modelled on Chromium's quota manager (`internal/sitestore/policy.go`).
 
 ## Privacy
 
-* Keyed by origin (scheme, host, port) inside one `BrowserContext`. The engine does not partition cookies or
-  `localStorage` by top-level site (it blocks third-party cookies instead), and storage follows the same model: there
-  is no per top-level-site partition. Iframes are not loaded as documents by this engine (`contentWindow` is `null`), so a
-  third party embedded in a page has no script, and therefore no storage, of its own to partition.
+* Keyed by origin (scheme, host, port) inside one `BrowserContext` in a first-party context, and by (origin, top-level
+  site) when the document or worker is embedded under another site; the directory name is the hash of that key. The
+  policy for every API is in [storage-partitioning.md](storage-partitioning.md).
 * Private windows use a separate context without a directory (above). Closing it discards everything.
 * "Clear browsing data" (`App.clearBrowsingData`) calls `BrowserContext.ClearSiteData("")` on the profile's context:
   open connections get `close` and are closed, then every origin's databases, caches, service worker registrations and
-  their files are deleted. `ClearSiteData(origin)` does it for one origin.
+  their files are deleted. `ClearSiteData(origin)` does it for one origin and for the partitions that mention it.
 
 ## Limits and what is not done
 
-* IndexedDB and Cache Storage are not available inside dedicated `Worker`s (their VM is the minimal worker prelude);
-  they are inside service workers.
+* The Origin Private File System has a fixed quota shared with the rest of the origin's storage (see above).
 * A value crosses the host boundary as one string, and a 1 MiB `ArrayBuffer` takes roughly 0.3 s to turn back into bytes
   because QuickJS runs the loop without a JIT. Large values are not kept in the store, but a script that reads one holds it.
 * A transaction's uncommitted writes are memory (cap 256 MiB, then `QuotaExceededError`). Deleting a key range one record at

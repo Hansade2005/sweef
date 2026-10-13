@@ -152,7 +152,7 @@ func (t *Tab) swNavigation(target string, headers map[string]string) (*http.Resp
 		return nil, false, nil
 	}
 	m := ctl.reg.m
-	if m.lookup(target) != ctl.reg {
+	if m.lookup(t.keyForURL(target), target) != ctl.reg {
 		return nil, false, nil
 	}
 	req := swFetchReq{URL: target, Method: "GET", Mode: "navigate", Credentials: "include", Destination: "document"}
@@ -201,7 +201,7 @@ func (t *Tab) swPrepareNavigation(target string) {
 		return
 	}
 	m := t.Context().sw()
-	reg := m.lookup(target)
+	reg := m.lookup(t.keyForURL(target), target)
 	if reg == nil {
 		t.sw.ctl.Store(nil)
 		return
@@ -227,7 +227,8 @@ func (t *Tab) swDocumentCommitted(finalURL string) {
 		return
 	}
 	m := t.Context().sw()
-	reg := m.lookup(finalURL)
+	key := t.keyForURL(finalURL)
+	reg := m.lookup(key, finalURL)
 	m.mu.Lock()
 	if reg != nil && reg.active == nil {
 		reg = nil
@@ -237,7 +238,7 @@ func (t *Tab) swDocumentCommitted(finalURL string) {
 	if ctl := t.sw.ctl.Load(); ctl != nil && ctl.reg == reg {
 		id = ctl.clientID
 	}
-	c := &swClient{id: id, tab: t, url: finalURL, reg: reg}
+	c := &swClient{id: id, tab: t, url: finalURL, key: key, reg: reg}
 	m.mu.Lock()
 	m.nextC++
 	c.seq = m.nextC

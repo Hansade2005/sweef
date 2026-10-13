@@ -629,7 +629,7 @@ func readFileFont(raw string) ([]byte, error) {
 // engine's HTTP client and cache, the CORS check, accounting.
 func (w *webFonts) fetchRaw(abs string, pol DataPolicy, icon bool) ([]byte, error) {
 	t := w.t
-	key, _ := t.eng.res.key(t.Context(), abs, "")
+	key, _ := t.cacheKey(abs, "")
 	known := t.knownSize(key)
 	// Data Saver gates
 	if pol.BlockFonts && !icon {
@@ -866,7 +866,7 @@ func (w *webFonts) settle(set *font.WebSet, gen uint64) bool {
 }
 
 func (w *webFonts) knownSizeOf(abs string) int64 {
-	key, _ := w.t.eng.res.key(w.t.Context(), abs, "")
+	key, _ := w.t.cacheKey(abs, "")
 	return w.t.knownSize(key)
 }
 

@@ -30,6 +30,12 @@ func (t *Tab) withDoc(fn func(*fnet.Doc) error) error {
 // default action may proceed (false when a listener called preventDefault).
 // With JS disabled every event is "not prevented".
 func (t *Tab) fire(bid int64, typ string, init map[string]any) bool {
+	switch typ {
+	case "click", "mousedown", "pointerdown", "keydown", "touchstart", "input":
+		if t.bc == nil { // the person used this top-level page (a page without scripts has no VM to see it)
+			t.Context().noteInteraction(schemefulSite(t.URL()))
+		}
+	}
 	t.mu.RLock()
 	j := t.js
 	t.mu.RUnlock()

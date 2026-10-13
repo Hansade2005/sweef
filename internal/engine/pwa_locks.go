@@ -205,6 +205,18 @@ func (m *lockMgr) closeAll() {
 }
 
 // clientID names the VM for LockManager.query(): the document's client id, or the worker's id.
+// lockKey is the namespace of the VM's locks: its storage key, so the same origin embedded under two sites has two
+// lock namespaces (partition.go).
+func (h *pwaHost) lockKey() string {
+	if t := h.j.tab; t != nil {
+		if o := t.docOrigin(); o != "" {
+			return t.storageKeyFor(o)
+		}
+		return "opaque:" + itoa(int(t.winID))
+	}
+	return h.origin()
+}
+
 func (h *pwaHost) clientID() string {
 	if rt := h.worker(); rt != nil {
 		return "sw" + itoa(int(rt.w.id))
@@ -223,7 +235,7 @@ func (h *pwaHost) locksFns(f map[string]hostFn) {
 		if !h.secure() {
 			return nil, &swError{"SecurityError", "Access to the Locks API is denied in this context."}
 		}
-		r := &lockReq{token: argI(a, 0), vm: h.j, origin: h.origin(), name: argS(a, 1), mode: argS(a, 2), ifAvailable: argB(a, 3), client: h.clientID()}
+		r := &lockReq{token: argI(a, 0), vm: h.j, origin: h.lockKey(), name: argS(a, 1), mode: argS(a, 2), ifAvailable: argB(a, 3), client: h.clientID()}
 		h.st().locks.request(r, argB(a, 4))
 		return nil, nil
 	}
@@ -239,6 +251,6 @@ func (h *pwaHost) locksFns(f map[string]hostFn) {
 		if !h.secure() {
 			return nil, &swError{"SecurityError", "Access to the Locks API is denied in this context."}
 		}
-		return h.st().locks.query(h.origin()), nil
+		return h.st().locks.query(h.lockKey()), nil
 	}
 }

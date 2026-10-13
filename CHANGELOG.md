@@ -9,7 +9,22 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ## [Unreleased]
 
+### Security
+- State is partitioned by top-level site: cookies, `localStorage`, IndexedDB, Cache Storage, the Origin Private File System, service
+  worker registrations, `BroadcastChannel`/`SharedWorker`/Web Locks namespaces and the HTTP cache are keyed by (origin, top-level site)
+  in a third-party context. Third-party cookies are neither sent nor stored unpartitioned; `Partitioned` and `SameSite` are honoured;
+  the Storage Access API is wired to the policy ([docs/storage-partitioning.md](docs/storage-partitioning.md)).
+- `document.cookie` no longer exposes `HttpOnly` cookies; `ClearCookies("")` clears all cookies; the Origin Private File System is no
+  longer shared between a private window and the normal one.
+
 ### Added
+- Dedicated Workers run on a full script VM of their own goroutine: IndexedDB, Cache Storage, `navigator.storage`, the Origin Private
+  File System with `FileSystemSyncAccessHandle`, `fetch`, WebAssembly and nested workers work inside them; real
+  `SharedWorker`, `BroadcastChannel` and `navigator.locks`; structured clone with transferred `MessagePort`s and `ArrayBuffer`s.
+- `<iframe>` documents are loaded as nested browsing contexts: separate origin, window and VM, `postMessage` with origin checks,
+  `parent`/`top`/`frameElement`, same-origin `contentWindow`/`contentDocument`, `sandbox`, `srcdoc`, `X-Frame-Options` and CSP
+  `frame-ancestors`. Frames are not painted or given input yet ([docs/storage-partitioning.md](docs/storage-partitioning.md)).
+- `BrowserContext.SetPartitionPolicy`, `GrantThirdPartyCookies`, `engine.SetHostMap` (resolver override), `Options.DisableFrames`.
 - Real camera, microphone and tab/window capture for `getUserMedia`, `getDisplayMedia` and `enumerateDevices`: V4L2 cameras and PulseAudio/PipeWire microphones on Linux (pure Go), a permission prompt with per-site choices and in-use indicators, `SWEEF_FAKE_DEVICES=1` test devices and `capdemo`; Windows and macOS backends are included but unverified on hardware (`docs/capture.md`).
 
 - Notifications: `Notification`, `showNotification`/`getNotifications`, `notificationclick`/`notificationclose`,

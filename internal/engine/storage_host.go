@@ -102,6 +102,7 @@ func (c *BrowserContext) SiteStorage() *sitestore.Manager {
 
 // siteClose flushes the context's storage (and stops its service workers) when the context goes away.
 func (c *BrowserContext) siteClose() {
+	c.workersShutdown()
 	c.pwaShutdown()
 	c.swShutdown()
 	if m := c.site.mgr.Load(); m != nil {
@@ -111,9 +112,24 @@ func (c *BrowserContext) siteClose() {
 
 // ClearSiteData deletes the IndexedDB databases, Cache Storage and service worker registrations of one
 // origin ("" = every origin of the context). Open connections are closed by force.
+//
+// An origin also clears the state kept for it inside other sites' partitions, and the state of the partitions
+// whose top-level site it is: clearing a site's data clears everything keyed with it. localStorage, the Origin
+// Private File System and partitioned cookies go with it.
 func (c *BrowserContext) ClearSiteData(origin string) {
 	c.swUnregisterAll(origin)
-	c.SiteStorage().ClearOrigin(origin)
+	m := c.SiteStorage()
+	if origin == "" {
+		m.ClearOrigin("")
+	} else {
+		for _, k := range m.Origins() {
+			if keyMatches(k, origin) {
+				m.ClearOrigin(k)
+			}
+		}
+	}
+	c.ClearStorage(origin)
+	c.clearPartitionedCookies(origin)
 }
 
 // siteOrigin is the storage origin of the page the VM runs for: scheme://host[:port] of an http(s) document,
@@ -193,11 +209,14 @@ func init() {
 
 type storageHost struct{ j *jsVM }
 
+// origin is the storage key of the calling document: its origin in a first-party context, (origin, top-level
+// site) when it is embedded under another site (partition.go). "" = no storage (opaque origin).
 func (h *storageHost) origin() string {
-	if h.j.tab == nil {
+	t := h.j.tab
+	if t == nil {
 		return ""
 	}
-	return siteOriginOf(h.j.tab.URL())
+	return t.storageKeyFor(t.docOrigin())
 }
 
 func (h *storageHost) mgr() *sitestore.Manager { return h.j.tab.Context().SiteStorage() }
@@ -229,10 +248,8 @@ func (h *storageHost) fns() map[string]hostFn {
 	j := h.j
 	m := h.mgr
 	return map[string]hostFn{
-		"idbAvail": func(a []any) (any, error) { return h.origin() != "", nil },
-		"secureContext": func(a []any) (any, error) {
-			return j.tab != nil && potentiallyTrustworthy(j.tab.URL()), nil
-		},
+		"idbAvail":      func(a []any) (any, error) { return h.origin() != "", nil },
+		"secureContext": func(a []any) (any, error) { return j.tab != nil && j.tab.secureDoc(), nil },
 		"idbSched": func(a []any) (any, error) {
 			j.rt().push(asyncEvent{kind: "storage", typ: "task"})
 			if j.tab != nil {

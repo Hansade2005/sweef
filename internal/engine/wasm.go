@@ -1268,26 +1268,6 @@ const wasmPageStub = `(function (g) {
   });
 })(globalThis);`
 
-const wasmWorkerStub = `(function (g) {
-  var init = g.__swWasm_init; delete g.__swWasm_init;
-  if (!init) return;
-  var busy = false;
-  function load() {
-    if (busy) return undefined;
-    busy = true;
-    try {
-      delete g.WebAssembly;
-      var src = init();
-      if (src) (0, eval)(src);
-    } finally { busy = false; }
-    return g.WebAssembly;
-  }
-  Object.defineProperty(g, 'WebAssembly', {
-    configurable: true, enumerable: false, get: load,
-    set: function (v) { Object.defineProperty(g, 'WebAssembly', { value: v, writable: true, configurable: true, enumerable: false }); }
-  });
-})(globalThis);`
-
 func init() {
 	registerPrelude("wasm", wasmPageStub)
 	registerHostExtension("wasm", func(j *jsVM) map[string]hostFn {
@@ -1319,22 +1299,4 @@ func wasmHostFor(vm *quickjs.VM, timeout func() time.Duration, hooks *[]func()) 
 	}
 	*hooks = append(*hooks, h.close)
 	return h, nil
-}
-
-// installWorkerWasm gives a Worker VM the same lazy WebAssembly global. w.mu is held by the caller or not yet
-// shared, so touching the VM is safe.
-func installWorkerWasm(vm *quickjs.VM, hooks *[]func()) {
-	var h *wasmHost
-	_ = vm.RegisterHostFunc("__swWasm_init", func(a []any) (any, error) {
-		if h != nil {
-			return "", nil
-		}
-		var err error
-		h, err = wasmHostFor(vm, func() time.Duration { return 5 * time.Second }, hooks)
-		if err != nil {
-			return "", nil
-		}
-		return h.install()
-	})
-	_, _ = vm.Eval(wasmWorkerStub, quickjs.EvalGlobal)
 }

@@ -124,20 +124,13 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	if ck := t.Context().JarRef().ForURL(abs); ck != "" && !o.anonymous {
-		req.Header.Set("Cookie", ck)
-	}
 	rec := fnet.RequestRecord{Method: req.Method, URL: abs, Headers: flattenHeaders(req.Header)}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 	start := time.Now()
 	req, mi := withMeter(req, t.Context(), t, kind, t.policy())
 	mi.maxBody = o.maxBody
+	mi.noCreds = o.anonymous
 	cl := t.eng.clientFor(t.Context())
-	if o.anonymous { // the client's own cookie jar must not add or keep cookies either
-		c2 := *cl
-		c2.Jar = nil
-		cl = &c2
-	}
 	res, err := cl.Do(req)
 	defer func() { t.tspan("http."+string(kind), abs, start) }()
 	if err != nil {
@@ -172,17 +165,6 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 		}
 		if rerr != nil {
 			break
-		}
-	}
-	for _, sc := range res.Header.Values("Set-Cookie") {
-		if o.anonymous {
-			break
-		}
-		if c := parseCookie(sc, t.eng.now()); c != nil {
-			if c.Domain == "" {
-				c.Domain = res.Request.URL.Hostname()
-			}
-			t.Context().JarRef().Set(c)
 		}
 	}
 	out.body = data

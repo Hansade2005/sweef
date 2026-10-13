@@ -1,17 +1,15 @@
 package engine
 
-// realtime.go — WebSockets and Web Workers.
+// realtime.go — WebSockets and the per-VM asynchronous event queue.
 //
-// Both produce events asynchronously (a socket frame arrives, a worker posts
-// a message) while page JavaScript may be running, so they push onto a small
-// queue that the event-loop pump drains into the page VM. Frames are also
-// logged to the network ring (kind Network.webSocket) so agents can inspect
-// realtime traffic the same way they inspect requests.
+// Sockets, workers, frames, storage and fetch produce events asynchronously while page JavaScript may be
+// running, so they push onto a small queue that the event-loop pump drains into the VM. Socket frames are also
+// logged to the network ring (kind Network.webSocket) so agents can inspect realtime traffic the same way
+// they inspect requests. Workers live in workers.go, nested browsing contexts in frames.go.
 
 import (
 	_ "embed"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -22,14 +20,10 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/net/websocket"
-	"modernc.org/quickjs"
 )
 
 //go:embed dom_prelude_ext.js
 var domPreludeExt string
-
-//go:embed worker_prelude.js
-var workerPrelude string
 
 type asyncEvent struct {
 	kind   string // ws | worker
@@ -51,7 +45,7 @@ type realtime struct {
 	queue       []asyncEvent
 	nextID      int64
 	sockets     map[int64]*websocket.Conn
-	workers     map[int64]*workerVM
+	bg          *vmBG    // workers, channels and locks this VM owns (workers.go)
 	closers     []func() // feature packages (webrtc.go) register their teardown here
 }
 
@@ -69,7 +63,7 @@ func (r *realtime) addCloser(f func()) {
 
 func (j *jsVM) rt() *realtime {
 	j.rtOnce.Do(func() {
-		j.realtime = &realtime{sockets: map[int64]*websocket.Conn{}, workers: map[int64]*workerVM{}}
+		j.realtime = &realtime{sockets: map[int64]*websocket.Conn{}}
 	})
 	return j.realtime
 }
@@ -104,8 +98,8 @@ func (r *realtime) id() int64 {
 // closeAll tears down sockets and workers when the page goes away.
 func (r *realtime) closeAll() {
 	r.mu.Lock()
-	socks, workers, closers := r.sockets, r.workers, r.closers
-	r.sockets, r.workers, r.closers = map[int64]*websocket.Conn{}, map[int64]*workerVM{}, nil
+	socks, closers, bg := r.sockets, r.closers, r.bg
+	r.sockets, r.closers, r.bg = map[int64]*websocket.Conn{}, nil, nil
 	r.mu.Unlock()
 	for _, f := range closers {
 		f()
@@ -113,8 +107,8 @@ func (r *realtime) closeAll() {
 	for _, c := range socks {
 		c.Close()
 	}
-	for _, w := range workers {
-		w.close()
+	if bg != nil {
+		bg.closeAll()
 	}
 }
 
@@ -133,7 +127,7 @@ func (j *jsVM) wsOpen(rawurl, protocols string) int64 {
 	r := j.rt()
 	id := r.id()
 	t := j.tab
-	origin := t.origin()
+	origin := t.docOrigin()
 	if !strings.HasPrefix(origin, "http") {
 		origin = "http://localhost"
 	}
@@ -155,7 +149,7 @@ func (j *jsVM) wsOpen(rawurl, protocols string) int64 {
 		cfg.Header = http.Header{}
 		cfg.Header.Set("User-Agent", t.UserAgent())
 		httpURL := strings.Replace(rawurl, "ws", "http", 1)
-		if ck := t.Context().JarRef().ForURL(httpURL); ck != "" {
+		if ck := t.Context().jar.Header(httpURL, t.cookieScopeFor(httpURL, KindXHR).query(false)); ck != "" {
 			cfg.Header.Set("Cookie", ck)
 		}
 		t.touchNet()
@@ -233,245 +227,6 @@ func (j *jsVM) wsClose(id int64) {
 	}
 }
 
-// ---- Workers ----------------------------------------------------------------------
-
-type workerVM struct {
-	mu      sync.Mutex // the VM: held while the worker runs script, timers or message handlers
-	inboxMu sync.Mutex // inbox only, never held across anything that blocks: the page thread posts and polls
-	// through it while the worker may be busy (taking mu there deadlocked against realtime.mu, see hasLiveWork)
-	vm     *quickjs.VM
-	id     int64
-	inbox  []string
-	closed bool
-	// started is set (under mu) once the worker's script has run, so its onmessage is installed. Messages that
-	// arrive earlier stay queued: delivering them to a worker that has not run yet would silently drop them.
-	started bool
-	start   time.Time
-	page    *jsVM
-
-	closeHooks []func() // run after the VM is closed (wasm.go)
-}
-
-func (w *workerVM) close() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.closed {
-		return
-	}
-	w.closed = true
-	w.vm.Close()
-	for _, h := range w.closeHooks {
-		h()
-	}
-	w.closeHooks = nil
-}
-
-func (j *jsVM) workerCreate(rawurl, src, typ string) (int64, error) {
-	r := j.rt()
-	id := r.id()
-	vm, err := quickjs.NewVM()
-	if err != nil {
-		return 0, err
-	}
-	vm.SetMemoryLimit(32 << 20)
-	vm.SetMaxStackSize(1 << 20)
-	vm.SetEvalTimeout(5 * time.Second)
-	w := &workerVM{vm: vm, id: id, start: time.Now(), page: j}
-	t := j.tab
-	reg := func(name string, fn func(a []any) (any, error)) { _ = vm.RegisterHostFunc("__w_"+name, fn) }
-	reg("post", func(a []any) (any, error) {
-		msg := argS(a, 0)
-		var probe struct {
-			Err string `json:"__swError"`
-		}
-		if json.Unmarshal([]byte(msg), &probe) == nil && probe.Err != "" {
-			r.push(asyncEvent{kind: "worker", id: id, typ: "error", data: probe.Err})
-			return nil, nil
-		}
-		r.push(asyncEvent{kind: "worker", id: id, typ: "message", data: msg})
-		return nil, nil
-	})
-	reg("log", func(a []any) (any, error) { t.LogConsole(argS(a, 0), argS(a, 1)); return nil, nil })
-	reg("http", func(a []any) (any, error) {
-		hdr := map[string]string{}
-		if len(a) > 2 {
-			if m, ok := a[2].(map[string]any); ok {
-				for k, v := range m {
-					hdr[k] = fmt.Sprint(v)
-				}
-			}
-		}
-		u, err := resolveURL(rawurl, argS(a, 1))
-		if err != nil {
-			return nil, err
-		}
-		return t.httpForScript(argS(a, 0), u, hdr, argS(a, 3))
-	})
-	reg("fetchText", func(a []any) (any, error) {
-		u, err := resolveURL(rawurl, argS(a, 0))
-		if err != nil {
-			return nil, err
-		}
-		body, status, err := t.fetchResourceKind(u, KindScript)
-		if err != nil {
-			return nil, err
-		}
-		if status >= 400 {
-			return nil, fmt.Errorf("importScripts: HTTP %d for %s", status, u)
-		}
-		return body, nil
-	})
-	reg("now", func(a []any) (any, error) { return float64(time.Since(w.start).Microseconds()) / 1000, nil })
-	reg("url", func(a []any) (any, error) { return rawurl, nil })
-	reg("close", func(a []any) (any, error) { go j.workerTerminate(id); return nil, nil })
-	reg("atob", func(a []any) (any, error) {
-		b, err := base64.StdEncoding.DecodeString(argS(a, 0))
-		return string(b), err
-	})
-	reg("btoa", func(a []any) (any, error) { return base64.StdEncoding.EncodeToString([]byte(argS(a, 0))), nil })
-	glue := `globalThis.__w={post:__w_post,log:__w_log,http:__w_http,fetchText:__w_fetchText,now:__w_now,url:__w_url,close:__w_close,atob:__w_atob,btoa:__w_btoa};`
-	if _, err := vm.Eval(glue, quickjs.EvalGlobal); err != nil {
-		vm.Close()
-		return 0, err
-	}
-	if _, err := vm.Eval(workerPrelude, quickjs.EvalGlobal); err != nil {
-		vm.Close()
-		return 0, fmt.Errorf("worker prelude: %w", err)
-	}
-	installWorkerWasm(vm, &w.closeHooks)
-	if src == "" {
-		body, status, err := t.fetchResourceKind(rawurl, KindScript)
-		if err != nil {
-			vm.Close()
-			return 0, err
-		}
-		if status >= 400 {
-			vm.Close()
-			return 0, fmt.Errorf("worker script %s: HTTP %d", rawurl, status)
-		}
-		src = body
-	}
-	r.mu.Lock()
-	r.workers[id] = w
-	r.mu.Unlock()
-	// Run the worker script on the next pump turn, like a real worker start.
-	go func() {
-		w.mu.Lock()
-		defer w.mu.Unlock()
-		if w.closed {
-			return
-		}
-		defer func() { w.started = true }()
-		var err error
-		if typ == "module" {
-			vm.SetModuleLoader(func(_ *quickjs.VM, name string) (string, error) {
-				b, _, err := t.fetchResourceKind(name, KindScript)
-				return b, err
-			}, func(_ *quickjs.VM, base, name string) (string, error) {
-				if strings.Contains(name, "://") {
-					return name, nil
-				}
-				b := base
-				if !strings.Contains(b, "://") {
-					b = rawurl
-				}
-				return resolveURL(b, name)
-			})
-			_, err = vm.Eval(src, quickjs.EvalModule)
-		} else {
-			_, err = vm.Eval(src, quickjs.EvalGlobal)
-		}
-		if err != nil {
-			t.LogConsole("error", jsErrorText(err, "worker "+rawurl))
-			r.push(asyncEvent{kind: "worker", id: id, typ: "error", data: err.Error()})
-		}
-		_, _ = vm.ExecutePendingJobs()
-	}()
-	return id, nil
-}
-
-func (j *jsVM) workerPost(id int64, msg string) {
-	r := j.rt()
-	r.mu.Lock()
-	w := r.workers[id]
-	r.mu.Unlock()
-	if w == nil {
-		return
-	}
-	w.inboxMu.Lock()
-	w.inbox = append(w.inbox, msg)
-	w.inboxMu.Unlock()
-}
-
-func (j *jsVM) workerTerminate(id int64) {
-	r := j.rt()
-	r.mu.Lock()
-	w := r.workers[id]
-	delete(r.workers, id)
-	r.mu.Unlock()
-	if w != nil {
-		w.close()
-	}
-}
-
-// pumpWorkers delivers queued messages to each worker and runs its timers.
-// It returns the milliseconds until the earliest worker timer, or -1.
-func (j *jsVM) pumpWorkers() float64 {
-	if j.realtime == nil {
-		return -1
-	}
-	r := j.realtime
-	r.mu.Lock()
-	ws := make([]*workerVM, 0, len(r.workers))
-	for _, w := range r.workers {
-		ws = append(ws, w)
-	}
-	r.mu.Unlock()
-	next := -1.0
-	for _, w := range ws {
-		w.mu.Lock()
-		if w.closed {
-			w.mu.Unlock()
-			continue
-		}
-		if !w.started {
-			w.mu.Unlock()
-			if next < 0 || next > 1 {
-				next = 1 // look again soon: the script is still starting
-			}
-			continue
-		}
-		w.inboxMu.Lock()
-		inbox := w.inbox
-		w.inbox = nil
-		w.inboxMu.Unlock()
-		for _, m := range inbox {
-			if _, err := w.vm.Call("__swwDeliver", m); err != nil {
-				j.tab.LogConsole("error", jsErrorText(err, "worker onmessage"))
-			}
-		}
-		_, _ = w.vm.ExecutePendingJobs()
-		now := float64(time.Since(w.start).Microseconds()) / 1000
-		res, err := w.vm.Call("__swwRunTimers", now)
-		_, _ = w.vm.ExecutePendingJobs()
-		w.mu.Unlock()
-		if err != nil {
-			continue
-		}
-		var n float64 = -1
-		switch v := res.(type) {
-		case int:
-			n = float64(v)
-		case float64:
-			n = v
-		}
-		if n >= 0 && (next < 0 || n < next) {
-			next = n
-		}
-	}
-	return next
-}
-
 // drainAsync hands queued socket and worker events to page JavaScript.
 // Returns true when anything was delivered.
 func (j *jsVM) drainAsync() bool {
@@ -484,10 +239,6 @@ func (j *jsVM) drainAsync() bool {
 		case "ws":
 			if _, err := j.call("__swWsEvent", e.id, e.typ, e.data, e.binary, e.code, e.reason); err != nil {
 				j.tab.LogConsole("error", jsErrorText(err, "websocket "+e.typ))
-			}
-		case "worker":
-			if _, err := j.call("__swWorkerEvent", e.id, e.typ, e.data); err != nil {
-				j.tab.LogConsole("error", jsErrorText(err, "worker "+e.typ))
 			}
 		case "http":
 			if _, err := j.call("__swHttpEvent", e.id); err != nil {
@@ -510,7 +261,7 @@ func (j *jsVM) drainAsync() bool {
 	return len(evs) > 0
 }
 
-// hasLiveWork reports open sockets or workers with queued work.
+// hasLiveWork reports queued events, requests in flight, nested documents that are still loading.
 func (j *jsVM) hasLiveWork() bool {
 	if j.realtime == nil {
 		return false
@@ -520,24 +271,12 @@ func (j *jsVM) hasLiveWork() bool {
 		return true // a detached image or a page request is on its way: the settle waits for its outcome
 	}
 	r.mu.Lock()
-	if len(r.queue) > 0 {
-		r.mu.Unlock()
+	n := len(r.queue)
+	r.mu.Unlock()
+	if n > 0 {
 		return true
 	}
-	ws := make([]*workerVM, 0, len(r.workers))
-	for _, w := range r.workers {
-		ws = append(ws, w)
-	}
-	r.mu.Unlock() // never hold r.mu while taking a worker lock: a starting worker holds its own and pushes to r
-	for _, w := range ws {
-		w.inboxMu.Lock()
-		busy := len(w.inbox) > 0
-		w.inboxMu.Unlock()
-		if busy {
-			return true
-		}
-	}
-	return false
+	return j.bgLiveWork()
 }
 
 var _ = url.Parse
