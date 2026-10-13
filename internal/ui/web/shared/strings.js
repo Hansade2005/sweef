@@ -113,7 +113,7 @@
     siteRule: "For {host}", ruleAuto: "Auto", ruleFull: "Always full", ruleLite: "Always lite", ruleSub: { "": "Follows your level.", full: "Everything loads on this site.", lite: "This site always loads in a lighter way." },
     top: "Top sites {period}", topNote: "Approximate", topNone: "Sites will show up here as you browse.", settings: "Data settings", mode: "Level",
     tapHint: "Or tap a box on the page to load just that one.", incogNote: "Private windows count toward your budget. {brand} does not keep which sites they used.",
-    research: "Research used {n}", researchNot: "About {n} not loaded (estimate)", researchTip: "Counted from the pages {agent} opened. They load as text, without images, fonts or video.",
+    research: "Research used {n}", researchNot: "About {n} not loaded (estimate)", researchTip: "Counted from the pages {agent} opened. They load as text, without images or video.",
     nt: { left: "{n} left {period}", used: "You have used your {limit} {period}. It resets {when}.", tomorrow: "tomorrow", inDays: "in {n} days" },
     stop: {
       title: "You have used your {limit} {period}", sub: "{brand} paused new pages so your data plan stays safe. Your budget resets {when}.", once: "Load this page once", onceNote: "Loading once still counts toward your total.",
@@ -126,7 +126,7 @@
       offDo: ["Counts the data you use", "Keeps your budget and tells you as you get close"], offDont: ["Does not block or delay anything", "Does not change how pages look"],
       stdDo: ["Loads images only as you scroll near them", "Turns very large images (over 200 KB) into tap-to-load boxes", "Plays video and audio only when you press play", "Pauses background tabs and reuses saved files instead of downloading again"],
       stdDont: ["Does not change text, layout or buttons", "Does not send pages through another company's servers", "Anything you tap loads in full"],
-      strictDo: ["Everything in Standard", "Shows no images until you tap them; boxes keep the page layout", "Skips web fonts, video, audio and scripts from other sites", "Limits the site's own scripts to 300 KB per page"],
+      strictDo: ["Everything in Standard", "Shows no images until you tap them; boxes keep the page layout", "Skips video, audio and scripts from other sites", "Limits the site's own scripts to 300 KB per page"],
       strictDont: ["Keeps page colours and layout (styles stay on)", "Has a Load fully, once button on every page", "Some interactive sites may look plain until you load them fully"],
       gBudget: "Data budget", budgetD: "Pick your plan size. {brand} only counts what pages load, and never stops you unless you ask it to.", presets: [["100", "100 MB"], ["500", "500 MB"], ["1024", "1 GB"], ["0", "No limit"]],
       custom: "Custom size", customD: "In megabytes.", period: "Budget period", periodD: "How often your data allowance starts over.", day: "Day", week: "Week", month: "Month",
@@ -135,9 +135,9 @@
       hardStopD: "You can still load one page at a time, raise the limit, or wait for the reset. Off by default: pages keep loading and you just see the numbers.",
       gUse: "So far {period}", usedL: "Used", usedLD: "Counted from the network as pages arrive.", savedL: "Saved, measured", savedLD: "Cache hits and downloads stopped early. Counted exactly.", estL: "Not loaded, estimate", estLD: "A guess from typical sizes. Never added to the measured numbers.",
       top: "Busiest sites", topD: "Approximate, by site.", reset: "Reset counter", resetD: "Start counting from zero. Your budget stays as it is.", resetSure: "Reset the usage counter?", resetYes: "Yes, reset", cancel: "Cancel",
-      gMore: "More", agentLite: "Light loading for {agent}", agentLiteD: "When {agent} researches for you, pages load as text without images, fonts or video. It never needs them.", showMeter: "Show the data meter in the toolbar", showMeterD: "A small chip next to the address bar.",
+      gMore: "More", agentLite: "Light loading for {agent}", agentLiteD: "When {agent} researches for you, pages load as text without images or video. It never needs them.", showMeter: "Show the data meter in the toolbar", showMeterD: "A small chip next to the address bar.",
       gSites: "Sites with their own rule", sitesD: "Set from the data popover on any page.", sitesNone: "No site has its own rule yet.", forget: "Forget", ruleFull: "Always full", ruleLite: "Always lite",
-      gCount: "What is counted", countD: "Used is counted from the network, including encryption overhead. Downloads you save to disk and {agent}'s own messages are not included. Saved is split in two: measured (files we did not download) and estimated (a guess from typical sizes). We never add them together.",
+      gCount: "What is counted", countD: "Used is counted from the network, including encryption overhead. Downloads and favicons are included; {agent}'s own messages to the model are not. Saved is split in two: measured (files we did not download) and estimated (a guess from typical sizes). We never add them together.",
       unavailable: "Counting is not available in this build yet, so the numbers below stay empty."
     },
     ob: {

@@ -36416,6 +36416,1265 @@
      }
     ]
    }
+  },
+  {
+   "site": "https://www.joelonsoftware.com/2000/04/06/things-you-should-never-do-part-i/",
+   "mode": "sweef-off",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 1877877,
+    "wire_out": 51554,
+    "conns": 16,
+    "handshake_in": 624,
+    "handshake_out": 1608,
+    "requests": 137,
+    "cache_served": 67,
+    "ready_ms": 8673.644,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Image": 6,
+     "Other": 70,
+     "Script": 55,
+     "Stylesheet": 4,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "c0.wp.com",
+      "conns": 4,
+      "in": 1076317,
+      "out": 21488
+     },
+     {
+      "host": "i0.wp.com",
+      "conns": 1,
+      "in": 349134,
+      "out": 3309
+     },
+     {
+      "host": "www.googletagmanager.com",
+      "conns": 1,
+      "in": 192336,
+      "out": 3992
+     },
+     {
+      "host": "www.joelonsoftware.com",
+      "conns": 1,
+      "in": 137002,
+      "out": 3953
+     },
+     {
+      "host": "platform.twitter.com",
+      "conns": 1,
+      "in": 34425,
+      "out": 2149
+     },
+     {
+      "host": "www.google-analytics.com",
+      "conns": 1,
+      "in": 26931,
+      "out": 2535
+     },
+     {
+      "host": "secure.gravatar.com",
+      "conns": 1,
+      "in": 15474,
+      "out": 1963
+     },
+     {
+      "host": "s0.wp.com",
+      "conns": 1,
+      "in": 10964,
+      "out": 1915
+     },
+     {
+      "host": "secure.gaug.es",
+      "conns": 1,
+      "in": 8350,
+      "out": 1850
+     },
+     {
+      "host": "analytics.google.com",
+      "conns": 1,
+      "in": 6853,
+      "out": 2370
+     },
+     {
+      "host": "stats.wp.com",
+      "conns": 1,
+      "in": 7336,
+      "out": 1849
+     },
+     {
+      "host": "fonts.googleapis.com",
+      "conns": 1,
+      "in": 6728,
+      "out": 2039
+     },
+     {
+      "host": "stats.g.doubleclick.net",
+      "conns": 1,
+      "in": 6027,
+      "out": 2142
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://www.joelonsoftware.com/2000/04/06/things-you-should-never-do-part-i/",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/inc/fontawesome/font-awesome.css?ver=4.1.0",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/style.css?ver=7.1.3",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/js/jquery.fitvids.js?ver=20140820",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/js/editor.js?ver=20161202",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://s0.wp.com/wp-content/js/bilmur.min.js?m=202642\u0026ver=1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/keycodes.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/vendor/react.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://fonts.googleapis.com/css?family=Source%20Sans%20Pro%3A400%2C600%2C700%2C400italic%2C600italic%2C700italic%7CRoboto%20Condensed%3A30…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/jquery/jquery-migrate.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/jquery/jquery.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/hooks.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/i18n.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/vendor/react-dom.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/private-apis.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/url.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/api-fetch.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/vendor/react-jsx-runtime.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/dom-ready.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/a11y.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/blob.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/block-serialization-default-parser.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/autop.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/deprecated.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/escape-html.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/dom.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/element.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/is-shallow-equal.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://stats.wp.com/e-202642.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/primitives.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/priority-queue.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/undo-manager.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/plugins/cloudflare-stream/dist/blocks.style.build.css?ver=1671234854",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 382
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/compose.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/redux-routine.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/data.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/shortcode.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/html-entities.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/rich-text.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/warning.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/blocks.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/vendor/moment.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/notices.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/date.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/theme.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/components.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/keyboard-shortcuts.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/preferences.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/preferences-persistence.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/commands.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/upload-media.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/style-engine.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/token-list.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/p/jetpack/16.3/_inc/build/twitter-timeline.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": 265
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/block-editor.min.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/plugins/blockprotocol/build/render.js?ver=d02daa73f930ea4bd873",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/jquery/jquery.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/jquery/jquery-migrate.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/js/jquery.fitvids.js?ver=20140820",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/js/editor.js?ver=20161202",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/vendor/react.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/vendor/react-dom.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/hooks.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/i18n.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/private-apis.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/url.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/api-fetch.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/vendor/react-jsx-runtime.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/dom-ready.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/a11y.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/blob.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/block-serialization-default-parser.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/autop.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/deprecated.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/dom.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/escape-html.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/element.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/is-shallow-equal.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/keycodes.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/priority-queue.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/undo-manager.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/compose.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/redux-routine.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/data.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/html-entities.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/rich-text.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/shortcode.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/warning.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/blocks.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/vendor/moment.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/date.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/primitives.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/theme.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/components.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/keyboard-shortcuts.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/preferences-persistence.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/preferences.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/commands.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/notices.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/style-engine.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/token-list.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/upload-media.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/c/7.1.3/wp-includes/js/dist/block-editor.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/plugins/blockprotocol/build/render.js?ver=d02daa73f930ea4bd873",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://c0.wp.com/p/jetpack/16.3/_inc/build/twitter-timeline.min.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://s0.wp.com/wp-content/js/bilmur.min.js?m=202642\u0026ver=1",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://stats.wp.com/e-202642.js",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-json/wp/v2/users/me?context=edit\u0026_locale=user",
+      "type": "XHR",
+      "status": 401,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.google-analytics.com/analytics.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/plugins/cloudflare-stream/dist/blocks.style.build.css?ver=1671234854",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/style.css?ver=7.1.3",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/inc/fontawesome/font-awesome.css?ver=4.1.0",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://fonts.googleapis.com/css?family=Source%20Sans%20Pro%3A400%2C600%2C700%2C400italic%2C600italic%2C700italic%7CRoboto%20Condensed%3A30…",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://i0.wp.com/www.joelonsoftware.com/wp-content/uploads/2016/12/Pong.png?w=730\u0026ssl=1",
+      "type": "Image",
+      "status": 200,
+      "encoded": 172782
+     },
+     {
+      "url": "https://i0.wp.com/www.joelonsoftware.com/wp-content/uploads/2000/04/Upper_West_Side_Brownstones_2.jpg?w=730\u0026ssl=1",
+      "type": "Image",
+      "status": 200,
+      "encoded": 25158
+     },
+     {
+      "url": "https://i0.wp.com/www.joelonsoftware.com/wp-content/uploads/2000/04/Columbus_Ave_Barber_Shop.jpg?w=730\u0026ssl=1",
+      "type": "Image",
+      "status": 200,
+      "encoded": 35491
+     },
+     {
+      "url": "https://i0.wp.com/www.joelonsoftware.com/wp-content/uploads/2000/04/Columbus_Ave.jpg?w=730\u0026ssl=1",
+      "type": "Image",
+      "status": 200,
+      "encoded": 81051
+     },
+     {
+      "url": "https://i0.wp.com/www.joelonsoftware.com/wp-content/uploads/2008/01/Lincoln_Center_Trees.jpg?w=730\u0026ssl=1",
+      "type": "Image",
+      "status": 200,
+      "encoded": 24494
+     },
+     {
+      "url": "https://secure.gravatar.com/avatar/4f742758d6ff8a422a0d154b351751a90a10542fda27afe910c1e16cb3779bf4?s=64\u0026d=mm\u0026r=pg",
+      "type": "Image",
+      "status": 200,
+      "encoded": 9307
+     },
+     {
+      "url": "https://platform.twitter.com/widgets.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/plugins/cloudflare-stream/dist/blocks.style.build.css?ver=1671234854",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/style.css?ver=7.1.3",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/inc/fontawesome/font-awesome.css?ver=4.1.0",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://fonts.googleapis.com/css?family=Source%20Sans%20Pro%3A400%2C600%2C700%2C400italic%2C600italic%2C700italic%7CRoboto%20Condensed%3A30…",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://secure.gaug.es/track.js",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/plugins/cloudflare-stream/dist/blocks.style.build.css?ver=1671234854",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/style.css?ver=7.1.3",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/inc/fontawesome/font-awesome.css?ver=4.1.0",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://fonts.googleapis.com/css?family=Source%20Sans%20Pro%3A400%2C600%2C700%2C400italic%2C600italic%2C700italic%7CRoboto%20Condensed%3A30…",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.google-analytics.com/j/collect?v=1\u0026_v=j102\u0026a=789577649\u0026t=pageview\u0026_s=1\u0026dl=https%3A%2F%2Fwww.joelonsoftware.com%2F2000%2F04%2F06…",
+      "type": "Other",
+      "status": 200,
+      "encoded": 15
+     },
+     {
+      "url": "https://www.googletagmanager.com/gtag/js?id=G-ES3L5VPF92\u0026cx=c\u0026_slc=1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://stats.g.doubleclick.net/g/collect?v=2\u0026ngs=1\u0026ibt=1\u0026tid=G-ES3L5VPF92\u0026cid=1471683218.1791852933\u0026gtm=45je6a91v9125368111za20gxf1\u0026rcb=6\u0026…",
+      "type": "Other",
+      "status": 204,
+      "encoded": 0
+     },
+     {
+      "url": "https://analytics.google.com/g/collect?v=2\u0026tid=G-ES3L5VPF92\u0026gtm=45je6a91v9125368111za20gxf1\u0026_p=1791852934345\u0026_gaz=1\u0026gcd=13l3l3l3l2l1\u0026npa=0\u0026…",
+      "type": "Other",
+      "status": 204,
+      "encoded": 0
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/plugins/cloudflare-stream/dist/blocks.style.build.css?ver=1671234854",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/style.css?ver=7.1.3",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/inc/fontawesome/font-awesome.css?ver=4.1.0",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     },
+     {
+      "url": "https://fonts.googleapis.com/css?family=Source%20Sans%20Pro%3A400%2C600%2C700%2C400italic%2C600italic%2C700italic%7CRoboto%20Condensed%3A30…",
+      "type": "Other",
+      "status": 200,
+      "encoded": -1,
+      "from_cache": true
+     }
+    ],
+    "engine": {
+     "wire_in": 1878501,
+     "wire_out": 53162,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 36424,
+    "wire_out": 7063,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 339,
+    "requests": 136,
+    "cache_served": 132,
+    "ready_ms": 3459.862,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 134,
+     "XHR": 1
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "www.joelonsoftware.com",
+      "conns": 2,
+      "in": 24422,
+      "out": 2284
+     },
+     {
+      "host": "www.google-analytics.com",
+      "conns": 2,
+      "in": 6505,
+      "out": 2214
+     },
+     {
+      "host": "analytics.google.com",
+      "conns": 2,
+      "in": 5497,
+      "out": 2349
+     },
+     {
+      "host": "stats.g.doubleclick.net",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "fonts.googleapis.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "c0.wp.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "stats.wp.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "i0.wp.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "secure.gravatar.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "secure.gaug.es",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "www.googletagmanager.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "s0.wp.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 36541,
+     "wire_out": 7114,
+     "cache_hit_bytes": 2996028,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://www.joelonsoftware.com/2000/04/06/things-you-should-never-do-part-i/",
+   "mode": "sweef-strict",
+   "run": 3,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 140955,
+    "wire_out": 5392,
+    "conns": 2,
+    "handshake_in": 78,
+    "handshake_out": 222,
+    "requests": 8,
+    "cache_served": 0,
+    "ready_ms": 601.551,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 3,
+     "Stylesheet": 4
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "www.joelonsoftware.com",
+      "conns": 1,
+      "in": 134234,
+      "out": 3337
+     },
+     {
+      "host": "fonts.googleapis.com",
+      "conns": 1,
+      "in": 6721,
+      "out": 2055
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://www.joelonsoftware.com/2000/04/06/things-you-should-never-do-part-i/",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/inc/fontawesome/font-awesome.css?ver=4.1.0",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/style.css?ver=7.1.3",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/plugins/cloudflare-stream/dist/blocks.style.build.css?ver=1671234854",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": 382
+     },
+     {
+      "url": "https://fonts.googleapis.com/css?family=Source%20Sans%20Pro%3A400%2C600%2C700%2C400italic%2C600italic%2C700italic%7CRoboto%20Condensed%3A30…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/js/jquery.fitvids.js?ver=20140820",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/themes/editor-redux/js/editor.js?ver=20161202",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://www.joelonsoftware.com/wp-content/plugins/blockprotocol/build/render.js?ver=d02daa73f930ea4bd873",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 141033,
+     "wire_out": 5614,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped": {
+      "script": 50
+     },
+     "skipped_estimate": 1536000,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 23504,
+    "wire_out": 2108,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 113,
+    "requests": 8,
+    "cache_served": 7,
+    "ready_ms": 270.98,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 7
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "www.joelonsoftware.com",
+      "conns": 1,
+      "in": 23504,
+      "out": 2084
+     },
+     {
+      "host": "fonts.googleapis.com",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 23543,
+     "wire_out": 2197,
+     "cache_hit_bytes": 111316,
+     "aborted_bytes": 0,
+     "skipped": {
+      "script": 50
+     },
+     "skipped_estimate": 1536000,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
   }
  ],
  "baselines": [

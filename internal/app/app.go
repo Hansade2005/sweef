@@ -249,6 +249,11 @@ func New(cfg Config) (*App, error) {
 		a.ownE = true
 	}
 	a.initDataSaver()
+	// the app's own HTTP clients count toward "used" like page traffic
+	if ct := a.eng.DefaultContext().CountedTransport(); ct != nil {
+		a.favicons.cli.Transport = ct
+		a.prof.Downloads.Client.Transport = ct
+	}
 	if at, ok := cfg.Agent.(AgentAttacher); ok {
 		at.AttachApp(a)
 	}
