@@ -175,11 +175,8 @@ func TestExtendedCacheFreshnessRules(t *testing.T) {
 				}
 			}
 			// whatever the level: no-store is never stored, a response without a validator cannot be revalidated
-			// (off keeps its old habit of reading such a script twice per navigation: prefetch, then loader)
+			// (and a script is read once per navigation, however many consumers ask for it: prefetch, then loader)
 			wantN := 1
-			if level == SaverOff {
-				wantN = 2
-			}
 			paths := []string{"/c/nostore.js", "/c/noval.js"}
 			if level == SaverOff {
 				paths = paths[:1] // off serves a max-age=0 response from its 5 s memory window, as before

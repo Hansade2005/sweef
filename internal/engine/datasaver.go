@@ -472,6 +472,10 @@ type tabDS struct {
 	skipped  []SkippedItem
 	skipSeen map[string]bool
 	stashed  map[string]string
+
+	memo      map[string]*resMemo // sub-resources read in this navigation (fetchres.go)
+	memoBytes int64
+	flights   map[string]*flight // requests in flight, shared by concurrent consumers
 }
 
 // SkippedItem describes one resource the policy withheld on this page.
@@ -561,6 +565,7 @@ func (t *Tab) resetDataForNavigation() {
 	t.ds.skipped = nil
 	t.ds.skipSeen = nil
 	t.ds.stashed = nil
+	t.ds.memo, t.ds.memoBytes = nil, 0
 	t.ds.mu.Unlock()
 	if t.ds.fullNext.Swap(false) {
 		t.ds.fullDoc.Store(true)

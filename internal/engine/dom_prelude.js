@@ -457,6 +457,19 @@
     Object.defineProperty(o, 'length', { value: items.length, configurable: true });
     return o;
   }
+  // genCached: a producer's result is reused until the document changes. A live collection answers
+  // every list[i] and list.length by calling its producer, so a loop over getElementsByTagName('*')
+  // (jQuery/Sizzle do exactly that) re-read the whole tree once per index: quadratic, seconds on a
+  // long page. The document's mutation counter says when the answer can differ.
+  function genCached(fn) {
+    var g = -1, v = null;
+    return function () {
+      var cur = host('docGen') ? sw.docGen() : -1;
+      if (cur < 0) return fn();
+      if (v === null || cur !== g) { v = fn(); g = cur; }
+      return v;
+    };
+  }
   function liveList(C, producer) {
     var target = Object.create(C.prototype);
     return new Proxy(target, {
@@ -799,7 +812,7 @@
     nodeName: { get: function () { var t = this.nodeType; return t === 1 ? this.tagName : t === 3 ? '#text' : t === 8 ? '#comment' : t === 9 ? '#document' : t === 10 ? (sw.tagName(this[ID]) || 'html') : '#node'; } },
     parentNode: { get: function () { return this[FRAG] || wrap(sw.parent(this[ID])); } },
     parentElement: { get: function () { var p = this.parentNode; return p && p.nodeType === 1 ? p : null; } },
-    childNodes: { get: function () { var self = this; var s = slots(this); return s.childNodes || (s.childNodes = liveList(NodeList, function () { return wrapAll(sw.children(self[ID])); })); } },
+    childNodes: { get: function () { var self = this; var s = slots(this); return s.childNodes || (s.childNodes = liveList(NodeList, genCached(function () { return wrapAll(sw.children(self[ID])); }))); } },
     firstChild: { get: function () { return wrap(sw.firstChild(this[ID])); } },
     lastChild: { get: function () { return wrap(sw.lastChild(this[ID])); } },
     nextSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; return k[k.indexOf(this) + 1] || null; } return wrap(sw.nextSibling(this[ID])); } },
@@ -887,7 +900,7 @@
   function childElements(id) { var ids = sw.children(id), out = []; for (var i = 0; i < ids.length; i++) if (sw.nodeType(ids[i]) === 1) out.push(wrap(ids[i])); return out; }
   function nextElement(id, dir) { for (var s = sw[dir](id); s; s = sw[dir](s)) if (sw.nodeType(s) === 1) return wrap(s); return null; }
   var ParentNodeGetters = {
-    children: { get: function () { var self = this; var s = slots(this); return s.children || (s.children = liveList(HTMLCollection, function () { return self.nodeType === 11 ? self._kids.filter(function (k) { return k.nodeType === 1; }) : childElements(self[ID]); })); } },
+    children: { get: function () { var self = this; var s = slots(this); return s.children || (s.children = liveList(HTMLCollection, self.nodeType === 11 ? function () { return self._kids.filter(function (k) { return k.nodeType === 1; }); } : genCached(function () { return childElements(self[ID]); }))); } },
     firstElementChild: { get: function () { return this.children[0] || null; } },
     lastElementChild: { get: function () { var c = this.children; return c[c.length - 1] || null; } },
     childElementCount: { get: function () { return this.children.length; } }
@@ -898,9 +911,9 @@
     replaceChildren: function () { while (this.firstChild) this.removeChild(this.firstChild); if (arguments.length) this.appendChild(toNodes(arguments)); },
     querySelector: function (sel) { return queryOne(this, sel); },
     querySelectorAll: function (sel) { return nodeListOf(queryAll(this, sel)); },
-    getElementsByTagName: function (tag) { var self = this; tag = String(tag).toLowerCase(); return liveList(HTMLCollection, function () { return wrapAll(sw.elementsByTag(queryRoot(self), tag)); }); },
+    getElementsByTagName: function (tag) { var self = this; tag = String(tag).toLowerCase(); return liveList(HTMLCollection, genCached(function () { return wrapAll(sw.elementsByTag(queryRoot(self), tag)); })); },
     getElementsByTagNameNS: function (ns, tag) { return this.getElementsByTagName(tag); },
-    getElementsByClassName: function (cls) { var self = this; cls = String(cls); return liveList(HTMLCollection, function () { return wrapAll(sw.elementsByClass(queryRoot(self), cls)); }); }
+    getElementsByClassName: function (cls) { var self = this; cls = String(cls); return liveList(HTMLCollection, genCached(function () { return wrapAll(sw.elementsByClass(queryRoot(self), cls)); })); }
   };
   var ChildNodeMethods = {
     remove: function () { var p = this.parentNode; if (p) p.removeChild(this); },
@@ -1249,7 +1262,7 @@
   var SelectP = global.HTMLSelectElement.prototype;
   getters(SelectP, {
     selectedIndex: { get: function () { var i = sw.selectedIndex(this[ID]); return typeof i === 'number' ? i : -1; }, set: function (i) { sw.setSelectedIndex(this[ID], i | 0); hostMutation('value', this[ID]); } },
-    options: { get: function () { var self = this; var s = slots(this); return s.options || (s.options = liveList(HTMLCollection, function () { return wrapAll(sw.elementsByTag(self[ID], 'option')); })); } },
+    options: { get: function () { var self = this; var s = slots(this); return s.options || (s.options = liveList(HTMLCollection, genCached(function () { return wrapAll(sw.elementsByTag(self[ID], 'option')); }))); } },
     selectedOptions: { get: function () { return collectionOf(itemsOf(this.options).filter(function (o) { return o.selected; })); } },
     length: { get: function () { return this.options.length; }, set: function () { } },
     type: { get: function () { return this.hasAttribute('multiple') ? 'select-multiple' : 'select-one'; } }
@@ -1489,8 +1502,8 @@
     dir: { get: function () { var h = this.documentElement; return h ? h.getAttribute('dir') || '' : ''; }, set: function (v) { var h = this.documentElement; if (h) h.setAttribute('dir', toStr(v)); } },
     forms: { get: function () { return this.getElementsByTagName('form'); } },
     images: { get: function () { return this.getElementsByTagName('img'); } },
-    links: { get: function () { var self = this; return liveList(HTMLCollection, function () { return queryAll(self, 'a[href],area[href]'); }); } },
-    anchors: { get: function () { var self = this; return liveList(HTMLCollection, function () { return queryAll(self, 'a[name]'); }); } },
+    links: { get: function () { var self = this; return liveList(HTMLCollection, genCached(function () { return queryAll(self, 'a[href],area[href]'); })); } },
+    anchors: { get: function () { var self = this; return liveList(HTMLCollection, genCached(function () { return queryAll(self, 'a[name]'); })); } },
     scripts: { get: function () { return this.getElementsByTagName('script'); } },
     embeds: { get: function () { return this.getElementsByTagName('embed'); } }, plugins: { get: function () { return this.getElementsByTagName('embed'); } },
     styleSheets: { get: function () { var list = queryAll(this, 'style,link[rel~="stylesheet"]').map(function (e) { return e.sheet; }).filter(Boolean); list.item = function (i) { return list[i] || null; }; return list; } },
@@ -1553,7 +1566,7 @@
     createTreeWalker: function (root, whatToShow, filter) { return new global.TreeWalker(root, whatToShow, filter); },
     createNodeIterator: function (root, whatToShow, filter) { return new global.NodeIterator(root, whatToShow, filter); },
     getElementById: function (id) { id = toStr(id); if (this._detachedRoot || this !== documentWrapper) return queryAll(this, '[id="' + id.replace(/"/g, '\\"') + '"]')[0] || null; return wrap(sw.getElementById(id)); },
-    getElementsByName: function (name) { name = toStr(name); var self = this; return liveList(NodeList, function () { return self === documentWrapper ? wrapAll(sw.elementsByName(name)) : queryAll(self, '[name="' + name.replace(/"/g, '\\"') + '"]'); }); },
+    getElementsByName: function (name) { name = toStr(name); var self = this; return liveList(NodeList, genCached(function () { return self === documentWrapper ? wrapAll(sw.elementsByName(name)) : queryAll(self, '[name="' + name.replace(/"/g, '\\"') + '"]'); })); },
     importNode: function (node, deep) { requireNode(node, 'importNode'); return node.cloneNode(!!deep); },
     adoptNode: function (node) { requireNode(node, 'adoptNode'); if (node.parentNode) node.parentNode.removeChild(node); return node; },
     hasFocus: function () { return true; },
@@ -1923,6 +1936,15 @@
     else { methods(global, { addEventListener: EventTarget.prototype.addEventListener, removeEventListener: EventTarget.prototype.removeEventListener, dispatchEvent: EventTarget.prototype.dispatchEvent }); def(global, Symbol.toStringTag, { value: 'Window', enumerable: false }); }
   })();
   if (typeof global.addEventListener !== 'function') methods(global, { addEventListener: EventTarget.prototype.addEventListener, removeEventListener: EventTarget.prototype.removeEventListener, dispatchEvent: EventTarget.prototype.dispatchEvent });
+  // The prelude is strict code: a bare `addEventListener('load', f)` calls the prototype method with no
+  // receiver (this === undefined) and threw. Window's own copies bind to the global object when called bare,
+  // as in a browser where `addEventListener === window.addEventListener`.
+  ['addEventListener', 'removeEventListener', 'dispatchEvent'].forEach(function (m) {
+    var base = EventTarget.prototype[m];
+    var f = function () { return base.apply(this === undefined || this === null ? global : this, arguments); };
+    Object.defineProperty(f, 'name', { value: m, configurable: true });
+    def(global, m, { value: f, enumerable: false });
+  });
 
   // ---- viewport-derived values
   function viewport() { var v = null; try { v = sw.viewport(); } catch (e) { /* ignore */ } v = v || {}; return { width: +v.width || 1280, height: +v.height || 800, dsf: +v.dsf || 1, mobile: !!v.mobile, dark: !!v.dark }; }

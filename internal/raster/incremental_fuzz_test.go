@@ -167,7 +167,7 @@ func TestIncrementalMatchesFullPaint(t *testing.T) {
 	}
 	nFull, nInc := 0, 0
 	defer func() {
-		t.Logf("%d incremental updates, %d full repaints", nInc, nFull)
+		t.Logf("%d incremental updates, %d full repaints, %d snapshot extensions", nInc, nFull, SnapExtended.Load())
 		if (!testing.Short() && nInc < 100) || nInc*3 < nFull {
 			t.Errorf("the fuzz test mostly bails out of the incremental path (%d vs %d)", nInc, nFull)
 		}

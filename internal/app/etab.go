@@ -44,6 +44,10 @@ type etab struct {
 	lastURL    string
 	dataScript string
 
+	// UI loop only: the navigation whose URL and title were committed at its first frame
+	commitSeq int64
+	commitURL string
+
 	// cross-goroutine
 	paintQueued   atomic.Bool
 	vpW, vpH      atomic.Int32 // CSS px
@@ -62,6 +66,7 @@ type etab struct {
 	paintW        atomic.Int32 // overlay: painted extent (CSS px)
 	paintH        atomic.Int32 // overlay: painted height (CSS px)
 	lastActive    atomic.Int64
+	driving       atomic.Bool  // a worker op chain is stepping a progressive load of this tab (driveLoad)
 	loadErr       atomic.Value // string: error of the last load started by loadURL ("" = ok); read by the agent host
 	restoreScroll atomic.Int32
 
@@ -79,6 +84,13 @@ func (a *App) newEtab(kind, id string, t *engine.Tab, incog bool) *etab {
 	e.navTarget.Store("")
 	e.loadOnce.Store("")
 	e.installHooks()
+	if kind == "page" {
+		// pages are shown while they load: images and the rest of the load arrive after the first frame
+		// and repaint it; the agent switches this off for the tabs it drives (see loadURL)
+		e.t.SetAsyncImages(true)
+		e.t.SetProgressiveNav(true)
+		e.t.SetUpdateHook(func() { e.requestPaint(false) })
+	}
 	return e
 }
 
@@ -221,6 +233,10 @@ func (e *etab) drainBindings() {
 func (e *etab) pump(d time.Duration) {
 	e.t.Settle(d)
 	e.drainBindings()
+	if e.kind == "page" && e.t.LoadPending() {
+		// page code navigated and the new document is loading progressively: nobody else steps it
+		e.driveLoad(e.navSeq.Load(), nil)
+	}
 }
 
 // hasTimers reports whether page JS still has timers pending (worker only).

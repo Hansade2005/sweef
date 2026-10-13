@@ -104,7 +104,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	if body != "" {
 		rdr = strings.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(t.eng.ctx, strings.ToUpper(method), abs, rdr)
+	req, err := http.NewRequestWithContext(t.withNetTrace(t.eng.ctx, string(kind)), strings.ToUpper(method), abs, rdr)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +125,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	req, mi := withMeter(req, t.Context(), t, kind, t.policy())
 	mi.maxBody = o.maxBody
 	res, err := t.eng.clientFor(t.Context()).Do(req)
+	defer func() { t.tspan("http."+string(kind), abs, start) }()
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": abs, "error": err.Error()}})
 		return nil, fmt.Errorf("TypeError: Failed to fetch (%s)", err.Error())

@@ -140,6 +140,7 @@ func compiledPrelude() []byte {
 
 type jsVM struct {
 	holdBG atomic.Bool // explicit waits also wait on background (media clock) timers
+	wakeMs float64     // set by pumpUntil when a slice ends with a timer pending: ms until it is due
 	mu     sync.Mutex
 	vm     *quickjs.VM
 	tab    *Tab
@@ -488,10 +489,22 @@ func truthyAny(v any) bool {
 // or the budget is spent. It performs a navigation requested by page code
 // (location.href = …, form.submit()) and returns true when one happened.
 func (j *jsVM) pump(budget time.Duration) bool {
+	nav, _ := j.pumpUntil(time.Now().Add(budget), time.Time{})
+	return nav
+}
+
+// pumpUntil is pump with an absolute settle deadline and an optional soft
+// deadline for the slice (zero = none). With a slice the call never sleeps and
+// never keeps draining queued scripts past it: it returns finished=false, with
+// the delay until the next timer in j.wakeMs (0 = run again at once), and the
+// caller (the progressive loader, which interleaves the page's work with input
+// and painting) comes back later. finished=true means the page is idle or the
+// settle deadline passed.
+func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 	if j == nil {
-		return false
+		return false, true
 	}
-	deadline := time.Now().Add(budget)
+	j.wakeMs = 0
 	for {
 		j.drainScripts()
 		j.jobs()
@@ -515,27 +528,37 @@ func (j *jsVM) pump(budget time.Duration) bool {
 			if strings.HasPrefix(nav, "form://") {
 				id, _ := strconv.ParseInt(strings.TrimPrefix(nav, "form://"), 10, 64)
 				_ = j.tab.SubmitFormBackend(id)
+			} else if j.tab.progMode.Load() {
+				_ = j.tab.NavigateProgressive(nav, nil)
 			} else {
 				_ = j.tab.Navigate(nav, nil)
 			}
-			return true
+			return true, true
 		}
 		j.mu.Lock()
 		more := len(j.scriptQueue) > 0
 		j.mu.Unlock()
+		sliceOver := !soft.IsZero() && !time.Now().Before(soft)
 		if more || ((delivered || j.hasLiveWork()) && time.Now().Before(deadline)) {
+			if sliceOver {
+				return false, false
+			}
 			continue
 		}
 		if next < 0 {
-			return false
+			return false, true
 		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			return false
+			return false, true
 		}
 		wait := time.Duration(next) * time.Millisecond
 		if wait > remaining {
 			wait = remaining
+		}
+		if !soft.IsZero() {
+			j.wakeMs = float64(wait) / float64(time.Millisecond)
+			return false, false
 		}
 		if wait > 30*time.Millisecond {
 			wait = 30 * time.Millisecond
@@ -548,6 +571,9 @@ func (j *jsVM) pump(budget time.Duration) bool {
 
 // Settle pumps the page's event loop for up to d (exported for RPC waits).
 func (t *Tab) Settle(d time.Duration) {
+	if t.beforeDCL() {
+		return
+	}
 	t.mu.RLock()
 	j := t.js
 	t.mu.RUnlock()
@@ -558,8 +584,19 @@ func (t *Tab) Settle(d time.Duration) {
 	t.settle(d)
 }
 
+// beforeDCL: a progressive load has not reached DOMContentLoaded yet. Timers and
+// queued work must not run ahead of the page's own scripts, so the post-action
+// pumps wait until LoadStep gets there.
+func (t *Tab) beforeDCL() bool {
+	p := t.pl.Load()
+	return p != nil && p.stage < stPre
+}
+
 // settle is the short pump used after every action.
 func (t *Tab) settle(d time.Duration) {
+	if t.beforeDCL() {
+		return
+	}
 	t.mu.RLock()
 	j := t.js
 	t.mu.RUnlock()
@@ -859,6 +896,7 @@ func (j *jsVM) registerHost() error {
 	hs := []h{
 		// tree
 		{"docId", doc(func(d *fnet.Doc, a []any) (any, error) { return d.DocID(), nil })},
+		{"docGen", doc(func(d *fnet.Doc, a []any) (any, error) { return int64(d.MutationGen() & (1<<52 - 1)), nil })},
 		{"nodeType", doc(func(d *fnet.Doc, a []any) (any, error) { return d.NodeType(argI(a, 0)), nil })},
 		{"tagName", doc(func(d *fnet.Doc, a []any) (any, error) { return d.TagName(argI(a, 0)), nil })},
 		{"namespace", doc(func(d *fnet.Doc, a []any) (any, error) { return d.Namespace(argI(a, 0)), nil })},

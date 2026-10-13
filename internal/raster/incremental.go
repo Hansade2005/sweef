@@ -487,6 +487,18 @@ func Damage(old, cur *ListInfo) (bands []Band, ok bool) {
 	if !ok {
 		return nil, false
 	}
+	if dbgNarrow {
+		for i, m := range ma {
+			if !m {
+				println("changed old", i, old.Desc[i][:min(len(old.Desc[i]), 120)], old.Bounds[i].X0, old.Bounds[i].X1)
+			}
+		}
+		for i, m := range mb {
+			if !m {
+				println("changed new", i, cur.Desc[i][:min(len(cur.Desc[i]), 120)], cur.Bounds[i].X0, cur.Bounds[i].X1)
+			}
+		}
+	}
 	for i, m := range ma {
 		if !m {
 			bands = append(bands, Band{old.Bounds[i].Y0, old.Bounds[i].Y1, old.Bounds[i].X0, old.Bounds[i].X1})
@@ -625,15 +637,20 @@ func (cv *Canvas) paint(list []render.Op, info *ListInfo) {
 	cv.Info = info
 }
 
+// ParallelBands lets Update repaint the damaged bands concurrently (a variable
+// so tests and benchmarks can compare).
+var ParallelBands = true
+
 // SnapBuilt and SnapUsed count surface snapshots made and repaints that
 // started from one (tests check the snapshot path is exercised).
-var SnapBuilt, SnapUsed atomic.Int64
+var SnapBuilt, SnapUsed, SnapExtended atomic.Int64
 
 // Snapshot tuning (variables so tests can force the snapshot path).
 var (
-	SnapMinOps   = 120 // lists shorter than this are cheap enough to repaint
-	SnapStable   = 2   // consecutive updates that must share the prefix
-	SnapMinShare = 4   // the prefix must be at least 1/SnapMinShare of the list
+	SnapMinOps    = 120 // lists shorter than this are cheap enough to repaint
+	SnapStable    = 2   // consecutive updates that must share the prefix
+	SnapMinShare  = 4   // the prefix must be at least 1/SnapMinShare of the list
+	SnapExtendMin = 2   // a snapshot is moved forward when the stable prefix grows by more than this many ops
 )
 
 // Update brings the canvas to list. It returns the rows that were repainted
@@ -659,11 +676,15 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 	if len(bands) == 0 {
 		return nil, false
 	}
+	if dbgNarrow {
+		println("update: lcp", lcp, "snap", cv.snap != nil, cv.snapN, "ops", len(list), "bands", len(bands))
+	}
 	if cv.snap != nil && !(cv.snapN <= len(list) && info.Pre[cv.snapN] == cv.snapPre) {
 		cv.snap = nil // the part under the snapshot changed
 	}
-	for bi := range bands {
-		b := &bands[bi]
+	// the bands are disjoint rows and each is repainted by its own painter, so
+	// they can be repainted at the same time: the result is the same bytes
+	paintBand := func(b *Band) {
 		region := narrow(info, *b, cv.Surf.R)
 		b.X0, b.X1 = region.X0, region.X1
 		if cv.snap != nil {
@@ -673,15 +694,34 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 			}
 			p := newPainterOver(cv.Surf, cv.DPR, cv.Env, region)
 			p.RunRegionFrom(list, info, region, cv.snapN)
-			continue
+			return
 		}
 		p := newPainterOn(cv.Surf, cv.DPR, cv.Env, region)
 		p.RunRegion(list, info, region)
+	}
+	if len(bands) == 1 || !ParallelBands {
+		for bi := range bands {
+			paintBand(&bands[bi])
+		}
+	} else {
+		var wg sync.WaitGroup
+		for bi := range bands[1:] {
+			wg.Add(1)
+			go func(b *Band) {
+				defer wg.Done()
+				paintBand(b)
+			}(&bands[bi+1])
+		}
+		paintBand(&bands[0])
+		wg.Wait()
 	}
 	// keep a snapshot when the same prefix has stayed untouched for a while
 	cv.lcps = append(cv.lcps, lcp)
 	if len(cv.lcps) > SnapStable {
 		cv.lcps = cv.lcps[1:]
+	}
+	if cv.snap != nil && len(cv.lcps) == SnapStable {
+		cv.extendSnapshot(list, info)
 	}
 	if cv.snap == nil && len(list) >= SnapMinOps && len(cv.lcps) == SnapStable {
 		m := cv.lcps[0]
@@ -699,6 +739,44 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 		}
 	}
 	return bands, false
+}
+
+// extendSnapshot moves the snapshot forward over the ops that have stayed
+// unchanged since it was made: they are painted onto it, inside the rectangle
+// they cover, the same way an incremental repaint paints over its backdrop.
+// (The snapshot is the surface after list[:snapN] with the current list.)
+func (cv *Canvas) extendSnapshot(list []render.Op, info *ListInfo) {
+	m := cv.lcps[0]
+	for _, v := range cv.lcps {
+		m = min(m, v)
+	}
+	n := safeSnapPoint(list, m)
+	if n <= cv.snapN+SnapExtendMin || n > len(list) {
+		return
+	}
+	var hull IRect
+	for i := cv.snapN; i < n; i++ {
+		hull = hull.union(info.Bounds[i])
+	}
+	if !hull.Empty() {
+		region := narrow(info, Band{hull.Y0, hull.Y1, hull.X0, hull.X1}, cv.Surf.R)
+		p := newPainterOver(cv.snap, cv.DPR, cv.Env, region)
+		for i := 0; i < cv.snapN; i++ { // re-open the clips and transforms still open
+			switch list[i].(type) {
+			case render.PushClip, render.PushTransform:
+				if int(info.Pair[i]) >= cv.snapN {
+					p.op(list[i])
+				} else {
+					i = int(info.Pair[i])
+				}
+			case render.PushLayer, render.PushMask:
+				i = int(info.Pair[i])
+			}
+		}
+		p.runRegion(list, info, region, cv.snapN, n)
+	}
+	cv.snapN, cv.snapPre = n, info.Pre[n]
+	SnapExtended.Add(1)
 }
 
 // safeSnapPoint returns the largest n <= max such that no layer or mask group
@@ -781,17 +859,17 @@ func (p *Painter) RunRegionFrom(list []render.Op, info *ListInfo, region IRect, 
 			i = int(info.Pair[i]) // (never open at start)
 		}
 	}
-	p.runRegion(list, info, region, start)
+	p.runRegion(list, info, region, start, len(list))
 }
 
 // RunRegion executes the ops of list that can reach region (the painter's
 // clip), skipping whole groups that cannot.
 func (p *Painter) RunRegion(list []render.Op, info *ListInfo, region IRect) {
-	p.runRegion(list, info, region, 0)
+	p.runRegion(list, info, region, 0, len(list))
 }
 
-func (p *Painter) runRegion(list []render.Op, info *ListInfo, region IRect, start int) {
-	for i := start; i < len(list); i++ {
+func (p *Painter) runRegion(list []render.Op, info *ListInfo, region IRect, start, end int) {
+	for i := start; i < end; i++ {
 		switch list[i].(type) {
 		case render.PopClip, render.PopLayer, render.PopMask, render.PopTransform:
 			p.op(list[i])

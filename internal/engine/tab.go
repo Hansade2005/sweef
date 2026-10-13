@@ -156,6 +156,16 @@ type Tab struct {
 	downloads      []Download
 
 	ds tabDS // Data Saver state (datasaver.go)
+
+	asyncImg atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
+	imgSem   chan struct{}             // images fetched at once
+	imgTimer atomic.Bool               // a relayout request for newly arrived images is scheduled
+	onUpdate atomic.Pointer[func()]    // the window's "repaint me" callback (SetUpdateHook)
+	pl       atomic.Pointer[progLoad]  // load work still pending after NavigateProgressive (progload.go)
+	plMu     sync.Mutex                // one LoadStep at a time
+	progMode atomic.Bool               // the current navigation is progressive: page-initiated navigations are too
+	tr       atomic.Pointer[loadTrace] // timeline of the current navigation (loadtrace.go)
+	traceNet atomic.Bool               // record DNS/connect/TLS/first byte of every request
 }
 
 func newTab(e *Engine, id string) *Tab {
@@ -170,6 +180,7 @@ func newTab(e *Engine, id string) *Tab {
 		vpW:         e.opts.ViewportWidth,
 		vpH:         e.opts.ViewportHeight,
 		dsf:         1,
+		imgSem:      make(chan struct{}, 8),
 	}
 	if t.vpW == 0 {
 		t.vpW = 1280
@@ -227,6 +238,23 @@ func (t *Tab) emit(kind EventKind, data any) {
 // Navigate fetches url and installs the resulting document. This is the
 // equivalent of Playwright's page.goto with waitUntil baked in.
 func (t *Tab) Navigate(rawurl string, headers map[string]string) error {
+	return t.navigate(rawurl, headers, false)
+}
+
+// NavigateProgressive is Navigate for a window that shows the page while it
+// loads (the GUI). It returns as soon as a first frame can be painted: the
+// document is fetched and parsed, its render-blocking stylesheets are in and the
+// scripts that were already downloaded and are quick have run. Everything else
+// (the remaining scripts, DOMContentLoaded, load, the settle pump, and with
+// SetAsyncImages the images) is left pending: the caller drives it with
+// LoadStep between paints and input, or runs it out with LoadFinish.
+// Headless callers (CLI, RPC, MCP, the agent) use Navigate, which returns only
+// when the page has settled.
+func (t *Tab) NavigateProgressive(rawurl string, headers map[string]string) error {
+	return t.navigate(rawurl, headers, true)
+}
+
+func (t *Tab) navigate(rawurl string, headers map[string]string, progressive bool) error {
 	u, err := url.Parse(rawurl)
 	if err != nil {
 		return fmt.Errorf("bad url %q: %w", rawurl, err)
@@ -240,7 +268,10 @@ func (t *Tab) Navigate(rawurl string, headers map[string]string) error {
 		return err
 	}
 	t.resetDataForNavigation()
+	t.resetTrace()
+	t0 := time.Now()
 	res, err := t.fetch(u, headers)
+	t.tspan("doc.fetch", u.String(), t0)
 	if errors.Is(err, errDownloaded) {
 		return nil // the response was saved as a download; the page stays
 	}
@@ -249,7 +280,7 @@ func (t *Tab) Navigate(rawurl string, headers map[string]string) error {
 		t.emit(EvFailure, map[string]any{"url": rawurl, "error": err.Error()})
 		return err
 	}
-	t.SetDocument(res.body, res.finalURL)
+	t.setDocument(res.body, res.finalURL, progressive)
 	t.mu.Lock()
 	// history bookkeeping (goBack/goForward)
 	if t.hIdx+1 < len(t.history) {
@@ -270,6 +301,10 @@ type fetchResult struct {
 }
 
 func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error) {
+	if strings.EqualFold(u.Scheme, "about") && strings.EqualFold(strings.TrimSpace(u.Opaque), "blank") {
+		// about:blank is an empty document, not a request
+		return &fetchResult{body: "<!doctype html><html><head></head><body></body></html>", finalURL: "about:blank", status: 200}, nil
+	}
 	if u.Scheme == "data" {
 		mt, data, err := decodeDataURL(u.String())
 		if err != nil {
@@ -378,8 +413,12 @@ func flattenHeaders(h map[string][]string) map[string]string {
 
 // SetDocument parses html, rebuilds the DOM, runs init scripts + page scripts,
 // fires load.
-func (t *Tab) SetDocument(htmlSrc, finalURL string) {
+func (t *Tab) SetDocument(htmlSrc, finalURL string) { t.setDocument(htmlSrc, finalURL, false) }
+
+func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
+	tp := time.Now()
 	doc, err := fnet.ParseDocument(htmlSrc, finalURL)
+	t.tspan("doc.parse", itoa(len(htmlSrc))+" bytes", tp)
 	if err != nil {
 		t.consoleRing.Push(Event{Tab: t.ID, Kind: EvConsole, At: time.Now(),
 			Data: map[string]string{"level": "error", "text": "parse failure: " + err.Error()}})
@@ -393,8 +432,11 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 	if w, _, _, _, _ := t.Viewport(); w > 0 {
 		doc.SetLayoutWidth(w)
 	}
+	t.pl.Store(nil) // load work of the previous document is void
 	t.installRender(doc)
+	ts := time.Now()
 	t.applyStyles(doc)
+	t.tspan("styles.ready", "", ts)
 	t.mu.Lock()
 	t.html = htmlSrc
 	t.dom = doc
@@ -426,18 +468,25 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 			for _, s := range initScripts {
 				_, _ = j.run(s.Source, s.Name)
 			}
-			t.runPageScripts(j, doc)
-			if t.closed.Load() {
+			pl := newProgLoad(t, j, doc, finalURL, progressive)
+			t.pl.Store(pl)
+			if progressive {
+				pl.prepaint()
+				if t.pl.Load() == pl {
+					t.tmark("first-paint-ready", "")
+					return // the rest is driven by LoadStep
+				}
 				return
 			}
-			t.mu.RLock()
-			navigated := t.js != j
-			t.mu.RUnlock()
-			if navigated {
-				return // page code navigated; the new document already fired load
-			}
+			pl.run()
+			return
 		}
 	}
+	t.finishLoad(finalURL)
+}
+
+// finishLoad announces the load of the current document.
+func (t *Tab) finishLoad(finalURL string) {
 	t.stateRing.Push(Event{Tab: t.ID, Kind: EvLoad, At: time.Now(), Data: map[string]any{"url": finalURL, "title": t.Title()}})
 	t.emit(EvLoad, map[string]any{"url": finalURL, "title": t.Title()})
 }

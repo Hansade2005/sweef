@@ -36,6 +36,8 @@ type tabEnv struct {
 	imgs map[string]image.Image
 	svgs map[string]string
 	lz   lazyState // Data Saver: lazy, skipped and forced images (lazy.go)
+	// async images (Tab.SetAsyncImages): fetches started by layout and still running
+	inflight map[string]bool
 	// sty carries computed styles from one layout pass to the next (a document's
 	// layout provider runs one pass at a time, under Doc's layout lock)
 	sty *render.Session
@@ -64,8 +66,15 @@ func (e *tabEnv) Image(u string) image.Image {
 			data = b
 		}
 	} else if !e.t.IsOfflineMode() || strings.HasPrefix(u, "file:") {
+		if e.asyncOK(u) {
+			e.startAsync(u)
+			return nil // not final: the layout runs again when the bytes are in
+		}
 		var memo bool
-		if data, memo = e.loadImageBytes(u); !memo {
+		ti := time.Now()
+		data, memo = e.loadImageBytes(u)
+		e.t.tspan("img.fetch", u, ti)
+		if !memo {
 			return nil // deferred or withheld by the Data Saver policy: not final, do not remember
 		}
 	}
@@ -76,6 +85,53 @@ func (e *tabEnv) Image(u string) image.Image {
 	e.imgs[u] = im
 	e.mu.Unlock()
 	return im
+}
+
+// asyncOK: the window shows the page while it loads (Tab.SetAsyncImages) and no
+// Data Saver policy is in force (its gates decide synchronously, see lazy.go).
+func (e *tabEnv) asyncOK(u string) bool {
+	return e.t.asyncImg.Load() && e.t.policy() == (DataPolicy{}) && !strings.HasPrefix(u, "file:")
+}
+
+// startAsync fetches and decodes an image in the background (a few at a time).
+// The result lands in the memo and the tab asks its window for a new layout.
+func (e *tabEnv) startAsync(u string) {
+	e.mu.Lock()
+	if e.inflight == nil {
+		e.inflight = map[string]bool{}
+	}
+	if e.inflight[u] {
+		e.mu.Unlock()
+		return
+	}
+	e.inflight[u] = true
+	e.mu.Unlock()
+	t := e.t
+	go func() {
+		t.imgSem <- struct{}{}
+		defer func() { <-t.imgSem }()
+		ti := time.Now()
+		data, memo := e.loadImageBytes(u)
+		t.tspan("img.fetch", u, ti)
+		var im image.Image
+		var markup string
+		if memo && len(data) > 0 {
+			im, _, _ = image.Decode(bytes.NewReader(data))
+			if im == nil && strings.Contains(strings.ToLower(string(data)), "<svg") {
+				markup = string(data)
+			}
+		}
+		e.mu.Lock()
+		delete(e.inflight, u)
+		if memo {
+			e.imgs[u] = im
+			if markup != "" {
+				e.svgs[u] = markup
+			}
+		}
+		e.mu.Unlock()
+		t.imageArrived(e)
+	}()
 }
 
 func (e *tabEnv) Bitmap(n *html.Node) image.Image {
@@ -108,12 +164,19 @@ func (e *tabEnv) SVGSource(u string) (string, bool) {
 		e.mu.Unlock()
 		return v, v != ""
 	}
+	_, decoded := e.imgs[u]
 	e.mu.Unlock()
+	if decoded && !strings.HasPrefix(u, "data:") && e.asyncOK(u) {
+		return "", false // the asynchronous fetch finished and the bytes were not an SVG
+	}
 	var markup string
 	if strings.HasPrefix(u, "data:") {
 		if _, b, err := decodeDataURL(u); err == nil {
 			markup = string(b)
 		}
+	} else if e.asyncOK(u) {
+		e.startAsync(u)
+		return "", false
 	} else if data, memo := e.loadImageBytes(u); !memo {
 		return "", false // deferred or withheld by the Data Saver policy
 	} else {
@@ -162,7 +225,7 @@ func (e *tabEnv) pageSheets() []render.Sheet {
 				href := strings.TrimSpace(attrOf(n, "href"))
 				if isSheet && !alt && href != "" && attrOf(n, "disabled") == "" {
 					if abs, err := resolveURL(base, href); err == nil {
-						if body, status, err := e.t.fetchResource(abs); err == nil && status < 400 {
+						if body, status, err := e.t.fetchResourceKind(abs, KindStyle); err == nil && status < 400 {
 							out = append(out, render.Sheet{Text: body, BaseURL: abs, Media: attrOf(n, "media")})
 						}
 					}
@@ -234,7 +297,11 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 		}
 		var res *render.Result
 		tl0 := time.Now()
-		defer func() { t.layoutN.Add(1); t.layoutNs.Add(int64(time.Since(tl0))) }()
+		defer func() {
+			t.layoutN.Add(1)
+			t.layoutNs.Add(int64(time.Since(tl0)))
+			t.tspan("layout", "", tl0)
+		}()
 		for round := 0; ; round++ {
 			env.lz.resetHints()
 			opts := render.Options{
