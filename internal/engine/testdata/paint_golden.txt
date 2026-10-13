@@ -252,9 +252,9 @@ data-chip-toast-light@2x type3 d8058e2c39247d9ba14a
 data-chip-toast-light@2x type4 f186786f0beab8e00858
 data-chip-toast-light@2x type5 cd6b790b5864facab63f
 data-chip-toast-light@2x type6 23f2ffe8593a0ef1ba55
-data-newtab-dark-warn@1x open 1239a0e0879504dbb82b
+data-newtab-dark-warn@1x open 0c764a8ffe3dfaaafaf8
 data-newtab-incognito@1x open 37def585c977f4342cd6
-data-newtab-light@1x open 555b6430a35bdacca35d
+data-newtab-light@1x open 2ddbfff8b3393d30b703
 data-popover-dark@1x open 98f2c5d125e8fad17419
 data-popover-dark@1x setup f95510a7e973e26ca341
 data-popover-dark@1x type0 476a51e89273e45fb595
