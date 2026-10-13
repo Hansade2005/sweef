@@ -470,7 +470,7 @@ func (a *App) shutdown() error {
 	if c, ok := a.agentRaw.(interface{ Close() }); ok {
 		c.Close() // cancel the agent run before the tabs it drives go away
 	}
-	a.dataPoll()          // book the last bytes before the counters go away
+	a.dataBook()          // book the last bytes before the counters go away (the ledger is flushed with the profile)
 	a.prof.Session.Stop() // flush the debounced save first, then mark the exit clean
 	a.saveSession(true)
 	if a.animT != nil {

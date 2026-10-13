@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -123,6 +124,7 @@ type dataSaver struct {
 		end    time.Time
 	}
 
+	accMu  sync.Mutex // guards tabAcc (the agent's worker calls observeTab too)
 	tabAcc map[string]*tabAcc
 	agent  agentData
 }
@@ -134,8 +136,13 @@ type dataMark struct {
 }
 
 // tabAcc accumulates a tab's attributed bytes across navigations (the
-// engine's tab counters restart with each navigation).
-type tabAcc struct{ banked, last int64 }
+// engine's tab counters restart with each navigation). url is the document the
+// counters belong to: a change of address, or a counter that went down, means a
+// new navigation began and what was counted for the old page is banked.
+type tabAcc struct {
+	banked, last int64
+	url          string
+}
 
 type agentData struct {
 	active  bool
@@ -366,6 +373,25 @@ func cloneInt64(m map[string]int64) map[string]int64 {
 	return out
 }
 
+// observeTab reads a tab's counters and folds them into its running total. It
+// is safe from any goroutine.
+func (a *App) observeTab(id string, t *engine.Tab) {
+	d := &a.dat
+	cur := d.eng.TabStats(t).Attributed()
+	u := t.URL()
+	d.accMu.Lock()
+	defer d.accMu.Unlock()
+	acc := d.tabAcc[id]
+	if acc == nil {
+		acc = &tabAcc{}
+		d.tabAcc[id] = acc
+	}
+	if acc.url != "" && (u != acc.url || cur < acc.last) { // a new navigation: the engine restarted its counters
+		acc.banked += acc.last
+	}
+	acc.url, acc.last = u, cur
+}
+
 // dataAccumulateTabs keeps per-tab running totals for the tabs the agent
 // uses and for the active tab; true when something changed.
 func (a *App) dataAccumulateTabs() bool {
@@ -383,19 +409,11 @@ func (a *App) dataAccumulateTabs() bool {
 		if e == nil {
 			continue
 		}
-		cur := d.eng.TabStats(e.t).Attributed()
-		acc := d.tabAcc[id]
-		if acc == nil {
-			acc = &tabAcc{}
-			d.tabAcc[id] = acc
-		}
-		if cur < acc.last { // the tab navigated and its counters restarted
-			acc.banked += acc.last
-		}
-		if cur != acc.last {
+		before := a.tabTotal(id)
+		a.observeTab(id, e.t)
+		if a.tabTotal(id) != before {
 			changed = true
 		}
-		acc.last = cur
 		if sc := d.eng.TabStats(e.t).Skipped["image"]; int32(sc) != e.liteSkipped.Load() {
 			e.liteSkipped.Store(int32(sc))
 			changed = true
@@ -405,19 +423,25 @@ func (a *App) dataAccumulateTabs() bool {
 }
 
 // dataBankTab folds a tab's current numbers into its running total right
-// before it navigates, so a restart of the engine counters loses nothing.
+// before the app navigates it, so the restart of the engine counters loses
+// nothing.
 func (a *App) dataBankTab(id string) {
-	d := &a.dat
-	acc := d.tabAcc[id]
 	e := a.page(id)
-	if acc == nil || e == nil {
+	if e == nil {
 		return
 	}
-	acc.banked += d.eng.TabStats(e.t).Attributed()
-	acc.last = 0
+	cur := a.dat.eng.TabStats(e.t).Attributed()
+	a.dat.accMu.Lock()
+	defer a.dat.accMu.Unlock()
+	if acc := a.dat.tabAcc[id]; acc != nil {
+		acc.banked += cur
+		acc.last, acc.url = 0, ""
+	}
 }
 
 func (a *App) tabTotal(id string) int64 {
+	a.dat.accMu.Lock()
+	defer a.dat.accMu.Unlock()
 	if acc := a.dat.tabAcc[id]; acc != nil {
 		return acc.banked + acc.last
 	}
@@ -922,6 +946,9 @@ func (a *App) agentTouch(id string) {
 		return
 	}
 	if _, ok := d.agent.touched[id]; !ok {
+		if e := a.page(id); e != nil {
+			a.observeTab(id, e.t) // the baseline is what the tab had cost until now
+		}
 		d.agent.touched[id] = a.tabTotal(id)
 		a.dataMarkBackground(id, false)
 	}

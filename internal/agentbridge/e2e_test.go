@@ -219,3 +219,37 @@ func TestConfirmCardApproveAndDeny(t *testing.T) {
 		})
 	}
 }
+
+// A finished run reports what its pages cost, from the agent tab's own counters,
+// and the Sidekick line is built from it ("Research used 412 KB").
+func TestDoneCarriesResearchDataFromTheAgentTab(t *testing.T) {
+	site := shopSite(t)
+	fake := newFakeAPI(t, scripted(
+		toolTurn("Looking.", tc{"r1", "read_page", `{}`}),
+		dyn(func(body []byte) (string, []tc) {
+			ref := findRef(body, "link", "Browse products")
+			return "", []tc{{"a1", "act", actJSON(`[{"op":"click","ref":"` + ref + `"},{"op":"extract"}]`)}}
+		}),
+		textTurn(10*time.Millisecond, "Done."),
+	))
+	e := newEnv(t, fake, envOpts{initial: []string{site.URL() + "/"}, allow: []string{site.URL()}})
+	e.openSidebar()
+	e.send("open the products", "agent")
+	done := e.waitTerminal()
+	if done["kind"] != "done" {
+		t.Fatalf("run ended with %v; feed: %s", done, e.feed())
+	}
+	d, _ := done["data"].(map[string]any)
+	if d == nil {
+		t.Fatalf("done has no data: %v", done)
+	}
+	if d["available"] != true || d["lite"] != true {
+		t.Fatalf("agent lite and counting should be on by default: %v", d)
+	}
+	if b, _ := d["bytes"].(float64); b < float64(len(productsPage)) {
+		t.Fatalf("the products page alone is %d bytes, the run reports %v", len(productsPage), d["bytes"])
+	}
+	if txt, _ := d["text"].(string); !strings.HasPrefix(txt, "Research used ") {
+		t.Fatalf("line %q", txt)
+	}
+}

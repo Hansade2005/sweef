@@ -778,3 +778,22 @@ func TestDataRealEngineTapPlaceholder(t *testing.T) {
 	h.click(40, vpTop+rect.Y+rect.H/2)
 	h.waitFor("tapping a placeholder loads that image", func() bool { return imgHits.Load() > before })
 }
+
+// The engine restarts a tab's counters at every navigation; a bigger second page must not
+// be undercounted just because its number is larger than the first page's.
+func TestDataAgentBytesSurviveNavigationToABiggerPage(t *testing.T) {
+	r := newDSRig(t, Config{})
+	id := r.app.model.Active(r.app.winID)
+	e := r.app.page(id)
+	r.f.setTab(e.t, DataSnap{ByKind: map[string]int64{"document": 500}}) // the page the run starts on
+	r.app.AgentDataBegin()
+	r.idle()
+	if err := r.app.AgentNavigate(t.Context(), id, r.srv.URL+"/two"); err != nil {
+		t.Fatal(err)
+	}
+	r.f.setTab(e.t, DataSnap{ByKind: map[string]int64{"document": 700}}) // restarted by the engine, and bigger
+	res := r.app.AgentDataEnd()
+	if res.Bytes != 700 {
+		t.Fatalf("the run loaded one page of 700 bytes, got %d", res.Bytes)
+	}
+}

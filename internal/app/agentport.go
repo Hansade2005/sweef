@@ -101,10 +101,12 @@ func (a *App) AgentRunOnTab(tabID string, f func(t *engine.Tab) error) error {
 	if e == nil {
 		return errors.New("no such tab")
 	}
-	a.post(func() { a.agentTouch(tabID) })
+	_ = a.onLoop(context.Background(), func() { a.agentTouch(tabID) }) // before the step runs: the run is measured from here
 	ch := make(chan error, 1)
 	if !e.w.do(func() {
+		a.observeTab(tabID, e.t) // what the page cost so far, before the step may navigate away
 		err := f(e.t)
+		a.observeTab(tabID, e.t)
 		e.drainBindings()
 		if !e.closed.Load() && a.model.Active(a.winID) == tabID {
 			e.paint(false)

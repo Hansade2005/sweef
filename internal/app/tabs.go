@@ -170,7 +170,9 @@ func (a *App) closeTab(id string) {
 		a.dataBook() // book the private bytes before their counters can disappear
 		a.maybeWipeIncognito()
 	}
+	a.dat.accMu.Lock()
 	delete(a.dat.tabAcc, id)
+	a.dat.accMu.Unlock()
 	delete(a.dat.agent.touched, id)
 	if next == "" {
 		if a.model.TabCount() == 0 {
