@@ -1,3 +1,27 @@
 === attempt 1 2026-10-13T11:34:21Z 
 engine data policy API: present (building with -tags datasaver_engine)-tags datasaver_engine
 baseline sweef-off          run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-off          run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-standard     run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-standard     run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-strict       run 1: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline sweef-strict       run 2: page in=0 out=0 conns=0; browser-internal in=0 out=0 []
+baseline chromium           run 1: page in=0 out=0 conns=0; browser-internal in=13285 out=4198 [www.google.com accounts.google.com]
+baseline chromium           run 2: page in=0 out=0 conns=0; browser-internal in=13210 out=4198 [www.google.com accounts.google.com]
+baseline chromium-savedata  run 1: page in=0 out=0 conns=0; browser-internal in=13150 out=4198 [accounts.google.com www.google.com]
+baseline chromium-savedata  run 2: page in=0 out=0 conns=0; browser-internal in=10457 out=4198 [accounts.google.com www.google.com]
+[1/230] sweef-off          run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  616653 warm=  138146 req= 42 ready= 4651ms ok
+[2/230] sweef-standard     run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  543260 warm=  138123 req= 34 ready= 3822ms ok
+[3/230] sweef-strict       run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  421839 warm=  144490 req= 13 ready= 3852ms ok
+[4/230] chromium           run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  522666 warm=  267180 req= 23 ready= 1226ms ok
+[5/230] chromium-savedata  run 1 https://en.wikipedia.org/wiki/Web_browser                    cold=  524398 warm=  267188 req= 23 ready= 1264ms ok
+[6/230] sweef-standard     run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  543593 warm=  138201 req= 34 ready= 4093ms ok
+[7/230] sweef-strict       run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  421751 warm=  144436 req= 13 ready= 3597ms ok
+[8/230] chromium           run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  529269 warm=  267160 req= 23 ready= 1143ms ok
+[9/230] chromium-savedata  run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  522856 warm=  267172 req= 23 ready= 1943ms ok
+[10/230] sweef-off          run 2 https://en.wikipedia.org/wiki/Web_browser                    cold=  639155 warm=  138975 req= 42 ready= 5345ms ok
+[11/230] sweef-off          run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1677936 warm=  684699 req=152 ready=10744ms ok
+[12/230] sweef-standard     run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold= 1192104 warm=  491033 req= 70 ready=11866ms ok
+[13/230] sweef-strict       run 1 https://en.wikivoyage.org/wiki/Lisbon                        cold=  302025 warm=  108473 req=  8 ready=  939ms ok
+=== attempt 1 2026-10-13T12:34:12Z resuming bench/datasaver/results/2026-10-13-withfonts.json
+engine data policy API: present (building with -tags datasaver_engine)-tags datasaver_engine

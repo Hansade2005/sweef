@@ -1,0 +1,4928 @@
+{
+ "schema": 1,
+ "label": "withfonts",
+ "started": "2026-10-13T11:34:42Z",
+ "complete": false,
+ "env": {
+  "date": "2026-10-13",
+  "go": "go1.26.0",
+  "os": "Ubuntu 24.04.5 LTS",
+  "kernel": "6.18.44-fc-v114",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 4,
+  "mem_mb": 16093,
+  "chromium": "Chrome/141.0.7390.37",
+  "chromium_ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+  "sweef_commit": "e3bd4d2, engine+net source hash 1bc087fd4fa6",
+  "sweef_dirty": false,
+  "policy_api": true,
+  "network": "Cloud sandbox VM. All egress goes through the agent's HTTP CONNECT proxy; TLS is re-terminated by an egress gateway with its own CA (certificate chains therefore differ from the sites' real ones). Bandwidth and latency are not controlled or recorded.",
+  "upstream": "http://127.0.0.1:40367",
+  "chromium_flags": [
+   "--headless=new",
+   "--no-sandbox",
+   "--user-data-dir=\u003cfresh temp dir\u003e",
+   "--remote-debugging-port=0",
+   "--remote-allow-origins=*",
+   "--proxy-server=http://\u003crecorder 127.0.0.1:PORT\u003e",
+   "--window-size=1280,720",
+   "--disable-background-networking",
+   "--disable-sync",
+   "--disable-component-update",
+   "--disable-default-apps",
+   "--disable-domain-reliability",
+   "--disable-client-side-phishing-detection",
+   "--safebrowsing-disable-auto-update",
+   "--disable-breakpad",
+   "--metrics-recording-only",
+   "--no-pings",
+   "--no-first-run",
+   "--no-default-browser-check",
+   "--disable-search-engine-choice-screen",
+   "--password-store=basic",
+   "--disable-features=OptimizationHints,OptimizationGuideModelDownloading,Translate,MediaRouter,AutofillServerCommunication,CertificateTransparencyComponentUpdater,PrivacySandboxSettings4,InterestFeedContentSuggestions,CalculateNativeWinOcclusion"
+  ],
+  "sweef_opts": {
+   "DisableJS": false,
+   "DiskCacheMiB": 100,
+   "JSTimeoutMs": 5000,
+   "MaxCacheMiB": 32,
+   "SettleMs": 1500,
+   "UserAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Sweef/0.1",
+   "ViewportHeight": 720,
+   "ViewportWidth": 1280
+  }
+ },
+ "sites_sha256": "34ef46ad4b48cd3974c8d99948c838b4e5618c7ed5ef4d287f8aa15bb001df81",
+ "sites": [
+  {
+   "url": "https://en.wikipedia.org/wiki/Web_browser",
+   "reason": "reference article, long text with many thumbnails, server-rendered"
+  },
+  {
+   "url": "https://en.wikivoyage.org/wiki/Lisbon",
+   "reason": "travel guide article on a MediaWiki site, maps and photos"
+  },
+  {
+   "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "reason": "MDN reference page, modern docs site with JS"
+  },
+  {
+   "url": "https://docs.python.org/3/library/asyncio.html",
+   "reason": "static documentation page (Sphinx), almost no third parties"
+  },
+  {
+   "url": "https://go.dev/doc/effective_go",
+   "reason": "long single-page doc, light CSS and JS"
+  },
+  {
+   "url": "https://news.ycombinator.com/",
+   "reason": "Hacker News front page, tiny HTML, no images"
+  },
+  {
+   "url": "https://www.joelonsoftware.com/2000/04/06/things-you-should-never-do-part-i/",
+   "reason": "classic blog post that is routinely linked from Hacker News, WordPress theme"
+  },
+  {
+   "url": "https://github.com/golang/go",
+   "reason": "GitHub repository page, heavy JS app with server-rendered file list"
+  },
+  {
+   "url": "https://stackoverflow.com/questions/927358/how-do-i-undo-the-most-recent-local-commits-in-git",
+   "reason": "Stack Overflow question with answers, ads and trackers"
+  },
+  {
+   "url": "https://www.bbc.com/news",
+   "reason": "news front page, many images and scripts"
+  },
+  {
+   "url": "https://www.theguardian.com/environment/2019/may/06/human-society-under-urgent-threat-loss-of-earth-natural-life-un-report",
+   "reason": "news article with hero image, related links, ads"
+  },
+  {
+   "url": "https://www.npr.org/",
+   "reason": "news front page, image-heavy cards"
+  },
+  {
+   "url": "https://arstechnica.com/",
+   "reason": "tech news front page, ads and trackers"
+  },
+  {
+   "url": "https://www.theverge.com/",
+   "reason": "script-heavy news front page"
+  },
+  {
+   "url": "https://www.ebay.com/b/Laptops-Netbooks/175672/bn_1648276",
+   "reason": "shopping category page, product grid with many images"
+  },
+  {
+   "url": "https://www.newegg.com/p/pl?d=laptop",
+   "reason": "second shopping category page, listing grid"
+  },
+  {
+   "url": "https://discuss.python.org/t/pep-703-making-the-global-interpreter-lock-optional-in-cpython/22606",
+   "reason": "long Discourse forum thread, JS app"
+  },
+  {
+   "url": "https://www.allrecipes.com/recipe/10813/best-chocolate-chip-cookies/",
+   "reason": "recipe blog page, ad-heavy"
+  },
+  {
+   "url": "https://forecast.weather.gov/MapClick.php?lat=40.7146\u0026lon=-74.0071",
+   "reason": "weather forecast page, government site, light"
+  },
+  {
+   "url": "https://www.lonelyplanet.com/japan",
+   "reason": "travel destination guide, image-heavy marketing page"
+  },
+  {
+   "url": "https://pypi.org/project/requests/",
+   "reason": "package index page, light server-rendered"
+  },
+  {
+   "url": "https://www.gov.uk/browse/driving",
+   "reason": "government text page, near-zero JS, plain baseline"
+  },
+  {
+   "url": "https://dev.to/",
+   "reason": "developer blog front page, feed of cards with images"
+  }
+ ],
+ "modes": [
+  "sweef-off",
+  "sweef-standard",
+  "sweef-strict",
+  "chromium",
+  "chromium-savedata"
+ ],
+ "modes_wanted": [
+  "sweef-off",
+  "sweef-standard",
+  "sweef-strict",
+  "chromium",
+  "chromium-savedata"
+ ],
+ "runs": 2,
+ "idle_sec": 5,
+ "cells": [
+  {
+   "site": "https://en.wikipedia.org/wiki/Web_browser",
+   "mode": "sweef-off",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 588317,
+    "wire_out": 28336,
+    "conns": 9,
+    "handshake_in": 351,
+    "handshake_out": 953,
+    "requests": 42,
+    "cache_served": 0,
+    "ready_ms": 4650.889,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Image": 30,
+     "Other": 1,
+     "Script": 7,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 463593,
+      "out": 12617
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 6,
+      "in": 106859,
+      "out": 11669
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 1,
+      "in": 10147,
+      "out": 2017
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 7718,
+      "out": 2033
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.parsoid.styles%7Cext.cite.styles%7Cext.tmh.player.styles%7Cext.uls.interlangua…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.gadget.ReferenceTooltips%2Cswitcher\u0026skin=vector-2022\u0026version=wc99c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext.…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.centralNotice.bannerHistoryLogger%2CchoiceData%2Cdisplay%2CgeoIP%2CimpressionDiet%2…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026skin…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/ins-502b/v2/events?hasty=true",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     },
+     {
+      "url": "https://meta.wikimedia.org/w/index.php?title=Special:BannerLoader\u0026campaign=wlm_2026_us\u0026banner=wlm_2026_us\u0026uselang=en\u0026debug=false",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Special:CentralAutoLogin/start?useformat=desktop\u0026type=script\u0026usesul3=1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-wordmark-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-tagline-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/icons/enwiki-25.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/en/thumb/4/4a/Commons-logo.svg/20px-Commons-logo.svg.png?utm_source=en.wikipedia.org\u0026utm_campaign=par…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 608
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f9/Crystal_Clear_app_linneighborhood.svg/40px-Crystal_Clear_app_linneighborhood.svg.p…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2492
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/en/thumb/1/1b/Semi-protection-shackle.svg/20px-Semi-protection-shackle.svg.png?utm_source=en.wikipedi…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 342
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/ba/Safari_15.png/250px-Safari_15.png?utm_source=en.wikipedia.org\u0026utm_campaign=parser\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 13072
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/13/Chromium_%28web_browser%29.png/250px-Chromium_%28web_browser%29.png?utm_source=en.…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 28612
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0b/Wikiversity_logo_2017.svg/40px-Wikiversity_logo_2017.svg.png?utm_source=en.wikiped…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 502
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/en/thumb/8/8a/OOjs_UI_icon_edit-ltr-progressive.svg/20px-OOjs_UI_icon_edit-ltr-progressive.svg.png?ut…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 200
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/footer/wikimedia.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/assets/mediawiki_compact.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/arrow-down-progressive.svg?5cd6d",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=verticalEllipsis\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/jquery.tablesorter.styles/images/sort_both.svg?0e440",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/link-external-small-ltr-progressive.svg?fb64d",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/mediawiki.skinning/images/magnify-clip-ltr.svg?8330e",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=menu\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=search\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbles\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=article\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=history\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=star\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=wikiText\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=edit\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=editLock\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbleAdd\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=ve…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/Web_browser_demo.webm/250px--Web_browser_demo.webm.jpg?utm_source=en.wikipedia.org…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10684
+     }
+    ],
+    "engine": {
+     "wire_in": 588668,
+     "wire_out": 29289,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 131659,
+    "wire_out": 6487,
+    "conns": 2,
+    "handshake_in": 78,
+    "handshake_out": 206,
+    "requests": 38,
+    "cache_served": 33,
+    "ready_ms": 2532.663,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Image": 30,
+     "Other": 1,
+     "Script": 3,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 121737,
+      "out": 4269
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 2,
+      "in": 9922,
+      "out": 2170
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 131737,
+     "wire_out": 6621,
+     "cache_hit_bytes": 210954,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://en.wikipedia.org/wiki/Web_browser",
+   "mode": "sweef-standard",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 514562,
+    "wire_out": 28698,
+    "conns": 10,
+    "handshake_in": 390,
+    "handshake_out": 1030,
+    "requests": 34,
+    "cache_served": 0,
+    "ready_ms": 3822.197,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Image": 22,
+     "Other": 1,
+     "Script": 7,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 6,
+      "in": 444942,
+      "out": 20336
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 2,
+      "in": 52201,
+      "out": 4278
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 1,
+      "in": 9703,
+      "out": 2039
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 7716,
+      "out": 2045
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.parsoid.styles%7Cext.cite.styles%7Cext.tmh.player.styles%7Cext.uls.interlangua…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.gadget.ReferenceTooltips%2Cswitcher\u0026skin=vector-2022\u0026version=wc99c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext.…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.centralNotice.bannerHistoryLogger%2CchoiceData%2Cdisplay%2CgeoIP%2CimpressionDiet%2…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026skin…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/ins-502b/v2/events?hasty=true",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     },
+     {
+      "url": "https://meta.wikimedia.org/w/index.php?title=Special:BannerLoader\u0026campaign=USHispanicHeritage\u0026banner=USHispanicHeritage\u0026uselang=en\u0026debug=fa…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Special:CentralAutoLogin/start?useformat=desktop\u0026type=script\u0026usesul3=1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/arrow-down-progressive.svg?5cd6d",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/assets/mediawiki_compact.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/footer/wikimedia.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=verticalEllipsis\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/mediawiki.skinning/images/magnify-clip-ltr.svg?8330e",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=menu\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-wordmark-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-tagline-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/ba/Safari_15.png/250px-Safari_15.png?utm_source=en.wikipedia.org\u0026utm_campaign=parser\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 23216
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/en/thumb/1/1b/Semi-protection-shackle.svg/20px-Semi-protection-shackle.svg.png?utm_source=en.wikipedi…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 342
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=article\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=search\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbles\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=history\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=star\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=wikiText\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=edit\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=editLock\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbleAdd\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=ve…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/Web_browser_demo.webm/250px--Web_browser_demo.webm.jpg?utm_source=en.wikipedia.org…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10684
+     }
+    ],
+    "engine": {
+     "wire_in": 514952,
+     "wire_out": 29728,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 131658,
+    "wire_out": 6465,
+    "conns": 2,
+    "handshake_in": 78,
+    "handshake_out": 206,
+    "requests": 30,
+    "cache_served": 25,
+    "ready_ms": 2583.821,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Image": 22,
+     "Other": 1,
+     "Script": 3,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 3,
+      "in": 121735,
+      "out": 4283
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 1,
+      "in": 9923,
+      "out": 2158
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 131736,
+     "wire_out": 6599,
+     "cache_hit_bytes": 130087,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://en.wikipedia.org/wiki/Web_browser",
+   "mode": "sweef-strict",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 406156,
+    "wire_out": 15683,
+    "conns": 4,
+    "handshake_in": 156,
+    "handshake_out": 432,
+    "requests": 13,
+    "cache_served": 0,
+    "ready_ms": 3852.289,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 2,
+     "Script": 6,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 2,
+      "in": 390915,
+      "out": 11079
+     },
+     {
+      "host": "intake-logging.wikimedia.org",
+      "conns": 1,
+      "in": 7525,
+      "out": 2559
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 7716,
+      "out": 2045
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.parsoid.styles%7Cext.cite.styles%7Cext.tmh.player.styles%7Cext.uls.interlangua…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.gadget.ReferenceTooltips%2Cswitcher\u0026skin=vector-2022\u0026version=wc99c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext.…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.centralNotice.bannerHistoryLogger%2CchoiceData%2Cdisplay%2CgeoIP%2CimpressionDiet%2…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026skin…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/ins-502b/v2/events?hasty=true",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Special:CentralAutoLogin/start?useformat=desktop\u0026type=script\u0026usesul3=1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://intake-logging.wikimedia.org/v1/events?hasty=true",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     }
+    ],
+    "engine": {
+     "wire_in": 406312,
+     "wire_out": 16115,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped": {
+      "image": 33,
+      "script": 1
+     },
+     "skipped_estimate": 1370473,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 135477,
+    "wire_out": 9013,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 327,
+    "requests": 9,
+    "cache_served": 3,
+    "ready_ms": 2926.362,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 2,
+     "Script": 2,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 2,
+      "in": 127953,
+      "out": 6368
+     },
+     {
+      "host": "intake-logging.wikimedia.org",
+      "conns": 1,
+      "in": 7524,
+      "out": 2621
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 135594,
+     "wire_out": 9316,
+     "cache_hit_bytes": 53937,
+     "aborted_bytes": 0,
+     "skipped": {
+      "image": 33,
+      "script": 1
+     },
+     "skipped_estimate": 1370473,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://en.wikipedia.org/wiki/Web_browser",
+   "mode": "chromium",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 509971,
+    "wire_out": 12695,
+    "conns": 5,
+    "internal_in": 21436,
+    "internal_out": 8809,
+    "internal_conns": 4,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 23,
+    "cache_served": 0,
+    "ready_ms": 1226.455,
+    "browser_in": 484751,
+    "browser_out": 22890,
+    "by_type": {
+     "Document": 73999,
+     "Image": 80329,
+     "Other": 1862,
+     "Script": 298298,
+     "Stylesheet": 30263
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 13,
+     "Other": 1,
+     "Script": 6,
+     "Stylesheet": 2
+    },
+    "protos": {
+     "h2": 23
+    },
+    "doc_bytes": 73999,
+    "cdp_host_in": {
+     "en.wikipedia.org": 467717,
+     "thumb.wikimedia.org": 12694,
+     "upload.wikimedia.org": 4340
+    },
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 474904,
+      "out": 6535
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 2,
+      "in": 25127,
+      "out": 3875
+     },
+     {
+      "host": "upload.wikimedia.org",
+      "conns": 2,
+      "in": 9940,
+      "out": 2285
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.referencePreviews%7Cext.math.popup%7Cext.popups.main\u0026skin=vector-2022\u0026version=…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26775
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026skin…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2887
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/link-external-small-ltr-progressive.svg?fb64d",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1071
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.parsoid.styles%7Cext.cite.styles%7Cext.tmh.player.styles%7Cext.uls.interlangua…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26906
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=menu\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1099
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 73999
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/icons/enwiki-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 44928
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3357
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.centralNotice.bannerHistoryLogger%2CchoiceData%2Cdisplay%2CgeoIP%2CimpressionDiet%2…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 218534
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=verticalEllipsis\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1127
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/jquery.tablesorter.styles/images/sort_both.svg?0e440",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 996
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-wordmark-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5008
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-tagline-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5604
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/mediawiki.skinning/images/magnify-clip-ltr.svg?8330e",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1077
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23329
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/Web_browser_demo.webm/250px--Web_browser_demo.webm.jpg?utm_source=en.wikipedia.org…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 12694
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext.…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 18653
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/arrow-down-progressive.svg?5cd6d",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1022
+     },
+     {
+      "url": "https://en.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1862
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.gadget.ReferenceTooltips%2Cswitcher\u0026skin=vector-2022\u0026version=wc99c",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 8120
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1363
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/d/d6/Lock-gray-alt-2.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2195
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/6/65/Lock-green.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2145
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 262060,
+    "wire_out": 5120,
+    "conns": 2,
+    "internal_in": 17582,
+    "internal_out": 7932,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 22,
+    "cache_served": 16,
+    "ready_ms": 593.616,
+    "browser_in": 249227,
+    "browser_out": 4321,
+    "by_type": {
+     "Document": 73488,
+     "Image": 0,
+     "Script": 175739,
+     "Stylesheet": 0
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 13,
+     "Script": 6,
+     "Stylesheet": 2
+    },
+    "protos": {
+     "h2": 22
+    },
+    "doc_bytes": 73488,
+    "cdp_host_in": {
+     "en.wikipedia.org": 249227,
+     "thumb.wikimedia.org": 0,
+     "upload.wikimedia.org": 0
+    },
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 255885,
+      "out": 3511
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 1,
+      "in": 6175,
+      "out": 1609
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://en.wikipedia.org/wiki/Web_browser",
+   "mode": "chromium-savedata",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 510099,
+    "wire_out": 14299,
+    "conns": 5,
+    "internal_in": 21130,
+    "internal_out": 8809,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 23,
+    "cache_served": 0,
+    "ready_ms": 1264.266,
+    "browser_in": 484859,
+    "browser_out": 23235,
+    "by_type": {
+     "Document": 73996,
+     "Image": 80460,
+     "Other": 1859,
+     "Script": 298285,
+     "Stylesheet": 30259
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 13,
+     "Other": 1,
+     "Script": 6,
+     "Stylesheet": 2
+    },
+    "protos": {
+     "h2": 23
+    },
+    "doc_bytes": 73996,
+    "cdp_host_in": {
+     "en.wikipedia.org": 467828,
+     "thumb.wikimedia.org": 12690,
+     "upload.wikimedia.org": 4341
+    },
+    "save_data_req": 23,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 475015,
+      "out": 6568
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 2,
+      "in": 25123,
+      "out": 3887
+     },
+     {
+      "host": "upload.wikimedia.org",
+      "conns": 2,
+      "in": 9961,
+      "out": 3844
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3354
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/link-external-small-ltr-progressive.svg?fb64d",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1109
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-wordmark-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5005
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/arrow-down-progressive.svg?5cd6d",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1060
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=verticalEllipsis\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1124
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/6/65/Lock-green.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2147
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.referencePreviews%7Cext.math.popup%7Cext.popups.main\u0026skin=vector-2022\u0026version=…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26772
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/icons/enwiki-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 44925
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-tagline-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5601
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.gadget.ReferenceTooltips%2Cswitcher\u0026skin=vector-2022\u0026version=wc99c",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 8118
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=menu\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1097
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.parsoid.styles%7Cext.cite.styles%7Cext.tmh.player.styles%7Cext.uls.interlangua…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26905
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/Web_browser_demo.webm/250px--Web_browser_demo.webm.jpg?utm_source=en.wikipedia.org…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 12690
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.centralNotice.bannerHistoryLogger%2CchoiceData%2Cdisplay%2CgeoIP%2CimpressionDiet%2…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 218532
+     },
+     {
+      "url": "https://en.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1859
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 73996
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext.…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 18650
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1362
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/d/d6/Lock-gray-alt-2.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2194
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026skin…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2886
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/jquery.tablesorter.styles/images/sort_both.svg?0e440",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1033
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23327
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/mediawiki.skinning/images/magnify-clip-ltr.svg?8330e",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1113
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 262050,
+    "wire_out": 5138,
+    "conns": 2,
+    "internal_in": 17568,
+    "internal_out": 7932,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 22,
+    "cache_served": 16,
+    "ready_ms": 686.105,
+    "browser_in": 249201,
+    "browser_out": 4065,
+    "by_type": {
+     "Document": 73473,
+     "Image": 0,
+     "Script": 175728,
+     "Stylesheet": 0
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 13,
+     "Script": 6,
+     "Stylesheet": 2
+    },
+    "protos": {
+     "h2": 22
+    },
+    "doc_bytes": 73473,
+    "cdp_host_in": {
+     "en.wikipedia.org": 249201,
+     "thumb.wikimedia.org": 0,
+     "upload.wikimedia.org": 0
+    },
+    "save_data_req": 22,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 255859,
+      "out": 3529
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 1,
+      "in": 6191,
+      "out": 1609
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://en.wikipedia.org/wiki/Web_browser",
+   "mode": "sweef-standard",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 514969,
+    "wire_out": 28624,
+    "conns": 10,
+    "handshake_in": 390,
+    "handshake_out": 1030,
+    "requests": 34,
+    "cache_served": 0,
+    "ready_ms": 4093.191,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Image": 22,
+     "Other": 1,
+     "Script": 7,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 6,
+      "in": 444942,
+      "out": 20318
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 2,
+      "in": 52164,
+      "out": 4232
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 1,
+      "in": 10146,
+      "out": 2029
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 7717,
+      "out": 2045
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.parsoid.styles%7Cext.cite.styles%7Cext.tmh.player.styles%7Cext.uls.interlangua…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.gadget.ReferenceTooltips%2Cswitcher\u0026skin=vector-2022\u0026version=wc99c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext.…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.centralNotice.bannerHistoryLogger%2CchoiceData%2Cdisplay%2CgeoIP%2CimpressionDiet%2…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026skin…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/ins-502b/v2/events?hasty=true",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     },
+     {
+      "url": "https://meta.wikimedia.org/w/index.php?title=Special:BannerLoader\u0026campaign=wlm_2026_us\u0026banner=wlm_2026_us\u0026uselang=en\u0026debug=false",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Special:CentralAutoLogin/start?useformat=desktop\u0026type=script\u0026usesul3=1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/arrow-down-progressive.svg?5cd6d",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/footer/wikimedia.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=verticalEllipsis\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/assets/mediawiki_compact.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/mediawiki.skinning/images/magnify-clip-ltr.svg?8330e",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=menu\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-tagline-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-wordmark-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/ba/Safari_15.png/250px-Safari_15.png?utm_source=en.wikipedia.org\u0026utm_campaign=parser\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 23216
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/en/thumb/1/1b/Semi-protection-shackle.svg/20px-Semi-protection-shackle.svg.png?utm_source=en.wikipedi…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 342
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=history\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=search\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=article\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbles\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=star\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=wikiText\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=edit\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=editLock\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbleAdd\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=ve…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/Web_browser_demo.webm/250px--Web_browser_demo.webm.jpg?utm_source=en.wikipedia.org…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10684
+     }
+    ],
+    "engine": {
+     "wire_in": 515359,
+     "wire_out": 29654,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 131665,
+    "wire_out": 6536,
+    "conns": 2,
+    "handshake_in": 78,
+    "handshake_out": 206,
+    "requests": 30,
+    "cache_served": 25,
+    "ready_ms": 2717.841,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Image": 22,
+     "Other": 1,
+     "Script": 3,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 2,
+      "in": 121742,
+      "out": 4307
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 2,
+      "in": 9923,
+      "out": 2181
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 131743,
+     "wire_out": 6646,
+     "cache_hit_bytes": 130076,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://en.wikipedia.org/wiki/Web_browser",
+   "mode": "sweef-strict",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 406117,
+    "wire_out": 15634,
+    "conns": 4,
+    "handshake_in": 156,
+    "handshake_out": 432,
+    "requests": 13,
+    "cache_served": 0,
+    "ready_ms": 3596.584,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 2,
+     "Script": 6,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 2,
+      "in": 390871,
+      "out": 11030
+     },
+     {
+      "host": "intake-logging.wikimedia.org",
+      "conns": 1,
+      "in": 7528,
+      "out": 2559
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 7718,
+      "out": 2045
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.parsoid.styles%7Cext.cite.styles%7Cext.tmh.player.styles%7Cext.uls.interlangua…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.gadget.ReferenceTooltips%2Cswitcher\u0026skin=vector-2022\u0026version=wc99c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext.…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.centralNotice.bannerHistoryLogger%2CchoiceData%2Cdisplay%2CgeoIP%2CimpressionDiet%2…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026skin…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/ins-502b/v2/events?hasty=true",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Special:CentralAutoLogin/start?useformat=desktop\u0026type=script\u0026usesul3=1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://intake-logging.wikimedia.org/v1/events?hasty=true",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     }
+    ],
+    "engine": {
+     "wire_in": 406273,
+     "wire_out": 16066,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped": {
+      "image": 33,
+      "script": 1
+     },
+     "skipped_estimate": 1370474,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 135495,
+    "wire_out": 8941,
+    "conns": 3,
+    "handshake_in": 117,
+    "handshake_out": 327,
+    "requests": 9,
+    "cache_served": 3,
+    "ready_ms": 2924.092,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Other": 2,
+     "Script": 2,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 2,
+      "in": 127971,
+      "out": 6272
+     },
+     {
+      "host": "intake-logging.wikimedia.org",
+      "conns": 2,
+      "in": 7524,
+      "out": 2645
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 135612,
+     "wire_out": 9220,
+     "cache_hit_bytes": 53937,
+     "aborted_bytes": 0,
+     "skipped": {
+      "image": 33,
+      "script": 1
+     },
+     "skipped_estimate": 1370474,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://en.wikipedia.org/wiki/Web_browser",
+   "mode": "chromium",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 514962,
+    "wire_out": 14307,
+    "conns": 5,
+    "internal_in": 21191,
+    "internal_out": 8770,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 23,
+    "cache_served": 0,
+    "ready_ms": 1142.897,
+    "browser_in": 484872,
+    "browser_out": 22895,
+    "by_type": {
+     "Document": 73991,
+     "Image": 80474,
+     "Other": 1858,
+     "Script": 298289,
+     "Stylesheet": 30260
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 13,
+     "Other": 1,
+     "Script": 6,
+     "Stylesheet": 2
+    },
+    "protos": {
+     "h2": 23
+    },
+    "doc_bytes": 73991,
+    "cdp_host_in": {
+     "en.wikipedia.org": 467830,
+     "thumb.wikimedia.org": 12699,
+     "upload.wikimedia.org": 4343
+    },
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 475015,
+      "out": 6533
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 2,
+      "in": 25115,
+      "out": 3879
+     },
+     {
+      "host": "upload.wikimedia.org",
+      "conns": 2,
+      "in": 14832,
+      "out": 3895
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23334
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1362
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/link-external-small-ltr-progressive.svg?fb64d",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1109
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-tagline-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5601
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext.…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 18650
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=menu\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1097
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/6/65/Lock-green.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2148
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3355
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.centralNotice.bannerHistoryLogger%2CchoiceData%2Cdisplay%2CgeoIP%2CimpressionDiet%2…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 218531
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/jquery.tablesorter.styles/images/sort_both.svg?0e440",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1033
+     },
+     {
+      "url": "https://en.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1858
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.gadget.ReferenceTooltips%2Cswitcher\u0026skin=vector-2022\u0026version=wc99c",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 8117
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/arrow-down-progressive.svg?5cd6d",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1061
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026skin…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2886
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=verticalEllipsis\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1125
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/mediawiki.skinning/images/magnify-clip-ltr.svg?8330e",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1115
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.referencePreviews%7Cext.math.popup%7Cext.popups.main\u0026skin=vector-2022\u0026version=…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26771
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.parsoid.styles%7Cext.cite.styles%7Cext.tmh.player.styles%7Cext.uls.interlangua…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26905
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-wordmark-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5005
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 73991
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/icons/enwiki-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 44924
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/Web_browser_demo.webm/250px--Web_browser_demo.webm.jpg?utm_source=en.wikipedia.org…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 12699
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/d/d6/Lock-gray-alt-2.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2195
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 262041,
+    "wire_out": 5119,
+    "conns": 2,
+    "internal_in": 16123,
+    "internal_out": 7932,
+    "internal_conns": 4,
+    "internal_hosts": [
+     "accounts.google.com",
+     "www.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 22,
+    "cache_served": 16,
+    "ready_ms": 767.911,
+    "browser_in": 249206,
+    "browser_out": 4667,
+    "by_type": {
+     "Document": 73476,
+     "Image": 0,
+     "Script": 175730,
+     "Stylesheet": 0
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 13,
+     "Script": 6,
+     "Stylesheet": 2
+    },
+    "protos": {
+     "h2": 22
+    },
+    "doc_bytes": 73476,
+    "cdp_host_in": {
+     "en.wikipedia.org": 249206,
+     "thumb.wikimedia.org": 0,
+     "upload.wikimedia.org": 0
+    },
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 255864,
+      "out": 3510
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 1,
+      "in": 6177,
+      "out": 1609
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://en.wikipedia.org/wiki/Web_browser",
+   "mode": "chromium-savedata",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 510100,
+    "wire_out": 12756,
+    "conns": 5,
+    "internal_in": 20009,
+    "internal_out": 8809,
+    "internal_conns": 5,
+    "internal_hosts": [
+     "www.google.com",
+     "accounts.google.com",
+     "android.clients.google.com",
+     "mtalk.google.com"
+    ],
+    "requests": 23,
+    "cache_served": 0,
+    "ready_ms": 1943.118,
+    "browser_in": 484860,
+    "browser_out": 23240,
+    "by_type": {
+     "Document": 73991,
+     "Image": 80462,
+     "Other": 1858,
+     "Script": 298290,
+     "Stylesheet": 30259
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 13,
+     "Other": 1,
+     "Script": 6,
+     "Stylesheet": 2
+    },
+    "protos": {
+     "h2": 23
+    },
+    "doc_bytes": 73991,
+    "cdp_host_in": {
+     "en.wikipedia.org": 467827,
+     "thumb.wikimedia.org": 12692,
+     "upload.wikimedia.org": 4341
+    },
+    "save_data_req": 23,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 475013,
+      "out": 6567
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 2,
+      "in": 25125,
+      "out": 3891
+     },
+     {
+      "host": "upload.wikimedia.org",
+      "conns": 2,
+      "in": 9962,
+      "out": 2298
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "Other",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1858
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/icons/enwiki-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 44924
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.gadget.ReferenceTooltips%2Cswitcher\u0026skin=vector-2022\u0026version=wc99c",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 8117
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1362
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/arrow-down-progressive.svg?5cd6d",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1061
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.referencePreviews%7Cext.math.popup%7Cext.popups.main\u0026skin=vector-2022\u0026version=…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26772
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "type": "Document",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 73991
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 23335
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-tagline-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5600
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/jquery.tablesorter.styles/images/sort_both.svg?0e440",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1031
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/link-external-small-ltr-progressive.svg?fb64d",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1109
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.parsoid.styles%7Cext.cite.styles%7Cext.tmh.player.styles%7Cext.uls.interlangua…",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 26905
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/Web_browser_demo.webm/250px--Web_browser_demo.webm.jpg?utm_source=en.wikipedia.org…",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 12692
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.centralNotice.bannerHistoryLogger%2CchoiceData%2Cdisplay%2CgeoIP%2CimpressionDiet%2…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 218532
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/d/d6/Lock-gray-alt-2.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2193
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=verticalEllipsis\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1125
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/mediawiki.skinning/images/magnify-clip-ltr.svg?8330e",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1115
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/6/65/Lock-green.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2148
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026skin…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 2885
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-wordmark-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 5006
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext.…",
+      "type": "Script",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 18649
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=menu\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 1096
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "proto": "h2",
+      "encoded": 3354
+     }
+    ]
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 262035,
+    "wire_out": 5137,
+    "conns": 2,
+    "internal_in": 16481,
+    "internal_out": 7932,
+    "internal_conns": 4,
+    "internal_hosts": [
+     "accounts.google.com",
+     "www.google.com",
+     "mtalk.google.com",
+     "android.clients.google.com"
+    ],
+    "requests": 22,
+    "cache_served": 16,
+    "ready_ms": 651.806,
+    "browser_in": 249203,
+    "browser_out": 4065,
+    "by_type": {
+     "Document": 73475,
+     "Image": 0,
+     "Script": 175728,
+     "Stylesheet": 0
+    },
+    "by_type_count": {
+     "Document": 1,
+     "Image": 13,
+     "Script": 6,
+     "Stylesheet": 2
+    },
+    "protos": {
+     "h2": 22
+    },
+    "doc_bytes": 73475,
+    "cdp_host_in": {
+     "en.wikipedia.org": 249203,
+     "thumb.wikimedia.org": 0,
+     "upload.wikimedia.org": 0
+    },
+    "save_data_req": 22,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 255860,
+      "out": 3528
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 1,
+      "in": 6175,
+      "out": 1609
+     }
+    ]
+   }
+  },
+  {
+   "site": "https://en.wikipedia.org/wiki/Web_browser",
+   "mode": "sweef-off",
+   "run": 2,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 610498,
+    "wire_out": 28657,
+    "conns": 9,
+    "handshake_in": 351,
+    "handshake_out": 953,
+    "requests": 42,
+    "cache_served": 0,
+    "ready_ms": 5345.312,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Image": 30,
+     "Other": 1,
+     "Script": 7,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 463501,
+      "out": 12821
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 6,
+      "in": 129579,
+      "out": 11776
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 1,
+      "in": 9702,
+      "out": 2027
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 7716,
+      "out": 2033
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.cite.parsoid.styles%7Cext.cite.styles%7Cext.tmh.player.styles%7Cext.uls.interlangua…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.gadget.ReferenceTooltips%2Cswitcher\u0026skin=vector-2022\u0026version=wc99c",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext.…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=ext.centralNotice.bannerHistoryLogger%2CchoiceData%2Cdisplay%2CgeoIP%2CimpressionDiet%2…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026skin…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/ins-502b/v2/events?hasty=true",
+      "type": "Other",
+      "status": 400,
+      "encoded": 0
+     },
+     {
+      "url": "https://meta.wikimedia.org/w/index.php?title=Special:BannerLoader\u0026campaign=USHispanicHeritage\u0026banner=USHispanicHeritage\u0026uselang=en\u0026debug=fa…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Special:CentralAutoLogin/start?useformat=desktop\u0026type=script\u0026usesul3=1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-tagline-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/mobile/copyright/wikipedia-wordmark-en-25.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/icons/enwiki-25.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/en/thumb/4/4a/Commons-logo.svg/20px-Commons-logo.svg.png?utm_source=en.wikipedia.org\u0026utm_campaign=par…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 608
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0b/Wikiversity_logo_2017.svg/40px-Wikiversity_logo_2017.svg.png?utm_source=en.wikiped…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 502
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f9/Crystal_Clear_app_linneighborhood.svg/40px-Crystal_Clear_app_linneighborhood.svg.p…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 2492
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/en/thumb/1/1b/Semi-protection-shackle.svg/20px-Semi-protection-shackle.svg.png?utm_source=en.wikipedi…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 342
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/ba/Safari_15.png/250px-Safari_15.png?utm_source=en.wikipedia.org\u0026utm_campaign=parser\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 23216
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/13/Chromium_%28web_browser%29.png/250px-Chromium_%28web_browser%29.png?utm_source=en.…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 41154
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/en/thumb/8/8a/OOjs_UI_icon_edit-ltr-progressive.svg/20px-OOjs_UI_icon_edit-ltr-progressive.svg.png?ut…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 200
+     },
+     {
+      "url": "https://en.wikipedia.org/static/images/footer/wikimedia.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/assets/mediawiki_compact.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/arrow-down-progressive.svg?5cd6d",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=verticalEllipsis\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/jquery.tablesorter.styles/images/sort_both.svg?0e440",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/skins/Vector/resources/skins.vector.styles/images/link-external-small-ltr-progressive.svg?fb64d",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/resources/src/mediawiki.skinning/images/magnify-clip-ltr.svg?8330e",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=menu\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=search\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbles\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=article\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=history\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=star\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=wikiText\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=edit\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=editLock\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbleAdd\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=ve…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/Web_browser_demo.webm/250px--Web_browser_demo.webm.jpg?utm_source=en.wikipedia.org…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10684
+     }
+    ],
+    "engine": {
+     "wire_in": 610849,
+     "wire_out": 29610,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 132097,
+    "wire_out": 6878,
+    "conns": 2,
+    "handshake_in": 78,
+    "handshake_out": 206,
+    "requests": 38,
+    "cache_served": 32,
+    "ready_ms": 2568.226,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Image": 30,
+     "Other": 1,
+     "Script": 3,
+     "Stylesheet": 2
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikipedia.org",
+      "conns": 2,
+      "in": 122619,
+      "out": 4673
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 2,
+      "in": 9478,
+      "out": 2181
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 1,
+      "in": 0,
+      "out": 24
+     }
+    ],
+    "engine": {
+     "wire_in": 132175,
+     "wire_out": 7012,
+     "cache_hit_bytes": 233513,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://en.wikivoyage.org/wiki/Lisbon",
+   "mode": "sweef-off",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 1624447,
+    "wire_out": 53489,
+    "conns": 10,
+    "handshake_in": 390,
+    "handshake_out": 1060,
+    "requests": 152,
+    "cache_served": 0,
+    "ready_ms": 10743.635,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 21,
+     "Image": 108,
+     "Other": 1,
+     "Script": 12,
+     "Stylesheet": 3,
+     "XHR": 7
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 2,
+      "in": 835314,
+      "out": 21567
+     },
+     {
+      "host": "en.wikivoyage.org",
+      "conns": 1,
+      "in": 639005,
+      "out": 15033
+     },
+     {
+      "host": "maps.wikimedia.org",
+      "conns": 1,
+      "in": 92732,
+      "out": 4723
+     },
+     {
+      "host": "upload.wikimedia.org",
+      "conns": 3,
+      "in": 31685,
+      "out": 6064
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 1,
+      "in": 9637,
+      "out": 2051
+     },
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 8359,
+      "out": 2017
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 7715,
+      "out": 2034
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikivoyage.org/wiki/Lisbon",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.gadget.NightMode\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.WikidataPageBanner%2CwikimediaBadges%7Cext.WikidataPageBanner.print.styles%7Cext.W…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.gadget.CUReportTool%2CCarousel%2CListingEditor2023%2CListingEditor2023Styles%2CLis…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.WikidataPageBanner.positionBanner%7Cext.centralNotice.choiceData%2Cdisplay%2CgeoIP…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026ski…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/static/images/icons/wikivoyage.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/static/images/mobile/copyright/wikivoyage-wordmark-en.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Lisboa_freguesias_-_Wikivoyage_City_districts_divison.png/330px-Lisboa_freguesias_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 57593
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fd/WV-Unesco-icon-small.svg/20px-WV-Unesco-icon-small.svg.png?utm_source=en.wikivoyag…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 616
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Map_mag.png?utm_source=en.wikivoyage.org\u0026utm_campaign=parser\u0026utm_content=thumbnail_unsc…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 1977
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/f/f7/GPX_Document_rev3-20x20.png?utm_source=en.wikivoyage.org\u0026utm_campaign=parser\u0026utm_conten…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 827
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/8/82/Lisbon_Wikivoyage_Banner.png?utm_source=en.wikivoyage.org\u0026utm_campaign=index\u0026utm_conten…",
+      "type": "Document",
+      "status": 429,
+      "encoded": 2256
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/51/Lisboa_-_Vista_Geral2.jpg/250px-Lisboa_-_Vista_Geral2.jpg?utm_source=en.wikivoyage…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 16585
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cf/LisbonCastle.jpg/250px-LisbonCastle.jpg?utm_source=en.wikivoyage.org\u0026utm_campaign=…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 14209
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5a/Pombaline_Baixa_Lisbon_map_1756.jpg/250px-Pombaline_Baixa_Lisbon_map_1756.jpg?utm_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 13896
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2b/Est%C3%A1tua_do_Rei_Dom_Jos%C3%A9_I_DSC_0078_%2852635007867%29.jpg/250px-Est%C3%A1…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 20774
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/20121024_0176_Lisbon_41.jpg/250px-20121024_0176_Lisbon_41.jpg?utm_source=en.wikivo…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 16450
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fd/Lisboa_Airport_LIS_aerial_view_September_2013_with_Ponte_Vasco_Da_Gama.jpg/250px-L…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10479
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Openstreetmap_logo.svg/20px-Openstreetmap_logo.svg.png?utm_source=en.wikivoyage.or…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 1030
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a3/Portugal_2011_%286655827765%29.jpg/250px-Portugal_2011_%286655827765%29.jpg?utm_so…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 17776
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d6/Antu_wikipedia.svg/20px-Antu_wikipedia.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 336
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8a/Wikivoyage-logo.svg/20px-Wikivoyage-logo.svg.png?utm_source=en.wikivoyage.org\u0026utm_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 334
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/Metro_de_Lisboa_-_Esta%C3%A7%C3%A3o_Aeroporto_%288176857326%29.jpg/250px-Metro_de_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 16531
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/ff/Wikidata-logo.svg/20px-Wikidata-logo.svg.png?utm_source=en.wikivoyage.org\u0026utm_camp…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 172
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/54/Gare_do_Oriente.jpg/250px-Gare_do_Oriente.jpg?utm_source=en.wikivoyage.org\u0026utm_cam…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 10252
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/32/Ponte_Vasco_da_Gama_Portugal.jpg/250px-Ponte_Vasco_da_Gama_Portugal.jpg?utm_source…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 20582
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/Estacao_de_sta_apolonia.JPG/250px-Estacao_de_sta_apolonia.JPG?utm_source=en.wikivo…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 12299
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/df/Navegante_occasional_card_in_2024.jpg/250px-Navegante_occasional_card_in_2024.jpg?…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 18273
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/30/Lisbon_tram.jpg/250px-Lisbon_tram.jpg?utm_source=en.wikivoyage.org\u0026utm_campaign=pa…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 21860
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/ElevBica%28topo%292013.jpg/250px-ElevBica%28topo%292013.jpg?utm_source=en.wikivoya…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 23089
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a5/Lisbon_2.jpg/250px-Lisbon_2.jpg?utm_source=en.wikivoyage.org\u0026utm_campaign=parser\u0026u…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 36692
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Metro_Lisboa_Route_Map_%28only_with_routes_in_operation%29.png/250px-Metro_Lisboa_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 40911
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b7/Bus_de_Lisbonne_%28Portugal%29_%285911024187%29_%282%29.jpg/250px-Bus_de_Lisbonne_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 19460
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8b/Barco-rio_Tejo1979.JPG/250px-Barco-rio_Tejo1979.JPG?utm_source=en.wikivoyage.org\u0026u…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 15066
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a5/Lisbon_%2845923876392%29.jpg/250px-Lisbon_%2845923876392%29.jpg?utm_source=en.wiki…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 21385
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a3/Lisboa_2019_Nov_%2849788699183%29.jpg/250px-Lisboa_2019_Nov_%2849788699183%29.jpg?…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 28792
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e5/Lisbon_Street%2C_Portugal_%288619812026%29.jpg/250px-Lisbon_Street%2C_Portugal_%28…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 23680
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/55/Pra%C3%A7a_do_Marqu%C3%AAs_de_Pombal_%28Lisboa%29.jpg/250px-Pra%C3%A7a_do_Marqu%C3…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 12459
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1c/Torre_de_Belem_3.jpg/250px-Torre_de_Belem_3.jpg?utm_source=en.wikivoyage.org\u0026utm_c…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 18919
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/22/Lisboa_S%C3%A9_de_Lisboa_DSC_0090_1_%2852635014679%29.jpg/250px-Lisboa_S%C3%A9_de_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 19991
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/Lisboa_-_Parque_das_Na%C3%A7%C3%B5es_-_20170814_-_02_-.jpg/250px-Lisboa_-_Parque_d…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 9639
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3d/Lisboa_%28P%29_-_Electrico_Red_Line_%28tone-mapping%29.jpg/250px-Lisboa_%28P%29_-_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 21469
+     },
+     {
+      "url": "https://maps.wikimedia.org/img/osm-intl,12,38.74257,-9.15844,420x420.png?lang=en\u0026domain=en.wikivoyage.org\u0026title=Lisbon\u0026revid=5384726\u0026groups…",
+      "type": "Document",
+      "status": 429,
+      "encoded": 2190
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8e/DSC_2280_%285581984932%29.jpg/250px-DSC_2280_%285581984932%29.jpg?utm_source=en.wi…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 20524
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4d/Lisbon_162_%2831787624974%29.jpg/250px-Lisbon_162_%2831787624974%29.jpg?utm_source…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 20348
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0f/0123_RUA_AUGUSTA_Lisbon.jpg/250px-0123_RUA_AUGUSTA_Lisbon.jpg?utm_source=en.wikivo…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 20558
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Celeste_Rodrigues.jpg/250px-Celeste_Rodrigues.jpg?utm_source=en.wikivoyage.org\u0026utm…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 16593
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/Lisboa_May_2013-6.jpg/250px-Lisboa_May_2013-6.jpg?utm_source=en.wikivoyage.org\u0026utm…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 15569
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b9/Flag_of_Australia.svg/20px-Flag_of_Australia.svg.png?utm_source=en.wikivoyage.org\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 238
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/05/Flag_of_Brazil.svg/20px-Flag_of_Brazil.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 318
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cf/Flag_of_Canada.svg/20px-Flag_of_Canada.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 156
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fe/Flag_of_Egypt.svg/20px-Flag_of_Egypt.svg.png?utm_source=en.wikivoyage.org\u0026utm_camp…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 152
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/Flag_of_the_People%27s_Republic_of_China.svg/20px-Flag_of_the_People%27s_Republic_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 148
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bc/Flag_of_Finland.svg/20px-Flag_of_Finland.svg.png?utm_source=en.wikivoyage.org\u0026utm_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 164
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c3/Flag_of_France.svg/20px-Flag_of_France.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 134
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/Flag_of_Greece.svg/20px-Flag_of_Greece.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 166
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b3/Flag_of_Vatican_City_%282023%E2%80%93present%29.svg/20px-Flag_of_Vatican_City_%282…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 298
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9f/Flag_of_Indonesia.svg/20px-Flag_of_Indonesia.svg.png?utm_source=en.wikivoyage.org\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 70
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/41/Flag_of_India.svg/20px-Flag_of_India.svg.png?utm_source=en.wikivoyage.org\u0026utm_camp…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 180
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f6/Flag_of_Iraq.svg/20px-Flag_of_Iraq.svg.png?utm_source=en.wikivoyage.org\u0026utm_campai…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 166
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Flag_of_Ireland.svg/20px-Flag_of_Ireland.svg.png?utm_source=en.wikivoyage.org\u0026utm_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 86
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/Flag_of_Israel.svg/20px-Flag_of_Israel.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 162
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Flag_of_Italy.svg/20px-Flag_of_Italy.svg.png?utm_source=en.wikivoyage.org\u0026utm_camp…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 130
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9e/Flag_of_Japan.svg/20px-Flag_of_Japan.svg.png?utm_source=en.wikivoyage.org\u0026utm_camp…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 182
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/Flag_of_Kosovo.svg/20px-Flag_of_Kosovo.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 244
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/Flag_of_Macau.svg/20px-Flag_of_Macau.svg.png?utm_source=en.wikivoyage.org\u0026utm_camp…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 228
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ea/Flag_of_Monaco.svg/20px-Flag_of_Monaco.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 52
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2c/Flag_of_Morocco.svg/20px-Flag_of_Morocco.svg.png?utm_source=en.wikivoyage.org\u0026utm_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 138
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/20/Flag_of_the_Netherlands.svg/20px-Flag_of_the_Netherlands.svg.png?utm_source=en.wik…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 100
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3e/Flag_of_New_Zealand.svg/20px-Flag_of_New_Zealand.svg.png?utm_source=en.wikivoyage.…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 214
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/32/Flag_of_Pakistan.svg/20px-Flag_of_Pakistan.svg.png?utm_source=en.wikivoyage.org\u0026ut…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 238
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/00/Flag_of_Palestine.svg/20px-Flag_of_Palestine.svg.png?utm_source=en.wikivoyage.org\u0026…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 164
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/73/Flag_of_Romania.svg/20px-Flag_of_Romania.svg.png?utm_source=en.wikivoyage.org\u0026utm_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 130
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f3/Flag_of_Russia.svg/20px-Flag_of_Russia.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 96
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b1/Flag_of_San_Marino.svg/20px-Flag_of_San_Marino.svg.png?utm_source=en.wikivoyage.or…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 300
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/af/Flag_of_South_Africa.svg/20px-Flag_of_South_Africa.svg.png?utm_source=en.wikivoyag…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 344
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/ff/Flag_of_Serbia.svg/20px-Flag_of_Serbia.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 318
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/Flag_of_Saudi_Arabia.svg/20px-Flag_of_Saudi_Arabia.svg.png?utm_source=en.wikivoyag…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 182
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Flag_of_South_Korea.svg/20px-Flag_of_South_Korea.svg.png?utm_source=en.wikivoyage.…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 360
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4c/Flag_of_Sweden.svg/20px-Flag_of_Sweden.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 126
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/72/Flag_of_the_Republic_of_China.svg/20px-Flag_of_the_Republic_of_China.svg.png?utm_s…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 134
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a9/Flag_of_Thailand.svg/20px-Flag_of_Thailand.svg.png?utm_source=en.wikivoyage.org\u0026ut…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 120
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/26/Flag_of_East_Timor.svg/20px-Flag_of_East_Timor.svg.png?utm_source=en.wikivoyage.or…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 190
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/20px-Flag_of_Turkey.svg.png?utm_source=en.wikivoyage.org\u0026utm_ca…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 184
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Flag_of_the_United_Arab_Emirates.svg/20px-Flag_of_the_United_Arab_Emirates.svg.png…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 102
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Flag_of_the_United_Kingdom_%283-5%29.svg/20px-Flag_of_the_United_Kingdom_%283-5%29…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 320
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a4/Flag_of_the_United_States.svg/20px-Flag_of_the_United_States.svg.png?utm_source=en…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 196
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/Ponte_Vasco_da_Gama_25.jpg/250px-Ponte_Vasco_da_Gama_25.jpg?utm_source=en.wikivoya…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 6501
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/32/Tabliczka_E1.svg/40px-Tabliczka_E1.svg.png?utm_source=en.wikivoyage.org\u0026utm_campai…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 408
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b4/A1-PT.svg/60px-A1-PT.svg.png?utm_source=en.wikivoyage.org\u0026utm_campaign=parser\u0026utm_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 444
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/34/IP7-PT.svg/40px-IP7-PT.svg.png?utm_source=en.wikivoyage.org\u0026utm_campaign=parser\u0026ut…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 340
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c3/A2-PT.svg/60px-A2-PT.svg.png?utm_source=en.wikivoyage.org\u0026utm_campaign=parser\u0026utm_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 566
+     },
+     {
+      "url": "https://en.wikivoyage.org/static/images/footer/wikimedia.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/resources/assets/mediawiki_compact.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=vector-2022…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/skins/Vector/resources/skins.vector.styles/images/arrow-down-progressive.svg?5cd6d",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=verticalEllipsis\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/skins/Vector/resources/skins.vector.styles/images/link-external-small-ltr-progressive.svg?fb64d",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/c/c4/UNESCO-ICH-white.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Yes_Check_Circle.svg/20px-Yes_Check_Circle.svg.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 470
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/resources/src/mediawiki.skinning/images/magnify-clip-ltr.svg?8330e",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=menu\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikipedia.org/w/index.php?title=MediaWiki:Gadget-exlinks.js\u0026action=raw\u0026ctype=text/javascript\u0026smaxage=21600\u0026maxage=86400",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://meta.wikimedia.org/w/index.php?title=Special:BannerLoader\u0026campaign=USHispanicHeritage\u0026banner=USHispanicHeritage\u0026uselang=en\u0026debug=fa…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/wiki/Special:CentralAutoLogin/start?useformat=desktop\u0026type=script\u0026usesul3=1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=mediawiki.notification\u0026skin=vector-2022\u0026version=w4gro",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=search\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbles\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16q…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=article\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=history\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=star\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=wikiText\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=edit\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=editLock\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbleAdd\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=v…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q413311%2CQ1017927%2CQ18500330",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q163215",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826613",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q10376043%2CQ1786389%2CQ15041623%2CQ1466131%2CQ1740339%2CQ978535%2CQ1786441%2CQ585130%…",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q1677202%2CQ10368164%2CQ2883431%2CQ423043%2CQ1817058%2CQ432607",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q1786376%2CQ1786384%2CQ387982",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q686717%2CQ1786435%2CQ1428475",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826607",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q534230%2CQ1044020%2CQ924723%2CQ10367770%2CQ1786397%2CQ1618787%2CQ1031527%2CQ448231%2C…",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826609",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.relatedArticles.readMore\u0026skin=vector-2022\u0026version=qxeq4",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/extensions/Kartographer/lib/external/mapbox/images/icons.svg?1f78f",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.uls.rewrite.entrypoints\u0026skin=vector-2022\u0026version=hxbks",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.kartographer.wv%7Coojs-ui%2Coojs-ui-toolbars%7Coojs-ui-toolbars.icons\u0026skin=vector-…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826613",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826609",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826607",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q10376043%2CQ1786389%2CQ15041623%2CQ1466131%2CQ1740339%2CQ978535%2CQ1786441%2CQ585130%…",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q1677202%2CQ10368164%2CQ2883431%2CQ423043%2CQ1817058%2CQ432607",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q1786376%2CQ1786384%2CQ387982",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q686717%2CQ1786435%2CQ1428475",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q413311%2CQ1017927%2CQ18500330",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q534230%2CQ1044020%2CQ924723%2CQ10367770%2CQ1786397%2CQ1618787%2CQ1031527%2CQ448231%2C…",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q163215",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/Wikidata-logo.svg/40px-Wikidata-logo.svg.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 244
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/api.php?action=query\u0026format=json\u0026formatversion=2\u0026origin=*\u0026prop=pageimages%7Cdescription\u0026piprop=thumbnail\u0026pithum…",
+      "type": "Other",
+      "status": 429,
+      "encoded": 278
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1943/1568.png?lang=en",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1943/1569.png?lang=en",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1942/1568.png?lang=en",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1944/1568.png?lang=en",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1942/1569.png?lang=en",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1944/1569.png?lang=en",
+      "type": "Image",
+      "status": 200,
+      "encoded": 15857
+     }
+    ],
+    "engine": {
+     "wire_in": 1624837,
+     "wire_out": 54549,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 659290,
+    "wire_out": 25409,
+    "conns": 8,
+    "handshake_in": 312,
+    "handshake_out": 844,
+    "requests": 149,
+    "cache_served": 106,
+    "ready_ms": 6844.174,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 19,
+     "Image": 117,
+     "Script": 4,
+     "Stylesheet": 3,
+     "XHR": 6
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikivoyage.org",
+      "conns": 1,
+      "in": 269633,
+      "out": 5840
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 3,
+      "in": 221159,
+      "out": 8249
+     },
+     {
+      "host": "maps.wikimedia.org",
+      "conns": 1,
+      "in": 140699,
+      "out": 4657
+     },
+     {
+      "host": "upload.wikimedia.org",
+      "conns": 1,
+      "in": 10301,
+      "out": 2334
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 1,
+      "in": 9480,
+      "out": 2155
+     },
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 8018,
+      "out": 2174
+     }
+    ],
+    "engine": {
+     "wire_in": 659602,
+     "wire_out": 26253,
+     "cache_hit_bytes": 947544,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://en.wikivoyage.org/wiki/Lisbon",
+   "mode": "sweef-standard",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 1135414,
+    "wire_out": 56690,
+    "conns": 22,
+    "handshake_in": 858,
+    "handshake_out": 2306,
+    "requests": 70,
+    "cache_served": 0,
+    "ready_ms": 11866.41,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 16,
+     "Image": 30,
+     "Other": 1,
+     "Script": 12,
+     "Stylesheet": 3,
+     "XHR": 8
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikivoyage.org",
+      "conns": 5,
+      "in": 657486,
+      "out": 21406
+     },
+     {
+      "host": "maps.wikimedia.org",
+      "conns": 11,
+      "in": 356792,
+      "out": 22035
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 1,
+      "in": 68630,
+      "out": 2584
+     },
+     {
+      "host": "upload.wikimedia.org",
+      "conns": 2,
+      "in": 26795,
+      "out": 4527
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 1,
+      "in": 9635,
+      "out": 2063
+     },
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 8360,
+      "out": 2029
+     },
+     {
+      "host": "auth.wikimedia.org",
+      "conns": 1,
+      "in": 7716,
+      "out": 2046
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikivoyage.org/wiki/Lisbon",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.gadget.NightMode\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.WikidataPageBanner%2CwikimediaBadges%7Cext.WikidataPageBanner.print.styles%7Cext.W…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.gadget.CUReportTool%2CCarousel%2CListingEditor2023%2CListingEditor2023Styles%2CLis…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.WikidataPageBanner.positionBanner%7Cext.centralNotice.choiceData%2Cdisplay%2CgeoIP…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=mw.config.values.wbCurrentSiteDetails%2CwbRepo%7Coojs-ui.styles.icons-editing-core\u0026ski…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fd/WV-Unesco-icon-small.svg/20px-WV-Unesco-icon-small.svg.png?utm_source=en.wikivoyag…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 616
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Yes_Check_Circle.svg/20px-Yes_Check_Circle.svg.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 470
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/c/c4/UNESCO-ICH-white.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Lisboa_freguesias_-_Wikivoyage_City_districts_divison.png/330px-Lisboa_freguesias_…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 57593
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/skins/Vector/resources/skins.vector.styles/images/arrow-down-progressive.svg?5cd6d",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/resources/src/mediawiki.skinning/images/magnify-clip-ltr.svg?8330e",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=vector-2022…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=verticalEllipsis\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Map_mag.png?utm_source=en.wikivoyage.org\u0026utm_campaign=parser\u0026utm_content=thumbnail_unsc…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 1977
+     },
+     {
+      "url": "https://en.wikivoyage.org/static/images/icons/wikivoyage.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=menu\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/static/images/mobile/copyright/wikivoyage-wordmark-en.svg",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/img/osm-intl,12,38.74257,-9.15844,420x420.png?lang=en\u0026domain=en.wikivoyage.org\u0026title=Lisbon\u0026revid=5384726\u0026groups…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 74683
+     },
+     {
+      "url": "https://en.wikipedia.org/w/index.php?title=MediaWiki:Gadget-exlinks.js\u0026action=raw\u0026ctype=text/javascript\u0026smaxage=21600\u0026maxage=86400",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://meta.wikimedia.org/w/index.php?title=Special:BannerLoader\u0026campaign=USHispanicHeritage\u0026banner=USHispanicHeritage\u0026uselang=en\u0026debug=fa…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/wiki/Special:CentralAutoLogin/start?useformat=desktop\u0026type=script\u0026usesul3=1",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=mediawiki.notification\u0026skin=vector-2022\u0026version=w4gro",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/f/f7/GPX_Document_rev3-20x20.png?utm_source=en.wikivoyage.org\u0026utm_campaign=parser\u0026utm_conten…",
+      "type": "Image",
+      "status": 200,
+      "encoded": 827
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/8/82/Lisbon_Wikivoyage_Banner.png?utm_source=en.wikivoyage.org\u0026utm_campaign=index\u0026utm_conten…",
+      "type": "Document",
+      "status": 429,
+      "encoded": 2256
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=history\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=article\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbles\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16q…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=wikiText\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=star\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=search\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=edit\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=editLock\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=16qkf",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons\u0026image=language\u0026format=original\u0026lang=en\u0026skin=vector-2022\u0026version=zp9ra",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?modules=skins.vector.icons.js\u0026image=speechBubbleAdd\u0026variant=progressive\u0026format=original\u0026lang=en\u0026skin=v…",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q163215",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826613",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826609",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q534230%2CQ1044020%2CQ924723%2CQ10367770%2CQ1786397%2CQ1618787%2CQ1031527%2CQ448231%2C…",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826607",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q686717%2CQ1786435%2CQ1428475",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q413311%2CQ1017927%2CQ18500330",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q1786376%2CQ1786384%2CQ387982",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q1677202%2CQ10368164%2CQ2883431%2CQ423043%2CQ1817058%2CQ432607",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q10376043%2CQ1786389%2CQ15041623%2CQ1466131%2CQ1740339%2CQ978535%2CQ1786441%2CQ585130%…",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.relatedArticles.readMore\u0026skin=vector-2022\u0026version=qxeq4",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/extensions/Kartographer/lib/external/mapbox/images/icons.svg?1f78f",
+      "type": "Image",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.kartographer.wv%7Coojs-ui%2Coojs-ui-toolbars%7Coojs-ui-toolbars.icons\u0026skin=vector-…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.uls.rewrite.entrypoints\u0026skin=vector-2022\u0026version=hxbks",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q1786376%2CQ1786384%2CQ387982",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q413311%2CQ1017927%2CQ18500330",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q686717%2CQ1786435%2CQ1428475",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q1677202%2CQ10368164%2CQ2883431%2CQ423043%2CQ1817058%2CQ432607",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q10376043%2CQ1786389%2CQ15041623%2CQ1466131%2CQ1740339%2CQ978535%2CQ1786441%2CQ585130%…",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoshape?getgeojson=1\u0026ids=Q534230%2CQ1044020%2CQ924723%2CQ10367770%2CQ1786397%2CQ1618787%2CQ1031527%2CQ448231%2C…",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826607",
+      "type": "XHR",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826609",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q1826613",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://maps.wikimedia.org/geoline?getgeojson=1\u0026ids=Q163215",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1965
+     },
+     {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/Wikidata-logo.svg/40px-Wikidata-logo.svg.png",
+      "type": "Image",
+      "status": 200,
+      "encoded": 244
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/api.php?action=query\u0026format=json\u0026formatversion=2\u0026origin=*\u0026prop=pageimages%7Cdescription\u0026piprop=thumbnail\u0026pithum…",
+      "type": "Other",
+      "status": 429,
+      "encoded": 278
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1942/1569.png?lang=en",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1944/1569.png?lang=en",
+      "type": "Document",
+      "status": 429,
+      "encoded": 1966
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1943/1569.png?lang=en",
+      "type": "Image",
+      "status": 200,
+      "encoded": 39122
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1944/1568.png?lang=en",
+      "type": "Image",
+      "status": 200,
+      "encoded": 28375
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1942/1568.png?lang=en",
+      "type": "Image",
+      "status": 200,
+      "encoded": 36068
+     },
+     {
+      "url": "https://maps.wikimedia.org/osm-intl/12/1943/1568.png?lang=en",
+      "type": "Image",
+      "status": 200,
+      "encoded": 44398
+     }
+    ],
+    "engine": {
+     "wire_in": 1136272,
+     "wire_out": 58996,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 447845,
+    "wire_out": 43188,
+    "conns": 21,
+    "handshake_in": 819,
+    "handshake_out": 2205,
+    "requests": 58,
+    "cache_served": 28,
+    "ready_ms": 9813.702,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 19,
+     "Image": 26,
+     "Other": 1,
+     "Script": 4,
+     "Stylesheet": 3,
+     "XHR": 5
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikivoyage.org",
+      "conns": 1,
+      "in": 267617,
+      "out": 5316
+     },
+     {
+      "host": "maps.wikimedia.org",
+      "conns": 16,
+      "in": 144334,
+      "out": 28861
+     },
+     {
+      "host": "upload.wikimedia.org",
+      "conns": 1,
+      "in": 10300,
+      "out": 2347
+     },
+     {
+      "host": "meta.wikimedia.org",
+      "conns": 1,
+      "in": 9481,
+      "out": 2168
+     },
+     {
+      "host": "thumb.wikimedia.org",
+      "conns": 2,
+      "in": 8094,
+      "out": 2309
+     },
+     {
+      "host": "en.wikipedia.org",
+      "conns": 1,
+      "in": 8019,
+      "out": 2187
+     }
+    ],
+    "engine": {
+     "wire_in": 448664,
+     "wire_out": 45369,
+     "cache_hit_bytes": 244433,
+     "aborted_bytes": 0,
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  },
+  {
+   "site": "https://en.wikivoyage.org/wiki/Lisbon",
+   "mode": "sweef-strict",
+   "run": 1,
+   "attempts": 1,
+   "cold": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 293041,
+    "wire_out": 8984,
+    "conns": 2,
+    "handshake_in": 78,
+    "handshake_out": 206,
+    "requests": 8,
+    "cache_served": 0,
+    "ready_ms": 939.255,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 4,
+     "Stylesheet": 3
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikivoyage.org",
+      "conns": 2,
+      "in": 293041,
+      "out": 8984
+     }
+    ],
+    "resources": [
+     {
+      "url": "https://en.wikivoyage.org/wiki/Lisbon",
+      "type": "Document",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=site.styles\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.gadget.NightMode\u0026only=styles\u0026skin=vector-2022",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.WikidataPageBanner%2CwikimediaBadges%7Cext.WikidataPageBanner.print.styles%7Cext.W…",
+      "type": "Stylesheet",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=startup\u0026only=scripts\u0026raw=1\u0026skin=vector-2022",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.gadget.CUReportTool%2CCarousel%2CListingEditor2023%2CListingEditor2023Styles%2CLis…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.visualEditor.core.utils.parsing%7Cext.visualEditor.desktopArticleTarget.init%7Cext…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     },
+     {
+      "url": "https://en.wikivoyage.org/w/load.php?lang=en\u0026modules=ext.WikidataPageBanner.positionBanner%7Cext.centralNotice.choiceData%2Cdisplay%2CgeoIP…",
+      "type": "Script",
+      "status": 200,
+      "encoded": -1
+     }
+    ],
+    "engine": {
+     "wire_in": 293119,
+     "wire_out": 9190,
+     "cache_hit_bytes": 0,
+     "aborted_bytes": 360179,
+     "skipped": {
+      "script": 1
+     },
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   },
+   "warm": {
+    "ok": true,
+    "status": 200,
+    "wire_in": 104770,
+    "wire_out": 3703,
+    "conns": 1,
+    "handshake_in": 39,
+    "handshake_out": 103,
+    "requests": 8,
+    "cache_served": 5,
+    "ready_ms": 316.959,
+    "browser_in": -1,
+    "browser_out": -1,
+    "by_type_count": {
+     "Document": 1,
+     "Script": 4,
+     "Stylesheet": 3
+    },
+    "doc_bytes": 0,
+    "hosts": [
+     {
+      "host": "en.wikivoyage.org",
+      "conns": 1,
+      "in": 104770,
+      "out": 3703
+     }
+    ],
+    "engine": {
+     "wire_in": 104809,
+     "wire_out": 3806,
+     "cache_hit_bytes": 115118,
+     "aborted_bytes": 360179,
+     "skipped": {
+      "script": 1
+     },
+     "skipped_estimate": 0,
+     "skipped_known_bytes": 0,
+     "requests": 0
+    }
+   }
+  }
+ ],
+ "baselines": [
+  {
+   "mode": "sweef-off",
+   "run": 1,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-off",
+   "run": 2,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-standard",
+   "run": 1,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-standard",
+   "run": 2,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-strict",
+   "run": 1,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "sweef-strict",
+   "run": 2,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0
+  },
+  {
+   "mode": "chromium",
+   "run": 1,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0,
+   "hosts": [
+    "www.google.com",
+    "accounts.google.com"
+   ],
+   "internal_in": 13285,
+   "internal_out": 4198
+  },
+  {
+   "mode": "chromium",
+   "run": 2,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0,
+   "hosts": [
+    "www.google.com",
+    "accounts.google.com"
+   ],
+   "internal_in": 13210,
+   "internal_out": 4198
+  },
+  {
+   "mode": "chromium-savedata",
+   "run": 1,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0,
+   "hosts": [
+    "accounts.google.com",
+    "www.google.com"
+   ],
+   "internal_in": 13150,
+   "internal_out": 4198
+  },
+  {
+   "mode": "chromium-savedata",
+   "run": 2,
+   "wire_in": 0,
+   "wire_out": 0,
+   "conns": 0,
+   "hosts": [
+    "accounts.google.com",
+    "www.google.com"
+   ],
+   "internal_in": 10457,
+   "internal_out": 4198
+  }
+ ]
+}
