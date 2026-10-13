@@ -29,6 +29,41 @@
         Object.defineProperty(proto, k, { get: typeof d === 'function' ? d : d.get, set: d.set, enumerable: true, configurable: true });
       });
     },
+    // true when a name is absent or still only our lazy accessor
+    missing: function (o, k) { var d = Object.getOwnPropertyDescriptor(o, k); return !d || !!(d.get && d.get.lazy); },
+    // event classes in the prelude's style: plain constructors with own data fields
+    eventClass: function (name, fields, sup, required) {
+      sup = sup || g.Event;
+      var C = function (type, init) {
+        if (!(this instanceof C)) throw new TypeError("Failed to construct '" + name + "': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+        if (arguments.length === 0) throw new TypeError("Failed to construct '" + name + "': 1 argument required, but only 0 present.");
+        if (required && (init === null || typeof init !== 'object' || init[required] === undefined)) throw new TypeError("Failed to construct '" + name + "': Failed to read the '" + required + "' property from '" + name + "Init': Required member is undefined.");
+        sup.call(this, type, init);
+        init = init || {};
+        for (var f in fields) this[f] = f in init ? init[f] : fields[f];
+      };
+      Object.setPrototypeOf(C.prototype, sup.prototype);
+      Object.setPrototypeOf(C, sup);
+      Object.defineProperty(C, 'name', { value: name, configurable: true });
+      H.tag(C, name);
+      H.glob(name, C);
+      return C;
+    },
+    // on<type> handler properties backed by addEventListener
+    handlers: function (proto, types) {
+      types.forEach(function (n) {
+        var key = '__on' + n;
+        Object.defineProperty(proto, 'on' + n, {
+          configurable: true, enumerable: true,
+          get: function () { return this[key] || null; },
+          set: function (fn) {
+            if (this[key]) this.removeEventListener(n, this[key]);
+            Object.defineProperty(this, key, { value: typeof fn === 'function' ? fn : null, writable: true, configurable: true });
+            if (this[key]) this.addEventListener(n, this[key]);
+          }
+        });
+      });
+    },
     load: load
   };
   function load(m) {
@@ -40,7 +75,8 @@
       (0, g.eval)('(function(g,H){"use strict";' + src + '\n})')(g, H);
     } catch (e) { loaded[m] = 0; throw e; }
   }
-  function lazy(obj, name, mod, enumerable) {
+  function lazy(obj, name, mod, enumerable, onlyMissing) {
+    if (onlyMissing && name in obj) return;
     var desc = {
       configurable: true, enumerable: !!enumerable,
       get: function () {
@@ -51,10 +87,11 @@
       },
       set: function (v) { Object.defineProperty(obj === g ? g : this, name, { value: v, writable: true, configurable: true, enumerable: !!enumerable }); }
     };
+    desc.get.lazy = true;
     Object.defineProperty(obj, name, desc);
   }
-  function names(mod, list, obj, enumerable) {
-    list.split(' ').forEach(function (n) { lazy(obj || g, n, mod, enumerable); });
+  function names(mod, list, obj, enumerable, onlyMissing) {
+    list.split(' ').forEach(function (n) { lazy(obj || g, n, mod, enumerable, onlyMissing); });
   }
   // The streams stubs of the base prelude are replaced by the real thing.
   names('streams', 'ReadableStream ReadableStreamDefaultReader ReadableStreamBYOBReader ReadableStreamDefaultController ReadableByteStreamController ReadableStreamBYOBRequest WritableStream WritableStreamDefaultWriter WritableStreamDefaultController TransformStream TransformStreamDefaultController CountQueuingStrategy ByteLengthQueuingStrategy');
@@ -62,6 +99,12 @@
   names('xpath', 'XPathEvaluator XPathExpression XPathResult XPathNSResolver');
   names('xpath', 'evaluate createExpression createNSResolver', g.Document.prototype, true);
   names('urlpattern', 'URLPattern');
+  names('es', 'fromAsync', Array, false, true);
+  names('es', 'dispose asyncDispose', Symbol, false, true);
+  names('es', 'DisposableStack AsyncDisposableStack SuppressedError', g, false, true);
+  if (typeof Atomics === 'object') names('es', 'waitAsync', Atomics, false, true);
+  names('intl', 'Locale', g.Intl, false, true);
+  names('sched', 'scheduler Scheduler TaskController TaskSignal TaskPriorityChangeEvent');
   Object.defineProperty(g, '__swPlatformLoad', { value: load });
   // V8 stack-trace API that libraries probe for.
   if (!Error.captureStackTrace) {
