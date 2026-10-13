@@ -181,7 +181,7 @@ H.define(FileSystemSyncAccessHandle.prototype, 'truncate', function truncate(siz
   if (!(n >= 0) || n === Infinity || n !== Math.floor(n)) throw new TypeError("Failed to execute 'truncate' on 'FileSystemSyncAccessHandle': The provided value is out of range.");
   op('syncTruncate', s.path, s.id, n);
 });
-H.define(FileSystemSyncAccessHandle.prototype, 'flush', function flush() { sh(this); });
+H.define(FileSystemSyncAccessHandle.prototype, 'flush', function flush() { var s = sh(this); op('syncFlush', s.path, s.id); });
 H.define(FileSystemSyncAccessHandle.prototype, 'close', function close() {
   var s = this !== null && typeof this === 'object' ? this[$] : undefined;
   if (!s || !s.sync) throw new TypeError('Illegal invocation');

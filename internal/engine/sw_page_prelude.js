@@ -147,10 +147,9 @@
       return { enable: function () { return Promise.resolve(); }, disable: function () { return Promise.resolve(); },
         setHeaderValue: function () { return Promise.resolve(); }, getState: function () { return Promise.resolve({ enabled: false, headerValue: 'true' }); } };
     },
-    pushManager: function () {
-      return { getSubscription: function () { return Promise.resolve(null); }, permissionState: function () { return Promise.resolve('denied'); },
-        subscribe: function () { return Promise.reject(mkErr('NotSupportedError', 'Push is not supported.')); } };
-    }
+    pushManager: function () { return global.__pwa.push(this); },
+    sync: function () { return global.__pwa.sync(this); },
+    periodicSync: function () { return global.__pwa.periodicSync(this); }
   });
   handlers(ServiceWorkerRegistration.prototype, ['updatefound']);
   function call(kind, args) {
@@ -167,8 +166,8 @@
       return call('swUpdate', [this._id]).then(function () { return self; });
     },
     unregister: function () { return call('swUnregister', [this._id]); },
-    getNotifications: function () { return Promise.resolve([]); },
-    showNotification: function () { return Promise.reject(new TypeError('No notification permission has been granted for this origin.')); }
+    getNotifications: function (filter) { return global.__pwa.list(this, filter); },
+    showNotification: function (title, options) { return global.__pwa.show.apply(null, [this].concat(Array.prototype.slice.call(arguments))); }
   });
   tag(ServiceWorkerRegistration, 'ServiceWorkerRegistration');
   exportClass(ServiceWorkerRegistration, 'ServiceWorkerRegistration');

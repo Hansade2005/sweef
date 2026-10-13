@@ -1,5 +1,5 @@
 /*
- * Worker, SharedWorker, BroadcastChannel and navigator.locks.
+ * Worker, SharedWorker and BroadcastChannel (navigator.locks is platformjs/pwa.js).
  *
  * Evaluated in every VM that has the page prelude: documents, the hidden VMs of workers (so a worker can start
  * workers, open channels and take locks) and nested browsing contexts. Go owns the worker VMs, the channel groups
@@ -200,90 +200,6 @@
   tag(BroadcastChannel, 'BroadcastChannel');
   exportClass(BroadcastChannel, 'BroadcastChannel');
 
-  // ---- Web Locks ------------------------------------------------------------------------------------------
-  var lockReqs = new Map();
-  function Lock(tok, name, mode) {
-    if (tok !== lockReqs) throw new TypeError('Illegal constructor');
-    Object.defineProperty(this, 'name', { value: name, enumerable: true });
-    Object.defineProperty(this, 'mode', { value: mode, enumerable: true });
-  }
-  tag(Lock, 'Lock');
-  exportClass(Lock, 'Lock');
-  function LockManager() { throw new TypeError('Illegal constructor'); }
-  function abortError(signal) {
-    if (signal && signal.reason !== undefined) return signal.reason;
-    return mkErr('AbortError', "The request was aborted.");
-  }
-  Object.defineProperty(LockManager.prototype, 'request', { value: function request(name, a, b) {
-    var options = {}, cb;
-    if (arguments.length < 2) return Promise.reject(new TypeError("Failed to execute 'request' on 'LockManager': 2 arguments required, but only " + arguments.length + " present."));
-    if (arguments.length === 2) cb = a; else { options = a === undefined || a === null ? {} : a; cb = b; }
-    if (typeof cb !== 'function') return Promise.reject(new TypeError("Failed to execute 'request' on 'LockManager': The callback provided as parameter 2 is not a function."));
-    name = String(name);
-    var mode = options.mode === undefined ? 'exclusive' : String(options.mode);
-    if (mode !== 'exclusive' && mode !== 'shared') return Promise.reject(new TypeError("Failed to execute 'request' on 'LockManager': The provided value '" + mode + "' is not a valid enum value of type LockMode."));
-    var ifAvailable = !!options.ifAvailable, steal = !!options.steal, signal = options.signal || null;
-    if (name.charAt(0) === '-') return Promise.reject(mkErr('NotSupportedError', "Failed to execute 'request' on 'LockManager': Names cannot start with '-'."));
-    if (steal && ifAvailable) return Promise.reject(mkErr('NotSupportedError', "Failed to execute 'request' on 'LockManager': The 'steal' and 'ifAvailable' options cannot be used together."));
-    if (steal && mode !== 'exclusive') return Promise.reject(mkErr('NotSupportedError', "Failed to execute 'request' on 'LockManager': The 'steal' option may only be used with 'exclusive' locks."));
-    if (signal && (steal || ifAvailable)) return Promise.reject(mkErr('NotSupportedError', "Failed to execute 'request' on 'LockManager': The 'signal' option cannot be used with 'steal' or 'ifAvailable'."));
-    if (signal && signal.aborted) return Promise.reject(abortError(signal));
-    return new Promise(function (resolve, reject) {
-      var id = host('lockRequest', name, mode, ifAvailable, steal);
-      var rec = { name: name, mode: mode, cb: cb, resolve: resolve, reject: reject, held: false, done: false };
-      lockReqs.set(id, rec);
-      if (signal) {
-        rec.onabort = function () {
-          if (rec.held || rec.done) return;
-          rec.done = true;
-          lockReqs.delete(id);
-          host('lockAbort', id);
-          reject(abortError(signal));
-        };
-        signal.addEventListener('abort', rec.onabort);
-        rec.signal = signal;
-      }
-    });
-  }, writable: true, configurable: true, enumerable: true });
-  Object.defineProperty(LockManager.prototype, 'query', { value: function query() {
-    return new Promise(function (resolve) {
-      var q = host('lockQuery');
-      function conv(l) { return (l || []).map(function (x) { return { name: x.name, mode: x.mode, clientId: x.clientId }; }); }
-      resolve({ held: conv(q.held), pending: conv(q.pending) });
-    });
-  }, writable: true, configurable: true, enumerable: true });
-  tag(LockManager, 'LockManager');
-  exportClass(LockManager, 'LockManager');
-  var lockManager = Object.create(LockManager.prototype);
-  function onLock(m) {
-    var rec = lockReqs.get(m.req);
-    if (!rec) return;
-    if (rec.signal && rec.onabort) rec.signal.removeEventListener('abort', rec.onabort);
-    if (m.st === 'granted') {
-      rec.held = true;
-      var ret;
-      try { ret = Promise.resolve(rec.cb(new Lock(lockReqs, rec.name, rec.mode))); } catch (e) { ret = Promise.reject(e); }
-      ret.then(function (v) { lockReqs.delete(m.req); host('lockRelease', m.req); if (!rec.stolen) rec.resolve(v); },
-        function (e) { lockReqs.delete(m.req); host('lockRelease', m.req); if (!rec.stolen) rec.reject(e); });
-    } else if (m.st === 'unavailable') {
-      rec.done = true;
-      lockReqs.delete(m.req);
-      var r2;
-      try { r2 = Promise.resolve(rec.cb(null)); } catch (e) { r2 = Promise.reject(e); }
-      r2.then(rec.resolve, rec.reject);
-    } else if (m.st === 'stolen') {
-      rec.stolen = true;
-      lockReqs.delete(m.req);
-      rec.reject(mkErr('AbortError', 'Lock broken by another request with the \'steal\' option.'));
-    }
-  }
-  try {
-    // the VM is built before it is bound to a document, so whether this is a secure context is asked on use
-    if (global.Navigator && global.Navigator.prototype) {
-      Object.defineProperty(global.Navigator.prototype, 'locks', { get: function () { return (typeof H.secureContext === 'function' ? !!H.secureContext() : true) ? lockManager : undefined; }, enumerable: true, configurable: true });
-    }
-  } catch (e) { /* no navigator */ }
-
   // ---- events from Go --------------------------------------------------------------------------------------
   Object.defineProperty(global, '__swWkEvent', { value: function (json) {
     var m = JSON.parse(json);
@@ -317,7 +233,6 @@
           ch.dispatchEvent(badc ? new global.MessageEvent('messageerror', {}) : new global.MessageEvent('message', { data: d, origin: m.origin || '' }));
           return true;
         }
-        case 'lock': onLock(m); return true;
       }
     } catch (e) { report(e); }
     return false;

@@ -466,8 +466,8 @@ func (t *Tab) cacheKeyKind(rawurl, rng string, kind DataKind) (string, bool) {
 	return t.eng.res.keyTop(t.Context(), top, rawurl, rng)
 }
 
-// secureContext: https, a loopback address, or a document that inherits such an origin (about:blank, srcdoc).
-func (t *Tab) secureContext() bool {
+// secureDoc: https, a loopback address, or a document that inherits such an origin (about:blank, srcdoc).
+func (t *Tab) secureDoc() bool {
 	if potentiallyTrustworthy(t.URL()) {
 		return true
 	}

@@ -82,95 +82,101 @@ func filter246(pix []byte, n, level, ilevel, hlevel, index, iStep, jStep int, fo
 // frameFilter runs the loop filter over the whole reconstructed frame in
 // macroblock raster order (sections 15.2 and 15.3).
 func (d *Decoder) frameFilter(img *image.YCbCr) {
+	for mby := 0; mby < d.mbh; mby++ {
+		for mbx := 0; mbx < d.mbw; mbx++ {
+			d.filterMB(img, mbx, mby)
+		}
+	}
+}
+
+// filterMB filters the edges of one macroblock (its left and top edges and its inner edges).
+// A macroblock may only be filtered after its left, top and top-right neighbours.
+func (d *Decoder) filterMB(img *image.YCbCr, mbx, mby int) {
 	sharp := d.lf.sharp
 	key := d.hdr.KeyFrame
 	ys, cs := img.YStride, img.CStride
-	for mby := 0; mby < d.mbh; mby++ {
-		for mbx := 0; mbx < d.mbw; mbx++ {
-			mi := &d.mbs[(mby+1)*d.miStride+mbx+1]
-			lvl := int(mi.lfLevel)
-			if lvl == 0 {
-				continue
-			}
-			il := lvl
-			if sharp > 0 {
-				if sharp > 4 {
-					il >>= 2
-				} else {
-					il >>= 1
-				}
-				if il > 9-sharp {
-					il = 9 - sharp
-				}
-			}
-			if il < 1 {
-				il = 1
-			}
-			hl := 0
-			if key {
-				if lvl >= 40 {
-					hl = 2
-				} else if lvl >= 15 {
-					hl = 1
-				}
-			} else {
-				if lvl >= 40 {
-					hl = 3
-				} else if lvl >= 20 {
-					hl = 2
-				} else if lvl >= 15 {
-					hl = 1
-				}
-			}
-			mbl := (lvl+2)*2 + il
-			bl := lvl*2 + il
-			inner := mi.lfInner
-			yi := (mby*ys + mbx) * 16
-			ci := (mby*cs + mbx) * 8
-			if d.lf.simple {
-				if mbx > 0 {
-					filter2(img.Y, mbl, yi, ys, 1)
-				}
-				if inner {
-					filter2(img.Y, bl, yi+4, ys, 1)
-					filter2(img.Y, bl, yi+8, ys, 1)
-					filter2(img.Y, bl, yi+12, ys, 1)
-				}
-				if mby > 0 {
-					filter2(img.Y, mbl, yi, 1, ys)
-				}
-				if inner {
-					filter2(img.Y, bl, yi+ys*4, 1, ys)
-					filter2(img.Y, bl, yi+ys*8, 1, ys)
-					filter2(img.Y, bl, yi+ys*12, 1, ys)
-				}
-				continue
-			}
-			if mbx > 0 {
-				filter246(img.Y, 16, mbl, il, hl, yi, ys, 1, false)
-				filter246(img.Cb, 8, mbl, il, hl, ci, cs, 1, false)
-				filter246(img.Cr, 8, mbl, il, hl, ci, cs, 1, false)
-			}
-			if inner {
-				filter246(img.Y, 16, bl, il, hl, yi+4, ys, 1, true)
-				filter246(img.Y, 16, bl, il, hl, yi+8, ys, 1, true)
-				filter246(img.Y, 16, bl, il, hl, yi+12, ys, 1, true)
-				filter246(img.Cb, 8, bl, il, hl, ci+4, cs, 1, true)
-				filter246(img.Cr, 8, bl, il, hl, ci+4, cs, 1, true)
-			}
-			if mby > 0 {
-				filter246(img.Y, 16, mbl, il, hl, yi, 1, ys, false)
-				filter246(img.Cb, 8, mbl, il, hl, ci, 1, cs, false)
-				filter246(img.Cr, 8, mbl, il, hl, ci, 1, cs, false)
-			}
-			if inner {
-				filter246(img.Y, 16, bl, il, hl, yi+ys*4, 1, ys, true)
-				filter246(img.Y, 16, bl, il, hl, yi+ys*8, 1, ys, true)
-				filter246(img.Y, 16, bl, il, hl, yi+ys*12, 1, ys, true)
-				filter246(img.Cb, 8, bl, il, hl, ci+cs*4, 1, cs, true)
-				filter246(img.Cr, 8, bl, il, hl, ci+cs*4, 1, cs, true)
-			}
+	mi := &d.mbs[(mby+1)*d.miStride+mbx+1]
+	lvl := int(mi.lfLevel)
+	if lvl == 0 {
+		return
+	}
+	il := lvl
+	if sharp > 0 {
+		if sharp > 4 {
+			il >>= 2
+		} else {
+			il >>= 1
 		}
+		if il > 9-sharp {
+			il = 9 - sharp
+		}
+	}
+	if il < 1 {
+		il = 1
+	}
+	hl := 0
+	if key {
+		if lvl >= 40 {
+			hl = 2
+		} else if lvl >= 15 {
+			hl = 1
+		}
+	} else {
+		if lvl >= 40 {
+			hl = 3
+		} else if lvl >= 20 {
+			hl = 2
+		} else if lvl >= 15 {
+			hl = 1
+		}
+	}
+	mbl := (lvl+2)*2 + il
+	bl := lvl*2 + il
+	inner := mi.lfInner
+	yi := (mby*ys + mbx) * 16
+	ci := (mby*cs + mbx) * 8
+	if d.lf.simple {
+		if mbx > 0 {
+			filter2(img.Y, mbl, yi, ys, 1)
+		}
+		if inner {
+			filter2(img.Y, bl, yi+4, ys, 1)
+			filter2(img.Y, bl, yi+8, ys, 1)
+			filter2(img.Y, bl, yi+12, ys, 1)
+		}
+		if mby > 0 {
+			filter2(img.Y, mbl, yi, 1, ys)
+		}
+		if inner {
+			filter2(img.Y, bl, yi+ys*4, 1, ys)
+			filter2(img.Y, bl, yi+ys*8, 1, ys)
+			filter2(img.Y, bl, yi+ys*12, 1, ys)
+		}
+		return
+	}
+	if mbx > 0 {
+		filter246(img.Y, 16, mbl, il, hl, yi, ys, 1, false)
+		filter246(img.Cb, 8, mbl, il, hl, ci, cs, 1, false)
+		filter246(img.Cr, 8, mbl, il, hl, ci, cs, 1, false)
+	}
+	if inner {
+		filter246(img.Y, 16, bl, il, hl, yi+4, ys, 1, true)
+		filter246(img.Y, 16, bl, il, hl, yi+8, ys, 1, true)
+		filter246(img.Y, 16, bl, il, hl, yi+12, ys, 1, true)
+		filter246(img.Cb, 8, bl, il, hl, ci+4, cs, 1, true)
+		filter246(img.Cr, 8, bl, il, hl, ci+4, cs, 1, true)
+	}
+	if mby > 0 {
+		filter246(img.Y, 16, mbl, il, hl, yi, 1, ys, false)
+		filter246(img.Cb, 8, mbl, il, hl, ci, 1, cs, false)
+		filter246(img.Cr, 8, mbl, il, hl, ci, 1, cs, false)
+	}
+	if inner {
+		filter246(img.Y, 16, bl, il, hl, yi+ys*4, 1, ys, true)
+		filter246(img.Y, 16, bl, il, hl, yi+ys*8, 1, ys, true)
+		filter246(img.Y, 16, bl, il, hl, yi+ys*12, 1, ys, true)
+		filter246(img.Cb, 8, bl, il, hl, ci+cs*4, 1, cs, true)
+		filter246(img.Cr, 8, bl, il, hl, ci+cs*4, 1, cs, true)
 	}
 }
 

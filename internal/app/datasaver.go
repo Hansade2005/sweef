@@ -660,6 +660,10 @@ func (a *App) onDataMessage(typ string, raw json.RawMessage, tabID string) bool 
 			Rule   string `json:"rule"`
 		}](raw)
 		a.dataSetSiteRule(p.Origin, p.Rule)
+	case "data.storageClear":
+		a.clearSiteStorage(decode[struct {
+			Origin string `json:"origin"`
+		}](raw).Origin)
 	case "data.reset":
 		a.prof.Data.Reset()
 		a.dat.cache.valid = false
@@ -845,6 +849,7 @@ func (a *App) dataState() map[string]any {
 		"showMeter":    a.prof.Settings.Bool("data.showMeter"),
 		"sites":        siteRulesJSON(a.prof.Settings.DataSites()),
 		"incognito":    priv,
+		"storage":      a.storageState(priv),
 	}
 	tab, kinds := a.dataTabState()
 	out["tab"] = tab

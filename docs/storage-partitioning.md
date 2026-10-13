@@ -28,9 +28,9 @@ A document with an opaque origin (sandbox without `allow-same-origin`, `data:`) 
 | `sessionStorage` | one per document (VM), unavailable to opaque origins | same |
 | IndexedDB | storage key (database files live under the key's directory) | same; also storage-quota probing |
 | Cache Storage | storage key | same, and cache probing |
-| Origin Private File System | storage key, per BrowserContext (a private window shares nothing with the normal one) | same |
+| Origin Private File System | storage key, stored in the key's own sitestore directory (a private window's context shares nothing with the normal one); a `FileSystemSyncAccessHandle` holds its file in memory until `flush`/`close` | same |
 | Service worker registrations and scope, the worker's script fetch | storage key (a registration made by an embed is visible to documents embedded the same way) | a worker is persistent storage that also runs code |
-| BroadcastChannel, SharedWorker, Web Locks | storage key (+ BrowserContext) | a covert channel between two embeds of one third party on different sites |
+| BroadcastChannel, SharedWorker | storage key (+ BrowserContext); Web Locks (`pwa_locks.go`) are namespaced by the same key | a covert channel between two embeds of one third party on different sites |
 | Dedicated Worker | inherits the key of the document that started it | a worker is part of its creator's context |
 | HTTP cache | top-level site + URL (`httpCache.keyTop`) | cache probing: a site learning that a resource was loaded by another site; a shared copy as a cross-site identifier |
 | Web font / image / preload fetches | go through the HTTP cache, so top-level site + URL | same |

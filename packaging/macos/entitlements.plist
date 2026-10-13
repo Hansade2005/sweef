@@ -5,9 +5,11 @@
   <!-- Hardened runtime is enabled at signing time (codesign option: runtime).
        Sweef is pure Go with a QuickJS interpreter translated to Go: there is no JIT, so none of the
        com.apple.security.cs.allow-jit / allow-unsigned-executable-memory / disable-library-validation
-       exceptions are requested. Add camera/microphone entitlements only when the engine gains
-       getUserMedia support (and then the matching NS*UsageDescription keys in Info.plist). -->
+       exceptions are requested. The camera and audio-input entitlements are what the hardened runtime needs for
+       getUserMedia (internal/capture/avf); the matching NS*UsageDescription keys are in Info.plist.in. -->
   <key>com.apple.security.network.client</key><true/>
   <key>com.apple.security.network.server</key><true/>
+  <key>com.apple.security.device.camera</key><true/>
+  <key>com.apple.security.device.audio-input</key><true/>
 </dict>
 </plist>

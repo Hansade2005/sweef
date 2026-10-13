@@ -115,19 +115,15 @@ return JSON.stringify({ caches: est.usageDetails.caches > 1048576, total: est.us
 `)
 	expect(t, tab, got, `{"caches":true,"total":true}`)
 	e1.Close()
-	bodies, _ := filepath.Glob(filepath.Join(dir, "*", "caches", "bodies", "*"))
-	if len(bodies) != 3 {
-		t.Fatalf("expected 3 body files, got %v", bodies)
+	// only the 1 MiB body is a file; the two small ones are values in the ordered store
+	bodies, _ := filepath.Glob(filepath.Join(dir, "*", "blobs", "*"))
+	if len(bodies) != 1 {
+		t.Fatalf("expected 1 blob file, got %v", bodies)
 	}
-	var total int64
-	for _, b := range bodies {
-		fi, _ := os.Stat(b)
-		total += fi.Size()
+	if fi, _ := os.Stat(bodies[0]); fi == nil || fi.Size() != 1048576 {
+		t.Fatalf("blob size: %v", fi)
 	}
-	if total != int64(1048576+len("alpha:")+256) {
-		t.Fatalf("body bytes on disk: %d", total)
-	}
-	// an orphan body (crash between file and index record) is swept on the next open
+	// an orphan body (crash between the file and the batch that refers to it) is swept on the next open
 	orphan := filepath.Join(filepath.Dir(bodies[0]), "9999")
 	os.WriteFile(orphan, []byte("junk"), 0o600)
 
@@ -144,9 +140,10 @@ return JSON.stringify({ names, big: big.byteLength, text: await (await c.match('
 	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
 		t.Fatalf("orphan body was not removed: %v", err)
 	}
-	// deleting the cache removes its files
+	// deleting the cache removes its files (the collector does it in the background)
 	js(t, tab2, `await caches.delete('assets'); return 1;`)
-	if left, _ := filepath.Glob(filepath.Join(dir, "*", "caches", "bodies", "*")); len(left) != 0 {
+	e2.DefaultContext().SiteStorage().Origin(siteOriginOf(srv.URL)).WaitGC()
+	if left, _ := filepath.Glob(filepath.Join(dir, "*", "blobs", "*")); len(left) != 0 {
 		t.Fatalf("bodies left after delete: %v", left)
 	}
 }
@@ -169,8 +166,8 @@ func TestCacheStorageEphemeralAndCleared(t *testing.T) {
 	}
 	tab := openTab(t, e, srv.URL+"/")
 	js(t, tab, `const c = await caches.open('keep'); await c.add('/a.txt'); return 1;`)
-	if b, _ := filepath.Glob(filepath.Join(dir, "*", "caches", "bodies", "*")); len(b) != 1 {
-		t.Fatalf("expected one body on disk: %v", b)
+	if b, _ := filepath.Glob(filepath.Join(dir, "*", "kv", "CURRENT")); len(b) != 1 {
+		t.Fatalf("expected the origin's ordered store on disk: %v", b)
 	}
 	e.DefaultContext().ClearSiteData(siteOriginOf(srv.URL))
 	if ents, _ := os.ReadDir(dir); len(ents) != 0 {

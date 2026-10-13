@@ -66,8 +66,6 @@ type workerHost struct {
 	shared map[string]*bgWorker
 	closed bool
 	bc     bcHub
-	locks  lockHub
-	opfs   map[string]*opfsOrigin // Origin Private File System trees by storage key (platform_opfs.go)
 }
 
 func (c *BrowserContext) workers() *workerHost {
@@ -76,7 +74,6 @@ func (c *BrowserContext) workers() *workerHost {
 	}
 	h := &workerHost{shared: map[string]*bgWorker{}}
 	h.bc.init()
-	h.locks.init()
 	if !c.wk.CompareAndSwap(nil, h) {
 		return c.wk.Load()
 	}
@@ -137,7 +134,6 @@ func (b *vmBG) closeAll() {
 	if b.j.tab != nil {
 		if h := b.j.tab.Context().wk.Load(); h != nil {
 			h.bc.vmGone(bcs)
-			h.locks.vmGone(b.j)
 		}
 	}
 	for _, w := range ws {
@@ -516,21 +512,6 @@ func (h *wkHost) fns() map[string]hostFn {
 		"bcClose": func(a []any) (any, error) {
 			h.ctxHost().bc.close(argI(a, 0), j)
 			return nil, nil
-		},
-		// ---- Web Locks ----
-		"lockRequest": func(a []any) (any, error) {
-			return h.ctxHost().locks.request(j, h.key(), argS(a, 0), argS(a, 1), argB(a, 2), argB(a, 3)), nil
-		},
-		"lockRelease": func(a []any) (any, error) { h.ctxHost().locks.release(argI(a, 0)); return nil, nil },
-		"lockAbort":   func(a []any) (any, error) { h.ctxHost().locks.abort(argI(a, 0)); return nil, nil },
-		"lockQuery": func(a []any) (any, error) {
-			return h.ctxHost().locks.query(h.key()), nil
-		},
-		"lockClientID": func(a []any) (any, error) {
-			if j.tab == nil {
-				return "", nil
-			}
-			return fmt.Sprintf("%d", j.tab.winID), nil
 		},
 	}
 }

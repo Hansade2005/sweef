@@ -26,15 +26,17 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 	"unsafe"
 
 	"github.com/pion/ice/v4"
-	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/pkg/cc"
+	"github.com/pion/interceptor/pkg/stats"
 	"github.com/pion/logging"
+	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
-	"github.com/pion/webrtc/v4/pkg/media"
 	"github.com/pion/webrtc/v4/pkg/rtcerr"
+
+	"github.com/sweefbrowser/sweef/internal/rtcmedia"
 )
 
 //go:embed webrtc_prelude.js
@@ -232,10 +234,28 @@ type rtcDC struct {
 }
 
 type rtcTR struct {
-	id    int64
-	t     *webrtc.RTPTransceiver
-	local *webrtc.TrackLocalStaticSample
-	live  atomic.Bool // a live track is attached: silence frames flow
+	id int64
+	t  *webrtc.RTPTransceiver
+
+	// send side (smu): the local track stays bound to the sender for its whole life, so replaceTrack only
+	// swaps the source behind the pipeline
+	smu       sync.Mutex
+	local     *rtcmedia.LocalTrack
+	vs        *rtcmedia.VideoSender
+	as        *rtcmedia.AudioSender
+	desc      RTCTrackDesc
+	params    rtcmedia.SendParams
+	live      atomic.Bool // a live track is attached and the sender is active
+	encActive atomic.Bool // RTCRtpEncodingParameters.active
+	rtcpH     atomic.Pointer[func([]rtcp.Packet)]
+	drained   sync.Once
+
+	// receive side (rmu)
+	rmu     sync.Mutex
+	vr      *rtcmedia.VideoReceiver
+	ar      *rtcmedia.AudioReceiver
+	nodes   map[int64]*rtcBitmap
+	audioOn bool
 }
 
 type rtcPeer struct {
@@ -253,8 +273,10 @@ type rtcPeer struct {
 	closed  atomic.Bool
 	done    chan struct{}
 	wg      sync.WaitGroup
-	pump    sync.Once
-	midOnce sync.Once
+	est     cc.BandwidthEstimator
+	sg      stats.Getter
+	rtx     *rtcmedia.RTXCounter
+	proc    rtcmedia.AudioProcessor
 }
 
 func (p *rtcPeer) emit(typ string, v any) {
@@ -365,7 +387,7 @@ func (h *rtcHost) config(c rtcConfigJS) (webrtc.Configuration, error) {
 	return cfg, nil
 }
 
-func (h *rtcHost) newAPI(mode WebRTCHostCandidates) (*webrtc.API, error) {
+func (h *rtcHost) newAPI(mode WebRTCHostCandidates) (*rtcmedia.API, error) {
 	se := webrtc.SettingEngine{}
 	se.LoggerFactory = &logging.DefaultLoggerFactory{Writer: io.Discard, DefaultLogLevel: logging.LogLevelDisabled}
 	if os.Getenv("SWEEF_WEBRTC_DEBUG") != "" { // pion's own log to stderr, for diagnosing connectivity
@@ -401,15 +423,7 @@ func (h *rtcHost) newAPI(mode WebRTCHostCandidates) (*webrtc.API, error) {
 		return nil, err
 	}
 	se.SetNet(n)
-	me := &webrtc.MediaEngine{}
-	if err := me.RegisterDefaultCodecs(); err != nil {
-		return nil, err
-	}
-	reg := &interceptor.Registry{}
-	if err := webrtc.RegisterDefaultInterceptors(me, reg); err != nil {
-		return nil, err
-	}
-	return webrtc.NewAPI(webrtc.WithSettingEngine(se), webrtc.WithMediaEngine(me), webrtc.WithInterceptorRegistry(reg)), nil
+	return rtcmedia.NewAPI(se, true)
 }
 
 func (h *rtcHost) fns() map[string]hostFn {
@@ -550,7 +564,18 @@ func (h *rtcHost) fns() map[string]hostFn {
 			return nil, err
 		}
 		if x := p.tr(argI(a, 1)); x != nil {
-			x.live.Store(argB(a, 2))
+			x.setLive(argB(a, 2))
+		}
+		return nil, nil
+	}
+	f["rtcTrackStopped"] = func(a []any) (any, error) {
+		p, err := h.peer(a)
+		if err != nil {
+			return nil, nil
+		}
+		if x := p.tr(argI(a, 1)); x != nil {
+			x.live.Store(false)
+			p.detachSource(x) // closes our capture source: the camera is released
 		}
 		return nil, nil
 	}
@@ -586,7 +611,10 @@ func (h *rtcHost) fns() map[string]hostFn {
 			return nil, nil
 		}
 		tr.live.Store(false)
-		return nil, rtcErr(tr.t.Stop())
+		err = rtcErr(tr.t.Stop())
+		tr.closeSender()
+		tr.closeReceiver()
+		return nil, err
 	}
 	f["rtcCreateDC"] = func(a []any) (any, error) {
 		p, err := h.peer(a)
@@ -665,6 +693,7 @@ func (h *rtcHost) fns() map[string]hostFn {
 		return jsonOut(p.transport())
 	}
 	f["rtcGenCert"] = h.hostGenCert
+	h.mediaFns(f)
 	return f
 }
 
@@ -752,6 +781,15 @@ func (h *rtcHost) hostNew(a []any) (any, error) {
 	h.mu.Lock()
 	id := r.id()
 	p := &rtcPeer{h: h, id: id, pc: pc, mode: mode, dcs: map[int64]*rtcDC{}, done: make(chan struct{})}
+	select {
+	case p.est = <-api.Estimator:
+	default:
+	}
+	select {
+	case p.sg = <-api.Stats:
+	default:
+	}
+	p.rtx = api.Retransmits
 	h.peers[id] = p
 	h.mu.Unlock()
 	rtcLive.Add(1)
@@ -779,27 +817,7 @@ func (p *rtcPeer) wire() {
 		mid, idx := p.firstMid()
 		p.emit("icecandidate", map[string]any{"candidate": line, "sdpMid": mid, "sdpMLineIndex": idx, "usernameFragment": derefStr(init.UsernameFragment)})
 	})
-	pc.OnTrack(func(tr *webrtc.TrackRemote, rcv *webrtc.RTPReceiver) {
-		// Received media is accepted and counted (stats), but the engine has no
-		// path from RTP to the media stack yet: the packets are read and dropped.
-		p.wg.Add(2)
-		go func() {
-			defer p.wg.Done()
-			for {
-				if _, _, err := tr.ReadRTP(); err != nil {
-					return
-				}
-			}
-		}()
-		go func() {
-			defer p.wg.Done()
-			for {
-				if _, _, err := rcv.ReadRTCP(); err != nil {
-					return
-				}
-			}
-		}()
-	})
+	pc.OnTrack(p.onRemoteTrack)
 	pc.OnDataChannel(func(d *webrtc.DataChannel) {
 		p.mu.Lock()
 		p.nextDC++
@@ -847,6 +865,13 @@ func (p *rtcPeer) close() {
 	}
 	close(p.done)
 	_ = p.pc.Close()
+	p.mu.Lock()
+	trs := append([]*rtcTR(nil), p.trs...)
+	p.mu.Unlock()
+	for _, x := range trs {
+		x.closeSender()
+		x.closeReceiver()
+	}
 	p.wg.Wait()
 	rtcLive.Add(-1)
 }
@@ -1010,9 +1035,11 @@ func (p *rtcPeer) trFor(t *webrtc.RTPTransceiver) *rtcTR {
 	}
 	p.nextTR++
 	x := &rtcTR{id: p.nextTR, t: t}
+	x.encActive.Store(true)
+	x.params = rtcmedia.DefaultSendParams()
 	p.trs = append(p.trs, x)
 	if s := t.Sender(); s != nil {
-		p.drainSender(s)
+		p.drainSender(x, s)
 	}
 	return x
 }
@@ -1037,33 +1064,35 @@ func (p *rtcPeer) snapshot() []map[string]any {
 	return out
 }
 
-func rtcCodec(kind string) webrtc.RTPCodecCapability {
-	if kind == "audio" {
-		return webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2, SDPFmtpLine: "minptime=10;useinbandfec=1"}
-	}
-	return webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}
-}
-
-func (p *rtcPeer) localTrack(kind, trackID, streamID string) (*webrtc.TrackLocalStaticSample, error) {
+func (p *rtcPeer) newLocal(x *rtcTR, kind, trackID, streamID string) *rtcmedia.LocalTrack {
 	if trackID == "" {
 		trackID = "track"
 	}
 	if streamID == "" {
 		streamID = "-"
 	}
-	return webrtc.NewTrackLocalStaticSample(rtcCodec(kind), trackID, streamID)
+	lt := rtcmedia.NewLocalTrack(kindOf(kind), trackID, streamID)
+	lt.SetRetransmitLimiter(p.rtx)
+	if x != nil {
+		lt.SetMidFunc(x.t.Mid)
+	}
+	return lt
 }
 
-func (p *rtcPeer) drainSender(s *webrtc.RTPSender) {
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		for {
-			if _, _, err := s.ReadRTCP(); err != nil {
-				return
-			}
-		}
-	}()
+// drainSender reads the RTCP of a sender (the interceptors need that to see feedback) and hands it to the
+// pipeline that is currently attached.
+func (p *rtcPeer) drainSender(x *rtcTR, s *webrtc.RTPSender) {
+	x.drained.Do(func() {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			rtcmedia.RunRTCP(s, func(pkts []rtcp.Packet) {
+				if h := x.rtcpH.Load(); h != nil {
+					(*h)(pkts)
+				}
+			})
+		}()
+	})
 }
 
 func (p *rtcPeer) trOfSender(s *webrtc.RTPSender) *rtcTR {
@@ -1075,11 +1104,9 @@ func (p *rtcPeer) trOfSender(s *webrtc.RTPSender) *rtcTR {
 	return nil
 }
 
-func (p *rtcPeer) addTrack(kind, trackID, streamID string) (any, error) {
-	lt, err := p.localTrack(kind, trackID, streamID)
-	if err != nil {
-		return nil, rtcErr(err)
-	}
+func (p *rtcPeer) addTrack(kind, descJSON, streamID string) (any, error) {
+	d := parseTrackDesc(descJSON)
+	lt := p.newLocal(nil, kind, d.ID, streamID)
 	s, err := p.pc.AddTrack(lt)
 	if err != nil {
 		return nil, rtcErr(err)
@@ -1088,30 +1115,36 @@ func (p *rtcPeer) addTrack(kind, trackID, streamID string) (any, error) {
 	if x == nil {
 		return nil, errors.New("OperationError: sender has no transceiver")
 	}
+	lt.SetMidFunc(x.t.Mid)
+	lt.ReadyWhenConnected(s)
+	x.smu.Lock()
 	x.local = lt
-	x.live.Store(true)
-	p.startPump()
+	x.smu.Unlock()
+	if err := p.ensurePipeline(x); err != nil {
+		return nil, rtcErr(err)
+	}
+	p.bindSource(x, d)
+	x.setLive(true)
 	return jsonOut(map[string]any{"id": x.id, "all": p.snapshot()})
 }
 
-func (p *rtcPeer) addTransceiver(kind, dir, trackID, streamID string) (any, error) {
-	d := webrtc.RTPTransceiverDirectionSendrecv
+func (p *rtcPeer) addTransceiver(kind, dir, descJSON, streamID string) (any, error) {
+	dd := webrtc.RTPTransceiverDirectionSendrecv
 	switch dir {
 	case "sendonly":
-		d = webrtc.RTPTransceiverDirectionSendonly
+		dd = webrtc.RTPTransceiverDirectionSendonly
 	case "recvonly":
-		d = webrtc.RTPTransceiverDirectionRecvonly
+		dd = webrtc.RTPTransceiverDirectionRecvonly
 	case "inactive":
-		d = webrtc.RTPTransceiverDirectionInactive
+		dd = webrtc.RTPTransceiverDirectionInactive
 	}
-	init := webrtc.RTPTransceiverInit{Direction: d}
+	init := webrtc.RTPTransceiverInit{Direction: dd}
 	var t *webrtc.RTPTransceiver
 	var err error
-	var lt *webrtc.TrackLocalStaticSample
-	if trackID != "" {
-		if lt, err = p.localTrack(kind, trackID, streamID); err != nil {
-			return nil, rtcErr(err)
-		}
+	var lt *rtcmedia.LocalTrack
+	d := parseTrackDesc(descJSON)
+	if d.ID != "" {
+		lt = p.newLocal(nil, kind, d.ID, streamID)
 		t, err = p.pc.AddTransceiverFromTrack(lt, init)
 	} else {
 		ck := webrtc.RTPCodecTypeVideo
@@ -1125,15 +1158,22 @@ func (p *rtcPeer) addTransceiver(kind, dir, trackID, streamID string) (any, erro
 	}
 	x := p.trFor(t)
 	if lt != nil {
+		lt.SetMidFunc(t.Mid)
+		lt.ReadyWhenConnected(t.Sender())
+		x.smu.Lock()
 		x.local = lt
-		x.live.Store(true)
-		p.startPump()
+		x.smu.Unlock()
+		if err := p.ensurePipeline(x); err != nil {
+			return nil, rtcErr(err)
+		}
+		p.bindSource(x, d)
+		x.setLive(true)
 	}
 	return jsonOut(map[string]any{"id": x.id, "all": p.snapshot()})
 }
 
-// setSender attaches (trackID != "") or detaches the page's track to a sender.
-func (p *rtcPeer) setSender(trID int64, kind, trackID, streamID string, live bool) error {
+// setSender attaches (a track description) or detaches the page's track to a sender: replaceTrack.
+func (p *rtcPeer) setSender(trID int64, kind, descJSON, streamID string, live bool) error {
 	x := p.tr(trID)
 	if x == nil {
 		return errors.New("InvalidStateError: unknown transceiver")
@@ -1142,26 +1182,30 @@ func (p *rtcPeer) setSender(trID int64, kind, trackID, streamID string, live boo
 	if s == nil {
 		return errors.New("InvalidStateError: no sender")
 	}
-	if trackID == "" {
-		x.live.Store(false)
-		if err := s.ReplaceTrack(nil); err != nil {
-			return rtcErr(err)
-		}
-		x.local = nil
+	d := parseTrackDesc(descJSON)
+	if d.ID == "" {
+		x.setLive(false)
+		p.detachSource(x)
 		return nil
 	}
-	lt, err := p.localTrack(kind, trackID, streamID)
-	if err != nil {
+	x.smu.Lock()
+	have := x.local != nil
+	x.smu.Unlock()
+	if !have {
+		lt := p.newLocal(x, kind, d.ID, streamID)
+		lt.ReadyWhenConnected(s)
+		if err := s.ReplaceTrack(lt); err != nil {
+			return rtcErr(err)
+		}
+		x.smu.Lock()
+		x.local = lt
+		x.smu.Unlock()
+	}
+	if err := p.ensurePipeline(x); err != nil {
 		return rtcErr(err)
 	}
-	if err := s.ReplaceTrack(lt); err != nil {
-		return rtcErr(err)
-	}
-	x.local = lt
-	x.live.Store(live)
-	if live {
-		p.startPump()
-	}
+	p.bindSource(x, d)
+	x.setLive(live)
 	return nil
 }
 
@@ -1171,10 +1215,12 @@ func (p *rtcPeer) removeTrack(trID int64) error {
 		return nil
 	}
 	x.live.Store(false)
+	var err error
 	if s := x.t.Sender(); s != nil {
-		return rtcErr(p.pc.RemoveTrack(s))
+		err = rtcErr(p.pc.RemoveTrack(s))
 	}
-	return nil
+	x.closeSender()
+	return err
 }
 
 // setDirection changes a transceiver's direction. pion v4 only accepts a
@@ -1211,46 +1257,6 @@ func rtcStoreDirection(t *webrtc.RTPTransceiver, d webrtc.RTPTransceiverDirectio
 	return nil
 }
 
-// rtcSilence is a 20 ms Opus frame of silence (a CELT-only silent packet).
-var rtcSilence = []byte{0xf8, 0xff, 0xfe}
-
-// startPump starts the single goroutine that feeds live audio senders. The
-// engine has no audio capture or encoder reachable from a MediaStreamTrack, so
-// an audio sender transmits real Opus packets carrying silence at 50 packets/s;
-// that keeps the RTP stream, the stats and the remote jitter buffer alive. Video
-// senders negotiate but send no frames. At the strict Data Saver level nothing is sent.
-func (p *rtcPeer) startPump() {
-	p.pump.Do(func() {
-		p.wg.Add(1)
-		go func() {
-			defer p.wg.Done()
-			tk := time.NewTicker(20 * time.Millisecond)
-			defer tk.Stop()
-			for {
-				select {
-				case <-p.done:
-					return
-				case <-tk.C:
-				}
-				if p.pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
-					continue
-				}
-				if t := p.h.j.tab; t != nil && t.policy().Level == SaverStrict {
-					continue
-				}
-				p.mu.Lock()
-				trs := append([]*rtcTR(nil), p.trs...)
-				p.mu.Unlock()
-				for _, x := range trs {
-					if x.local != nil && x.live.Load() && x.t.Kind() == webrtc.RTPCodecTypeAudio {
-						_ = x.local.WriteSample(media.Sample{Data: rtcSilence, Duration: 20 * time.Millisecond})
-					}
-				}
-			}
-		}()
-	})
-}
-
 // ---- stats and transports -----------------------------------------------------------
 
 func (p *rtcPeer) stats() (any, error) {
@@ -1263,6 +1269,7 @@ func (p *rtcPeer) stats() (any, error) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, errors.New("OperationError: " + err.Error())
 	}
+	p.addMediaStats(m)
 	for _, s := range m {
 		if s["type"] == "local-candidate" {
 			p.scrubCandidateStat(s)

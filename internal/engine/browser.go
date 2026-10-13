@@ -37,6 +37,7 @@ type BrowserContext struct {
 	site siteHolder                 // origin-scoped storage and service workers (storage_host.go)
 	part atomic.Pointer[partState]  // cookie partitioning policy and grants (partition.go)
 	wk   atomic.Pointer[workerHost] // shared workers, BroadcastChannel groups, Web Locks (workers.go)
+	pwah pwaHolder                  // notifications, push, background sync, badge and locks (pwa.go)
 }
 
 type ContextOptions struct {

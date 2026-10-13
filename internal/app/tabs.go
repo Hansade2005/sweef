@@ -159,6 +159,7 @@ func (a *App) closeTab(id string) {
 	if !ok {
 		return
 	}
+	a.dropPromptsOfTab(id)
 	next, _ := a.model.CloseTab(id)
 	a.mu.Lock()
 	e := a.pages[id]

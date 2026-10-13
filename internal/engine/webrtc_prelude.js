@@ -199,23 +199,53 @@
   var REVERSE = { sendrecv: 'sendrecv', sendonly: 'recvonly', recvonly: 'sendonly', inactive: 'inactive' };
 
   // ---- codec capabilities (what the engine's media engine negotiates) ------------------
-  var CAPS = {
-    audio: [
-      { mimeType: 'audio/opus', clockRate: 48000, channels: 2, sdpFmtpLine: 'minptime=10;useinbandfec=1' },
-      { mimeType: 'audio/G722', clockRate: 8000, channels: 1 },
-      { mimeType: 'audio/PCMU', clockRate: 8000, channels: 1 },
-      { mimeType: 'audio/PCMA', clockRate: 8000, channels: 1 }
-    ],
-    video: [
-      { mimeType: 'video/VP8', clockRate: 90000 },
-      { mimeType: 'video/H264', clockRate: 90000, sdpFmtpLine: 'level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f' },
-      { mimeType: 'video/VP9', clockRate: 90000, sdpFmtpLine: 'profile-id=0' },
-      { mimeType: 'video/AV1', clockRate: 90000 }
-    ]
-  };
-  function capabilities(kind) {
+  var capCache = {};
+  function caps(kind) {
     if (kind !== 'audio' && kind !== 'video') return null;
-    return { codecs: CAPS[kind].map(function (c) { var o = {}; for (var k in c) o[k] = c[k]; return o; }), headerExtensions: [] };
+    if (!capCache[kind]) capCache[kind] = callJSON('rtcCaps', kind);
+    return capCache[kind];
+  }
+  function capabilities(kind) {
+    var c = caps(kind);
+    if (!c) return null;
+    return { codecs: c.codecs.map(function (x) { var o = {}; for (var k in x) o[k] = x[k]; return o; }), headerExtensions: c.headerExtensions.map(function (x) { return { uri: x.uri }; }) };
+  }
+  var AUX = /^(audio\/telephone-event|video\/rtx|video\/red|video\/ulpfec|video\/flexfec-03|audio\/red|audio\/cn)$/i;
+
+  // ---- tracks: description for the engine, stop and enabled hooks -----------------------------------
+  var hookMap = new WeakMap();
+  function isTrack(t) { return t instanceof global.MediaStreamTrack || (!!t && typeof t === 'object' && (t.kind === 'audio' || t.kind === 'video') && 'readyState' in t); }
+  function hooksOf(track, key) {
+    var t = track._t;
+    if (t) return t[key] || (t[key] = []);
+    var m = hookMap.get(track);
+    if (!m) { m = {}; hookMap.set(track, m); }
+    return m[key] || (m[key] = []);
+  }
+  function hookStop(track, fn) {
+    if (!track._t && !hookMap.has(track) && typeof track.stop === 'function') {
+      var orig = track.stop;
+      track.stop = function () { orig.apply(this, arguments); (hooksOf(track, 'stopHooks')).forEach(function (f) { try { f(); } catch (e) { /* ignore */ } }); };
+    }
+    hooksOf(track, 'stopHooks').push(fn);
+  }
+  function hookEnabled(track, fn) { hooksOf(track, 'enabledHooks').push(fn); }
+  function trackDesc(track) {
+    if (!track) return '';
+    var ex = (track._t && track._t.extra) || {};
+    var st = {};
+    try { if (typeof track.getSettings === 'function') st = track.getSettings() || {}; } catch (e) { st = {}; }
+    return JSON.stringify({
+      id: track.id, kind: track.kind, deviceId: ex.deviceId || st.deviceId || '', label: track.label || '',
+      width: (st.width | 0) || (ex.width | 0), height: (st.height | 0) || (ex.height | 0), frameRate: +(st.frameRate || ex.frameRate) || 0,
+      canvas: track.canvas ? (global.__swIdOf ? global.__swIdOf(track.canvas) : 0) : 0, enabled: track.enabled !== false
+    });
+  }
+  function watchTrack(rec, x, track) {
+    var s = x.sender._s;
+    hookStop(track, function () { if (s.track === track && !rec.closed) call('rtcTrackStopped', rec.id, x.id); });
+    hookEnabled(track, function (en) { if (s.track === track && !rec.closed) call('rtcTrackEnabled', rec.id, x.id, !!en); });
+    if (track._t) hooksOf(track, 'constraintHooks').push(function () { if (s.track === track && !rec.closed) call('rtcTrackConstraints', rec.id, x.id, trackDesc(track)); });
   }
 
   // ---- registry -----------------------------------------------------------------------------
@@ -233,6 +263,65 @@
     };
     stop.__rtc = true;
     MST.prototype.stop = stop;
+    // track.enabled = false makes the sender transmit black frames / silence
+    var d = Object.getOwnPropertyDescriptor(MST.prototype, 'enabled');
+    if (d && d.set && !d.set.__rtc) {
+      var set = function (v) {
+        d.set.call(this, v);
+        var h = this._t && this._t.enabledHooks, en = !!v;
+        if (h) h.forEach(function (f) { try { f(en); } catch (e) { /* ignore */ } });
+      };
+      set.__rtc = true;
+      Object.defineProperty(MST.prototype, 'enabled', { get: d.get, set: set, configurable: true, enumerable: d.enumerable });
+    }
+  })();
+
+  // ---- track settings, capabilities and constraints, consistent with what the senders do ------------------
+  // The capture layer (getUserMedia) creates the tracks; here the numbers they report follow what a sender
+  // really delivers: no echo cancellation, noise suppression or gain control is applied (use headphones),
+  // sizes and frame rates are the ones the source supports, and applyConstraints on a track that is being
+  // sent reopens the source at the new size or frame rate (the encoder follows mid-call).
+  (function () {
+    var MST = global.MediaStreamTrack;
+    if (!MST || MST.prototype.getSettings.__rtc) return;
+    var P = MST.prototype;
+    function num(v) {
+      if (typeof v === 'number') return v;
+      if (v && typeof v === 'object') {
+        if (typeof v.exact === 'number') return v.exact;
+        if (typeof v.ideal === 'number') return v.ideal;
+        if (typeof v.max === 'number' && typeof v.min !== 'number') return v.max;
+        if (typeof v.min === 'number') return v.min;
+      }
+      return undefined;
+    }
+    var gs = P.getSettings;
+    P.getSettings = function () {
+      var o = gs.apply(this, arguments);
+      if (this.kind === 'audio') { o.echoCancellation = false; o.noiseSuppression = false; o.autoGainControl = false; o.channelCount = 1; o.sampleRate = 48000; }
+      return o;
+    };
+    P.getSettings.__rtc = true;
+    P.getCapabilities = function () {
+      var id = (this._t && this._t.extra && this._t.extra.deviceId) || '';
+      if (this.kind === 'audio') return { deviceId: id, groupId: '', sampleRate: { min: 8000, max: 48000 }, channelCount: { min: 1, max: 2 }, echoCancellation: [false], noiseSuppression: [false], autoGainControl: [false], latency: { min: 0.01, max: 0.5 }, sampleSize: { min: 16, max: 16 } };
+      return { deviceId: id, groupId: '', width: { min: 16, max: 1920 }, height: { min: 16, max: 1080 }, frameRate: { min: 1, max: 60 }, aspectRatio: { min: 0.01, max: 100 }, facingMode: ['user'], resizeMode: ['none', 'crop-and-scale'] };
+    };
+    P.getConstraints = function () { return (this._t && this._t.constraints) || {}; };
+    var ac = P.applyConstraints;
+    P.applyConstraints = function (c) {
+      var self = this, t = this._t;
+      return Promise.resolve(ac.apply(this, arguments)).then(function () {
+        if (!c || typeof c !== 'object') { t.constraints = {}; return; }
+        t.constraints = JSON.parse(JSON.stringify(c));
+        if (self.kind !== 'video') return;
+        var e = t.extra, w = num(c.width), h = num(c.height), f = num(c.frameRate);
+        if (w) e.width = w;
+        if (h) e.height = h;
+        if (f) e.frameRate = f;
+        (t.constraintHooks || []).forEach(function (fn) { try { fn(); } catch (err) { /* ignore */ } });
+      });
+    };
   })();
 
   // ---- RTCDtlsTransport / RTCIceTransport / RTCSctpTransport -------------------------------
@@ -337,7 +426,7 @@
     var self = this, s = this._s, x = s.tr._x;
     return new Promise(function (res, rej) {
       try {
-        if (track !== null && !(track instanceof global.MediaStreamTrack)) throw new TypeError("Failed to execute 'replaceTrack' on 'RTCRtpSender': parameter 1 is not of type 'MediaStreamTrack'.");
+        if (track !== null && !isTrack(track)) throw new TypeError("Failed to execute 'replaceTrack' on 'RTCRtpSender': parameter 1 is not of type 'MediaStreamTrack'.");
         if (x.rec.closed || x.stopped) throw dex("Failed to execute 'replaceTrack' on 'RTCRtpSender': The transceiver is stopped.", 'InvalidStateError');
         if (track && track.kind !== x.kind) throw new TypeError("Failed to execute 'replaceTrack' on 'RTCRtpSender': Track kind does not match the sender's.");
         attach(x, track, s.streams);
@@ -346,11 +435,12 @@
     });
   });
   defMethod(RTCRtpSender.prototype, 'getParameters', function () {
-    var s = this._s;
+    var s = this._s, x = s.tr._x;
     s.tx = String(Math.random()).slice(2);
     var enc = s.encodings.map(function (e) { var o = {}; for (var k in e) o[k] = e[k]; return o; });
-    var x = s.tr._x;
-    return { transactionId: s.tx, encodings: enc, headerExtensions: [], rtcp: { cname: '', reducedSize: false }, codecs: x.mid !== null ? CAPS[x.kind].slice(0, 1).map(function (c, i) { return { payloadType: 96 + i, mimeType: c.mimeType, clockRate: c.clockRate, channels: c.channels, sdpFmtpLine: c.sdpFmtpLine }; }) : [] };
+    var hp = { codecs: [], headerExtensions: [] };
+    if (!x.rec.closed && x.mid !== null) { try { hp = callJSON('rtcSenderParams', x.rec.id, x.id) || hp; } catch (e) { /* keep empty */ } }
+    return { transactionId: s.tx, encodings: enc, headerExtensions: hp.headerExtensions || [], rtcp: { cname: 'sweef', reducedSize: false }, codecs: hp.codecs || [] };
   });
   defMethod(RTCRtpSender.prototype, 'setParameters', function (p) {
     var s = this._s, x = s.tr._x;
@@ -363,16 +453,23 @@
         if (enc.length !== s.encodings.length) throw dex("Failed to execute 'setParameters' on 'RTCRtpSender': Attempted to change the number of encodings.", 'InvalidModificationError');
         enc.forEach(function (e) {
           if (e.maxBitrate !== undefined && !(e.maxBitrate >= 0)) throw new RangeError('maxBitrate must be non-negative');
+          if (e.maxFramerate !== undefined && !(e.maxFramerate >= 0)) throw new RangeError('maxFramerate must be non-negative');
           if (e.scaleResolutionDownBy !== undefined && !(e.scaleResolutionDownBy >= 1)) throw new RangeError('scaleResolutionDownBy must be >= 1');
         });
         s.encodings = enc.map(function (e) { var o = {}; for (var k in e) o[k] = e[k]; if (o.active === undefined) o.active = true; return o; });
         s.tx = null;
+        pushParams(x);
         var any = s.encodings.some(function (e) { return e.active !== false; });
         if (s.track) call('rtcSenderLive', x.rec.id, x.id, any && s.track.readyState === 'live');
         res(undefined);
       } catch (e) { rej(e); }
     });
   });
+  // a single layer is sent: the first encoding decides (the others, if the page asked for simulcast, are ignored)
+  function pushParams(x) {
+    var e = x.sender._s.encodings[0] || {};
+    call('rtcSetParams', x.rec.id, x.id, JSON.stringify({ active: e.active !== false, maxBitrate: e.maxBitrate, maxFramerate: e.maxFramerate, scaleResolutionDownBy: e.scaleResolutionDownBy }));
+  }
   defMethod(RTCRtpSender.prototype, 'setStreams', function () {
     var x = this._s.tr._x;
     if (x.rec.closed) throw dex("Failed to execute 'setStreams' on 'RTCRtpSender': The RTCPeerConnection's signalingState is 'closed'.", 'InvalidStateError');
@@ -387,9 +484,13 @@
   defGetter(RTCRtpReceiver.prototype, 'track', function () { return this._r.track; });
   defGetter(RTCRtpReceiver.prototype, 'transport', function () { var r = this._r.tr._x.rec; return r.hasDesc ? dtlsTransportOf(r) : null; });
   defGetter(RTCRtpReceiver.prototype, 'jitterBufferTarget', function () { return null; }, function () { });
-  defMethod(RTCRtpReceiver.prototype, 'getParameters', function () { return { headerExtensions: [], rtcp: { cname: '', reducedSize: false }, codecs: [] }; });
+  defMethod(RTCRtpReceiver.prototype, 'getParameters', function () { var c = capabilities(this._r.tr._x.kind) || { codecs: [], headerExtensions: [] }; return { headerExtensions: c.headerExtensions, rtcp: { cname: '', reducedSize: false }, codecs: c.codecs.map(function (k) { return k; }) }; });
   defMethod(RTCRtpReceiver.prototype, 'getContributingSources', function () { return []; });
-  defMethod(RTCRtpReceiver.prototype, 'getSynchronizationSources', function () { return []; });
+  defMethod(RTCRtpReceiver.prototype, 'getSynchronizationSources', function () {
+    var x = this._r.tr._x;
+    if (x.rec.closed) return [];
+    try { return callJSON('rtcSources', x.rec.id, x.id) || []; } catch (e) { return []; }
+  });
   defMethod(RTCRtpReceiver.prototype, 'getStats', function () { return statsFor(this._r.tr._x.rec, 'inbound-rtp', this._r.tr._x.kind); });
   defMethod(RTCRtpReceiver, 'getCapabilities', function (kind) { return capabilities(kind); });
   global.RTCRtpReceiver = RTCRtpReceiver;
@@ -427,12 +528,14 @@
   defMethod(RTCRtpTransceiver.prototype, 'setCodecPreferences', function (codecs) {
     var x = this._x;
     if (!Array.isArray(codecs)) throw new TypeError("Failed to execute 'setCodecPreferences' on 'RTCRtpTransceiver': The provided value cannot be converted to a sequence.");
-    var caps = CAPS[x.kind];
+    var have = caps(x.kind).codecs;
     codecs.forEach(function (c) {
-      var ok = caps.some(function (k) { return k.mimeType.toLowerCase() === String(c && c.mimeType).toLowerCase() && k.clockRate === c.clockRate; });
+      var ok = c && have.some(function (k) { return k.mimeType.toLowerCase() === String(c.mimeType).toLowerCase() && k.clockRate === c.clockRate && (k.channels || 0) === (c.channels || 0) && (!c.sdpFmtpLine || c.sdpFmtpLine === k.sdpFmtpLine); });
       if (!ok) throw dex("Failed to execute 'setCodecPreferences' on 'RTCRtpTransceiver': Invalid codec.", 'InvalidModificationError');
     });
-    x.codecPrefs = codecs.slice(); // accepted and validated; the engine's own order is used on the wire
+    if (codecs.length && codecs.every(function (c) { return AUX.test(c.mimeType); })) throw dex("Failed to execute 'setCodecPreferences' on 'RTCRtpTransceiver': Invalid codec preferences: no media codec left.", 'InvalidModificationError');
+    x.codecPrefs = codecs.slice();
+    call('rtcSetCodecPrefs', x.rec.id, x.id, JSON.stringify(codecs));
   });
   global.RTCRtpTransceiver = RTCRtpTransceiver;
 
@@ -444,12 +547,13 @@
 
   function newTransceiver(rec, id, kind, dir) {
     var tr = Object.create(RTCRtpTransceiver.prototype);
-    var x = { rec: rec, id: id, kind: kind, mid: null, dir: dir, curDir: null, stopped: false, recvActive: false, codecPrefs: null };
+    var x = { rec: rec, id: id, kind: kind, mid: null, dir: dir, curDir: null, stopped: false, recvActive: false, codecPrefs: null, els: [], vw: 0, vh: 0 };
     var snd = Object.create(RTCRtpSender.prototype);
     hid(snd, '_s', { tr: tr, track: null, streams: [], encodings: [{ active: true }], tx: null, dtmf: null });
     var rcv = Object.create(RTCRtpReceiver.prototype);
     var track = global.__swMakeTrack(kind, '', { remote: true });
     track._t.muted = true;
+    track._t.rtc = { pc: rec.id, tr: id };
     Object.defineProperty(track, 'muted', { get: function () { return track._t.muted === true; }, configurable: true, enumerable: true });
     hid(rcv, '_r', { tr: tr, track: track });
     x.sender = snd; x.receiver = rcv;
@@ -482,9 +586,9 @@
     var sid = streams && streams.length ? streams[0].id : '';
     if (track) {
       var live = track.readyState === 'live';
-      call('rtcSetSender', rec.id, x.id, x.kind, track.id, sid, live);
-      var hooks = track._t.stopHooks || (track._t.stopHooks = []);
-      hooks.push(function () { if (s.track === track && !rec.closed) call('rtcSenderLive', rec.id, x.id, false); });
+      s.track = track;
+      call('rtcSetSender', rec.id, x.id, x.kind, trackDesc(track), sid, live);
+      watchTrack(rec, x, track);
     } else {
       call('rtcSetSender', rec.id, x.id, x.kind, '', '', false);
     }
@@ -777,20 +881,19 @@
     addTrack(track) {
       var rec = this._p;
       if (rec.closed) throw dex("Failed to execute 'addTrack' on 'RTCPeerConnection': The RTCPeerConnection's signalingState is 'closed'.", 'InvalidStateError');
-      if (!(track instanceof global.MediaStreamTrack)) throw new TypeError("Failed to execute 'addTrack' on 'RTCPeerConnection': parameter 1 is not of type 'MediaStreamTrack'.");
+      if (!isTrack(track)) throw new TypeError("Failed to execute 'addTrack' on 'RTCPeerConnection': parameter 1 is not of type 'MediaStreamTrack'.");
       var streams = Array.prototype.slice.call(arguments, 1);
       for (var i = 0; i < rec.trs.length; i++) {
         var o = rec.trs[i]._x;
         if (!o.stopped && o.sender._s.track === track) throw dex("Failed to execute 'addTrack' on 'RTCPeerConnection': A sender already exists for the track.", 'InvalidAccessError');
       }
-      var r = callJSON('rtcAddTrack', rec.id, track.kind, track.id, streams.length ? streams[0].id : '');
+      var r = callJSON('rtcAddTrack', rec.id, track.kind, trackDesc(track), streams.length ? streams[0].id : '');
       syncSnap(rec, r.all);
       var tr = rec.byId.get(r.id);
       var s = tr._x.sender._s;
       s.track = track; s.streams = streams;
       var x = tr._x;
-      var hooks = track._t.stopHooks || (track._t.stopHooks = []);
-      hooks.push(function () { if (s.track === track && !rec.closed) call('rtcSenderLive', rec.id, x.id, false); });
+      watchTrack(rec, x, track);
       if (track.readyState !== 'live') call('rtcSenderLive', rec.id, x.id, false);
       return x.sender;
     }
@@ -809,7 +912,7 @@
       var rec = this._p;
       if (rec.closed) throw dex("Failed to execute 'addTransceiver' on 'RTCPeerConnection': The RTCPeerConnection's signalingState is 'closed'.", 'InvalidStateError');
       var kind, track = null;
-      if (trackOrKind instanceof global.MediaStreamTrack) { track = trackOrKind; kind = track.kind; }
+      if (isTrack(trackOrKind)) { track = trackOrKind; kind = track.kind; }
       else if (trackOrKind === 'audio' || trackOrKind === 'video') kind = trackOrKind;
       else throw new TypeError("Failed to execute 'addTransceiver' on 'RTCPeerConnection': The provided value '" + trackOrKind + "' is not a valid enum value of type RTCRtpTransceiverKind.");
       init = init || {};
@@ -817,15 +920,14 @@
       if (DIRS.indexOf(dir) < 0) throw new TypeError("Failed to execute 'addTransceiver' on 'RTCPeerConnection': The provided value '" + dir + "' is not a valid enum value of type RTCRtpTransceiverDirection.");
       var streams = init.streams ? Array.from(init.streams) : [];
       var encs = init.sendEncodings ? Array.from(init.sendEncodings) : [];
-      var r = callJSON('rtcAddTransceiver', rec.id, kind, dir, track ? track.id : '', streams.length ? streams[0].id : '');
+      var r = callJSON('rtcAddTransceiver', rec.id, kind, dir, track ? trackDesc(track) : '', streams.length ? streams[0].id : '');
       syncSnap(rec, r.all);
       var tr = rec.byId.get(r.id), x = tr._x, s = x.sender._s;
-      if (encs.length) s.encodings = encs.map(function (e) { var o = {}; for (var k in e) o[k] = e[k]; if (o.active === undefined) o.active = true; return o; });
+      if (encs.length) { s.encodings = encs.map(function (e) { var o = {}; for (var k in e) o[k] = e[k]; if (o.active === undefined) o.active = true; return o; }); pushParams(x); }
       s.streams = streams;
       if (track) {
         s.track = track;
-        var hooks = track._t.stopHooks || (track._t.stopHooks = []);
-        hooks.push(function () { if (s.track === track && !rec.closed) call('rtcSenderLive', rec.id, x.id, false); });
+        watchTrack(rec, x, track);
         if (track.readyState !== 'live') call('rtcSenderLive', rec.id, x.id, false);
       }
       return tr;
@@ -861,7 +963,7 @@
       return op(rec, 'getStats', function () {
         var kind = null, type = null;
         if (selector !== undefined && selector !== null) {
-          if (!(selector instanceof global.MediaStreamTrack)) throw new TypeError("Failed to execute 'getStats' on 'RTCPeerConnection': parameter 1 is not of type 'MediaStreamTrack'.");
+          if (!isTrack(selector)) throw new TypeError("Failed to execute 'getStats' on 'RTCPeerConnection': parameter 1 is not of type 'MediaStreamTrack'.");
           var found = rec.trs.filter(function (t) { return t._x.sender._s.track === selector || t._x.receiver._r.track === selector; })[0];
           if (!found) throw dex("Failed to execute 'getStats' on 'RTCPeerConnection': Cannot get stats for a track that is not associated with this connection.", 'InvalidAccessError');
           kind = found._x.kind; type = found._x.sender._s.track === selector ? 'outbound-rtp' : 'inbound-rtp';
@@ -930,7 +1032,6 @@
           return st;
         });
         events.push(function () {
-          if (track._t.muted) { track._t.muted = false; fire(track, 'unmute'); }
           rec.pc.dispatchEvent(new RTCTrackEvent('track', { receiver: x.receiver, track: track, streams: streams, transceiver: tr }));
         });
       } else if (!sending && x.recvActive) {
@@ -1013,6 +1114,19 @@
           pc.dispatchEvent(new RTCDataChannelEvent('datachannel', { channel: ch }));
           break;
         }
+        case 'trackmute': {
+          var mx = rec.byId.get(v.tr);
+          if (mx) {
+            var mt = mx._x.receiver._r.track;
+            if (mt._t.muted !== v.muted && mt._t.ready !== 'ended') { mt._t.muted = v.muted; fire(mt, v.muted ? 'mute' : 'unmute'); }
+          }
+          break;
+        }
+        case 'vsize': {
+          var vx = rec.byId.get(v.tr);
+          if (vx) { vx._x.vw = v.w; vx._x.vh = v.h; vx._x.els.slice().forEach(function (att) { attStart(att, v.w, v.h); }); }
+          break;
+        }
         case 'dtlsstate': if (rec.dtls) fire(rec.dtls, 'statechange'); if (rec.sctpT) fire(rec.sctpT, 'statechange'); break;
         case 'icetstate': if (rec.iceT) fire(rec.iceT, 'statechange'); break;
         case 'icetpair': if (rec.iceT) fire(rec.iceT, 'selectedcandidatepairchange'); break;
@@ -1021,6 +1135,58 @@
       }
     } catch (e) { if (global.reportError) global.reportError(e); }
     return true;
+  };
+
+  // A <video>/<audio> given a MediaStream with received tracks plays them: video frames are bound to the
+  // element's pixels and the element becomes ready (readyState, videoWidth/Height, resize) with the first
+  // decoded frame; audio goes to the audio sink while the element holds the stream. Returns true when the
+  // element's readiness is decided here (video), false to let media_prelude.js use its default for streams.
+  function attStart(att, w, h) {
+    var s = att.api.state, el = att.el;
+    if (!att.ready) {
+      att.ready = true;
+      // s.video stays unset: it would make the element's frame scheduler poll for frames of a file; the frames here are pushed
+      s.videoW = w; s.videoH = h; s.fps = 30; s.duration = Infinity;
+      att.api.ev(el, 'durationchange');
+      s.ready = 1;
+      att.api.ev(el, 'loadedmetadata');
+      s.net = 1;
+      att.api.ev(el, 'resize');
+      att.api.setReady(el, 4);
+    } else if (s.videoW !== w || s.videoH !== h) {
+      s.videoW = w; s.videoH = h;
+      att.api.ev(el, 'resize');
+    }
+  }
+  global.__swStreamAttach = function (el, ms, api) {
+    var vt = null, at = null;
+    ms.getTracks().forEach(function (t) {
+      if (!t._t || !t._t.rtc) return;
+      if (t.kind === 'video' && !vt) vt = t; else if (t.kind === 'audio' && !at) at = t;
+    });
+    if (!vt && !at) return false;
+    var undo = [], deferred = false;
+    if (at) {
+      var ra = pcs.get(at._t.rtc.pc);
+      if (ra && !ra.closed) {
+        call('rtcBindAudio', ra.id, at._t.rtc.tr, true);
+        undo.push(function () { if (!ra.closed) call('rtcBindAudio', ra.id, at._t.rtc.tr, false); });
+      }
+    }
+    if (vt) {
+      var rec = pcs.get(vt._t.rtc.pc), tr = rec && !rec.closed ? rec.byId.get(vt._t.rtc.tr) : null;
+      if (tr) {
+        var x = tr._x, node = global.__swIdOf(el);
+        var info = callJSON('rtcBindVideo', rec.id, x.id, node);
+        var att = { el: el, api: api, ready: false };
+        x.els.push(att);
+        undo.push(function () { x.els = x.els.filter(function (a) { return a !== att; }); if (!rec.closed) call('rtcUnbindVideo', rec.id, x.id, node); });
+        if (info && info.w > 0) attStart(att, info.w, info.h);
+        deferred = true;
+      }
+    }
+    api.state.rtcDetach = function () { api.state.rtcDetach = null; undo.forEach(function (f) { try { f(); } catch (e) { /* ignore */ } }); };
+    return deferred;
   };
 
   function dcEvent(rec, type, v) {

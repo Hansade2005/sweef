@@ -142,3 +142,14 @@ as names that must stay absent.
 
 WebAssembly, IndexedDB, Cache Storage, Service Workers and WebRTC are owned by
 other work streams and are neither listed nor asserted here.
+
+## Notifications, push, background sync, locks
+
+| API | Status | Notes |
+|---|---|---|
+| Notification, NotificationEvent | implemented | Secure contexts; `vibrate` ignored; see [notifications.md](notifications.md). |
+| Permissions, PermissionStatus | implemented | `notifications`, `push`, `periodic-background-sync`, `background-sync` are answered; other names report `prompt` unless another module registers `__permHandlers[name]`. |
+| PushManager, PushSubscription, PushEvent, PushMessageData, PushSubscriptionChangeEvent | implemented | Needs a configured push service ([push.md](push.md)); `aes128gcm` only. |
+| SyncManager, SyncEvent, PeriodicSyncManager, PeriodicSyncEvent | implemented | [background-sync.md](background-sync.md). |
+| navigator.setAppBadge, clearAppBadge | implemented | Secure contexts; the badge is reported to the app, no shell draws it. |
+| navigator.locks, LockManager, Lock | implemented | Documents and service workers; not dedicated Workers. |

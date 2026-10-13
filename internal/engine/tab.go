@@ -134,6 +134,8 @@ type Tab struct {
 	userAgent   string
 	geo         *[2]float64
 	permissions map[string]bool
+	mediaBroker atomic.Pointer[MediaBroker] // permission/display handler of the embedding app (capture_host.go)
+	docPolicy   atomic.Value                // string: the document's Permissions-Policy header
 	offline     bool
 	colorScheme string
 	extraHdrs   map[string]string
@@ -155,8 +157,9 @@ type Tab struct {
 	bindingRing    *Ring
 	downloads      []Download
 
-	ds tabDS // Data Saver state (datasaver.go)
-	sw tabSW // service worker control of the document (sw_intercept.go)
+	ds tabDS  // Data Saver state (datasaver.go)
+	sw tabSW  // service worker control of the document (sw_intercept.go)
+	pw pwaTab // user activation, for the permission and window rules of pwa.go
 
 	bc    *browsingCtx // nested browsing context or worker tab: its place in the tree and its partition (partition.go)
 	winID int64        // identity of this tab's window for cross-window references (frames.go)
@@ -437,6 +440,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	}
 	rec.DurationMs = time.Since(start).Milliseconds()
 	rec.ResponseHeaders = flattenHeaders(res.Header)
+	t.setDocPolicy(res.Header.Get("Permissions-Policy"), res.Header.Get("Feature-Policy"))
 	if docMI != nil {
 		if st := docMI.cacheState(); st != "" {
 			h := make(map[string]string, len(rec.Headers)+1)

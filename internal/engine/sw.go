@@ -54,6 +54,7 @@ type swManager struct {
 	byWorker map[int64]*swWorker  // every worker that is not redundant
 	nextW    int64
 	nextR    int64
+	nextC    int64 // creation order of clients
 	closed   bool
 	quit     chan struct{}
 	wg       sync.WaitGroup
@@ -97,6 +98,7 @@ type swClient struct {
 	tab *Tab
 	url string
 	key string // the storage key of the document: its origin, plus the top-level site when it is embedded (partition.go)
+	seq int64  // creation order: clients.matchAll lists the oldest first
 	reg *swReg // the registration controlling it, nil when uncontrolled
 }
 
@@ -702,6 +704,7 @@ func (m *swManager) unregister(reg *swReg) bool {
 	m.announce(origin, snap)
 	m.announceRemoved(reg, id)
 	m.persist(origin)
+	m.c.pwaRegistrationGone(origin, reg.scope) // its push subscription and sync registrations go with it
 	return true
 }
 

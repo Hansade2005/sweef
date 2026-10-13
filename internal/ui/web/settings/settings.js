@@ -2,7 +2,7 @@
 (function () {
   var SW = window.SW, S = window.S, h = SW.h, icon = SW.icon, post = SW.post, $ = function (id) { return document.getElementById(id); };
   var cur = (SW.query("s") || (location.hash || "").slice(1) || "general").split("/")[0], q = "";
-  var SECS = [["general", "globe", S.set.nav.general], ["search", "search", S.set.nav.search], ["privacy", "shield", S.set.nav.privacy], ["data", "drop", S.data.set.nav], ["agent", "spark", S.f(S.set.nav.agent)], ["appearance", "brush", S.set.nav.appearance], ["downloads", "download", S.set.nav.downloads], ["about", "info", S.f(S.set.nav.about)]];
+  var SECS = [["general", "globe", S.set.nav.general], ["search", "search", S.set.nav.search], ["privacy", "shield", S.set.nav.privacy], ["notif", "bell", S.set.nav.notif], ["data", "drop", S.data.set.nav], ["agent", "spark", S.f(S.set.nav.agent)], ["appearance", "brush", S.set.nav.appearance], ["downloads", "download", S.set.nav.downloads], ["about", "info", S.f(S.set.nav.about)]];
   $("ttl").textContent = S.set.title; $("sic").appendChild(icon("search", 16)); $("sq").setAttribute("placeholder", S.set.search); $("sq").setAttribute("aria-label", S.set.search);
   var val = function (k, d) { return SW.setting(k, d); };
   function toggle(key, def) {
@@ -37,6 +37,18 @@
       return [h("h2", T.nav.privacy), h("p.lead", F(g.lead)),
         group(g.gTrack, [row(g.track, g.trackD, seg("privacy.trackers", [["standard", g.std], ["strict", g.strict], ["off", g.off]], "standard")), row(g.gpc, g.gpcD, toggle("privacy.gpc", true)), row(g.https, g.httpsD, toggle("privacy.httpsUpgrade", true))]),
         group(g.gData, [row(g.clearExit, g.clearExitD, toggle("privacy.clearOnExit", false)), row(g.clearNow, g.clearNowD, btn(g.clearBtn, function () { post("data.clear"); })), row(g.site, g.siteD, btn(g.open, function () { post("tab.new", { url: "sweef://settings#site" }); }))])];
+    },
+    notif: function () {
+      var g = S.perm.set, ps = SW.state.perm || {}, sites = ps.sites || [], key = h("input.field.w", { value: String(val("push.service", "")), placeholder: "https://push.example.com", "aria-label": g.push, autocomplete: "off" });
+      var choose = function (s) {
+        var el = h("div.seg", { role: "radiogroup", "aria-label": SW.host(s.origin) });
+        [["allowed", "granted", g.allow], ["blocked", "denied", g.block], ["ask", "", g.reset]].forEach(function (o) { el.appendChild(h("button", { role: "radio", "aria-checked": s.state === o[0] ? "true" : "false", onclick: function () { post("perm.set", { origin: s.origin, name: "notifications", state: o[1] }); } }, o[2])); });
+        return el;
+      };
+      return [h("h2", S.perm.label), h("p.lead", F(g.lead)),
+        group(g.gAll, [row(g.dnd, g.dndD, toggle("notifications.dnd", false)), row(g.dflt, "", seg("notifications.default", [["ask", g.ask], ["blocked", g.blocked]], "ask"))]),
+        group(g.gPush, [row(g.push, F(g.pushD), [key, btn(g.save, function () { SW.set("push.service", key.value.trim()); }, "primary")]), row(ps.push ? F(g.pushOn) : g.pushOff, "", null)]),
+        group(g.gSites, sites.length ? sites.map(function (s) { return row(SW.host(s.origin), s.embargo ? g.embargo : "", choose(s)); }) : [row(g.none, "", null)])];
     },
     data: function () { return SW.dataSet({ row: row, group: group, btn: btn, toggle: toggle }); },
     agent: function () {

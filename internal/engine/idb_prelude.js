@@ -552,7 +552,10 @@
       names = names.filter(function (n, ix) { return names.indexOf(n) === ix; }).sort();
       var r = host('idbBegin', this._conn, names, mode === 'readonly' ? 0 : 1);
       var tx = new IDBTransaction(TOKEN, this, names, mode, r[0], !!r[1]);
-      if (options && options.durability) tx._durability = String(options.durability);
+      if (options && options.durability) {
+        tx._durability = String(options.durability);
+        if (tx._durability === 'strict' && mode === 'readwrite') H.idbDurability(tx._id, true); // synchronous write at commit
+      }
       return tx;
     }
   });
@@ -891,12 +894,17 @@
       if (multi && Array.isArray(kp)) throw mkErr('InvalidAccessError', "Failed to execute 'createIndex' on 'IDBObjectStore': The keyPath argument was an array and the multiEntry option is true.");
       var meta = { name: name, keyPath: JSON.stringify(kp), unique: unique, multiEntry: multi };
       // index the records already in the store
-      var flat = host('idbAllRecords', tx._id, st._name), entries = [];
-      var probe = { _inames: [name], _imeta: {} };
+      // (read a page at a time: the store may be far larger than memory; only the keys are collected)
+      var entries = [], after = '', probe = { _inames: [name], _imeta: {} };
       probe._imeta[name] = meta;
-      for (var i = 0; i < flat.length; i += 2) {
-        var ks = indexKeysOf(probe, de(flat[i + 1]))[name];
-        if (ks) entries.push([flat[i], ks]);
+      for (;;) {
+        var pg = host('idbRecordsPage', tx._id, st._name, after, 256), flat = pg[0];
+        for (var i = 0; i < flat.length; i += 2) {
+          var ks = indexKeysOf(probe, de(flat[i + 1]))[name];
+          if (ks) entries.push([flat[i], ks]);
+        }
+        after = pg[1];
+        if (!after) break;
       }
       var failure = null;
       try { host('idbCreateIndex', tx._id, st._name, name, meta.keyPath, unique, multi, entries); } catch (e) { failure = e; }
@@ -1178,8 +1186,8 @@
   defMethods(StorageManager.prototype, {
     estimate: function () {
       return new Promise(function (resolve) {
-        var e = H.storageEstimate(), opfs = typeof global.__swOpfsUsage === 'function' ? global.__swOpfsUsage() : 0;
-        resolve({ usage: e.usage + opfs, quota: e.quota, usageDetails: { indexedDB: e.indexedDB, caches: e.caches, serviceWorkerRegistrations: e.serviceWorkers } });
+        var e = H.storageEstimate();
+        resolve({ usage: e.usage, quota: e.quota, usageDetails: { indexedDB: e.indexedDB, caches: e.caches, serviceWorkerRegistrations: e.serviceWorkers, fileSystem: e.opfs || 0 } });
       });
     },
     persist: function () { return new Promise(function (resolve) { resolve(!!H.storagePersist()); }); },

@@ -1,130 +1,54 @@
 package engine
 
-// platform_opfs.go: storage behind navigator.storage.getDirectory(), the
-// Origin Private File System. The tree is memory-backed and shared by every
-// document and worker of the same storage key (origin, or origin plus top-level
-// site in a third-party context, see partition.go) inside one BrowserContext:
-// it survives navigations and reloads, not a restart, and a private window's
-// context shares nothing with the normal window's.
-// platformjs/opfs.js builds the handle classes on top of it. FileSystemSyncAccessHandle
-// (createSyncAccessHandle, dedicated workers only) works in place on the file's
-// bytes under an exclusive lock: while a sync access handle is open no other
-// sync handle or writable stream can be opened on the file, and it cannot be
-// removed or moved.
+// platform_opfs.go: host side of navigator.storage.getDirectory(), the Origin
+// Private File System. The tree is kept by internal/sitestore (OPFS): its
+// nodes live in the origin's ordered store and file contents above 64 KiB are
+// files under the origin's storage directory, so nothing is held in memory
+// beyond the file an operation is working on, and it counts against the
+// origin's quota like IndexedDB and Cache Storage. A context without a storage
+// directory (private windows, throw-away agent contexts) keeps the tree in
+// memory and discards it with the context. platformjs/opfs.js builds the
+// handle classes on top of this.
+//
+// The tree is keyed by the document's storage key (origin, plus the top-level site when it is embedded, see
+// partition.go), so an embed has one file system per site that embeds it.
+//
+// FileSystemSyncAccessHandle (dedicated workers) works on a buffer: createSyncAccessHandle takes an exclusive lock
+// on the file and reads it once, read/write/truncate/getSize are synchronous operations on that buffer, and flush
+// and close write it back with one store write. The store has only whole-file operations, so a file held by a sync
+// handle is in memory for as long as the handle is open, and a crash loses what was not flushed. While a handle is
+// open no second handle or writable stream can be opened on the file, and it cannot be written, removed or moved.
 
 import (
 	"encoding/base64"
-	"fmt"
-	"sort"
 	"strings"
 	"sync"
-	"time"
+
+	"github.com/sweefbrowser/sweef/internal/sitestore"
 )
 
-const opfsQuota = 256 << 20 // bytes per storage key
+var (
+	opfsFallbackOnce sync.Once
+	opfsFallbackMgr  *sitestore.Manager
+)
 
-type opfsNode struct {
-	dir     bool
-	data    []byte
-	kids    map[string]*opfsNode
-	mtime   int64
-	sync    bool // a FileSystemSyncAccessHandle is open on the file
-	writers int  // open FileSystemWritableFileStreams
-}
-
-type opfsHandle struct {
-	node   *opfsNode
-	writer bool // a writable stream's reservation rather than a sync access handle
-	vm     *jsVM
-}
-
-type opfsOrigin struct {
-	mu      sync.Mutex
-	root    *opfsNode
-	size    int64
-	handles map[int64]*opfsHandle
-	next    int64
-}
-
-// opfsFor returns the tree of one storage key in this context.
-func (h *workerHost) opfsFor(key string) *opfsOrigin {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.opfs == nil {
-		h.opfs = map[string]*opfsOrigin{}
-	}
-	o := h.opfs[key]
-	if o == nil {
-		o = &opfsOrigin{root: &opfsNode{dir: true, kids: map[string]*opfsNode{}}, handles: map[int64]*opfsHandle{}}
-		h.opfs[key] = o
-	}
-	return o
-}
-
-// opfsClear forgets the trees of every storage key that holds state of origin ("" = all).
-func (c *BrowserContext) opfsClear(origin string) {
-	h := c.wk.Load()
-	if h == nil {
-		return
-	}
-	h.mu.Lock()
-	for k := range h.opfs {
-		if keyMatches(k, origin) {
-			delete(h.opfs, k)
+// opfsFor returns the file system of the document's storage key. A document with an opaque origin (about:blank,
+// data:, a sandboxed frame) or a VM without a tab gets a memory-only tree of its own window.
+func (j *jsVM) opfsFor() *sitestore.OPFS {
+	if j.tab != nil {
+		if key := j.tab.opfsKey(); key != "" {
+			return j.tab.Context().SiteStorage().Origin(key).OPFS()
 		}
 	}
-	h.mu.Unlock()
+	opfsFallbackOnce.Do(func() { opfsFallbackMgr = sitestore.NewManager("", 0) })
+	name := "null"
+	if j.tab != nil {
+		name = "opaque:" + itoa64(j.tab.winID)
+	}
+	return opfsFallbackMgr.Origin(name).OPFS()
 }
 
-func opfsSplit(p string) []string {
-	if p == "" {
-		return nil
-	}
-	return strings.Split(p, "/")
-}
-
-// walk returns the node at the path (nil when absent).
-func (o *opfsOrigin) walk(parts []string) *opfsNode {
-	n := o.root
-	for _, p := range parts {
-		if n == nil || !n.dir {
-			return nil
-		}
-		n = n.kids[p]
-	}
-	return n
-}
-
-func opfsErr(name, msg string) error { return fmt.Errorf("%s: %s", name, msg) }
-
-func opfsTotal(n *opfsNode) int64 {
-	if !n.dir {
-		return int64(len(n.data))
-	}
-	var t int64
-	for _, k := range n.kids {
-		t += opfsTotal(k)
-	}
-	return t
-}
-
-// opfsLocked reports whether the node, or anything below it, has an open sync access handle. Writable streams
-// work on a swap file and do not stop the file from being removed or moved (their close then fails).
-func opfsLocked(n *opfsNode) bool {
-	if !n.dir {
-		return n.sync
-	}
-	for _, k := range n.kids {
-		if opfsLocked(k) {
-			return true
-		}
-	}
-	return false
-}
-
-var errOPFSLocked = opfsErr("NoModificationAllowedError", "An attempt was made to modify an object where modifications are not allowed.")
-
-// opfsKey is the storage key of the tab's document ("" when its origin is opaque and it has no private file system).
+// opfsKey is the storage key of the tab's document ("" when its origin is opaque).
 func (t *Tab) opfsKey() string {
 	if o := t.docOrigin(); o != "" {
 		return t.storageKeyFor(o)
@@ -132,313 +56,330 @@ func (t *Tab) opfsKey() string {
 	return ""
 }
 
-var opfsVMs sync.Map // *jsVM -> struct{}, VMs that hold handles
+// ---- locks and sync access handles ---------------------------------------------------------------------
+
+type opfsHandle struct {
+	parts  []string
+	writer bool // a writable stream's reservation, not a sync access handle
+	buf    []byte
+	dirty  bool
+	vm     *jsVM
+}
+
+type opfsLocks struct {
+	mu      sync.Mutex
+	next    int64
+	handles map[int64]*opfsHandle
+}
+
+var opfsLockTable sync.Map // *sitestore.OPFS -> *opfsLocks
+
+func opfsLocksOf(fs *sitestore.OPFS) *opfsLocks {
+	v, _ := opfsLockTable.LoadOrStore(fs, &opfsLocks{handles: map[int64]*opfsHandle{}})
+	return v.(*opfsLocks)
+}
+
+func samePath(a, b []string) bool { return strings.Join(a, "/") == strings.Join(b, "/") }
+
+// under reports whether p is path or below it.
+func under(p, path []string) bool {
+	if len(p) < len(path) {
+		return false
+	}
+	for i := range path {
+		if p[i] != path[i] {
+			return false
+		}
+	}
+	return true
+}
+
+var errOPFSLocked = &sitestore.Error{Name: "NoModificationAllowedError", Msg: "An attempt was made to modify an object where modifications are not allowed."}
+
+// syncLockedUnder reports whether a sync access handle is open on path or anything below it. l.mu is held.
+func (l *opfsLocks) syncLockedUnder(path []string) bool {
+	for _, h := range l.handles {
+		if !h.writer && under(h.parts, path) {
+			return true
+		}
+	}
+	return false
+}
+
+var opfsVMs sync.Map // *jsVM -> *sitestore.OPFS list owner, for teardown
 
 func init() {
 	registerCloseHook(func(j *jsVM) {
-		if _, ok := opfsVMs.LoadAndDelete(j); !ok || j.tab == nil {
+		if _, ok := opfsVMs.LoadAndDelete(j); !ok {
 			return
 		}
-		h := j.tab.Context().wk.Load()
-		if h == nil {
-			return
-		}
-		h.mu.Lock()
-		trees := make([]*opfsOrigin, 0, len(h.opfs))
-		for _, o := range h.opfs {
-			trees = append(trees, o)
-		}
-		h.mu.Unlock()
-		for _, o := range trees {
-			o.mu.Lock()
-			for id, hd := range o.handles {
-				if hd.vm == j {
-					o.release(id)
+		opfsLockTable.Range(func(k, v any) bool {
+			fs, l := k.(*sitestore.OPFS), v.(*opfsLocks)
+			l.mu.Lock()
+			for id, h := range l.handles {
+				if h.vm == j {
+					if !h.writer && h.dirty {
+						_ = fs.Write(h.parts, h.buf)
+					}
+					delete(l.handles, id)
 				}
 			}
-			o.mu.Unlock()
-		}
+			l.mu.Unlock()
+			return true
+		})
 	})
-}
-
-// release frees a handle's lock. o.mu is held.
-func (o *opfsOrigin) release(id int64) {
-	hd := o.handles[id]
-	if hd == nil {
-		return
-	}
-	delete(o.handles, id)
-	if hd.writer {
-		if hd.node.writers > 0 {
-			hd.node.writers--
-		}
-	} else {
-		hd.node.sync = false
-	}
 }
 
 func (j *jsVM) opfsHost(f map[string]hostFn) {
 	f["opfs"] = func(a []any) (any, error) {
-		if j.tab == nil {
-			return nil, opfsErr("SecurityError", "Storage is not available here.")
-		}
-		key := j.tab.opfsKey()
-		if key == "" {
-			return nil, opfsErr("SecurityError", "Storage is disabled inside 'data:' URLs and for opaque origins.")
-		}
-		o := j.tab.Context().workers().opfsFor(key)
-		o.mu.Lock()
-		defer o.mu.Unlock()
+		fs := j.opfsFor()
+		lk := opfsLocksOf(fs)
 		op, parts := argS(a, 0), opfsSplit(argS(a, 1))
-		now := time.Now().UnixMilli()
 		switch op {
 		case "usage":
-			return map[string]any{"usage": o.size, "quota": opfsQuota}, nil
+			var quota int64
+			if j.tab != nil {
+				if key := j.tab.opfsKey(); key != "" {
+					quota = j.tab.Context().SiteStorage().Origin(key).Quota()
+				}
+			}
+			if quota == 0 {
+				quota = 256 << 20
+			}
+			return map[string]any{"usage": fs.Usage(), "quota": quota}, nil
 		case "stat":
-			n := o.walk(parts)
-			if n == nil {
-				return nil, nil
+			st, err := fs.Stat(parts)
+			if err != nil || st == nil {
+				return nil, err
 			}
 			kind := "file"
-			if n.dir {
+			if st.Dir {
 				kind = "directory"
 			}
-			return map[string]any{"kind": kind, "size": len(n.data), "mtime": n.mtime}, nil
+			size := st.Size
+			lk.mu.Lock()
+			for _, h := range lk.handles { // a file held by a sync handle: the handle's size is the file's
+				if !h.writer && samePath(h.parts, parts) {
+					size = int64(len(h.buf))
+				}
+			}
+			lk.mu.Unlock()
+			return map[string]any{"kind": kind, "size": size, "mtime": st.Mtime}, nil
 		case "get": // (path, kind, create): get or create a child
-			kind, create := argS(a, 2), argB(a, 3)
 			if len(parts) == 0 {
 				return nil, nil
 			}
-			parent := o.walk(parts[:len(parts)-1])
-			if parent == nil || !parent.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
+			if err := fs.Get(parts, argS(a, 2) == "directory", argB(a, 3)); err != nil {
+				return nil, err
 			}
-			name := parts[len(parts)-1]
-			n := parent.kids[name]
-			if n != nil {
-				if n.dir != (kind == "directory") {
-					return nil, opfsErr("TypeMismatchError", "The path supplied exists, but was not an entry of requested type.")
-				}
-				return true, nil
-			}
-			if !create {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			n = &opfsNode{dir: kind == "directory", mtime: now}
-			if n.dir {
-				n.kids = map[string]*opfsNode{}
-			}
-			parent.kids[name] = n
-			parent.mtime = now
 			return true, nil
 		case "list":
-			n := o.walk(parts)
-			if n == nil || !n.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
+			es, err := fs.List(parts)
+			if err != nil {
+				return nil, err
 			}
-			names := make([]string, 0, len(n.kids))
-			for k := range n.kids {
-				names = append(names, k)
-			}
-			sort.Strings(names)
-			out := make([]any, 0, len(names))
-			for _, k := range names {
+			out := make([]any, 0, len(es))
+			for _, e := range es {
 				kind := "file"
-				if n.kids[k].dir {
+				if e.Dir {
 					kind = "directory"
 				}
-				out = append(out, []any{k, kind})
+				out = append(out, []any{e.Name, kind})
 			}
 			return out, nil
 		case "remove": // (path, recursive)
-			if len(parts) == 0 {
-				return nil, opfsErr("NoModificationAllowedError", "The root directory cannot be removed.")
-			}
-			parent := o.walk(parts[:len(parts)-1])
-			if parent == nil || !parent.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			name := parts[len(parts)-1]
-			n := parent.kids[name]
-			if n == nil {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			if n.dir && len(n.kids) > 0 && !argB(a, 2) {
-				return nil, opfsErr("InvalidModificationError", "The object can not be modified in this way.")
-			}
-			if opfsLocked(n) {
+			lk.mu.Lock()
+			locked := lk.syncLockedUnder(parts)
+			lk.mu.Unlock()
+			if locked {
 				return nil, errOPFSLocked
 			}
-			o.size -= opfsTotal(n)
-			delete(parent.kids, name)
-			parent.mtime = now
+			if err := fs.Remove(parts, argB(a, 2)); err != nil {
+				return nil, err
+			}
 			return true, nil
 		case "read":
-			n := o.walk(parts)
-			if n == nil || n.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
+			lk.mu.Lock()
+			for _, h := range lk.handles {
+				if !h.writer && samePath(h.parts, parts) && h.dirty { // the unflushed bytes of an open sync handle
+					b := append([]byte(nil), h.buf...)
+					lk.mu.Unlock()
+					return map[string]any{"d": base64.StdEncoding.EncodeToString(b), "mtime": int64(0)}, nil
+				}
 			}
-			return map[string]any{"d": base64.StdEncoding.EncodeToString(n.data), "mtime": n.mtime}, nil
+			lk.mu.Unlock()
+			b, mtime, err := fs.Read(parts)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"d": base64.StdEncoding.EncodeToString(b), "mtime": mtime}, nil
 		case "write":
-			n := o.walk(parts)
-			if n == nil || n.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
 			data, err := base64.StdEncoding.DecodeString(argS(a, 2))
 			if err != nil {
-				return nil, opfsErr("TypeError", "bad data")
+				return nil, &sitestore.Error{Name: "TypeError", Msg: "bad data"}
 			}
-			if n.sync {
+			lk.mu.Lock()
+			locked := lk.syncLockedUnder(parts)
+			lk.mu.Unlock()
+			if locked {
 				return nil, errOPFSLocked
 			}
-			if o.size-int64(len(n.data))+int64(len(data)) > opfsQuota {
-				return nil, opfsErr("QuotaExceededError", "The origin private file system quota was exceeded.")
+			if err := fs.Write(parts, data); err != nil {
+				return nil, err
 			}
-			o.size += int64(len(data)) - int64(len(n.data))
-			n.data, n.mtime = data, now
 			return true, nil
 		case "move": // (path, newPath): rename or move within the tree
-			np := opfsSplit(argS(a, 2))
-			if len(parts) == 0 || len(np) == 0 {
-				return nil, opfsErr("NoModificationAllowedError", "The root directory cannot be moved.")
-			}
-			sp := o.walk(parts[:len(parts)-1])
-			dp := o.walk(np[:len(np)-1])
-			if sp == nil || dp == nil || !dp.dir || sp.kids[parts[len(parts)-1]] == nil {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
-			}
-			n := sp.kids[parts[len(parts)-1]]
-			if ex := dp.kids[np[len(np)-1]]; ex != nil && (ex.dir || n.dir) {
-				return nil, opfsErr("InvalidModificationError", "The object can not be modified in this way.")
-			}
-			if opfsLocked(n) {
+			to := opfsSplit(argS(a, 2))
+			lk.mu.Lock()
+			locked := lk.syncLockedUnder(parts) || lk.syncLockedUnder(to)
+			lk.mu.Unlock()
+			if locked {
 				return nil, errOPFSLocked
 			}
-			if ex := dp.kids[np[len(np)-1]]; ex != nil {
-				if opfsLocked(ex) {
-					return nil, errOPFSLocked
-				}
-				o.size -= opfsTotal(ex)
+			if err := fs.Move(parts, to); err != nil {
+				return nil, err
 			}
-			delete(sp.kids, parts[len(parts)-1])
-			dp.kids[np[len(np)-1]] = n
-			n.mtime = now
 			return true, nil
 
-		// ---- locks: writable streams and synchronous access handles ----
+		// ---- writable streams and sync access handles ----
 		case "writerOpen": // (path): reserve the file for a writable stream; fails while a sync access handle is open
-			n := o.walk(parts)
-			if n == nil || n.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
+			st, err := fs.Stat(parts)
+			if err != nil {
+				return nil, err
 			}
-			if n.sync {
+			if st == nil || st.Dir {
+				return nil, &sitestore.Error{Name: "NotFoundError", Msg: "A requested file or directory could not be found."}
+			}
+			lk.mu.Lock()
+			defer lk.mu.Unlock()
+			if lk.syncLockedUnder(parts) {
 				return nil, errOPFSLocked
 			}
-			n.writers++
-			return o.newHandle(&opfsHandle{node: n, writer: true, vm: j}), nil
+			lk.next++
+			lk.handles[lk.next] = &opfsHandle{parts: parts, writer: true, vm: j}
+			opfsVMs.Store(j, struct{}{})
+			return lk.next, nil
 		case "writerClose": // (path, id)
-			o.release(argI(a, 2))
+			lk.mu.Lock()
+			delete(lk.handles, argI(a, 2))
+			lk.mu.Unlock()
 			return nil, nil
-		case "syncOpen": // (path): exclusive lock, returns [id, size]
-			n := o.walk(parts)
-			if n == nil || n.dir {
-				return nil, opfsErr("NotFoundError", "A requested file or directory could not be found.")
+		case "syncOpen": // (path): exclusive lock, loads the file; returns [id, size]
+			st, err := fs.Stat(parts)
+			if err != nil {
+				return nil, err
 			}
-			if n.sync || n.writers > 0 {
-				return nil, errOPFSLocked
+			if st == nil || st.Dir {
+				return nil, &sitestore.Error{Name: "NotFoundError", Msg: "A requested file or directory could not be found."}
 			}
-			n.sync = true
-			return []any{o.newHandle(&opfsHandle{node: n, vm: j}), len(n.data)}, nil
-		case "syncClose": // (path, id)
-			o.release(argI(a, 2))
-			return nil, nil
-		case "syncRead": // (path, id, at, len) -> base64 of up to len bytes from at
-			hd := o.handles[argI(a, 2)]
-			if hd == nil || hd.writer {
-				return nil, opfsErr("InvalidStateError", "The access handle is closed.")
+			lk.mu.Lock()
+			defer lk.mu.Unlock()
+			for _, h := range lk.handles {
+				if samePath(h.parts, parts) {
+					return nil, errOPFSLocked // another sync handle, or a writable stream
+				}
 			}
+			b, _, err := fs.Read(parts)
+			if err != nil {
+				return nil, err
+			}
+			lk.next++
+			lk.handles[lk.next] = &opfsHandle{parts: parts, buf: b, vm: j}
+			opfsVMs.Store(j, struct{}{})
+			return []any{lk.next, len(b)}, nil
+		}
+		// the remaining operations work on an open sync handle: (op, path, id, ...)
+		lk.mu.Lock()
+		defer lk.mu.Unlock()
+		h := lk.handles[argI(a, 2)]
+		if h == nil || h.writer {
+			return nil, &sitestore.Error{Name: "InvalidStateError", Msg: "The access handle is closed."}
+		}
+		switch op {
+		case "syncRead": // at, len -> base64 of up to len bytes from at
 			at, n := argI(a, 3), argI(a, 4)
-			d := hd.node.data
-			if at < 0 || at >= int64(len(d)) || n <= 0 {
+			if at < 0 || at >= int64(len(h.buf)) || n <= 0 {
 				return "", nil
 			}
 			end := at + n
-			if end > int64(len(d)) {
-				end = int64(len(d))
+			if end > int64(len(h.buf)) {
+				end = int64(len(h.buf))
 			}
-			return base64.StdEncoding.EncodeToString(d[at:end]), nil
-		case "syncWrite": // (path, id, at, base64) -> bytes written
-			hd := o.handles[argI(a, 2)]
-			if hd == nil || hd.writer {
-				return nil, opfsErr("InvalidStateError", "The access handle is closed.")
-			}
+			return base64.StdEncoding.EncodeToString(h.buf[at:end]), nil
+		case "syncWrite": // at, base64 -> bytes written
 			data, err := base64.StdEncoding.DecodeString(argS(a, 4))
 			if err != nil {
-				return nil, opfsErr("TypeError", "bad data")
+				return nil, &sitestore.Error{Name: "TypeError", Msg: "bad data"}
 			}
 			at := argI(a, 3)
 			if at < 0 {
-				return nil, opfsErr("TypeError", "Invalid offset.")
+				return nil, &sitestore.Error{Name: "TypeError", Msg: "Invalid offset."}
 			}
-			nd := hd.node
-			end := at + int64(len(data))
-			if grow := end - int64(len(nd.data)); grow > 0 {
-				if o.size+grow > opfsQuota {
-					return nil, opfsErr("QuotaExceededError", "The origin private file system quota was exceeded.")
+			if end := at + int64(len(data)); end > int64(len(h.buf)) {
+				if end > opfsSyncMax {
+					return nil, &sitestore.Error{Name: "QuotaExceededError", Msg: "The access handle's file is too large."}
 				}
-				if end > int64(cap(nd.data)) {
-					nb := make([]byte, end, end+end/4+64)
-					copy(nb, nd.data)
-					nd.data = nb
-				} else {
-					nd.data = nd.data[:end]
-				}
-				o.size += grow
+				nb := make([]byte, end, end+end/4+64)
+				copy(nb, h.buf)
+				h.buf = nb
 			}
-			copy(nd.data[at:], data)
-			nd.mtime = now
+			copy(h.buf[at:], data)
+			h.dirty = true
 			return len(data), nil
-		case "syncSize": // (path, id)
-			hd := o.handles[argI(a, 2)]
-			if hd == nil || hd.writer {
-				return nil, opfsErr("InvalidStateError", "The access handle is closed.")
-			}
-			return len(hd.node.data), nil
-		case "syncTruncate": // (path, id, size)
-			hd := o.handles[argI(a, 2)]
-			if hd == nil || hd.writer {
-				return nil, opfsErr("InvalidStateError", "The access handle is closed.")
-			}
+		case "syncSize":
+			return len(h.buf), nil
+		case "syncTruncate":
 			size := argI(a, 3)
 			if size < 0 {
-				return nil, opfsErr("TypeError", "Invalid size.")
+				return nil, &sitestore.Error{Name: "TypeError", Msg: "Invalid size."}
 			}
-			nd := hd.node
-			cur := int64(len(nd.data))
+			if size > opfsSyncMax {
+				return nil, &sitestore.Error{Name: "QuotaExceededError", Msg: "The access handle's file is too large."}
+			}
 			switch {
-			case size < cur:
-				nd.data = nd.data[:size]
-			case size > cur:
-				if o.size+(size-cur) > opfsQuota {
-					return nil, opfsErr("QuotaExceededError", "The origin private file system quota was exceeded.")
-				}
+			case size < int64(len(h.buf)):
+				h.buf = h.buf[:size]
+			case size > int64(len(h.buf)):
 				nb := make([]byte, size)
-				copy(nb, nd.data)
-				nd.data = nb
+				copy(nb, h.buf)
+				h.buf = nb
 			}
-			o.size += size - cur
-			nd.mtime = now
+			h.dirty = true
 			return true, nil
+		case "syncFlush":
+			if h.dirty {
+				if err := fs.Write(h.parts, h.buf); err != nil {
+					return nil, err
+				}
+				h.dirty = false
+			}
+			return true, nil
+		case "syncClose":
+			var err error
+			if h.dirty {
+				err = fs.Write(h.parts, h.buf)
+			}
+			delete(lk.handles, argI(a, 2))
+			return nil, err
 		}
-		return nil, opfsErr("TypeError", "unknown opfs operation")
+		return nil, &sitestore.Error{Name: "TypeError", Msg: "unknown opfs operation"}
 	}
 }
 
-func (o *opfsOrigin) newHandle(h *opfsHandle) int64 {
-	o.next++
-	o.handles[o.next] = h
-	if h.vm != nil {
-		opfsVMs.Store(h.vm, struct{}{})
+// opfsSyncMax bounds the file a sync access handle holds in memory.
+const opfsSyncMax = 512 << 20
+
+func opfsSplit(p string) []string {
+	if p == "" {
+		return nil
 	}
-	return o.next
+	out := []string{}
+	start := 0
+	for i := 0; i <= len(p); i++ {
+		if i == len(p) || p[i] == '/' {
+			out = append(out, p[start:i])
+			start = i + 1
+		}
+	}
+	return out
 }
