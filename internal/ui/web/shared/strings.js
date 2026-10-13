@@ -97,6 +97,17 @@
   ];
   S.overlay = { working: "{agent} is working", fulfilling: "Fulfilling \"{task}\"", takeControl: "Take control", stop: "Stop", control: "You are in control", controlSub: "{agent} is paused.", resume: "Hand back to {agent}", step: "Step {n}", done: "Done", stopped: "Stopped", cursorLabel: "{agent}" };
 
+  /* Camera, microphone and screen sharing */
+  S.media = {
+    camera: "Camera", mic: "Microphone", screen: "Screen sharing",
+    wantsBoth: "{host} wants to use your camera and microphone", wantsCam: "{host} wants to use your camera", wantsMic: "{host} wants to use your microphone", wantsShare: "{host} wants to share your screen content",
+    once: "Allow this time", always: "Always allow on this site", block: "Block", dismiss: "Not now", share: "Share", cancel: "Cancel", close: "Close",
+    priv: "Private window: nothing you choose here is remembered.", pick: "Choose what to share", thisTab: "This tab", otherTabs: "Other tabs", win: "The {brand} window", winSub: "Everything in this window, including tabs and menus.",
+    noAudio: "Sound is not shared yet.", noOs: "Other apps and your whole screen are not available.", device: "Choose a device",
+    inUse: "In use", allowed: "Allowed", blocked: "Blocked", ask: "Ask", reset: "Reset",
+    usingCam: "Camera in use", usingMic: "Microphone in use", usingBoth: "Camera and microphone in use", usingShare: "Sharing screen content",
+    popTitle: "In use now", stop: "Stop", sharing: "{host} is sharing {what}", whatTab: "a tab", whatWin: "this window", stopSharing: "Stop sharing", hide: "Hide", sitePerms: "Permissions"
+  };
   /* Data Saver. Plain words, never guilt: say what is happening and what the person can do.
      "Measured" = counted from the network. "Estimated" = our best guess. The UI never adds the two. */
   S.data = {

@@ -342,6 +342,31 @@ func (m *appMedia) MediaChanged(t *engine.Tab, act engine.MediaActivity) {
 	})
 }
 
+// shares lists the screen/tab/window shares of all tabs: the chrome keeps a "Stop sharing" bar up while any exists.
+func (m *appMedia) shares() []map[string]any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []map[string]any{}
+	ids := make([]string, 0, len(m.acts))
+	for id := range m.acts {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, tabID := range ids {
+		st, _ := m.a.model.Tab(tabID)
+		host := st.URL
+		if u, err := url.Parse(st.URL); err == nil && u.Host != "" {
+			host = u.Host
+		}
+		for _, s := range m.acts[tabID].Sessions {
+			if s.Kind == "screen" {
+				out = append(out, map[string]any{"id": s.ID, "tab": tabID, "host": host, "label": s.Label, "surface": s.Surface})
+			}
+		}
+	}
+	return out
+}
+
 func (m *appMedia) sessions(tabID string) []engine.MediaSession {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -366,6 +391,7 @@ func (a *App) mediaState(act stateTab, ok bool) map[string]any {
 		ses = append(ses, map[string]any{"id": s.ID, "kind": s.Kind, "label": s.Label, "surface": s.Surface})
 	}
 	out["sessions"] = ses
+	out["shares"] = m.shares() // every tab that is sharing, for the persistent bar
 	if origin := store.OriginOf(act.URL); origin != "" && strings.HasPrefix(act.URL, "http") {
 		site := map[string]any{"origin": origin}
 		for _, n := range []string{"camera", "microphone", "screen"} {

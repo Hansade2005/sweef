@@ -216,6 +216,38 @@ func Scenarios() []Scenario {
 		Setup: `SW.sk.send("Compare the three best-reviewed trail shoes under $120");` + ev("action", "id", "a1", "label", "Searched the web", "detail", "best trail shoes under $120", "status", "ok", "ms", 842) + ev("action", "id", "a2", "label", "Read runnersworld.com", "status", "ok", "ms", 311) + ev("text", "text", "I compared three well-reviewed pairs: the **Speedgoat 5** at $119, the **Peregrine 13** at $110 and the **Challenger 7** at $104. The Challenger is the best all-rounder at the lowest price.") + ev("done", "ttft", 388, "tps", 82, "data", M{"bytes": 421_888, "savedEstimated": 1_310_720, "skipped": 41, "lite": true, "available": true})})
 	add(Scenario{Name: "data-sidekick-dark", Page: "chrome/index.html", W: 1280, H: 800, State: with(dark, "data", dataState(0.394, "standard")), Backdrop: "article",
 		Setup: `SW.sk.send("Summarise the pricing page");` + ev("text", "text", "The **Team** plan is $12 per seat per month, billed yearly.") + ev("done", "ttft", 402, "tps", 77, "data", M{"bytes": 96_256, "skipped": 6, "lite": true, "available": true})})
+	// ---- camera, microphone and screen sharing
+	mp := func(base M, prompt M, extra ...any) M {
+		kv := append([]any{"sidebar.open", false, "media", M{"prompt": prompt, "sessions": []M{}, "shares": []M{}, "site": M{"origin": "https://meet.example.com", "camera": "ask", "microphone": "ask", "screen": "ask"}}, "url", "https://meet.example.com/standup", "title", "Daily standup - Meet"}, extra...)
+		return with(base, kv...)
+	}
+	devPrompt := M{"id": "mp1", "kind": "devices", "origin": "https://meet.example.com", "host": "meet.example.com", "tab": "t1", "video": true, "audio": true, "remember": true, "incognito": false,
+		"cameras": []M{{"id": "v1", "label": "Integrated Camera (0c45:6723)"}, {"id": "v2", "label": "Logitech BRIO"}}, "mics": []M{{"id": "a1", "label": "Built-in Audio Analog Stereo"}, {"id": "a2", "label": "BRIO Microphone"}}}
+	dispPrompt := M{"id": "mp2", "kind": "display", "origin": "https://meet.example.com", "host": "meet.example.com", "tab": "t1", "incognito": false, "wantAudio": true, "preferCurrentTab": false,
+		"sources": []M{{"id": "tab:t1", "title": "Daily standup - Meet", "url": "https://meet.example.com/standup", "surface": "browser", "current": true}, {"id": "tab:t3", "title": "Lo-fi beats to refactor to", "url": "https://www.youtube.com/watch?v=abc", "surface": "browser"},
+			{"id": "tab:t5", "title": "sweef/sweef: a fast, light browser written in Go", "url": "https://github.com/sweefbrowser/sweef", "surface": "browser"}, {"id": "window:main", "title": "Sweef window", "surface": "window"}}}
+	add(Scenario{Name: "media-prompt-light", Page: "chrome/index.html", W: 1280, H: 800, State: mp(light, devPrompt), Backdrop: "article"})
+	add(Scenario{Name: "media-prompt-dark", Page: "chrome/index.html", W: 1280, H: 800, State: mp(dark, devPrompt), Backdrop: "article"})
+	add(Scenario{Name: "media-prompt-devices", Page: "chrome/index.html", W: 1280, H: 800, State: mp(light, devPrompt), Backdrop: "article",
+		Then: `document.querySelectorAll('.mprompt .mdev .mrow')[0].click();`})
+	privPrompt := M{"id": "mp3", "kind": "devices", "origin": "https://meet.example.com", "host": "meet.example.com", "tab": "t1", "video": false, "audio": true, "remember": false, "incognito": true,
+		"cameras": []M{}, "mics": []M{{"id": "a1", "label": "Built-in Audio Analog Stereo"}}}
+	add(Scenario{Name: "media-prompt-incognito", Page: "chrome/index.html", W: 1280, H: 800, State: mp(inc, privPrompt), BackdropFrom: "newtab-incognito-page"})
+	add(Scenario{Name: "media-display-light", Page: "chrome/index.html", W: 1280, H: 800, State: mp(light, dispPrompt), Backdrop: "article"})
+	add(Scenario{Name: "media-display-dark", Page: "chrome/index.html", W: 1280, H: 800, State: mp(dark, dispPrompt), Backdrop: "article"})
+	live := func(base M, tabs []M, ses []M, shares []M) M {
+		return with(base, "sidebar.open", false, "tabs", tabs, "active", "t1", "url", "https://meet.example.com/standup", "title", "Daily standup - Meet",
+			"media", M{"sessions": ses, "shares": shares, "site": M{"origin": "https://meet.example.com", "camera": "allow", "microphone": "allow", "screen": "ask"}})
+	}
+	liveTabs := []M{tab("p1", "Mail", "https://mail.example.com/inbox", "pinned", true), tab("t1", "Daily standup - Meet", "https://meet.example.com/standup", "camera", true, "mic", true),
+		tab("t2", "Design review - Meet", "https://meet.example.com/review", "mic", true), tab("t3", "Slides", "https://slides.example.com/deck", "sharing", true), tab("t5", "sweef/sweef", "https://github.com/sweefbrowser/sweef")}
+	camMic := []M{{"id": "s1", "kind": "camera", "label": "Integrated Camera (0c45:6723)"}, {"id": "s2", "kind": "microphone", "label": "Built-in Audio Analog Stereo"}}
+	add(Scenario{Name: "media-inuse-popover-light", Page: "chrome/index.html", W: 1280, H: 800, State: live(light, liveTabs, camMic, []M{}), Backdrop: "article", Then: `document.getElementById('mediabtn').click();`})
+	add(Scenario{Name: "media-inuse-popover-dark", Page: "chrome/index.html", W: 1280, H: 800, State: live(dark, liveTabs, camMic, []M{}), Backdrop: "article", Then: `document.getElementById('mediabtn').click();`})
+	shareSes := []M{{"id": "s3", "kind": "screen", "label": "Daily standup - Meet", "surface": "browser"}}
+	add(Scenario{Name: "media-sharebar-dark", Page: "chrome/index.html", W: 1280, H: 800, State: live(dark, liveTabs, shareSes, []M{{"id": "s3", "tab": "t1", "host": "meet.example.com", "label": "Daily standup - Meet", "surface": "browser"}}), Backdrop: "article"})
+	add(Scenario{Name: "media-siteinfo-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(live(light, liveTabs, camMic, []M{}), "media.site.microphone", "block"), Backdrop: "article",
+		Setup: `document.getElementById('secbtn').click();`})
 	add(Scenario{Name: "error-dns", Page: "error/index.html", Query: "?kind=dns&url=https%3A%2F%2Fexample-typo.test%2Fhello", W: 1280, H: 800, State: light})
 	add(Scenario{Name: "error-cert-dark", Page: "error/index.html", Query: "?kind=cert&url=https%3A%2F%2Fexpired.example.com%2F&detail=certificate+expired+2026-03-01&open=1", W: 1280, H: 800, State: dark})
 	add(Scenario{Name: "error-offline", Page: "error/index.html", Query: "?kind=offline&url=https%3A%2F%2Fwww.wsj.com%2F", W: 1280, H: 800, State: light})
