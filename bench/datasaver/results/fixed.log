@@ -293,3 +293,93 @@ baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=
 [270/345] sweef-standard     run 3 https://www.allrecipes.com/recipe/10813/best-chocolate-chip… skipped (failed earlier)
 [271/345] sweef-off          run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 2008856 warm=  251243 req= 37 ready= 9246ms ok
 [272/345] sweef-standard     run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1732019 warm=    7835 req= 28 ready= 6534ms ok
+[273/345] sweef-strict       run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold=  326963 warm=       0 req=  7 ready= 1614ms ok
+[274/345] chromium           run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1893963 warm=  580362 req= 40 ready= 2925ms ok
+[275/345] chromium-savedata  run 1 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1889304 warm=  252237 req= 39 ready= 2619ms ok
+[276/345] sweef-standard     run 2 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1724168 warm=    9135 req= 28 ready= 6771ms ok
+[277/345] sweef-strict       run 2 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold=  314333 warm=      24 req=  7 ready= 1650ms ok
+[278/345] chromium           run 2 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1888665 warm=   26884 req= 39 ready= 2727ms ok
+[279/345] chromium-savedata  run 2 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1885394 warm=   17148 req= 39 ready= 2802ms ok
+[280/345] sweef-off          run 2 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 2011945 warm=  250151 req= 37 ready=10336ms ok
+[281/345] sweef-strict       run 3 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold=  314193 warm=      24 req=  7 ready= 1797ms ok
+[282/345] chromium           run 3 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1884963 warm=  337066 req= 39 ready= 2769ms ok
+[283/345] chromium-savedata  run 3 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1886861 warm=   17126 req= 39 ready= 2977ms ok
+[284/345] sweef-off          run 3 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 2009606 warm=   15845 req= 37 ready=38272ms ok
+[285/345] sweef-standard     run 3 https://forecast.weather.gov/MapClick.php?lat=40.7146&lon=-… cold= 1731054 warm=    9103 req= 28 ready= 5886ms ok
+[286/345] sweef-off          run 1 https://www.lonelyplanet.com/japan                           cold= 3327818 warm=  176399 req= 65 ready=21080ms ok
+[287/345] sweef-standard     run 1 https://www.lonelyplanet.com/japan                           cold= 1012654 warm=  175796 req= 52 ready=10590ms ok
+[288/345] sweef-strict       run 1 https://www.lonelyplanet.com/japan                           cold=  411447 warm=  150897 req= 28 ready= 6007ms ok
+[289/345] chromium           run 1 https://www.lonelyplanet.com/japan                           cold= 4613362 warm= 3720659 req=153 ready= 7004ms ok
+[290/345] chromium-savedata  run 1 https://www.lonelyplanet.com/japan                           cold= 4365717 warm= 3409988 req=149 ready= 6186ms ok
+[291/345] sweef-standard     run 2 https://www.lonelyplanet.com/japan                           cold= 1012250 warm=  176285 req= 52 ready=10637ms ok
+[292/345] sweef-strict       run 2 https://www.lonelyplanet.com/japan                           cold=  411655 warm=  151291 req= 28 ready= 5908ms ok
+[293/345] chromium           run 2 https://www.lonelyplanet.com/japan                           cold= 4309571 warm= 4191547 req=151 ready= 6128ms ok
+[294/345] chromium-savedata  run 2 https://www.lonelyplanet.com/japan                           cold= 4606688 warm= 2841051 req=151 ready= 5622ms ok
+[295/345] sweef-off          run 2 https://www.lonelyplanet.com/japan                           cold= 3336634 warm=  176963 req= 65 ready=20112ms ok
+[296/345] sweef-strict       run 3 https://www.lonelyplanet.com/japan                           cold=  411215 warm=  150884 req= 28 ready= 6307ms ok
+[297/345] chromium           run 3 https://www.lonelyplanet.com/japan                           cold= 4632734 warm=  858545 req=151 ready= 6063ms ok
+[298/345] chromium-savedata  run 3 https://www.lonelyplanet.com/japan                           cold= 4611853 warm= 3360347 req=148 ready= 6707ms ok
+[299/345] sweef-off          run 3 https://www.lonelyplanet.com/japan                           cold= 3332204 warm=  175759 req= 71 ready=20505ms ok
+[300/345] sweef-standard     run 3 https://www.lonelyplanet.com/japan                           cold= 1008531 warm=  176261 req= 46 ready=11438ms ok
+[301/345] sweef-off          run 1 https://pypi.org/project/requests/                           cold= 2134424 warm=  259468 req= 51 ready= 9807ms ok
+[302/345] sweef-standard     run 1 https://pypi.org/project/requests/                           cold= 1097130 warm=   65939 req= 24 ready= 6532ms ok
+[303/345] sweef-strict       run 1 https://pypi.org/project/requests/                           cold=  408885 warm=   32846 req= 14 ready= 3405ms ok
+[304/345] chromium           run 1 https://pypi.org/project/requests/                           cold= 1422812 warm=  165006 req= 45 ready= 2576ms ok
+[305/345] chromium-savedata  run 1 https://pypi.org/project/requests/                           cold= 1586927 warm=  153779 req= 47 ready= 1434ms ok
+[306/345] sweef-standard     run 2 https://pypi.org/project/requests/                           cold= 1011328 warm=   65982 req= 24 ready= 6882ms ok
+[307/345] sweef-strict       run 2 https://pypi.org/project/requests/                           cold=   28458 warm=   25079 req=  5 ready=  518ms ok
+[308/345] chromium           run 2 https://pypi.org/project/requests/                           cold=  167276 warm= 1521770 req= 11 ready=  565ms ok
+[309/345] chromium-savedata  run 2 https://pypi.org/project/requests/                           cold= 1570975 warm=  769241 req= 45 ready= 2431ms ok
+[310/345] sweef-off          run 2 https://pypi.org/project/requests/                           cold= 2084080 warm=  167592 req= 51 ready= 9140ms ok
+[311/345] sweef-strict       run 3 https://pypi.org/project/requests/                           cold=   28458 warm=  409520 req=  5 ready=  543ms ok
+[312/345] chromium           run 3 https://pypi.org/project/requests/                           cold= 1540553 warm=  167083 req= 45 ready= 2260ms ok
+[313/345] chromium-savedata  run 3 https://pypi.org/project/requests/                           cold=  166445 warm= 1600666 req= 11 ready=  572ms ok
+[314/345] sweef-off          run 3 https://pypi.org/project/requests/                           cold= 2219351 warm=  159141 req= 51 ready= 9598ms ok
+[315/345] sweef-standard     run 3 https://pypi.org/project/requests/                           cold= 1008039 warm=   67235 req= 24 ready= 6295ms ok
+[316/345] sweef-off          run 1 https://www.gov.uk/browse/driving                            cold=  105391 warm=       0 req=  8 ready= 2624ms ok
+[317/345] sweef-standard     run 1 https://www.gov.uk/browse/driving                            cold=  105649 warm=      24 req=  8 ready= 2691ms ok
+[318/345] sweef-strict       run 1 https://www.gov.uk/browse/driving                            cold=  114267 warm=      24 req=  8 ready= 3284ms ok
+[319/345] chromium           run 1 https://www.gov.uk/browse/driving                            cold=  187335 warm=    7925 req= 12 ready=  640ms ok
+[320/345] chromium-savedata  run 1 https://www.gov.uk/browse/driving                            cold=  187349 warm=    7925 req= 12 ready=  644ms ok
+[321/345] sweef-standard     run 2 https://www.gov.uk/browse/driving                            cold=  105507 warm=      24 req=  8 ready= 2787ms ok
+[322/345] sweef-strict       run 2 https://www.gov.uk/browse/driving                            cold=  114150 warm=      24 req=  8 ready= 3166ms ok
+[323/345] chromium           run 2 https://www.gov.uk/browse/driving                            cold=  187388 warm=    7925 req= 12 ready=  652ms ok
+[324/345] chromium-savedata  run 2 https://www.gov.uk/browse/driving                            cold=  187384 warm=    7925 req= 12 ready=  637ms ok
+[325/345] sweef-off          run 2 https://www.gov.uk/browse/driving                            cold=  105511 warm=      24 req=  8 ready= 2928ms ok
+[326/345] sweef-strict       run 3 https://www.gov.uk/browse/driving                            cold=  114263 warm=      24 req=  8 ready= 3196ms ok
+[327/345] chromium           run 3 https://www.gov.uk/browse/driving                            cold=  187350 warm=    7925 req= 12 ready=  783ms ok
+[328/345] chromium-savedata  run 3 https://www.gov.uk/browse/driving                            cold=  187364 warm=    7925 req= 12 ready=  606ms ok
+[329/345] sweef-off          run 3 https://www.gov.uk/browse/driving                            cold=  105253 warm=      24 req=  8 ready= 2836ms ok
+[330/345] sweef-standard     run 3 https://www.gov.uk/browse/driving                            cold=  105576 warm=       0 req=  8 ready= 2608ms ok
+[331/345] sweef-off          run 1 https://dev.to/                                              cold= 1689467 warm=   22421 req= 70 ready=10761ms ok
+[332/345] sweef-standard     run 1 https://dev.to/                                              cold= 1365407 warm=   22763 req= 48 ready= 8537ms ok
+[333/345] sweef-strict       run 1 https://dev.to/                                              cold=  773971 warm=  155971 req= 46 ready=10676ms ok
+[334/345] chromium           run 1 https://dev.to/                                              cold= 2692960 warm=  236537 req= 71 ready= 2896ms ok
+[335/345] chromium-savedata  run 1 https://dev.to/                                              cold= 3069485 warm=  233171 req= 69 ready= 2643ms ok
+[336/345] sweef-standard     run 2 https://dev.to/                                              cold= 1279576 warm=  177764 req= 44 ready=11061ms ok
+[337/345] sweef-strict       run 2 https://dev.to/                                              cold=  781367 warm=  155686 req= 46 ready= 8942ms ok
+[338/345] chromium           run 2 https://dev.to/                                              cold= 2681953 warm=  232910 req= 69 ready= 4389ms ok
+[339/345] chromium-savedata  run 2 https://dev.to/                                              cold= 3234436 warm=  239126 req= 71 ready= 2755ms ok
+[340/345] sweef-off          run 2 https://dev.to/                                              cold= 1760796 warm=   22332 req= 72 ready=10070ms ok
+[341/345] sweef-strict       run 3 https://dev.to/                                              cold=  780766 warm=  155646 req= 46 ready= 8484ms ok
+[342/345] chromium           run 3 https://dev.to/                                              cold= 2940372 warm=  247057 req= 81 ready= 2421ms ok
+[343/345] chromium-savedata  run 3 https://dev.to/                                              cold= 3082475 warm=  504615 req= 70 ready= 2533ms ok
+[344/345] sweef-off          run 3 https://dev.to/                                              cold= 1746480 warm=  192171 req= 71 ready=11306ms ok
+[345/345] sweef-standard     run 3 https://dev.to/                                              cold= 1308464 warm=   74561 req= 47 ready= 8477ms ok
+results: bench/datasaver/results/2026-10-13-fixed.json
+report: docs/data-saver-bench.md
+
+18 of 23 sites included, 5 excluded, 3 runs
+mode                     mean KB/page        pages/100MB   req/page     ready ms
+Sweef off                        2071   48.3 (48.1-50.1)       65.4         9071
+Sweef standard                   1201   83.3 (83.3-84.7)       48.7         7270
+Sweef strict                      312  320.7 (301.1-324.7)       20.3         1670
+Chromium                         2728   36.7 (36.2-38.9)      113.7         2970
+Chromium + Save-Data             2642   37.9 (37.0-39.1)      108.8         2894
+Sweef standard vs Sweef off                      saved 42.0% (40.9 to 42.2)
+Sweef strict vs Sweef off                        saved 84.9% (83.4 to 85.2)
+Sweef off vs Chromium                            saved 25.0% (19.1 to 26.8)
+Sweef standard vs Chromium                       saved 56.5% (53.3 to 56.7)
+Sweef strict vs Chromium                         saved 88.0% (87.8 to 88.7)
+Chromium with Save-Data header vs Chromium       saved 3.1% (-5.2 to 7.3)
+=== finished 2026-10-13T05:05:57Z
