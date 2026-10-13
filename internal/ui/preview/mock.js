@@ -2,6 +2,7 @@
 window.__posts = [];
 window.__errs = [];
 window.sweef = { post: function (t, p) { window.__posts.push([t, p]); }, onMessage: null, mock: true };
+window.__sweefSeed = 0; /* the new-tab suggestion rows rotate hourly; previews and goldens must not depend on the clock */
 window.__send = function (t, p) { if (window.sweef.onMessage) window.sweef.onMessage(t, p); };
 window.addEventListener("error", function (e) { window.__errs.push("uncaught: " + (e && (e.message || e.error)) + " @" + (e && e.filename) + ":" + (e && e.lineno)); });
 window.addEventListener("unhandledrejection", function (e) { window.__errs.push("unhandled rejection: " + (e && e.reason)); });
