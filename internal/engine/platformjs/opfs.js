@@ -81,8 +81,20 @@ H.define(FileSystemFileHandle.prototype, 'createWritable', pr(function createWri
   var st = op('stat', s.path.join('/'));
   if (!st || st.kind !== 'file') throw H.exc('A requested file or directory could not be found.', 'NotFoundError');
   if (keep) initial = unb64(op('read', s.path.join('/')).d);
-  return new FileSystemWritableFileStream(s.path.join('/'), initial);
+  var wid = op('writerOpen', s.path.join('/')); // fails while a sync access handle holds the file
+  return new FileSystemWritableFileStream(s.path.join('/'), initial, wid);
 }));
+if (typeof g.DedicatedWorkerGlobalScope === 'function' && g instanceof g.DedicatedWorkerGlobalScope) {
+  // FileSystemSyncAccessHandle exists in dedicated workers only (it blocks the thread by design)
+  H.define(FileSystemFileHandle.prototype, 'createSyncAccessHandle', pr(function createSyncAccessHandle(options) {
+    var s = hs(this);
+    if (options !== undefined && options !== null && typeof options !== 'object') throw new TypeError("Failed to execute 'createSyncAccessHandle' on 'FileSystemFileHandle': The provided value is not of type 'FileSystemCreateSyncAccessHandleOptions'.");
+    var r = op('syncOpen', s.path.join('/'));
+    var h = Object.create(FileSystemSyncAccessHandle.prototype);
+    Object.defineProperty(h, $, { value: { sync: true, path: s.path.join('/'), id: r[0], closed: false } });
+    return h;
+  }));
+}
 H.tag(FileSystemFileHandle, 'FileSystemFileHandle');
 
 H.define(FileSystemDirectoryHandle.prototype, 'getFileHandle', pr(function getFileHandle(name, options) {
@@ -133,8 +145,54 @@ function blobBytes(v) {
   if (g.Blob && v instanceof g.Blob) return v.arrayBuffer().then(function (b) { return new Uint8Array(b); });
   return null;
 }
+// ---- FileSystemSyncAccessHandle ---------------------------------------------------------------------------------------
+function FileSystemSyncAccessHandle() { illegal(); }
+function sh(o) {
+  var s = o !== null && typeof o === 'object' ? o[$] : undefined;
+  if (!s || !s.sync) throw new TypeError('Illegal invocation');
+  if (s.closed) throw H.exc('The access handle is closed.', 'InvalidStateError');
+  return s;
+}
+function viewBytes(buffer, what) {
+  if (buffer instanceof ArrayBuffer) return new Uint8Array(buffer);
+  if (ArrayBuffer.isView(buffer)) return new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  if (typeof SharedArrayBuffer === 'function' && buffer instanceof SharedArrayBuffer) return new Uint8Array(buffer);
+  throw new TypeError("Failed to execute '" + what + "' on 'FileSystemSyncAccessHandle': The provided value is not of type '(ArrayBuffer or ArrayBufferView)'.");
+}
+function atOf(options, what) {
+  var at = options && options.at !== undefined ? Number(options.at) : 0;
+  if (!(at >= 0) || at === Infinity || at !== Math.floor(at)) throw new TypeError("Failed to execute '" + what + "' on 'FileSystemSyncAccessHandle': Failed to read the 'at' property: The provided value is out of range.");
+  return at;
+}
+H.define(FileSystemSyncAccessHandle.prototype, 'read', function read(buffer, options) {
+  var s = sh(this), dst = viewBytes(buffer, 'read'), at = atOf(options, 'read');
+  var b = op('syncRead', s.path, s.id, at, dst.length);
+  var src = b ? unb64(b) : new Uint8Array(0);
+  dst.set(src);
+  return src.length;
+});
+H.define(FileSystemSyncAccessHandle.prototype, 'write', function write(buffer, options) {
+  var s = sh(this), src = viewBytes(buffer, 'write'), at = atOf(options, 'write');
+  return op('syncWrite', s.path, s.id, at, b64(src));
+});
+H.define(FileSystemSyncAccessHandle.prototype, 'getSize', function getSize() { var s = sh(this); return op('syncSize', s.path, s.id); });
+H.define(FileSystemSyncAccessHandle.prototype, 'truncate', function truncate(size) {
+  var s = sh(this), n = Number(size);
+  if (!(n >= 0) || n === Infinity || n !== Math.floor(n)) throw new TypeError("Failed to execute 'truncate' on 'FileSystemSyncAccessHandle': The provided value is out of range.");
+  op('syncTruncate', s.path, s.id, n);
+});
+H.define(FileSystemSyncAccessHandle.prototype, 'flush', function flush() { sh(this); });
+H.define(FileSystemSyncAccessHandle.prototype, 'close', function close() {
+  var s = this !== null && typeof this === 'object' ? this[$] : undefined;
+  if (!s || !s.sync) throw new TypeError('Illegal invocation');
+  if (s.closed) return;
+  s.closed = true;
+  op('syncClose', s.path, s.id);
+});
+H.tag(FileSystemSyncAccessHandle, 'FileSystemSyncAccessHandle');
+
 class FileSystemWritableFileStream extends g.WritableStream {
-  constructor(path, initial) {
+  constructor(path, initial, wid) {
     var st = { buf: initial.slice(), size: initial.length, pos: 0, path: path };
     function ensure(n) {
       if (n > st.buf.length) { var nb = new Uint8Array(Math.max(n, st.buf.length * 2, 64)); nb.set(st.buf.subarray(0, st.size)); st.buf = nb; }
@@ -170,12 +228,18 @@ class FileSystemWritableFileStream extends g.WritableStream {
       if (bytes && typeof bytes.then === 'function') return bytes.then(commit);
       commit(bytes);
     }
+    function unlock() { if (wid) { var id = wid; wid = 0; try { op('writerClose', st.path, id); } catch (e) { /* the origin went away */ } } }
     super({
-      write: function (chunk) { return apply(chunk); },
+      write: function (chunk) {
+        try { var r = apply(chunk); } catch (e) { unlock(); throw e; }
+        return r && typeof r.then === 'function' ? r.then(undefined, function (e) { unlock(); throw e; }) : r;
+      },
       close: function () {
         var data = st.buf.subarray(0, st.size);
-        try { op('write', st.path, b64(data)); } catch (e) { return Promise.reject(e); }
-      }
+        try { op('write', st.path, b64(data)); } catch (e) { unlock(); return Promise.reject(e); }
+        unlock();
+      },
+      abort: function () { unlock(); }
     });
     Object.defineProperty(this, $, { value: { st: st, resize: resize, position: position } });
   }
@@ -220,4 +284,5 @@ function picker(name) {
 ['showOpenFilePicker', 'showSaveFilePicker', 'showDirectoryPicker'].forEach(picker);
 
 var G = { FileSystemHandle: FileSystemHandle, FileSystemFileHandle: FileSystemFileHandle, FileSystemDirectoryHandle: FileSystemDirectoryHandle, FileSystemWritableFileStream: FileSystemWritableFileStream };
+if (typeof g.DedicatedWorkerGlobalScope === 'function' && g instanceof g.DedicatedWorkerGlobalScope) G.FileSystemSyncAccessHandle = FileSystemSyncAccessHandle;
 Object.keys(G).forEach(function (n) { H.glob(n, G[n]); });

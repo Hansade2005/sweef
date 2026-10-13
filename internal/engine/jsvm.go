@@ -582,9 +582,6 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 			// animation frames) and no workers; promise jobs and results already
 			// delivered still flow, so an explicit evaluate does not hang.
 			next = j.runTimers()
-			if wn := j.pumpWorkers(); wn >= 0 && (next < 0 || wn < next) {
-				next = wn
-			}
 		}
 		if j.drainAsync() {
 			delivered = true
@@ -1276,12 +1273,6 @@ func (j *jsVM) registerHost() error {
 		{"wsOpen", func(a []any) (any, error) { return j.wsOpen(argS(a, 0), argS(a, 1)), nil }},
 		{"wsSend", func(a []any) (any, error) { return nil, j.wsSend(argI(a, 0), argS(a, 1), argB(a, 2)) }},
 		{"wsClose", func(a []any) (any, error) { j.wsClose(argI(a, 0)); return nil, nil }},
-		{"workerCreate", func(a []any) (any, error) {
-			id, err := j.workerCreate(argS(a, 0), argS(a, 1), argS(a, 2))
-			return id, err
-		}},
-		{"workerPost", func(a []any) (any, error) { j.workerPost(argI(a, 0), argS(a, 1)); return nil, nil }},
-		{"workerTerminate", func(a []any) (any, error) { j.workerTerminate(argI(a, 0)); return nil, nil }},
 		{"binding", func(a []any) (any, error) {
 			name, args := argS(a, 0), argS(a, 1)
 			if !json.Valid([]byte(args)) {

@@ -36,7 +36,9 @@ type BrowserContext struct {
 	httpClient *http.Client            // per-context client with its own cookie jar (see clientFor)
 	ds         atomic.Pointer[ctxData] // Data Saver policy, counters and stats (datasaver.go)
 
-	site siteHolder // origin-scoped storage and service workers (storage_host.go)
+	site siteHolder                 // origin-scoped storage and service workers (storage_host.go)
+	part atomic.Pointer[partState]  // cookie partitioning policy and grants (partition.go)
+	wk   atomic.Pointer[workerHost] // shared workers, BroadcastChannel groups, Web Locks (workers.go)
 }
 
 type ContextOptions struct {

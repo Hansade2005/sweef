@@ -421,6 +421,7 @@
     try {
       var ev = new global.ErrorEvent('error', { message: e && e.message !== undefined ? String(e.message) : String(e), error: e, filename: (e && e.fileName) || '', lineno: (e && e.lineNumber) || 0, cancelable: true });
       dispatch(global, ev);
+      if (typeof global.__swUncaught === 'function' && !ev.defaultPrevented) global.__swUncaught(ev); // a worker forwards what it did not handle to its owner
     } catch (e2) { /* ignore */ } finally { reportingError = false; }
   }
 
@@ -1911,10 +1912,6 @@
   setTag(MessagePort, 'MessagePort'); global.MessagePort = MessagePort;
   function MessageChannel() { if (!(this instanceof MessageChannel)) throw new TypeError("Constructor MessageChannel requires 'new'"); this.port1 = new MessagePort(); this.port2 = new MessagePort(); this.port1._other = this.port2; this.port2._other = this.port1; }
   setTag(MessageChannel, 'MessageChannel'); global.MessageChannel = MessageChannel;
-  global.BroadcastChannel = function BroadcastChannel(name) { EventTarget.call(this); this.name = name; };
-  extend(global.BroadcastChannel, EventTarget);
-  methods(global.BroadcastChannel.prototype, { postMessage: function () { }, close: function () { } });
-  defineHandlerProps(global.BroadcastChannel.prototype, ['message', 'messageerror']);
   global.postMessage = function postMessage(data) { setTimeoutImpl(function () { dispatch(global, new global.MessageEvent('message', { data: data, origin: originOf(currentURL()), source: global })); }, [], 0, false); };
 
   // ==== 9. Platform ========================================================
@@ -2465,8 +2462,6 @@
   setTag(WebSocket, 'WebSocket'); global.WebSocket = WebSocket;
   global.EventSource = function EventSource(url) { EventTarget.call(this); this.url = String(url); this.readyState = 2; var self = this; setTimeoutImpl(function () { fire(self, 'error', {}); }, [], 0, false); };
   extend(global.EventSource, EventTarget); methods(global.EventSource.prototype, { close: function () { } }); defineHandlerProps(global.EventSource.prototype, ['open', 'message', 'error']);
-  global.Worker = function Worker() { throw DOMException('Web Workers are not available in Sweef', 'NotSupportedError'); };
-  global.SharedWorker = global.Worker;
   function Notification(title, opts) { if (!(this instanceof Notification)) throw new TypeError("Constructor Notification requires 'new'"); EventTarget.call(this); this.title = String(title); Object.assign(this, { body: '', icon: '', tag: '', data: null, dir: 'auto', lang: '', silent: null }, opts || {}); }
   extend(Notification, EventTarget);
   methods(Notification.prototype, { close: function () { } });

@@ -158,6 +158,10 @@ type Tab struct {
 	ds tabDS // Data Saver state (datasaver.go)
 	sw tabSW // service worker control of the document (sw_intercept.go)
 
+	bc    *browsingCtx // nested browsing context or worker tab: its place in the tree and its partition (partition.go)
+	winID int64        // identity of this tab's window for cross-window references (frames.go)
+	wk    *bgWorker    // set on the hidden tab of a worker (workers.go)
+
 	asyncImg   atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
 	imgSem     chan struct{}             // images fetched at once
 	preloadSem chan struct{}             // requests the preload scanner has in flight
@@ -173,6 +177,7 @@ type Tab struct {
 
 func newTab(e *Engine, id string) *Tab {
 	t := &Tab{
+		winID:       winSeq.Add(1),
 		ID:          id,
 		eng:         e,
 		consoleRing: NewRing(e.opts.ConsoleRingSize),
