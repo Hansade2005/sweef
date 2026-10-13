@@ -26,6 +26,9 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   attribute writes when they move (about 13.0 ms to 11.3 ms median in-process at 1x with history present; the shadow
   change takes roughly another 1 ms off).
 
+### Security
+- Updated `golang.org/x/net` from v0.17.0 to v0.61.0 (HTML parser denial-of-service and XSS-class advisories GO-2024-3333, GO-2025-3595, GO-2026-4440, GO-2026-5025 to 5030, HTTP/2 GO-2024-2687, GO-2026-4918, IDNA GO-2026-5026) and the Go toolchain to 1.26.9 (about 30 standard library advisories in `net/http`, `crypto/tls`, `crypto/x509`, `net/url`, ...). `govulncheck ./...` now reports no vulnerabilities; it runs weekly and on every PR.
+
 ### Removed
 - A 32 MB `appbench` binary that had been committed by mistake (it stays in git history).
 
