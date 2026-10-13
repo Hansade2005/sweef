@@ -142,9 +142,19 @@ func Devices(kind Kind) []DeviceInfo {
 }
 
 func find(id string, kind Kind) (Provider, bool) {
+	// Devices() can touch the OS (a directory scan, a socket round trip): never call it under the registry lock.
 	mu.Lock()
-	defer mu.Unlock()
-	for _, p := range providers {
+	names := make([]string, 0, len(providers))
+	for n := range providers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	ps := make([]Provider, 0, len(names))
+	for _, n := range names {
+		ps = append(ps, providers[n])
+	}
+	mu.Unlock()
+	for _, p := range ps {
 		for _, d := range p.Devices() {
 			if d.ID == id && d.Kind == kind {
 				return p, true
