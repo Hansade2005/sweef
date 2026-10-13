@@ -134,6 +134,14 @@ func (v *Video) Stop() error {
 
 func (v *Video) Err() error { return v.err }
 
+// sinTab is one period of sine in 4096 steps, scaled to 0..255 (so a pattern costs about a nanosecond a pixel).
+var sinTab = func() (t [4096]uint8) {
+	for i := range t {
+		t[i] = uint8(127.5 + 127.5*math.Sin(2*math.Pi*float64(i)/4096))
+	}
+	return
+}()
+
 // Pattern renders frame n of the test sequence: a diagonal colour gradient that scrolls, a bouncing box
 // and, in the top-left, the 16-bit frame counter as black/white blocks.
 func Pattern(w, h int, n uint32) *capture.Frame {
@@ -141,16 +149,28 @@ func Pattern(w, h int, n uint32) *capture.Frame {
 	cw, ch := w/2, h/2
 	f := &capture.Frame{W: w, H: h, Y: make([]byte, w*h), U: make([]byte, cw*ch), V: make([]byte, cw*ch), YStride: w, UVStride: cw}
 	t := float64(n)
+	// luma: 60 + 120*(0.5+0.5*sin(2*pi*(1.5*x/w + 0.7*y/h) + 0.08*t)), phases in 1/4096 of a turn
+	dx := int(1.5 * 4096 / float64(w) * 65536)
+	dy := int(0.7 * 4096 / float64(h) * 65536)
+	p0 := int((0.08 * t / (2 * math.Pi) * 4096) * 65536)
 	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			g := 0.5 + 0.5*math.Sin(2*math.Pi*(float64(x)/float64(w)*1.5+float64(y)/float64(h)*0.7)+t*0.08)
-			f.Y[y*w+x] = byte(60 + 120*g)
+		ph := p0 + y*dy
+		row := f.Y[y*w : y*w+w]
+		for x := range row {
+			row[x] = byte(60 + int(sinTab[(ph>>16)&4095])*120/255)
+			ph += dx
 		}
 	}
 	for y := 0; y < ch; y++ {
-		for x := 0; x < cw; x++ {
-			f.U[y*cw+x] = byte(128 + 50*math.Sin(float64(x)/float64(cw)*6+t*0.05))
-			f.V[y*cw+x] = byte(128 + 50*math.Cos(float64(y)/float64(ch)*6-t*0.03))
+		pv := int((float64(y)/float64(ch)*6 - t*0.03) / (2 * math.Pi) * 4096 * 65536)
+		pu0 := int((t * 0.05) / (2 * math.Pi) * 4096 * 65536)
+		du := int(6 / float64(cw) / (2 * math.Pi) * 4096 * 65536)
+		ur := f.U[y*cw : y*cw+cw]
+		vr := f.V[y*cw : y*cw+cw]
+		vv := byte(128 + (int(sinTab[((pv>>16)+1024)&4095])-128)*50/128)
+		for x := range ur {
+			ur[x] = byte(128 + (int(sinTab[((pu0+x*du)>>16)&4095])-128)*50/128)
+			vr[x] = vv
 		}
 	}
 	// bouncing box

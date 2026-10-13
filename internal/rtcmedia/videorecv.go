@@ -94,6 +94,8 @@ type VideoReceiver struct {
 	lastPktAt  time.Time
 	muted      bool
 	deliverSig chan struct{}
+	missing    map[uint32]*nackInfo
+	nackRTT    float64
 
 	// playout timing
 	havePlay  bool
@@ -134,7 +136,7 @@ type VideoCallbacks struct {
 func NewVideoReceiver(track *webrtc.TrackRemote, rcv *webrtc.RTPReceiver, writeRTCP func([]rtcp.Packet) error, cb VideoCallbacks) *VideoReceiver {
 	r := &VideoReceiver{
 		track: track, rcv: rcv, writeRTCP: writeRTCP, ssrc: uint32(track.SSRC()),
-		pkts: map[uint32]*vpkt{}, dec: vp8.NewDecoder(), muted: true, needKey: true,
+		pkts: map[uint32]*vpkt{}, missing: map[uint32]*nackInfo{}, nackRTT: 0.05, dec: vp8.NewDecoder(), muted: true, needKey: true,
 		deliverSig: make(chan struct{}, 1), outSig: make(chan struct{}, 1), done: make(chan struct{}),
 		delay: 0.03, cb: cb,
 	}
@@ -150,7 +152,8 @@ func NewVideoReceiver(track *webrtc.TrackRemote, rcv *webrtc.RTPReceiver, writeR
 	r.rwg.Add(2)
 	go func() { defer r.rwg.Done(); r.readRTP() }()
 	go func() { defer r.rwg.Done(); r.readRTCP() }()
-	r.wg.Add(3)
+	r.wg.Add(4)
+	go func() { defer r.wg.Done(); r.nackLoop() }()
 	go func() { defer r.wg.Done(); r.decodeLoop() }()
 	go func() { defer r.wg.Done(); r.playLoop() }()
 	go func() { defer r.wg.Done(); r.monitor() }()
@@ -281,7 +284,25 @@ func (r *VideoReceiver) insert(p *rtp.Packet, now time.Time) {
 		r.st.PacketsDiscarded++
 		return
 	}
+	prevHigh, hadSeq := r.highest, r.haveSeq
 	e := r.extend(p.SequenceNumber)
+	if hadSeq && int32(e-prevHigh) > 1 {
+		if int32(e-prevHigh) > 400 { // a hole too wide to repair with retransmissions
+			r.missing = map[uint32]*nackInfo{}
+			r.needKey = true
+			r.requestKeyLocked(now)
+		} else {
+			for q := prevHigh + 1; q != e; q++ {
+				r.missing[q] = &nackInfo{first: now}
+			}
+		}
+	}
+	if mi, ok := r.missing[e]; ok { // a missing packet arrived (late or retransmitted)
+		if mi.tries > 0 {
+			r.nackRTT += (now.Sub(mi.lastSent).Seconds() - r.nackRTT) * 0.2
+		}
+		delete(r.missing, e)
+	}
 	if _, dup := r.pkts[e]; dup || (r.haveRef && int32(e-r.delivered) <= 0) {
 		r.st.PacketsDiscarded++
 		return
@@ -381,6 +402,7 @@ func (r *VideoReceiver) next(now time.Time) *vframe {
 				return nil
 			}
 			r.needKey = true
+			r.missing = map[uint32]*nackInfo{} // what was lost belongs to frames that will not be decoded now
 			r.st.FramesDropped++
 			r.consume(f)
 			r.ready = r.ready[1:]
@@ -400,6 +422,7 @@ func (r *VideoReceiver) next(now time.Time) *vframe {
 func (r *VideoReceiver) consume(f *vframe) {
 	for q := f.first; q != f.last+1; q++ {
 		delete(r.pkts, q)
+		delete(r.missing, q)
 	}
 	if int32(f.last-r.delivered) > 0 || !r.haveRef {
 		r.delivered = f.last
@@ -411,6 +434,11 @@ func (r *VideoReceiver) dropBefore(seq uint32) {
 	for k := range r.pkts {
 		if int32(k-seq) < 0 {
 			delete(r.pkts, k)
+		}
+	}
+	for k := range r.missing {
+		if int32(k-seq) < 0 {
+			delete(r.missing, k)
 		}
 	}
 	keep := r.ready[:0]
@@ -648,4 +676,69 @@ func (r *VideoReceiver) Sources() (ssrc uint32, last time.Time, rtpTS uint32, ok
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.ssrc, r.st.LastPacketTime, r.st.LastRTPTimestamp, !r.st.LastPacketTime.IsZero()
+}
+
+// ---- NACK generation ------------------------------------------------------------------------------------
+
+type nackInfo struct {
+	first    time.Time
+	lastSent time.Time
+	tries    int
+}
+
+// nackLoop asks for retransmissions of the packets that are missing. A request is repeated about once per
+// round trip, at most six times, and only while the packet is still useful; when the list grows beyond what
+// retransmission can repair, the receiver stops asking and requests a key frame instead.
+func (r *VideoReceiver) nackLoop() {
+	tk := time.NewTicker(20 * time.Millisecond)
+	defer tk.Stop()
+	for {
+		select {
+		case <-r.done:
+			return
+		case now := <-tk.C:
+			r.mu.Lock()
+			pairs := r.collectNacks(now)
+			r.mu.Unlock()
+			if len(pairs) > 0 && r.writeRTCP != nil {
+				_ = r.writeRTCP([]rtcp.Packet{&rtcp.TransportLayerNack{MediaSSRC: r.ssrc, Nacks: pairs}})
+			}
+		}
+	}
+}
+
+func (r *VideoReceiver) collectNacks(now time.Time) []rtcp.NackPair {
+	if len(r.missing) == 0 {
+		return nil
+	}
+	if len(r.missing) > 250 {
+		r.missing = map[uint32]*nackInfo{}
+		r.needKey = true
+		r.requestKeyLocked(now)
+		return nil
+	}
+	interval := time.Duration(math.Max(0.04, 1.3*r.nackRTT) * float64(time.Second))
+	var seqs []uint16
+	for q, mi := range r.missing {
+		age := now.Sub(mi.first)
+		if age > 600*time.Millisecond || mi.tries >= 6 {
+			delete(r.missing, q)
+			continue
+		}
+		if age < 12*time.Millisecond {
+			continue // may only be reordered
+		}
+		if mi.tries > 0 && now.Sub(mi.lastSent) < interval {
+			continue
+		}
+		mi.tries++
+		mi.lastSent = now
+		seqs = append(seqs, uint16(q))
+	}
+	if len(seqs) == 0 {
+		return nil
+	}
+	sort.Slice(seqs, func(i, j int) bool { return int16(seqs[i]-seqs[j]) < 0 })
+	r.st.NACKCount += uint32(len(seqs))
+	return rtcp.NackPairsFromSequenceNumbers(seqs)
 }

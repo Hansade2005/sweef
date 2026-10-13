@@ -30,6 +30,7 @@ import (
 
 	"github.com/pion/ice/v4"
 	"github.com/pion/interceptor/pkg/cc"
+	"github.com/pion/interceptor/pkg/stats"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
@@ -273,6 +274,8 @@ type rtcPeer struct {
 	done    chan struct{}
 	wg      sync.WaitGroup
 	est     cc.BandwidthEstimator
+	sg      stats.Getter
+	rtx     *rtcmedia.RTXCounter
 }
 
 func (p *rtcPeer) emit(typ string, v any) {
@@ -564,6 +567,17 @@ func (h *rtcHost) fns() map[string]hostFn {
 		}
 		return nil, nil
 	}
+	f["rtcTrackStopped"] = func(a []any) (any, error) {
+		p, err := h.peer(a)
+		if err != nil {
+			return nil, nil
+		}
+		if x := p.tr(argI(a, 1)); x != nil {
+			x.live.Store(false)
+			p.detachSource(x) // closes our capture source: the camera is released
+		}
+		return nil, nil
+	}
 	f["rtcStates"] = func(a []any) (any, error) {
 		p, err := h.peer(a)
 		if err != nil {
@@ -770,6 +784,11 @@ func (h *rtcHost) hostNew(a []any) (any, error) {
 	case p.est = <-api.Estimator:
 	default:
 	}
+	select {
+	case p.sg = <-api.Stats:
+	default:
+	}
+	p.rtx = api.Retransmits
 	h.peers[id] = p
 	h.mu.Unlock()
 	rtcLive.Add(1)
@@ -1052,6 +1071,7 @@ func (p *rtcPeer) newLocal(x *rtcTR, kind, trackID, streamID string) *rtcmedia.L
 		streamID = "-"
 	}
 	lt := rtcmedia.NewLocalTrack(kindOf(kind), trackID, streamID)
+	lt.SetRetransmitLimiter(p.rtx)
 	if x != nil {
 		lt.SetMidFunc(x.t.Mid)
 	}
@@ -1095,6 +1115,7 @@ func (p *rtcPeer) addTrack(kind, descJSON, streamID string) (any, error) {
 		return nil, errors.New("OperationError: sender has no transceiver")
 	}
 	lt.SetMidFunc(x.t.Mid)
+	lt.ReadyWhenConnected(s)
 	x.smu.Lock()
 	x.local = lt
 	x.smu.Unlock()
@@ -1137,6 +1158,7 @@ func (p *rtcPeer) addTransceiver(kind, dir, descJSON, streamID string) (any, err
 	x := p.trFor(t)
 	if lt != nil {
 		lt.SetMidFunc(t.Mid)
+		lt.ReadyWhenConnected(t.Sender())
 		x.smu.Lock()
 		x.local = lt
 		x.smu.Unlock()
@@ -1170,6 +1192,7 @@ func (p *rtcPeer) setSender(trID int64, kind, descJSON, streamID string, live bo
 	x.smu.Unlock()
 	if !have {
 		lt := p.newLocal(x, kind, d.ID, streamID)
+		lt.ReadyWhenConnected(s)
 		if err := s.ReplaceTrack(lt); err != nil {
 			return rtcErr(err)
 		}

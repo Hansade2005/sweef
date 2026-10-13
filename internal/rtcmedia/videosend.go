@@ -89,6 +89,8 @@ type VideoSender struct {
 	tier     int // index into videoTiers currently used (0 = highest); -1 unlimited
 	tierUp   time.Time
 	cpuTier  int
+	cpuAt    time.Time
+	encEMA   float64 // smoothed encode seconds per frame at the frame rate in use
 	fps      fpsMeter
 	lastEnc  time.Time
 
@@ -377,6 +379,10 @@ func (s *VideoSender) encodeSend(f *capture.Frame, now time.Time) {
 	if f.W < 16 || f.H < 16 {
 		return
 	}
+	if !s.track.Ready() {
+		s.keyReq.Store(true) // nothing can leave yet: the first picture sent must be a key frame
+		return
+	}
 	tw, th := s.targetDims(f.W, f.H, p)
 	img := f
 	if tw != f.W || th != f.H {
@@ -389,6 +395,7 @@ func (s *VideoSender) encodeSend(f *capture.Frame, now time.Time) {
 	target := s.bitrateTarget(p)
 	s.target.Store(int64(target))
 	s.pacedTo.Store(int64(float64(target) * 2.5))
+	s.track.SetRetransmitBudget(target / 3)
 	fps := s.fps.rate()
 	if fps < 5 || fps > 60 {
 		fps = 30
@@ -424,6 +431,10 @@ func (s *VideoSender) encodeSend(f *capture.Frame, now time.Time) {
 	t0 := time.Now()
 	pk, err := s.enc.Encode(&vp8enc.Image{W: img.W, H: img.H, Y: img.Y, U: img.U, V: img.V, YStride: img.YStride, UVStride: img.UVStride})
 	enc := time.Since(t0)
+	if s.encEMA == 0 {
+		s.encEMA = enc.Seconds()
+	}
+	s.encEMA += (enc.Seconds() - s.encEMA) * 0.1
 	s.lastEnc = now
 	s.fps.add(now)
 	if err != nil || pk == nil {
@@ -602,15 +613,22 @@ func (s *VideoSender) control() {
 	default:
 		s.tierUp = time.Time{}
 	}
-	// CPU: look at the encoder's own timing
+	// CPU: the encoder already trades search effort for time; when it is at its fastest and still needs more
+	// than the frame interval, lower the frame rate and then the picture size; step back when it has been
+	// comfortably fast for a while
 	if s.enc != nil {
-		st := s.enc.Stats()
-		budget := 1 / math.Max(s.fps.rate(), 10)
-		if st.Frames > 20 && st.Speed == 0 {
-			avg := st.EncodeTime.Seconds() / float64(st.Frames)
-			if avg > 0.9*budget && s.cpuTier < 3 {
-				s.cpuTier++
-			}
+		ema := s.encEMA
+		s.mu.Lock()
+		speed0 := s.enc.Stats().Speed == 0
+		s.mu.Unlock()
+		const budget30 = 1.0 / 30
+		switch {
+		case ema > 0.85*budget30 && speed0 && s.cpuTier < 3 && now.Sub(s.cpuAt) > 1500*time.Millisecond:
+			s.cpuTier++
+			s.cpuAt = now
+		case ema > 0 && ema < 0.5*budget30 && s.cpuTier > 0 && now.Sub(s.cpuAt) > 8*time.Second:
+			s.cpuTier--
+			s.cpuAt = now
 		}
 	}
 	// limitation reason for stats: only a picture or frame rate actually reduced counts

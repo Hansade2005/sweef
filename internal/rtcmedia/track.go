@@ -42,6 +42,8 @@ type LocalTrack struct {
 	audID  uint8
 	absID  uint8
 	midFn  func() string
+	ready  func() bool
+	rtx    *RTXCounter
 	onBind []func(Negotiated)
 
 	pkts atomic.Uint64
@@ -61,6 +63,42 @@ func (t *LocalTrack) RID() string                { return "" }
 func (t *LocalTrack) StreamID() string           { return t.streamID }
 func (t *LocalTrack) Kind() webrtc.RTPCodecType  { return t.kind }
 func (t *LocalTrack) SetMidFunc(f func() string) { t.mu.Lock(); t.midFn = f; t.mu.Unlock() }
+
+// SetReadyFunc sets the check that the transport can carry media (the DTLS handshake is done); packets
+// written before that are silently discarded by pion, so senders wait for it instead.
+func (t *LocalTrack) SetReadyFunc(f func() bool) { t.mu.Lock(); t.ready = f; t.mu.Unlock() }
+
+// SetRetransmitLimiter attaches the counter that enforces the retransmission budget of this track.
+func (t *LocalTrack) SetRetransmitLimiter(c *RTXCounter) { t.mu.Lock(); t.rtx = c; t.mu.Unlock() }
+
+// SetRetransmitBudget limits the NACK retransmissions of the track to bps bits per second.
+func (t *LocalTrack) SetRetransmitBudget(bps int) {
+	t.mu.RLock()
+	c, ssrc := t.rtx, t.neg.SSRC
+	t.mu.RUnlock()
+	if c != nil {
+		c.SetBudget(ssrc, bps)
+	}
+}
+
+// ReadyWhenConnected makes the track ready once the sender's DTLS transport is connected.
+func (t *LocalTrack) ReadyWhenConnected(rs *webrtc.RTPSender) {
+	t.SetReadyFunc(func() bool {
+		tr := rs.Transport()
+		return tr != nil && tr.State() == webrtc.DTLSTransportStateConnected
+	})
+}
+
+// Ready reports whether media can be sent now.
+func (t *LocalTrack) Ready() bool {
+	t.mu.RLock()
+	f, w := t.ready, t.w
+	t.mu.RUnlock()
+	if w == nil {
+		return false
+	}
+	return f == nil || f()
+}
 
 // OnBind registers f to be called whenever the track is (re)bound to a transport.
 func (t *LocalTrack) OnBind(f func(Negotiated)) {

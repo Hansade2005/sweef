@@ -51,6 +51,7 @@ func TestAudioLoopback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	lt.ReadyWhenConnected(rs)
 	as, err := NewAudioSender(lt)
 	if err != nil {
 		t.Fatal(err)

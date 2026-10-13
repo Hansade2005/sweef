@@ -151,6 +151,7 @@ func TestVideoLoopback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	lt.ReadyWhenConnected(rs)
 	est := <-p.apiA.Estimator
 	vs := NewVideoSender(lt, est)
 	go RunRTCP(rs, vs.HandleRTCP)

@@ -249,7 +249,7 @@ func (a *AudioSender) ingest(c *capture.AudioChunk) {
 // tick sends one 20 ms frame.
 func (a *AudioSender) tick() {
 	a.mu.Lock()
-	if !a.active || !a.hasSrc || a.closed {
+	if !a.active || !a.hasSrc || a.closed || !a.track.Ready() {
 		a.mu.Unlock()
 		return
 	}

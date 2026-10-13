@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/sweefbrowser/sweef/internal/capture"
@@ -269,8 +268,8 @@ func imageToI420(img image.Image) *capture.Frame {
 				su += (-38*r - 74*g + 112*bb)
 				sv += (112*r - 94*g - 18*bb)
 			}
-			f.U[(y/2)*f.UVStride+x/2] = clampByte((su+2)>>2>>8 + 128)
-			f.V[(y/2)*f.UVStride+x/2] = clampByte((sv+2)>>2>>8 + 128)
+			f.U[(y/2)*f.UVStride+x/2] = clampByte(((su>>2)+128)>>8 + 128)
+			f.V[(y/2)*f.UVStride+x/2] = clampByte(((sv>>2)+128)>>8 + 128)
 		}
 	}
 	return f
@@ -441,7 +440,13 @@ type rtcBitmap struct {
 	last time.Time
 }
 
+// rtcFrameHook, when set (tests), sees every frame pushed to a video element.
+var rtcFrameHook atomic.Pointer[func(*image.YCbCr)]
+
 func (b *rtcBitmap) PushFrame(img *image.YCbCr) {
+	if h := rtcFrameHook.Load(); h != nil {
+		(*h)(img)
+	}
 	b.mu.Lock()
 	b.yuv = img
 	b.seq++
@@ -608,6 +613,16 @@ func (h *rtcHost) mediaFns(f map[string]hostFn) {
 			if e.MaxBitrate != nil && *e.MaxBitrate > 0 {
 				as.SetBitrate(int(*e.MaxBitrate))
 			}
+		}
+		return nil, nil
+	}
+	f["rtcTrackConstraints"] = func(a []any) (any, error) {
+		p, err := h.peer(a)
+		if err != nil {
+			return nil, nil
+		}
+		if x := p.tr(argI(a, 1)); x != nil {
+			p.bindSource(x, parseTrackDesc(argS(a, 2))) // reopen the source at the new size / frame rate
 		}
 		return nil, nil
 	}
@@ -831,6 +846,39 @@ func (p *rtcPeer) addMediaStats(m map[string]map[string]any) {
 		}
 		return nil
 	}
+	// outbound-rtp and remote-inbound-rtp come from our own statistics interceptor (pion's report has
+	// only the receive side)
+	ensureOutbound := func(x *rtcTR, n rtcmedia.Negotiated, kind string) map[string]any {
+		id := "outbound-rtp-" + itoa64(int64(n.SSRC))
+		s := map[string]any{"type": "outbound-rtp", "id": id, "timestamp": now, "ssrc": float64(n.SSRC), "kind": kind, "transportId": "iceTransport", "mid": x.t.Mid()}
+		if p.sg != nil {
+			if st := p.sg.Get(n.SSRC); st != nil {
+				o := st.OutboundRTPStreamStats
+				s["packetsSent"] = o.PacketsSent
+				s["bytesSent"] = o.BytesSent
+				s["headerBytesSent"] = o.HeaderBytesSent
+				s["nackCount"] = o.NACKCount
+				s["pliCount"] = o.PLICount
+				s["firCount"] = o.FIRCount
+				ri := st.RemoteInboundRTPStreamStats
+				if ri.RoundTripTimeMeasurements > 0 || ri.PacketsReceived > 0 {
+					rid := "remote-inbound-rtp-" + itoa64(int64(n.SSRC))
+					m[rid] = map[string]any{"type": "remote-inbound-rtp", "id": rid, "timestamp": now, "ssrc": float64(n.SSRC), "kind": kind, "transportId": "iceTransport",
+						"localId": id, "packetsLost": ri.PacketsLost, "jitter": ri.Jitter, "fractionLost": ri.FractionLost,
+						"roundTripTime": ri.RoundTripTime.Seconds(), "totalRoundTripTime": ri.TotalRoundTripTime.Seconds(), "roundTripTimeMeasurements": ri.RoundTripTimeMeasurements}
+					s["remoteId"] = rid
+				}
+			}
+		}
+		if p.rtx != nil {
+			pk, by, dr := p.rtx.Get(n.SSRC)
+			s["retransmittedPacketsSent"] = pk
+			s["retransmittedBytesSent"] = by
+			s["packetsDiscardedOnSend"] = dr
+		}
+		m[id] = s
+		return s
+	}
 	codecID := func(mime string) string {
 		for id, s := range m {
 			if s["type"] == "codec" && strings.EqualFold(s["mimeType"].(string), mime) {
@@ -849,7 +897,7 @@ func (p *rtcPeer) addMediaStats(m map[string]map[string]any) {
 			if vs != nil && n.Bound {
 				st := vs.Stats()
 				srcID := "SA" + itoa64(int64(n.SSRC))
-				if s := findRTP("outbound-rtp", n.SSRC); s != nil {
+				if s := ensureOutbound(x, n, "video"); s != nil {
 					s["framesEncoded"] = st.FramesEncoded
 					s["keyFramesEncoded"] = st.KeyFramesEncoded
 					s["framesSent"] = st.FramesEncoded
@@ -867,8 +915,6 @@ func (p *rtcPeer) addMediaStats(m map[string]map[string]any) {
 					s["powerEfficientEncoder"] = false
 					s["active"] = st.Active
 					s["mediaSourceId"] = srcID
-					s["pliCount"] = st.PLICount
-					s["firCount"] = st.FIRCount
 					if cid := codecID(webrtc.MimeTypeVP8); cid != "" {
 						s["codecId"] = cid
 					}
@@ -879,10 +925,13 @@ func (p *rtcPeer) addMediaStats(m map[string]map[string]any) {
 			if as != nil && n.Bound {
 				st := as.Stats()
 				srcID := "SA" + itoa64(int64(n.SSRC))
-				if s := findRTP("outbound-rtp", n.SSRC); s != nil {
+				if s := ensureOutbound(x, n, "audio"); s != nil {
 					s["active"] = st.Active
 					s["mediaSourceId"] = srcID
 					s["targetBitrate"] = float64(32000)
+					if cid := codecID(webrtc.MimeTypeOpus); cid != "" {
+						s["codecId"] = cid
+					}
 				}
 				m[srcID] = map[string]any{"type": "media-source", "id": srcID, "timestamp": now, "kind": "audio", "trackIdentifier": desc.ID,
 					"audioLevel": st.AudioLevel, "totalAudioEnergy": st.TotalAudioEnergy, "totalSamplesDuration": st.TotalSamplesDuration}
@@ -945,6 +994,7 @@ func (p *rtcPeer) addMediaStats(m map[string]map[string]any) {
 			if s["type"] == "candidate-pair" {
 				if nom, _ := s["nominated"].(bool); nom {
 					s["availableOutgoingBitrate"] = float64(p.est.GetTargetBitrate())
+					s["sweefCongestionControl"] = p.est.GetStats() // non-standard: the GCC estimator's internals, for diagnostics
 				}
 			}
 		}
@@ -957,5 +1007,3 @@ func itoa64(v int64) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
-
-var _ = rtcp.Packet(nil)

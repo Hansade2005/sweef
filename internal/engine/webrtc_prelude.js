@@ -243,8 +243,9 @@
   }
   function watchTrack(rec, x, track) {
     var s = x.sender._s;
-    hookStop(track, function () { if (s.track === track && !rec.closed) call('rtcSenderLive', rec.id, x.id, false); });
+    hookStop(track, function () { if (s.track === track && !rec.closed) call('rtcTrackStopped', rec.id, x.id); });
     hookEnabled(track, function (en) { if (s.track === track && !rec.closed) call('rtcTrackEnabled', rec.id, x.id, !!en); });
+    if (track._t) hooksOf(track, 'constraintHooks').push(function () { if (s.track === track && !rec.closed) call('rtcTrackConstraints', rec.id, x.id, trackDesc(track)); });
   }
 
   // ---- registry -----------------------------------------------------------------------------
@@ -273,6 +274,54 @@
       set.__rtc = true;
       Object.defineProperty(MST.prototype, 'enabled', { get: d.get, set: set, configurable: true, enumerable: d.enumerable });
     }
+  })();
+
+  // ---- track settings, capabilities and constraints, consistent with what the senders do ------------------
+  // The capture layer (getUserMedia) creates the tracks; here the numbers they report follow what a sender
+  // really delivers: no echo cancellation, noise suppression or gain control is applied (use headphones),
+  // sizes and frame rates are the ones the source supports, and applyConstraints on a track that is being
+  // sent reopens the source at the new size or frame rate (the encoder follows mid-call).
+  (function () {
+    var MST = global.MediaStreamTrack;
+    if (!MST || MST.prototype.getSettings.__rtc) return;
+    var P = MST.prototype;
+    function num(v) {
+      if (typeof v === 'number') return v;
+      if (v && typeof v === 'object') {
+        if (typeof v.exact === 'number') return v.exact;
+        if (typeof v.ideal === 'number') return v.ideal;
+        if (typeof v.max === 'number' && typeof v.min !== 'number') return v.max;
+        if (typeof v.min === 'number') return v.min;
+      }
+      return undefined;
+    }
+    var gs = P.getSettings;
+    P.getSettings = function () {
+      var o = gs.apply(this, arguments);
+      if (this.kind === 'audio') { o.echoCancellation = false; o.noiseSuppression = false; o.autoGainControl = false; o.channelCount = 1; o.sampleRate = 48000; }
+      return o;
+    };
+    P.getSettings.__rtc = true;
+    P.getCapabilities = function () {
+      var id = (this._t && this._t.extra && this._t.extra.deviceId) || '';
+      if (this.kind === 'audio') return { deviceId: id, groupId: '', sampleRate: { min: 8000, max: 48000 }, channelCount: { min: 1, max: 2 }, echoCancellation: [false], noiseSuppression: [false], autoGainControl: [false], latency: { min: 0.01, max: 0.5 }, sampleSize: { min: 16, max: 16 } };
+      return { deviceId: id, groupId: '', width: { min: 16, max: 1920 }, height: { min: 16, max: 1080 }, frameRate: { min: 1, max: 60 }, aspectRatio: { min: 0.01, max: 100 }, facingMode: ['user'], resizeMode: ['none', 'crop-and-scale'] };
+    };
+    P.getConstraints = function () { return (this._t && this._t.constraints) || {}; };
+    var ac = P.applyConstraints;
+    P.applyConstraints = function (c) {
+      var self = this, t = this._t;
+      return Promise.resolve(ac.apply(this, arguments)).then(function () {
+        if (!c || typeof c !== 'object') { t.constraints = {}; return; }
+        t.constraints = JSON.parse(JSON.stringify(c));
+        if (self.kind !== 'video') return;
+        var e = t.extra, w = num(c.width), h = num(c.height), f = num(c.frameRate);
+        if (w) e.width = w;
+        if (h) e.height = h;
+        if (f) e.frameRate = f;
+        (t.constraintHooks || []).forEach(function (fn) { try { fn(); } catch (err) { /* ignore */ } });
+      });
+    };
   })();
 
   // ---- RTCDtlsTransport / RTCIceTransport / RTCSctpTransport -------------------------------
@@ -1096,7 +1145,8 @@
     var s = att.api.state, el = att.el;
     if (!att.ready) {
       att.ready = true;
-      s.video = { width: w, height: h, frameRate: 30 }; s.videoW = w; s.videoH = h; s.fps = 30; s.duration = Infinity;
+      // s.video stays unset: it would make the element's frame scheduler poll for frames of a file; the frames here are pushed
+      s.videoW = w; s.videoH = h; s.fps = 30; s.duration = Infinity;
       att.api.ev(el, 'durationchange');
       s.ready = 1;
       att.api.ev(el, 'loadedmetadata');
