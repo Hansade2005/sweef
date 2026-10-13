@@ -18,6 +18,7 @@ package engine
 // request issued under it must complete in place or the await never ends).
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -46,12 +47,19 @@ var httpToken atomic.Int64
 // to be made in place (see the file comment).
 func (j *jsVM) hostHTTPAsync(a []any) (any, error) {
 	hdr := map[string]string{}
-	if m, ok := argAt(a, 2).(map[string]any); ok {
+	if m, ok := normalizeJS(argAt(a, 2)).(map[string]any); ok { // a JS object arrives as *quickjs.Object
 		for k, v := range m {
 			hdr[k] = fmt.Sprint(v)
 		}
 	}
 	method, raw, body, beacon := argS(a, 0), argS(a, 1), argS(a, 3), argB(a, 4)
+	if argB(a, 5) { // the body is binary, sent as base64
+		raw64, err := base64.StdEncoding.DecodeString(body)
+		if err != nil {
+			return nil, fmt.Errorf("TypeError: bad request body")
+		}
+		body = string(raw64)
+	}
 	t := j.tab
 	if j.syncNet && !beacon {
 		return t.httpForScript(method, raw, hdr, body)

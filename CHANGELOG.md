@@ -47,6 +47,10 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - `docs/development.md` (package map and contracts), `docs/releasing.md`, and an ADR log in `docs/adr/`.
 - `appbench -open-profile` times the key that opens the omnibox dropdown and the key that closes it separately and
   writes a CPU profile.
+- Sound for the desktop browser: a pure-Go audio mixer with an `oto` device backend, per-tab audible indicator and mute,
+  and the audio clock driving `<video>`/`<audio>` and Web Audio (`docs/audio-output.md`).
+- Adaptive streaming: MSE rebuilt on parsed coded frames with a native player, decode-ahead and late-frame handling,
+  measured decode and dropped-frame numbers, and a per-site status table (`docs/media-streaming.md`); EME/DRM is not supported.
 - WebRTC on pion (pure Go): `RTCPeerConnection`, data channels, transceivers, stats; local IPs hidden behind mDNS by
   default, no STUN unless the page configures it ([docs/webrtc.md](docs/webrtc.md)).
 - WebAssembly JavaScript API on wazero (pure Go): `Module`, `Instance`, `Memory` (an ArrayBuffer over the live linear memory), `Table`, `Global`, `validate`/`compile`/`instantiate` and the streaming variants, in pages and Web Workers; no threads, `Tag` or `externref` ([docs/webassembly.md](docs/webassembly.md)).

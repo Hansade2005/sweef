@@ -4,6 +4,12 @@ package h264
 // boundary strength derivation and the special MBAFF edge handling follow
 // FFmpeg's loop filter.
 
+import (
+	"runtime"
+	"sync"
+	"sync/atomic"
+)
+
 func (d *Decoder) deblockPicture(pic *Picture) {
 	step, row0 := 1, 0
 	if d.fieldPic {
@@ -18,12 +24,60 @@ func (d *Decoder) deblockPicture(pic *Picture) {
 		}
 		return
 	}
-	for mby := row0; mby < d.mbH; mby += step {
-		for mbx := 0; mbx < d.mbW; mbx++ {
-			d.deblockMB(mbx, mby)
+	rows := (d.mbH - row0 + step - 1) / step
+	workers := min(runtime.GOMAXPROCS(0), 4)
+	if !deblockParallel || workers < 2 || rows < 6 || d.mbW < 6 {
+		for mby := row0; mby < d.mbH; mby += step {
+			for mbx := 0; mbx < d.mbW; mbx++ {
+				d.deblockMB(mbx, mby)
+			}
 		}
+		return
 	}
+	// The result is that of filtering macroblocks in raster order. Macroblock (x, y) reads and changes pixels
+	// of its left neighbour and of the one above it, which the macroblock above and to the right (whose left
+	// edge filtering reaches into the one above) must have finished: rows run as a wavefront two macroblocks
+	// apart. Each worker uses its own copy of the decoder state (the per-macroblock geometry lives there);
+	// the pictures and tables it reads are shared.
+	progress := make([]atomic.Int32, rows) // macroblocks finished per row
+	var next atomic.Int32
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			dd := new(Decoder)
+			*dd = *d
+			for {
+				r := int(next.Add(1)) - 1
+				if r >= rows {
+					return
+				}
+				mby := row0 + r*step
+				for x := 0; x < d.mbW; x++ {
+					if r > 0 {
+						need := int32(min(x+2, d.mbW))
+						for spin := 0; progress[r-1].Load() < need; spin++ {
+							if spin > 64 {
+								runtime.Gosched()
+							}
+						}
+					}
+					dd.deblockMB(x, mby)
+					progress[r].Store(int32(x + 1))
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
+
+// deblockParallel switches the wavefront deblocking filter (tests compare it with the serial one).
+var deblockParallel = true
+
+// SetParallelDeblock turns the multi-goroutine deblocking filter on or off (it is on by default; the output
+// is identical either way). It exists for tests and measurements.
+func SetParallelDeblock(on bool) { deblockParallel = on }
 
 func mvFarY(a, b mv16, limit int) bool {
 	dx := int(a.x) - int(b.x)

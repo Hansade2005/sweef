@@ -59,6 +59,15 @@ In the chrome page, `window.sweef` exists:
    scale change) is always a full one. `SWEEF_INCR_CHECK=1` compares every incremental paint with a
    full paint and repairs a difference (development aid).
 
+## Tab audio
+
+Each tab owns an `audioout` group (see [audio-output.md](audio-output.md)). The engine emits `EvAudio` with
+`engine.AudioState{Audible, Muted}` when the tab starts or stops making sound (audible = the mixed peak of its
+media elements and Web Audio contexts passed a threshold within the last 1.5 s) and when its mute changes.
+`internal/app` turns the event into the `audible`/`muted` fields of the tab entry in the chrome state;
+`tab.mute {id}` calls `Tab.SetAudioMuted`, and the mute is re-applied when a tab is recreated. The chrome shows
+a speaker icon on the tab strip entry; clicking it sends `tab.mute`.
+
 ## Agent <-> app
 
 `internal/agent` defines `type Backend interface` (see that package). `internal/app` implements it on

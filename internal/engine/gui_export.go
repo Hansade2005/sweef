@@ -22,7 +22,7 @@ func (t *Tab) Generation() uint64 {
 	if d == nil {
 		return 0
 	}
-	return d.MutationGen()
+	return d.MutationGen() + d.PaintGen()
 }
 
 // PaintOptions selects how PaintRGBAOpts rasterises.

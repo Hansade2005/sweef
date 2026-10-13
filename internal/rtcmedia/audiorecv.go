@@ -1,6 +1,7 @@
 package rtcmedia
 
 import (
+	"io"
 	"math"
 	"sync"
 	"time"
@@ -104,8 +105,12 @@ func (a *AudioReceiver) SetSink(s AudioSink) {
 		s = NullSink{}
 	}
 	a.mu.Lock()
+	old := a.sink
 	a.sink = s
 	a.mu.Unlock()
+	if c, ok := old.(io.Closer); ok && old != s {
+		c.Close() // a sink that holds a device stream releases it
+	}
 }
 
 // SetProcessor installs the echo cancellation hook, which sees the far-end signal before playback.
@@ -115,6 +120,12 @@ func (a *AudioReceiver) SetProcessor(p AudioProcessor) { a.mu.Lock(); a.proc = p
 func (a *AudioReceiver) Close() {
 	a.once.Do(func() { close(a.done) })
 	a.wg.Wait()
+	a.mu.Lock()
+	sink := a.sink
+	a.mu.Unlock()
+	if c, ok := sink.(io.Closer); ok {
+		c.Close()
+	}
 }
 
 // Wait blocks until the readers have ended (after the peer connection was closed).

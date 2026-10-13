@@ -361,6 +361,21 @@
     }
     return path;
   }
+  // Inline event handler attributes (onclick="..."): compiled on first use and again when the attribute changes.
+  // The scope is the element, then the document, as in browsers (the form owner is left out).
+  var attrHandlers = new WeakMap();
+  function attributeHandler(el, type) {
+    var src = el.getAttribute('on' + type);
+    if (src === null || src === undefined) return undefined;
+    var per = attrHandlers.get(el);
+    if (!per) { per = Object.create(null); attrHandlers.set(el, per); }
+    var c = per[type];
+    if (c && c.src === src) return c.fn;
+    var fn = null;
+    try { fn = new Function('event', 'with (document) { with (this) { ' + src + '\n } }'); } catch (e) { reportError(e); }
+    per[type] = { src: src, fn: fn };
+    return fn;
+  }
   function invokeListeners(target, ev, phase) {
     var m = target[LISTENERS];
     var list = m && m[ev.type];
@@ -386,6 +401,7 @@
     // legacy on* handler runs with the bubble/target listeners
     if (phase !== 1 && !ev._stopNow) {
       var h = target[HANDLERS] && target[HANDLERS][ev.type];
+      if (h === undefined && target !== global && typeof target.getAttribute === 'function') h = attributeHandler(target, ev.type);
       if (typeof h === 'function') {
         try {
           var r = target === global && ev.type === 'error' && ev instanceof global.ErrorEvent ? h.call(target, ev.message, ev.filename, ev.lineno, ev.colno, ev.error) : h.call(target, ev);
@@ -1219,6 +1235,17 @@
   methods(SVGElement.prototype, { focus: HTMLElement.prototype.focus, blur: HTMLElement.prototype.blur, getBBox: function () { return this.getBoundingClientRect(); }, getScreenCTM: function () { return null; }, getCTM: function () { return null; }, createSVGPoint: function () { return { x: 0, y: 0, matrixTransform: function () { return this; } }; } });
   global.SVGSVGElement = makeClass('SVGSVGElement', SVGElement); TAG_CLASS.svg = global.SVGSVGElement;
   global.SVGGraphicsElement = SVGElement;
+  // SVG element interfaces by tag (pages test nodes with instanceof SVGPathElement and the like)
+  var SVG_CLASS = {};
+  var SVG_CLASSES = { SVGPathElement: 'path', SVGCircleElement: 'circle', SVGRectElement: 'rect', SVGEllipseElement: 'ellipse', SVGLineElement: 'line',
+    SVGPolylineElement: 'polyline', SVGPolygonElement: 'polygon', SVGGElement: 'g', SVGDefsElement: 'defs', SVGUseElement: 'use',
+    SVGSymbolElement: 'symbol', SVGTextElement: 'text', SVGTSpanElement: 'tspan', SVGImageElement: 'image', SVGClipPathElement: 'clippath',
+    SVGMaskElement: 'mask', SVGPatternElement: 'pattern', SVGLinearGradientElement: 'lineargradient', SVGRadialGradientElement: 'radialgradient',
+    SVGStopElement: 'stop', SVGMarkerElement: 'marker', SVGForeignObjectElement: 'foreignobject', SVGFilterElement: 'filter' };
+  Object.keys(SVG_CLASSES).forEach(function (name) {
+    var tag = SVG_CLASSES[name], C = makeClass(name, SVGElement);
+    global[name] = C; SVG_CLASS[tag] = C; if (!TAG_CLASS[tag]) TAG_CLASS[tag] = C;
+  });
 
   // ---- form controls: live value/checked accessors live on the SPECIFIC prototypes
   function liveValue(proto) {
@@ -1542,7 +1569,7 @@
       var local = qname.indexOf(':') >= 0 ? qname.split(':')[1] : qname;
       if (ns === XHTML_NS || ns === null || ns === '') return this.createElement(local, options);
       var id = sw.createElement(local.toLowerCase());
-      var C = ns === SVG_NS ? (local.toLowerCase() === 'svg' ? global.SVGSVGElement : SVGElement) : Element;
+      var C = ns === SVG_NS ? (local.toLowerCase() === 'svg' ? global.SVGSVGElement : SVG_CLASS[local.toLowerCase()] || SVGElement) : Element;
       var w = makeWrapper(id, C);
       w[NS] = ns; w[ORIG_TAG] = local;
       hostMutation('create', id);
@@ -2581,6 +2608,11 @@
   function parseURL(input, base) {
     input = String(input).trim().replace(/[\t\n\r]/g, '');
     var m = /^([a-zA-Z][a-zA-Z0-9+.-]*):(.*)$/.exec(input);
+    if (m && base !== undefined && SPECIAL[m[1].toLowerCase() + ':'] && !/^[\/\\]{2}/.test(m[2])) {
+      // "https:../x" against an https base is a relative reference (special relative or authority state)
+      var sb = null; try { sb = parseURL(base); } catch (e) { /* not a valid base */ }
+      if (sb && sb.protocol === m[1].toLowerCase() + ':') { input = m[2]; m = null; }
+    }
     var rec = { protocol: '', username: '', password: '', hostname: '', port: '', pathname: '', search: '', hash: '', opaque: false };
     var rest;
     if (m) { rec.protocol = m[1].toLowerCase() + ':'; rest = m[2]; }
@@ -2840,15 +2872,30 @@
     return null;
   }
   function defineBody(proto) {
-    getters(proto, { bodyUsed: { get: function () { return !!this._used; } }, body: { get: function () { if (this._body === null || this._body === undefined) return null; return bytesStream(utf8Encode(this._text())); } } });
+    getters(proto, { bodyUsed: { get: function () { return !!this._used; } }, body: { get: function () { if (this._body === null || this._body === undefined) return null; if (typeof this._body.getReader === 'function') return this._body; return bytesStream(this._rawBytes ? this._rawBytes.slice() : utf8Encode(this._text())); } } });
     methods(proto, {
       _text: function () { return bodyToString(this._body); },
-      _consume: function () { if (this._used) return Promise.reject(new TypeError('Failed to execute \'text\' on \'' + this.constructor.name + '\': body stream already read')); this._used = true; return Promise.resolve(this._text()); },
+      _consume: function () {
+        if (this._used) return Promise.reject(new TypeError('Failed to execute \'text\' on \'' + this.constructor.name + '\': body stream already read'));
+        this._used = true;
+        var self = this, b = this._body;
+        if (b && typeof b.getReader === 'function') {
+          var rd = b.getReader(), parts = [], total = 0;
+          var pump = function () { return rd.read().then(function (r) {
+            if (r.done) { var all = new Uint8Array(total), o = 0; parts.forEach(function (p) { all.set(p, o); o += p.length; }); self._rawBytes = all; return utf8Decode(all); }
+            var v = r.value, u = typeof v === 'string' ? utf8Encode(v) : v instanceof ArrayBuffer ? new Uint8Array(v) : ArrayBuffer.isView(v) ? new Uint8Array(v.buffer, v.byteOffset, v.byteLength) : null;
+            if (!u) throw new TypeError('Received non-Uint8Array chunk');
+            parts.push(u); total += u.length; return pump();
+          }); };
+          return pump();
+        }
+        return Promise.resolve(this._text());
+      },
       text: function () { return this._consume(); },
       json: function () { return this._consume().then(function (t) { return JSON.parse(t); }); },
-      arrayBuffer: function () { var raw = this._rawBytes; return this._consume().then(function (t) { return raw ? raw.slice().buffer : utf8Encode(t).buffer; }); },
-      bytes: function () { var raw = this._rawBytes; return this._consume().then(function (t) { return raw ? raw.slice() : utf8Encode(t); }); },
-      blob: function () { var type = this.headers.get('content-type') || '', raw = this._rawBytes; return this._consume().then(function (t) { return new Blob([raw || t], { type: type }); }); },
+      arrayBuffer: function () { var self = this; return this._consume().then(function (t) { var raw = self._rawBytes; return raw ? raw.slice().buffer : utf8Encode(t).buffer; }); },
+      bytes: function () { var self = this; return this._consume().then(function (t) { var raw = self._rawBytes; return raw ? raw.slice() : utf8Encode(t); }); },
+      blob: function () { var type = this.headers.get('content-type') || '', self = this; return this._consume().then(function (t) { var raw = self._rawBytes; return new Blob([raw || t], { type: type }); }); },
       formData: function () { var type = this.headers.get('content-type') || ''; return this._consume().then(function (t) { var fd = new FormData(); if (/urlencoded/.test(type)) new URLSearchParams(t).forEach(function (v, k) { fd.append(k, v); }); return fd; }); }
     });
   }
@@ -2895,17 +2942,35 @@
   }
   defineBody(Response.prototype);
   getters(Response.prototype, { ok: { get: function () { return this.status >= 200 && this.status < 300; } } });
-  methods(Response.prototype, { clone: function () { if (this._used) throw new TypeError("Failed to execute 'clone' on 'Response': Response body is already used"); var r = new Response(this._body, { status: this.status, statusText: this.statusText, headers: this.headers, url: this.url, type: this.type, redirected: this.redirected }); return r; } });
+  methods(Response.prototype, { clone: function () { if (this._used) throw new TypeError("Failed to execute 'clone' on 'Response': Response body is already used"); var r = new Response(this._body, { status: this.status, statusText: this.statusText, headers: this.headers, url: this.url, type: this.type, redirected: this.redirected }); if (this._rawBytes) Object.defineProperty(r, '_rawBytes', { value: this._rawBytes, writable: true, configurable: true }); return r; } });
   Response.error = function () { var r = new Response(null, { status: 200, type: 'error' }); Object.defineProperty(r, 'status', { value: 0 }); return r; };
   Response.redirect = function (url, status) { return new Response(null, { status: status || 302, headers: { location: new URL(url, currentURL()).href } }); };
   Response.json = function (data, init) { init = Object.assign({}, init || {}); var h = new Headers(init.headers); if (!h.has('content-type')) h.set('content-type', 'application/json'); init.headers = h; return new Response(JSON.stringify(data), init); };
   setTag(Response, 'Response'); global.Response = Response;
 
   // ---- fetch: an asynchronous request behind a Promise, started on a microtask
+  // The request body as the host takes it: text as a string, bytes (ArrayBuffer, typed array, Blob) as
+  // {bin: Uint8Array} so that they are not mangled by a trip through UTF-8.
+  function sendBody(body) {
+    if (body === null || body === undefined) return null;
+    if (body instanceof ArrayBuffer) return { bin: new Uint8Array(body) };
+    if (ArrayBuffer.isView(body)) return { bin: new Uint8Array(body.buffer, body.byteOffset, body.byteLength) };
+    if (body instanceof Blob) return { bin: body._bytes };
+    return bodyToString(body);
+  }
+  function bodyWire(body) {
+    if (body && typeof body === 'object' && body.bin) {
+      var u = body.bin, s = '';
+      for (var i = 0; i < u.length; i += 0x6000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x6000));
+      return [global.btoa(s), true];
+    }
+    return [body, false];
+  }
   function doHttp(method, url, headers, body) {
     var hobj = {};
     if (headers) headers.forEach(function (v, k) { hobj[k] = v; });
-    var r = sw.http(method, url, hobj, body);
+    var w = bodyWire(body);
+    var r = sw.http(method, url, hobj, w[0], w[1]);
     if (!r || typeof r !== 'object') throw new TypeError('Failed to fetch');
     return r;
   }
@@ -2916,7 +2981,8 @@
     var hobj = {};
     if (headers) headers.forEach(function (v, k) { hobj[k] = v; });
     var t;
-    try { t = sw.httpAsync(method, url, hobj, body, false); } catch (e) { cb(null, e); return; }
+    var w = bodyWire(body);
+    try { t = sw.httpAsync(method, url, hobj, w[0], false, w[1]); } catch (e) { cb(null, e); return; }
     if (t && typeof t === 'object') { cb(t); return; }
     httpCbs.set(t, cb);
   }
@@ -2931,7 +2997,7 @@
     var status = r.status | 0;
     var resp = new Response(r.body === undefined || r.body === null ? '' : r.body, { status: status >= 200 && status <= 599 ? status : 200, statusText: r.statusText || '', headers: r.headers || {} });
     if (status < 200 || status > 599) Object.defineProperty(resp, 'status', { value: status });
-    if (r.b64) Object.defineProperty(resp, '_rawBytes', { value: b64ToBytes(String(r.b64)), writable: true });
+    if (r.b64) Object.defineProperty(resp, '_rawBytes', { value: b64ToBytes(String(r.b64)), writable: true, configurable: true });
     resp.url = r.url || url;
     resp.redirected = !!r.url && r.url !== url;
     resp.type = 'basic';
@@ -2946,7 +3012,7 @@
       if (req.signal) req.signal.addEventListener('abort', function () { aborted = true; reject(req.signal.reason); });
       queueMicrotaskImpl(function () {
         if (aborted) return;
-        doHttpAsync(req.method, req.url, req.headers, req._body === null ? null : bodyToString(req._body), function (r, e) {
+        doHttpAsync(req.method, req.url, req.headers, sendBody(req._body), function (r, e) {
           if (aborted) return;
           if (e) { reject(e instanceof Error ? new TypeError('Failed to fetch: ' + (e.message || e)) : new TypeError('Failed to fetch')); return; }
           if (!r || (!r.status && !r.body)) { reject(new TypeError('Failed to fetch')); return; }
@@ -3006,7 +3072,7 @@
         }
       }
     },
-    responseXML: { get: function () { if (this.readyState !== 4 || !/html|xml/.test(this._resHeaders.get('content-type') || '') && this.responseType !== 'document') return null; try { return new DOMParser().parseFromString(this._responseText, 'text/html'); } catch (e) { return null; } } }
+    responseXML: { get: function () { if (this.readyState !== 4 || !/html|xml/.test(this._resHeaders.get('content-type') || '') && this.responseType !== 'document') return null; try { var ct = this._resHeaders.get('content-type') || ''; return new DOMParser().parseFromString(this._responseText, /xml/.test(ct) && !/html/.test(ct) ? 'text/xml' : 'text/html'); } catch (e) { return null; } } }
   });
   methods(XMLHttpRequest.prototype, {
     open: function (method, url, async, user, password) {
@@ -3023,7 +3089,8 @@
       if (this.readyState !== 1 || this._sent) throw DOMException("Failed to execute 'send' on 'XMLHttpRequest': The object's state must be OPENED.", 'InvalidStateError');
       this._sent = true;
       if (this._method === 'GET' || this._method === 'HEAD') body = null;
-      var bodyStr = body === undefined || body === null ? null : bodyToString(body);
+      var bodyStr = body === undefined || body === null ? null : sendBody(body);
+      var bodyLen = bodyStr === null ? 0 : typeof bodyStr === 'string' ? bodyStr.length : bodyStr.bin.length;
       if (bodyStr !== null && !this._reqHeaders.has('content-type')) { var ct = bodyContentType(body); if (ct) this._reqHeaders.set('content-type', ct); }
       var self = this, url = this._url, method = this._method, headers = this._reqHeaders;
       fire(this, 'loadstart', {});
@@ -3031,7 +3098,7 @@
       var done = function (r, e) {
         if (self._aborted || self.readyState === 4) return;
         if (e) { xhrFail(self, 'error'); return; }
-        if (bodyStr !== null) { fire(self.upload, 'progress', { lengthComputable: true, loaded: bodyStr.length, total: bodyStr.length }); fire(self.upload, 'load', {}); fire(self.upload, 'loadend', {}); }
+        if (bodyStr !== null) { fire(self.upload, 'progress', { lengthComputable: true, loaded: bodyLen, total: bodyLen }); fire(self.upload, 'load', {}); fire(self.upload, 'loadend', {}); }
         if (!r || (!r.status && !r.body)) { xhrFail(self, 'error'); return; }
         xhrFinish(self, r, url);
       };

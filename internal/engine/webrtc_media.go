@@ -113,16 +113,6 @@ func (p *rtcPeer) audioProcessor() rtcmedia.AudioProcessor {
 	return p.proc
 }
 
-func rtcNewAudioSink() rtcmedia.AudioSink {
-	rtcSinkMu.Lock()
-	f := rtcSinkMake
-	rtcSinkMu.Unlock()
-	if f == nil {
-		return rtcmedia.NullSink{}
-	}
-	return f()
-}
-
 func (p *rtcPeer) resolveSource(d RTCTrackDesc) (RTCTrackSource, bool) {
 	rtcSourceMu.Lock()
 	s, ok := rtcSourceReg[d.ID]
@@ -570,7 +560,7 @@ func (p *rtcPeer) onRemoteTrack(tr *webrtc.TrackRemote, rcv *webrtc.RTPReceiver)
 	}
 	var sink rtcmedia.AudioSink = rtcmedia.NullSink{}
 	if x.audioOn {
-		sink = rtcNewAudioSink()
+		sink = p.audioSink()
 	}
 	ar, err := rtcmedia.NewAudioReceiver(tr, rcv, sink, func(m bool) { p.emit("trackmute", map[string]any{"tr": x.id, "muted": m}) })
 	if err != nil {
@@ -831,7 +821,7 @@ func (h *rtcHost) mediaFns(f map[string]hostFn) {
 		x.rmu.Unlock()
 		if ar != nil {
 			if on {
-				ar.SetSink(rtcNewAudioSink())
+				ar.SetSink(p.audioSink())
 			} else {
 				ar.SetSink(nil)
 			}

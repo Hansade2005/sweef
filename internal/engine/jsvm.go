@@ -159,10 +159,12 @@ type jsVM struct {
 
 	rtOnce   sync.Once
 	realtime *realtime // WebSockets and Workers (lazily created)
-	closers  []func()  // run by close(): host extensions release goroutines and handles here
 
 	// closeHooks run after the QuickJS VM is closed: feature files hang their native teardown here (wasm.go).
 	closeHooks []func()
+
+	closerMu sync.Mutex
+	closers  []func() // run first when the VM closes (host extensions, media players, audio streams); they must not call into the VM
 
 	pendingNav  string
 	scriptQueue []int64        // script element ids inserted by page code
@@ -182,7 +184,7 @@ func buildVM(o Options) (*jsVM, error) {
 	}
 	mem := o.JSMemoryMiB
 	if mem <= 0 {
-		mem = 64
+		mem = 256
 	}
 	vm.SetMemoryLimit(uintptr(mem) << 20)
 	vm.SetMaxStackSize(1 << 20)
@@ -349,13 +351,17 @@ func (j *jsVM) close() {
 		return
 	}
 	j.closed = true
+	j.closerMu.Lock()
+	cl := j.closers
+	j.closers = nil
+	j.closerMu.Unlock()
+	for _, f := range cl {
+		f()
+	}
 	if j.realtime != nil {
 		j.realtime.closeAll()
 	}
 	runCloseHooks(j)
-	for _, f := range j.closers {
-		f()
-	}
 	if j.capture != nil {
 		j.capture.closeAll()
 	}
@@ -365,6 +371,13 @@ func (j *jsVM) close() {
 		h()
 	}
 	j.closeHooks = nil
+}
+
+// onClose registers f to run when the VM closes.
+func (j *jsVM) onClose(f func()) {
+	j.closerMu.Lock()
+	defer j.closerMu.Unlock()
+	j.closers = append(j.closers, f)
 }
 
 func (j *jsVM) nowMs() float64 { return float64(time.Since(j.start).Microseconds()) / 1000 }
@@ -1211,7 +1224,7 @@ func (j *jsVM) registerHost() error {
 		{"now", func(a []any) (any, error) { return j.nowMs(), nil }},
 		{"http", func(a []any) (any, error) {
 			hdr := map[string]string{}
-			if m, ok := a[2].(map[string]any); ok {
+			if m, ok := normalizeJS(a[2]).(map[string]any); ok {
 				for k, v := range m {
 					hdr[k] = fmt.Sprint(v)
 				}
@@ -1219,6 +1232,13 @@ func (j *jsVM) registerHost() error {
 			body := ""
 			if len(a) > 3 && a[3] != nil {
 				body = argS(a, 3)
+			}
+			if len(a) > 4 && argB(a, 4) { // binary body, sent as base64
+				raw, err := base64.StdEncoding.DecodeString(body)
+				if err != nil {
+					return nil, fmt.Errorf("TypeError: bad request body")
+				}
+				body = string(raw)
 			}
 			return j.tab.httpForScript(argS(a, 0), argS(a, 1), hdr, body)
 		}},

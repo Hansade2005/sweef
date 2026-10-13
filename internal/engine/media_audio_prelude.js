@@ -671,6 +671,7 @@
     var el = node.__el;
     if (el.__swSourceNode) throw dex("Failed to construct 'MediaElementAudioSourceNode': HTMLMediaElement already connected previously to a different MediaElementSourceNode.", 'InvalidStateError');
     el.__swSourceNode = node; this.__els.push(node);
+    try { sw.playerRoute(global.__swIdOf(el), true); } catch (e) { /* the element's own output goes silent: its sound reaches the device through the graph */ }
   };
   function dispatchEnded(ctx, ids) {
     ids.forEach(function (gid) {

@@ -1,5 +1,7 @@
 package vp9
 
+import "unsafe"
+
 // probs holds every adaptive probability table (spec 6.3, 10.5).
 type probs struct {
 	tx           [4][2][3]uint8
@@ -75,6 +77,16 @@ type counts struct {
 	mvHp         [2][2]uint32
 	token        [4][2][2][6][6][3]uint32
 	moreCoefs    [4][2][2][6][6][2]uint32
+}
+
+// add adds the counts of o (the counts of another tile column) to c.
+func (c *counts) add(o *counts) {
+	n := int(unsafe.Sizeof(*c)) / 4
+	a := unsafe.Slice((*uint32)(unsafe.Pointer(c)), n)
+	b := unsafe.Slice((*uint32)(unsafe.Pointer(o)), n)
+	for i := range a {
+		a[i] += b[i]
+	}
 }
 
 func round2(x int, n uint) int { return (x + (1 << n >> 1)) >> n }

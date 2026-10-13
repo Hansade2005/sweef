@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>mini adaptive player</title>
+<body style="margin:0;background:#000">
+<video id="v" width="320" height="180"></video>
+<script>
+// A tiny DASH-style player that feeds MediaSource the way dash.js / Shaka do: init segment per
+// representation, media segments appended one at a time (waiting for updateend), the representation
+// chosen per segment, endOfStream at the end. Everything is driven from the query string:
+//   fam=h264|vp9|av1   plan=0,0,1  (representation of each video segment, h264 only)   manual=1  (create the buffers only)
+var q = new URLSearchParams(location.search);
+var fam = q.get('fam') || 'h264';
+var plan = (q.get('plan') || '0,0,0').split(',').map(Number);
+var T = { log: [], ready: false, error: null, appended: 0 };
+window.T = T;
+var v = document.getElementById('v');
+var ms = new MediaSource();
+v.src = URL.createObjectURL(ms);
+['waiting', 'playing', 'canplay', 'seeking', 'seeked', 'ended', 'pause', 'error', 'ratechange', 'stalled'].forEach(function (n) {
+  v.addEventListener(n, function () { T.log.push([n, Math.round(v.currentTime * 1000) / 1000, v.readyState]); });
+});
+function get(url) {
+  return new Promise(function (res, rej) {
+    var x = new XMLHttpRequest(); x.open('GET', url); x.responseType = 'arraybuffer';
+    x.onload = function () { x.status === 200 ? res(x.response) : rej(new Error(url + ' ' + x.status)); };
+    x.onerror = function () { rej(new Error(url)); };
+    x.send();
+  });
+}
+function append(sb, buf) {
+  return new Promise(function (res, rej) {
+    sb.addEventListener('updateend', function h() { sb.removeEventListener('updateend', h); res(); });
+    sb.addEventListener('error', function () { rej(new Error('append error')); }, { once: true });
+    sb.appendBuffer(buf);
+  });
+}
+T.append = append; T.get = get;
+var cfg = {
+  h264: { vmime: 'video/mp4; codecs="avc1.4d400c"', amime: 'audio/mp4; codecs="mp4a.40.2"', dir: 'h264', ext: 'm4s', vinit: ['init-0.m4s', 'init-1.m4s'], ainit: 'init-2.m4s', vseg: function (r, n) { return 'chunk-' + r + '-0000' + n + '.m4s'; }, aseg: function (n) { return 'chunk-2-0000' + n + '.m4s'; }, asegs: 4 },
+  vp9: { vmime: 'video/webm; codecs="vp9"', amime: 'audio/webm; codecs="opus"', dir: 'vp9', vinit: ['init-0.webm'], ainit: 'init-1.webm', vseg: function (r, n) { return 'chunk-0-0000' + n + '.webm'; }, aseg: function (n) { return 'chunk-1-0000' + n + '.webm'; }, asegs: 4 },
+  av1: { vmime: 'video/mp4; codecs="av01.0.00M.08"', amime: null, dir: 'av1', vinit: ['init-0.m4s'], vseg: function (r, n) { return 'chunk-0-0000' + n + '.m4s'; }, asegs: 0 }
+}[fam];
+ms.addEventListener('sourceopen', function () {
+  T.log.push(['sourceopen', 0, 0]);
+  if (T.sbv) return; // MediaSource reopens (and fires sourceopen again) after endOfStream() when a buffer changes
+  var sbv = ms.addSourceBuffer(cfg.vmime), sba = cfg.amime && !q.get('manual') ? ms.addSourceBuffer(cfg.amime) : null;
+  T.sbv = sbv; T.sba = sba; T.ms = ms;
+  var d = cfg.dir + '/';
+  if (q.get('manual')) { T.ready = true; return; } // the test appends by hand
+  var chain = Promise.resolve();
+  function step(f) { chain = chain.then(f); }
+  var rep = -1;
+  step(function () { ms.duration = 6; });
+  if (sba) step(function () { return get(d + cfg.ainit).then(function (b) { return append(sba, b); }); });
+  for (var n = 1; n <= 3; n++) (function (n) {
+    step(function () {
+      var r = fam === 'h264' ? plan[n - 1] : 0;
+      var p = Promise.resolve();
+      if (r !== rep) { rep = r; p = get(d + cfg.vinit[r]).then(function (b) { return append(sbv, b); }); }
+      return p.then(function () { return get(d + cfg.vseg(r, n)); }).then(function (b) { T.appended++; return append(sbv, b); });
+    });
+  })(n);
+  if (sba) for (var k = 1; k <= cfg.asegs; k++) (function (k) {
+    step(function () { return get(d + cfg.aseg(k)).then(function (b) { return append(sba, b); }); });
+  })(k);
+  step(function () { ms.endOfStream(); T.ready = true; });
+  chain.catch(function (e) { T.error = String(e); });
+});
+</script>
