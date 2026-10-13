@@ -1041,7 +1041,7 @@ func (h *wasmHost) funcRefValue(a []any, i int) (uintptr, error) {
 		return 0, nil
 	case strings.HasPrefix(s, "ref:"):
 		n, err := strconv.ParseUint(s[4:], 10, 32)
-		if err != nil || n == 0 || int(n) > len(h.refTab) {
+		if err != nil || n == 0 || n > uint64(len(h.refTab)) {
 			return 0, errors.New("bad function reference")
 		}
 		return h.refTab[n-1], nil
