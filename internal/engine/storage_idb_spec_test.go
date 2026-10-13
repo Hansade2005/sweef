@@ -395,6 +395,8 @@ func TestIDBPersistsAcrossEngineRestart(t *testing.T) {
 	srv := storageServer(t)
 	dir := t.TempDir()
 	e1 := New(func() Options { o := DefaultOptions(); o.StorageDir = dir; return o }())
+	// without a policy persist() is refused (see TestStoragePersistFollowsThePolicy); this one grants it
+	e1.DefaultContext().SiteStorage().SetPersistPolicy(func(string) bool { return true })
 	tab := openTab(t, e1, srv.URL+"/")
 	got := js(t, tab, idbHelpers+`
 const db = await open('persist', 3, (db) => {
@@ -410,9 +412,8 @@ return JSON.stringify({ usage: est.usage > 0, quota: est.quota > est.usage, idb:
 `)
 	expect(t, tab, got, `{"usage":true,"quota":true,"idb":true,"persisted":false,"persist":true,"persisted2":true}`)
 	e1.Close()
-	files, _ := filepath.Glob(filepath.Join(dir, "*", "idb", "*.db"))
-	if len(files) != 1 {
-		t.Fatalf("expected one database file under %s, got %v", dir, files)
+	if files, _ := filepath.Glob(filepath.Join(dir, "*", "kv", "CURRENT")); len(files) != 1 {
+		t.Fatalf("expected one ordered store under %s, got %v", dir, files)
 	}
 
 	e2 := New(func() Options { o := DefaultOptions(); o.StorageDir = dir; return o }())
@@ -493,7 +494,7 @@ const tx = db.transaction('s', 'readwrite'); tx.objectStore('s').put(1, 'a'); aw
 	e.DefaultContext().ClearSiteData("")
 	got := js(t, tab, `await new Promise(r => setTimeout(r, 20)); return JSON.stringify({ closed: window.closed, dbs: await indexedDB.databases() });`)
 	expect(t, tab, got, `{"closed":true,"dbs":[]}`)
-	if files, _ := filepath.Glob(filepath.Join(dir, "*", "idb", "*")); len(files) != 0 {
+	if files, _ := filepath.Glob(filepath.Join(dir, "*", "kv", "*")); len(files) != 0 {
 		t.Fatalf("files survived clearing: %v", files)
 	}
 }

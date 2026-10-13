@@ -84,6 +84,7 @@ type App struct {
 
 	prof     *store.Profile
 	incog    *store.Profile // lazily created in-memory profile for incognito tabs
+	sprompt  storagePrompt  // asks the person whether a site may keep its storage (siteusage.go)
 	model    *state.Model
 	winID    int
 	comp     *compositor.Compositor
@@ -252,6 +253,8 @@ func New(cfg Config) (*App, error) {
 		a.eng = engine.New(o)
 		a.ownE = true
 	}
+	// navigator.storage.persist(): bookmarked sites and sites the person agrees to; everyone else is refused
+	a.eng.DefaultContext().SiteStorage().SetPersistPolicy(a.storagePersistPolicy)
 	a.initDataSaver()
 	// the app's own HTTP clients count toward "used" like page traffic
 	if ct := a.eng.DefaultContext().CountedTransport(); ct != nil {

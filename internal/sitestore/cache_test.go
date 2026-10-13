@@ -2,8 +2,6 @@ package sitestore
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -30,17 +28,12 @@ func TestCacheStoreReplaceCompactAndReload(t *testing.T) {
 	if err := c.Put("nope", CacheEntry{URL: "http://a/z", Method: "GET"}, nil); !IsError(err, "NotFoundError") {
 		t.Fatalf("put into a missing cache: %v", err)
 	}
-	bodies, _ := filepath.Glob(filepath.Join(dir, "*", "caches", "bodies", "*"))
-	if len(bodies) != 2 {
-		t.Fatalf("superseded bodies were not removed: %d files", len(bodies))
+	if es, _ := c.Requests("v1", CacheQuery{}); len(es) != 2 {
+		t.Fatalf("superseded entries were not replaced: %d", len(es))
 	}
-	logs, _ := filepath.Glob(filepath.Join(dir, "*", "caches", "index.log"))
-	if len(logs) != 1 {
-		t.Fatalf("index logs: %v", logs)
-	}
-	fi, _ := os.Stat(logs[0])
-	if fi.Size() > 20_000 {
-		t.Fatalf("index log not compacted: %d bytes", fi.Size())
+	// 600 puts of one request leave one entry's worth of usage, not 600
+	if u := o.Usage(); u.Caches > 2000 {
+		t.Fatalf("usage grew with replaced entries: %+v", u)
 	}
 	m.Close()
 
@@ -61,9 +54,6 @@ func TestCacheStoreReplaceCompactAndReload(t *testing.T) {
 	}
 	if !c2.Delete("v1") {
 		t.Fatal("delete")
-	}
-	if left, _ := filepath.Glob(filepath.Join(dir, "*", "caches", "bodies", "*")); len(left) != 0 {
-		t.Fatalf("bodies left: %v", left)
 	}
 	if u := m2.Origin("http://a").Usage(); u.Caches != 0 {
 		t.Fatalf("usage after delete: %+v", u)

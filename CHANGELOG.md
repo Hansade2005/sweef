@@ -26,8 +26,13 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - Web platform layer (see `docs/web-platform.md`): real Streams plus Compression/Decompression and TextEncoder/TextDecoder streams, XPath, URLPattern, the Navigation API, ElementInternals, View Transitions, the CSS Highlight and `@property` registries, `Array.fromAsync`, `scheduler`, the Origin Private File System and honest stand-ins for device, credential, payment and Picture-in-Picture APIs, all loaded lazily.
 - WebRTC video and audio: a pure Go VP8 encoder, VP8 and Opus send and receive with jitter buffers, NACK/PLI and bandwidth estimation, `getStats` media entries ([docs/webrtc.md](docs/webrtc.md), [docs/webrtc-interop.md](docs/webrtc-interop.md)).
 
+- Quota management for site storage: a global budget (60% of the profile volume's available space, at most 64 GiB) with at most 20% per origin, exact usage accounting across IndexedDB, Cache Storage, the origin private file system and service worker scripts, `QuotaExceededError` on writes over the cap, eviction of whole least-recently-used best-effort origins under pressure (open connections get `close`), a working `navigator.storage.persist()` decided by the application (bookmarked sites, or a prompt the embedder installs), `estimate()` with real usage and quota, and a per-site storage list with a "Clear" button in Settings > Data. `engine.Options.StorageBudgetMiB`; see docs/storage.md.
+- ADR 0002 (the ordered store, with measurements) and `tools/kvbench`, the harness behind it.
+
 ### Changed
 - The release binary-size budget is 40 MiB (was 32 MiB): WebRTC (pion), WebAssembly (wazero) and the web platform layer add about 12 MiB. The stripped linux/amd64 build is about 34.7 MiB.
+- IndexedDB, Cache Storage and the origin private file system are stored in one disk-resident ordered key-value store per origin (goleveldb) instead of an append-only log replayed into memory: memory no longer depends on database size (a 1 GB database opens in 44 ms and reads at about 30 MB resident), cursors stream, transactions commit as one atomic batch, `clear()` and `deleteDatabase` are O(1), values and cache bodies above 64 KiB are files, and a crash or kill leaves each transaction whole or absent. The origin private file system now persists across restarts and is no longer limited to 256 MiB of memory.
+- `navigator.storage.persist()` no longer always succeeds in a persistent context: it asks the application's policy and answers no without one. `StorageQuotaMiB` is now a cap per origin that overrides the derived one (0 = derived), not a fixed 1 GiB.
 - README shows the real browser UI (first-run setup with the real browser logos, Sidekick, Data Saver, new tab, omnibox), rendered by `uipreview`.
 - The omnibox dropdown uses a lighter shadow (the `--sh-2` token plus a 1 px ring instead of `--sh-3`).
 
@@ -40,6 +45,7 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - Updated `golang.org/x/net` from v0.17.0 to v0.61.0 (HTML parser denial-of-service and XSS-class advisories GO-2024-3333, GO-2025-3595, GO-2026-4440, GO-2026-5025 to 5030, HTTP/2 GO-2024-2687, GO-2026-4918, IDNA GO-2026-5026) and the Go toolchain to 1.26.9 (about 30 standard library advisories in `net/http`, `crypto/tls`, `crypto/x509`, `net/url`, ...). `govulncheck ./...` now reports no vulnerabilities; it runs weekly and on every PR.
 
 ### Removed
+- The append-only log format of IndexedDB and Cache Storage. It never shipped; leftover `idb/` and `caches/` directories are deleted when found, and a store in an unknown or unrecoverable format is kept as `kv.bak` while a new one starts.
 - A 32 MB `appbench` binary that had been committed by mistake (it stays in git history).
 
 ## [0.1.0-alpha] - 2026-10-13 (not yet tagged)

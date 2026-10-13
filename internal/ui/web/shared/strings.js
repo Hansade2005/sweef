@@ -148,6 +148,7 @@
       top: "Busiest sites", topD: "Approximate, by site.", reset: "Reset counter", resetD: "Start counting from zero. Your budget stays as it is.", resetSure: "Reset the usage counter?", resetYes: "Yes, reset", cancel: "Cancel",
       gMore: "More", agentLite: "Light loading for {agent}", agentLiteD: "When {agent} researches for you, pages load as text without images or video. It never needs them.", showMeter: "Show the data meter in the toolbar", showMeterD: "A small chip next to the address bar.",
       gSites: "Sites with their own rule", sitesD: "Set from the data popover on any page.", sitesNone: "No site has its own rule yet.", forget: "Forget", ruleFull: "Always full", ruleLite: "Always lite",
+      gStorage: "Site storage", storageD: "Data that sites keep on this device: databases, caches and files. {used} of {budget} in use. When space runs short, the sites you used least recently are cleared first, except the ones marked kept.", storageNone: "No site is storing data on this device.", clearSite: "Clear", kept: "kept",
       gCount: "What is counted", countD: "Used is counted from the network, including encryption overhead. Downloads and favicons are included; {agent}'s own messages to the model are not. Saved is split in two: measured (files we did not download) and estimated (a guess from typical sizes). We never add them together.",
       unavailable: "Counting is not available in this build yet, so the numbers below stay empty."
     },

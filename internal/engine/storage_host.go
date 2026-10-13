@@ -89,8 +89,13 @@ func (c *BrowserContext) SiteStorage() *sitestore.Manager {
 		if root == "" && c.ID == "c_default" {
 			root = c.eng.opts.StorageDir
 		}
-		quota := int64(c.eng.opts.StorageQuotaMiB) << 20
-		c.site.mgr.Store(sitestore.NewManager(root, quota))
+		m := sitestore.NewManagerOptions(root, sitestore.Options{
+			OriginQuota: int64(c.eng.opts.StorageQuotaMiB) << 20,
+			Budget:      int64(c.eng.opts.StorageBudgetMiB) << 20,
+		})
+		// an evicted origin loses its service worker registrations with the rest of its data
+		m.SetEvictHook(func(origin string) { c.swUnregisterAll(origin) })
+		c.site.mgr.Store(m)
 	})
 	return c.site.mgr.Load()
 }
@@ -99,7 +104,7 @@ func (c *BrowserContext) SiteStorage() *sitestore.Manager {
 func (c *BrowserContext) siteClose() {
 	c.swShutdown()
 	if m := c.site.mgr.Load(); m != nil {
-		m.Close()
+		m.Shutdown()
 	}
 }
 
@@ -286,6 +291,10 @@ func (h *storageHost) fns() map[string]hostFn {
 			return []any{id, started}, nil
 		},
 		"idbCommit": func(a []any) (any, error) { return nil, m().Commit(argI(a, 0)) },
+		"idbDurability": func(a []any) (any, error) {
+			m().SetDurability(argI(a, 0), argB(a, 1)) // durability "strict": the commit waits for stable storage
+			return nil, nil
+		},
 		"idbAbort": func(a []any) (any, error) {
 			m().Abort(argI(a, 0))
 			return nil, nil
@@ -302,6 +311,13 @@ func (h *storageHost) fns() map[string]hostFn {
 				r = []any{}
 			}
 			return r, err
+		},
+		"idbRecordsPage": func(a []any) (any, error) {
+			page, next, err := m().RecordsPage(argI(a, 0), argS(a, 1), argS(a, 2), int(argI(a, 3)))
+			if page == nil {
+				page = []any{}
+			}
+			return []any{page, next}, err
 		},
 		"idbCreateIndex": func(a []any) (any, error) {
 			var ents []sitestore.IndexEntry
@@ -362,15 +378,14 @@ func (h *storageHost) fns() map[string]hostFn {
 				return map[string]any{"usage": 0, "quota": 0, "indexedDB": 0, "caches": 0, "serviceWorkers": 0}, nil
 			}
 			u := o.Usage()
-			return map[string]any{"usage": u.Total, "quota": o.Quota(), "indexedDB": u.IndexedDB, "caches": u.Caches, "serviceWorkers": u.Other}, nil
+			return map[string]any{"usage": u.Total, "quota": o.Quota(), "indexedDB": u.IndexedDB, "caches": u.Caches, "serviceWorkers": u.Other, "opfs": u.OPFS}, nil
 		},
 		"storagePersist": func(a []any) (any, error) {
 			o, err := h.site()
-			if err != nil || !m().Persistent() {
+			if err != nil {
 				return false, nil
 			}
-			o.SetPersisted(true)
-			return true, nil
+			return o.RequestPersist(), nil // the application's policy decides; memory-only contexts never persist
 		},
 		"storagePersisted": func(a []any) (any, error) {
 			o, err := h.site()
