@@ -1,0 +1,10 @@
+# Applied by .github/workflows/labeler.yml
+engine:   [{changed-files: [{any-glob-to-any-file: ['internal/engine/**', 'internal/net/**']}]}]
+render:   [{changed-files: [{any-glob-to-any-file: ['internal/render/**', 'internal/raster/**', 'internal/style/**', 'internal/font/**']}]}]
+media:    [{changed-files: [{any-glob-to-any-file: ['internal/media/**', 'third_party/**']}]}]
+gui:      [{changed-files: [{any-glob-to-any-file: ['internal/app/**', 'internal/ui/**', 'internal/shell/**']}]}]
+agent:    [{changed-files: [{any-glob-to-any-file: ['internal/agent/**', 'internal/agentbridge/**', 'internal/mcp/**', 'internal/rpc/**']}]}]
+release:  [{changed-files: [{any-glob-to-any-file: ['packaging/**', 'scripts/release/**', '.github/workflows/release.yml']}]}]
+bench:    [{changed-files: [{any-glob-to-any-file: ['bench/**', 'fidelity/**', 'scripts/bench/**']}]}]
+docs:     [{changed-files: [{any-glob-to-any-file: ['docs/**', '*.md']}]}]
+ci:       [{changed-files: [{any-glob-to-any-file: ['.github/**']}]}]

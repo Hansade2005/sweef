@@ -4,3 +4,8 @@ page.png
 /.claude/worktrees/
 *.test
 /dist/
+/appbench
+/engine.test
+/app.test
+*.prof
+/coverage.out

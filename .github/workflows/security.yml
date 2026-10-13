@@ -1,0 +1,41 @@
+name: security
+
+# TODO(owner): pin every `uses:` by full commit SHA before the first public release (same as ci.yml).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"   # weekly: new advisories appear without any code change
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: govulncheck (reachable vulnerabilities in dependencies and the standard library)
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
+  dependency-review:
+    name: dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # Licences we accept for new dependencies (see CONTRIBUTING.md).
+          allow-licenses: Apache-2.0, BSD-2-Clause, BSD-3-Clause, MIT, ISC, 0BSD, MPL-2.0, Unlicense, CC0-1.0, Zlib

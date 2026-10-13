@@ -1,6 +1,6 @@
 module github.com/sweefbrowser/sweef
 
-go 1.26.0
+go 1.26.9
 
 require (
 	github.com/dsnet/compress v0.0.1
@@ -9,7 +9,7 @@ require (
 	github.com/jfreymuth/oggvorbis v1.0.5
 	github.com/thesyncim/gopus v0.1.2
 	golang.org/x/image v0.47.0
-	golang.org/x/net v0.17.0
+	golang.org/x/net v0.61.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
 	modernc.org/quickjs v0.25.0

@@ -1,0 +1,8 @@
+# Every change needs a review from a code owner (enable "Require review from Code Owners" in branch protection).
+*                       @Hansade2005
+/.github/               @Hansade2005
+/scripts/release/       @Hansade2005
+/packaging/             @Hansade2005
+/internal/update/       @Hansade2005
+/SECURITY.md            @Hansade2005
+/LICENSE                @Hansade2005

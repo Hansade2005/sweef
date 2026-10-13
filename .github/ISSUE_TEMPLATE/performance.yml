@@ -1,0 +1,20 @@
+name: Performance problem or regression
+description: Slower, heavier or hungrier than it should be.
+labels: [performance, needs-triage]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What is slow or heavy?
+    validations: {required: true}
+  - type: textarea
+    id: numbers
+    attributes:
+      label: Numbers and how you measured them
+      description: Command, machine, before/after if it is a regression. A CPU profile (`go tool pprof`) is ideal.
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes:
+      label: Output of `sweef version`
+    validations: {required: true}
