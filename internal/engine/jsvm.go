@@ -157,6 +157,7 @@ type jsVM struct {
 
 	rtOnce   sync.Once
 	realtime *realtime // WebSockets and Workers (lazily created)
+	closers  []func()  // run by close(): host extensions release goroutines and handles here
 
 	pendingNav  string
 	scriptQueue []int64        // script element ids inserted by page code
@@ -336,6 +337,9 @@ func (j *jsVM) close() {
 	j.closed = true
 	if j.realtime != nil {
 		j.realtime.closeAll()
+	}
+	for _, f := range j.closers {
+		f()
 	}
 	j.vm.SetModuleLoader(nil, nil)
 	j.vm.Close()

@@ -2699,14 +2699,8 @@
   defineHandlerProps(FileReader.prototype, ['load', 'loadstart', 'loadend', 'progress', 'error', 'abort']);
   constant(FileReader, 'EMPTY', 0); constant(FileReader, 'LOADING', 1); constant(FileReader, 'DONE', 2);
   setTag(FileReader, 'FileReader'); global.FileReader = FileReader;
-  function bytesStream(bytes) {
-    var done = false;
-    var reader = { read: function () { if (done) return Promise.resolve({ done: true, value: undefined }); done = true; return Promise.resolve({ done: false, value: bytes }); }, cancel: function () { done = true; return Promise.resolve(); }, releaseLock: function () { }, closed: Promise.resolve() };
-    return { locked: false, getReader: function () { return reader; }, cancel: function () { done = true; return Promise.resolve(); }, pipeTo: function () { return Promise.resolve(); }, tee: function () { return [bytesStream(bytes), bytesStream(bytes)]; }, [Symbol.asyncIterator]: function () { return { next: function () { return reader.read(); } }; } };
-  }
-  global.ReadableStream = function ReadableStream(src) { var chunks = []; var ctrl = { enqueue: function (c) { chunks.push(c); }, close: function () { }, error: function () { } }; if (src && src.start) src.start(ctrl); var i = 0; this.locked = false; this.getReader = function () { return { read: function () { if (src && src.pull && i >= chunks.length) src.pull(ctrl); return Promise.resolve(i < chunks.length ? { done: false, value: chunks[i++] } : { done: true, value: undefined }); }, cancel: function () { return Promise.resolve(); }, releaseLock: function () { }, closed: Promise.resolve() }; }; this.cancel = function () { return Promise.resolve(); }; };
-  global.WritableStream = function WritableStream(sink) { this.locked = false; this.getWriter = function () { return { write: function (c) { if (sink && sink.write) sink.write(c); return Promise.resolve(); }, close: function () { if (sink && sink.close) sink.close(); return Promise.resolve(); }, abort: function () { return Promise.resolve(); }, releaseLock: function () { }, ready: Promise.resolve(), closed: Promise.resolve() }; }; };
-  global.TransformStream = function TransformStream() { var chunks = []; this.readable = new global.ReadableStream({ start: function (c) { chunks.push(c); } }); this.writable = new global.WritableStream({ write: function (v) { chunks[0].enqueue(v); } }); };
+  // Real streams live in platformjs/streams.js and load on first use.
+  function bytesStream(bytes) { return new global.ReadableStream({ start: function (c) { if (bytes.length) c.enqueue(bytes); c.close(); } }); }
 
   // ---- FormData
   function FormData(form) {
