@@ -87,6 +87,32 @@ func SetRTCAudioSinkFactory(f func() rtcmedia.AudioSink) {
 	rtcSinkMu.Unlock()
 }
 
+// SetRTCAudioProcessorFactory installs echo cancellation / noise suppression for calls: f is called once per
+// peer connection, and the processor it returns hears what is played (far end) and cleans what is captured
+// (near end). Sweef ships none; calls need headphones until one is provided.
+func SetRTCAudioProcessorFactory(f func() rtcmedia.AudioProcessor) {
+	rtcSinkMu.Lock()
+	rtcProcMake = f
+	rtcSinkMu.Unlock()
+}
+
+var rtcProcMake func() rtcmedia.AudioProcessor
+
+func (p *rtcPeer) audioProcessor() rtcmedia.AudioProcessor {
+	rtcSinkMu.Lock()
+	f := rtcProcMake
+	rtcSinkMu.Unlock()
+	if f == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.proc == nil {
+		p.proc = f()
+	}
+	return p.proc
+}
+
 func rtcNewAudioSink() rtcmedia.AudioSink {
 	rtcSinkMu.Lock()
 	f := rtcSinkMake
@@ -350,6 +376,9 @@ func (p *rtcPeer) ensurePipeline(x *rtcTR) error {
 		return err
 	}
 	x.as = as
+	if pr := p.audioProcessor(); pr != nil {
+		as.Processor = pr
+	}
 	h := as.HandleRTCP
 	x.rtcpH.Store(&h)
 	return nil
@@ -543,6 +572,9 @@ func (p *rtcPeer) onRemoteTrack(tr *webrtc.TrackRemote, rcv *webrtc.RTPReceiver)
 	if err != nil {
 		drain()
 		return
+	}
+	if pr := p.audioProcessor(); pr != nil {
+		ar.SetProcessor(pr)
 	}
 	x.ar = ar
 }

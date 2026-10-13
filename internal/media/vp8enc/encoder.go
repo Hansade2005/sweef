@@ -79,6 +79,9 @@ type Stats struct {
 	EncodeTime                 time.Duration
 	LastQ                      int
 	Speed                      int
+	// Macroblocks coded so far, by kind: intra, inter from the last / golden / altref frame, skipped
+	// (no residual), and inter blocks that needed a new motion vector.
+	MBIntra, MBLast, MBGolden, MBAlt, MBSkip, MBNewMV int
 }
 
 // Encoder encodes a sequence of I420 pictures of one size.
@@ -137,6 +140,10 @@ type Encoder struct {
 	firstBuf      []byte
 	lastPackets   int
 	refreshGolden bool
+	pendIntra     int
+	pendRef       [4]int
+	pendSkip      int
+	pendNewMV     int
 	partStarts    []int
 	lfLevel       []uint8
 	lfInner       []bool
@@ -485,6 +492,11 @@ func (e *Encoder) encodeFrame(key bool) []byte {
 		}
 	}
 	data := e.pack(key, &cnt, nIntra, nSkip, nNoSkip, nRef)
+	e.pendIntra, e.pendRef, e.pendSkip = nIntra, nRef, nSkip
+	e.pendNewMV = 0
+	for _, w := range e.workers {
+		e.pendNewMV += w.newMV
+	}
 
 	// loop filter over the reconstruction
 	if lvl := lfLevel(e.q, key); lvl > 0 {
@@ -553,6 +565,12 @@ func (e *Encoder) commit(key bool) {
 		e.last = cur
 	}
 	e.probs = e.nextProbs
+	e.st.MBIntra += e.pendIntra
+	e.st.MBLast += e.pendRef[refLast]
+	e.st.MBGolden += e.pendRef[refGolden]
+	e.st.MBAlt += e.pendRef[refAlt]
+	e.st.MBSkip += e.pendSkip
+	e.st.MBNewMV += e.pendNewMV
 	e.mvField, e.prevField = e.prevField, e.mvField
 	if key {
 		for i := range e.prevField {

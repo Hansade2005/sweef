@@ -276,6 +276,7 @@ type rtcPeer struct {
 	est     cc.BandwidthEstimator
 	sg      stats.Getter
 	rtx     *rtcmedia.RTXCounter
+	proc    rtcmedia.AudioProcessor
 }
 
 func (p *rtcPeer) emit(typ string, v any) {

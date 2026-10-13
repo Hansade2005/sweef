@@ -210,7 +210,7 @@ func (a *AudioReceiver) insert(p *rtp.Packet, now time.Time) {
 		return
 	}
 	// interarrival jitter on the 48 kHz timestamps
-	tr := now.Sub(a.t0).Seconds() - float64(p.Timestamp-a.tsBase)/opusRate
+	tr := now.Sub(a.t0).Seconds() - float64(int32(p.Timestamp-a.tsBase))/opusRate
 	if a.haveTr {
 		d := math.Abs(tr - a.prevTr)
 		a.jitter += (d - a.jitter) / 16

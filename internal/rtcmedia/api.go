@@ -20,6 +20,7 @@ import (
 	"github.com/pion/interceptor/pkg/gcc"
 	"github.com/pion/interceptor/pkg/nack"
 	"github.com/pion/interceptor/pkg/stats"
+	"github.com/pion/interceptor/pkg/twcc"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
@@ -68,12 +69,14 @@ func Codecs(kind webrtc.RTPCodecType) []webrtc.RTPCodecParameters {
 	switch kind {
 	case webrtc.RTPCodecTypeAudio:
 		return []webrtc.RTPCodecParameters{
-			{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2, SDPFmtpLine: "minptime=10;useinbandfec=1"}, PayloadType: PTOpus},
+			{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2, SDPFmtpLine: "minptime=10;useinbandfec=1",
+				RTCPFeedback: []webrtc.RTCPFeedback{{Type: webrtc.TypeRTCPFBTransportCC}}}, PayloadType: PTOpus},
 			{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: mimeTelephoneEv, ClockRate: 8000}, PayloadType: PTTelEv},
 		}
 	default:
 		return []webrtc.RTPCodecParameters{
-			{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, PayloadType: PTVP8},
+			{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000, RTCPFeedback: []webrtc.RTCPFeedback{
+				{Type: "goog-remb"}, {Type: webrtc.TypeRTCPFBTransportCC}, {Type: "ccm", Parameter: "fir"}, {Type: "nack"}, {Type: "nack", Parameter: "pli"}}}, PayloadType: PTVP8},
 			{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90000, SDPFmtpLine: "apt=96"}, PayloadType: PTRTX},
 		}
 	}
@@ -90,9 +93,6 @@ func NewAPI(se webrtc.SettingEngine, quiet bool) (*API, error) {
 			}
 		}
 	}
-	// feedback: nack + nack pli (Configure below), transport-cc (Configure below), plus remb and fir
-	me.RegisterFeedback(webrtc.RTCPFeedback{Type: "goog-remb"}, webrtc.RTPCodecTypeVideo)
-	me.RegisterFeedback(webrtc.RTCPFeedback{Type: "ccm", Parameter: "fir"}, webrtc.RTPCodecTypeVideo)
 
 	for _, ext := range []struct {
 		uri  string
@@ -145,8 +145,6 @@ func NewAPI(se webrtc.SettingEngine, quiet bool) (*API, error) {
 	if err != nil {
 		return nil, err
 	}
-	me.RegisterFeedback(webrtc.RTCPFeedback{Type: "nack"}, webrtc.RTPCodecTypeVideo)
-	me.RegisterFeedback(webrtc.RTCPFeedback{Type: "nack", Parameter: "pli"}, webrtc.RTPCodecTypeVideo)
 	reg.Add(responder)
 	if err := webrtc.ConfigureRTCPReports(reg); err != nil {
 		return nil, err
@@ -168,9 +166,12 @@ func NewAPI(se webrtc.SettingEngine, quiet bool) (*API, error) {
 		}
 	})
 	reg.Add(sf)
-	if err := webrtc.ConfigureTWCCSender(me, reg); err != nil {
+	// transport-wide feedback for what we receive (the sender side is in the header extension interceptor above)
+	twccGen, err := twcc.NewSenderInterceptor(twcc.WithLoggerFactory(lf))
+	if err != nil {
 		return nil, err
 	}
+	reg.Add(twccGen)
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(se), webrtc.WithMediaEngine(me), webrtc.WithInterceptorRegistry(reg))
 	if api == nil {
 		return nil, errors.New("rtcmedia: no API")

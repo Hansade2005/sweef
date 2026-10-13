@@ -54,6 +54,7 @@ type AudioSender struct {
 	// Processor is the optional echo cancellation / noise suppression hook.
 	Processor AudioProcessor
 
+	encMu   sync.Mutex // the Opus encoder is not safe for concurrent use
 	enc     *gopus.Encoder
 	res     *Resampler
 	resRate int
@@ -127,12 +128,21 @@ func (a *AudioSender) SetBitrate(bps int) {
 	}
 	a.mu.Lock()
 	a.bitrate = bps
-	_ = a.enc.SetBitrate(bps)
 	a.mu.Unlock()
+	a.encMu.Lock()
+	_ = a.enc.SetBitrate(bps)
+	a.encMu.Unlock()
 }
 
 // SetDTX turns discontinuous transmission on or off.
-func (a *AudioSender) SetDTX(on bool) { a.mu.Lock(); a.dtx = on; a.enc.SetDTX(on); a.mu.Unlock() }
+func (a *AudioSender) SetDTX(on bool) {
+	a.mu.Lock()
+	a.dtx = on
+	a.mu.Unlock()
+	a.encMu.Lock()
+	a.enc.SetDTX(on)
+	a.encMu.Unlock()
+}
 
 // Close stops the sender and its source.
 func (a *AudioSender) Close() {
@@ -182,11 +192,14 @@ func (a *AudioSender) HandleRTCP(pkts []rtcp.Packet) {
 				}
 			}
 			pct := int(math.Min(25, frac*100*1.5+3))
-			if pct != a.lossPct {
-				a.lossPct = pct
-				_ = a.enc.SetPacketLoss(pct)
-			}
+			change := pct != a.lossPct
+			a.lossPct = pct
 			a.mu.Unlock()
+			if change {
+				a.encMu.Lock()
+				_ = a.enc.SetPacketLoss(pct)
+				a.encMu.Unlock()
+			}
 		}
 	}
 }
@@ -282,7 +295,9 @@ func (a *AudioSender) tick() {
 		}
 		level = rmsLevel(pcm[:])
 		buf := make([]byte, 400)
+		a.encMu.Lock()
 		n, err := a.enc.EncodeInt16(pcm[:], buf)
+		a.encMu.Unlock()
 		if err != nil {
 			return
 		}

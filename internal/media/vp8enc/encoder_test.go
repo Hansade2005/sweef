@@ -267,7 +267,11 @@ func TestBitrateAndFPS(t *testing.T) {
 		w, h, kbps int
 		kind       seqKind
 	}
-	for _, c := range []tc{{320, 180, 250, seqNatural}, {640, 360, 800, seqNatural}, {1280, 720, 1500, seqNatural}, {640, 360, 300, seqStatic}} {
+	cases := []tc{{320, 180, 250, seqNatural}, {640, 360, 800, seqNatural}, {1280, 720, 1500, seqNatural}, {640, 360, 300, seqStatic}}
+	if testing.Short() {
+		cases = cases[:2]
+	}
+	for _, c := range cases {
 		cfg := Config{Width: c.w, Height: c.h, Bitrate: c.kbps * 1000, FrameRate: 30, Speed: -1}
 		enc, err := New(cfg)
 		if err != nil {
@@ -306,6 +310,39 @@ func TestBitrateAndFPS(t *testing.T) {
 		t.Logf("%dx%d %s target %d kbps: actual %.0f kbps, PSNR-Y %.2f dB, %d frames (%d dropped, %d key), encode %.1f ms/frame (%.0f fps), final speed %d, last q %d",
 			c.w, c.h, c.kind, c.kbps, float64(bytesOut)*8/secs/1000, psnr/float64(cnt), cnt, st.Dropped, st.KeyFrames,
 			float64(encTime.Milliseconds())/float64(cnt), float64(cnt)/encTime.Seconds(), st.Speed, st.LastQ)
+	}
+}
+
+// The tools the encoder claims must actually be used: intra and inter blocks, all three references, new
+// vectors and skipped blocks.
+func TestCodingToolsAreUsed(t *testing.T) {
+	cfg := Config{Width: 320, Height: 180, Bitrate: 250000, FrameRate: 30, Speed: 2}
+	_, _, enc := encodeSeq(t, cfg, seqStatic, 120, false)
+	st := enc.Stats()
+	t.Logf("static scene with a moving object: %+v", st)
+	if st.MBIntra == 0 || st.MBLast == 0 || st.MBSkip == 0 {
+		t.Errorf("intra %d last %d skip %d", st.MBIntra, st.MBLast, st.MBSkip)
+	}
+	if st.MBGolden+st.MBAlt == 0 {
+		t.Errorf("no macroblock ever referenced the golden or altref frame")
+	}
+	_, _, enc = encodeSeq(t, cfg, seqNatural, 60, false)
+	st = enc.Stats()
+	t.Logf("panning texture: %+v", st)
+	if st.MBNewMV == 0 {
+		t.Errorf("no new motion vectors on a panning sequence")
+	}
+}
+
+// Golden refreshes move the old golden frame to the altref slot; with frequent refreshes both references are in
+// use and the stream must still decode to the encoder's reconstruction (checked bit by bit).
+func TestGoldenAndAltRefStayInSync(t *testing.T) {
+	cfg := Config{Width: 192, Height: 112, Bitrate: 200000, FrameRate: 3, Speed: 2} // low nominal rate: golden every 15 frames
+	_, _, enc := encodeSeq(t, cfg, seqStatic, 100, true)
+	st := enc.Stats()
+	t.Logf("golden %d altref %d last %d", st.MBGolden, st.MBAlt, st.MBLast)
+	if st.MBGolden == 0 || st.MBAlt == 0 {
+		t.Errorf("golden %d altref %d macroblocks: one of the references was never used", st.MBGolden, st.MBAlt)
 	}
 }
 
@@ -364,6 +401,9 @@ func TestKeyFrameRequestAndResize(t *testing.T) {
 }
 
 func TestBitrateChange(t *testing.T) {
+	if testing.Short() {
+		t.Skip("takes about 6 s")
+	}
 	enc, _ := New(Config{Width: 640, Height: 360, Bitrate: 1000000, Speed: 1})
 	gen := newSeq(640, 360, seqNatural)
 	measure := func(from, to int) float64 {
