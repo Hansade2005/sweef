@@ -55,7 +55,7 @@ func (t *Tab) docOrigin() string {
 	if bc == nil {
 		return siteOriginOf(t.URL())
 	}
-	if bc.opaque {
+	if bc.opaque || t.fr.opaque.Load() {
 		return ""
 	}
 	u := t.URL()
@@ -239,4 +239,22 @@ func (c *BrowserContext) unpartitionedFor(topSite, embeddedSite string) bool {
 		return true
 	}
 	return pol.Exception != nil && pol.Exception(topSite, embeddedSite)
+}
+
+// webStorageKey is the key of the localStorage bucket of the VM's document: the origin in a first-party context,
+// the (origin, top-level site) key in a third-party one. A document with an opaque origin has no web storage.
+func (j *jsVM) webStorageKey() (string, error) {
+	t := j.tab
+	if t == nil {
+		return "", jsErr("SecurityError", "Access is denied for this document.")
+	}
+	o := t.docOrigin()
+	if o == "" {
+		// about:blank at the top level keeps the bucket it always had; sandboxed and data: documents have none
+		if t.bc == nil && strings.HasPrefix(t.URL(), "about:") {
+			return t.URL(), nil
+		}
+		return "", jsErr("SecurityError", "Failed to read the 'localStorage' property from 'Window': Access is denied for this document.")
+	}
+	return t.storageKeyFor(o), nil
 }

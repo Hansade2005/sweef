@@ -161,6 +161,7 @@ type Tab struct {
 	bc    *browsingCtx // nested browsing context or worker tab: its place in the tree and its partition (partition.go)
 	winID int64        // identity of this tab's window for cross-window references (frames.go)
 	wk    *bgWorker    // set on the hidden tab of a worker (workers.go)
+	fr    frameSet     // child frames of the document and, for a frame, its pump (frames.go)
 
 	asyncImg   atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
 	imgSem     chan struct{}             // images fetched at once
@@ -197,6 +198,7 @@ func newTab(e *Engine, id string) *Tab {
 	if t.vpH == 0 {
 		t.vpH = 720
 	}
+	winReg.Store(t.winID, t)
 	return t
 }
 
@@ -210,6 +212,8 @@ func (t *Tab) Context() *BrowserContext {
 
 func (t *Tab) close() {
 	if t.closed.CompareAndSwap(false, true) {
+		t.closeFrames()
+		winReg.Delete(t.winID)
 		t.swDocumentGone()
 		dropBitmapSources(t.ID)
 		if env := t.ds.env.Load(); env != nil {
@@ -245,6 +249,9 @@ func (t *Tab) Title() string {
 }
 
 func (t *Tab) emit(kind EventKind, data any) {
+	if t.bc != nil {
+		return // frames and workers are not tabs of the engine: their events belong to the page that owns them
+	}
 	t.eng.bus.Publish(Event{Tab: t.ID, Kind: kind, At: time.Now(), Data: data})
 }
 
@@ -296,6 +303,16 @@ func (t *Tab) navigate(rawurl string, headers map[string]string, progressive boo
 		t.emit(EvFailure, map[string]any{"url": rawurl, "error": err.Error()})
 		return err
 	}
+	if t.isFrame() {
+		if blocked, why := t.frameAncestorsBlocked(res.header, res.finalURL); blocked {
+			t.LogConsole("error", fmt.Sprintf("Refused to display '%s' in a frame because it set '%s'.", res.finalURL, why))
+			t.fr.blocked.Store(true)
+			t.fr.opaque.Store(true)
+			t.setDocument("<!doctype html><html><head></head><body></body></html>", "about:blank", false)
+			return nil
+		}
+		t.fr.blocked.Store(false)
+	}
 	t.setDocument(res.body, res.finalURL, progressive)
 	t.mu.Lock()
 	// history bookkeeping (goBack/goForward)
@@ -314,6 +331,7 @@ type fetchResult struct {
 	finalURL string
 	status   int
 	har      fnet.RequestRecord
+	header   http.Header // response headers (frame checks)
 }
 
 func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error) {
@@ -363,7 +381,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 			return nil, err
 		}
 		req.Header.Set("User-Agent", t.UserAgent())
-		t.setBrowserHeaders(req.Header, req.URL, KindDocument, true)
+		t.setDocumentHeaders(req.Header, req.URL)
 		for k, v := range t.ExtraHeaders() {
 			req.Header.Set(k, v)
 		}
@@ -379,7 +397,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 		t.emit(EvRequest, rec)
 		t.touchNet()
-		mreq, mi := withMeter(req, t.Context(), t, KindDocument, pol)
+		mreq, mi := withMeter(req, t.Context(), t, t.documentKind(), pol)
 		if res, err = t.eng.clientFor(t.Context()).Do(mreq); err != nil {
 			return nil, err
 		}
@@ -436,7 +454,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
 	t.emit(EvResponse, rec)
 	status, text := res.StatusCode, string(body)
-	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec}, nil
+	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec, header: res.Header}, nil
 }
 
 func flattenHeaders(h map[string][]string) map[string]string {
@@ -464,6 +482,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	doc.SetMutationListener(func(m fnet.Mutation) {
 		t.stateRing.Push(Event{Tab: t.ID, Kind: EvDomMutated, At: time.Now(), Data: m})
 		t.emit(EvDomMutated, m)
+		t.frameMutation(m)
 	})
 	if w, _, _, _, _ := t.Viewport(); w > 0 {
 		doc.SetLayoutWidth(w)
@@ -473,6 +492,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	ts := time.Now()
 	t.applyStyles(doc)
 	t.tspan("styles.ready", "", ts)
+	t.closeFrames() // the frames of the document that is being replaced
 	t.mu.Lock()
 	t.html = htmlSrc
 	t.dom = doc
@@ -494,7 +514,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	// Pages with no scripts, no inline handlers and no init scripts get no
 	// VM at all: there is nothing to run, and a navigation stays at the cost
 	// of a fetch and a parse. A VM is created on demand by Evaluate.
-	if !t.eng.opts.DisableJS && (len(initScripts) > 0 || doc.NeedsScript()) {
+	if !t.eng.opts.DisableJS && t.scriptsAllowed() && (len(initScripts) > 0 || doc.NeedsScript()) {
 		j := newJSVM(t, doc, finalURL)
 		t.mu.Lock()
 		t.js = j
@@ -505,6 +525,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 			for _, s := range initScripts {
 				_, _ = j.run(s.Source, s.Name)
 			}
+			t.scanFrames() // the document is parsed: its frames start loading while its scripts run
 			pl := newProgLoad(t, j, doc, finalURL, progressive)
 			t.pl.Store(pl)
 			if progressive {
@@ -519,6 +540,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 			return
 		}
 	}
+	t.scanFrames()
 	t.finishLoad(finalURL)
 }
 
@@ -661,6 +683,9 @@ func (t *Tab) ensureJS() (*jsVM, error) {
 	}
 	if t.eng.opts.DisableJS {
 		return nil, fmt.Errorf("javascript is disabled (--no-js)")
+	}
+	if !t.scriptsAllowed() {
+		return nil, fmt.Errorf("scripts are blocked by the frame's sandbox")
 	}
 	if d == nil {
 		return nil, fmt.Errorf("no document loaded")

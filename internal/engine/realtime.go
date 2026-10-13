@@ -127,7 +127,7 @@ func (j *jsVM) wsOpen(rawurl, protocols string) int64 {
 	r := j.rt()
 	id := r.id()
 	t := j.tab
-	origin := t.origin()
+	origin := t.docOrigin()
 	if !strings.HasPrefix(origin, "http") {
 		origin = "http://localhost"
 	}

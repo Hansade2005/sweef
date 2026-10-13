@@ -112,7 +112,7 @@ func proxyFunc(explicit string) func(*http.Request) (*url.URL, error) {
 func countedDial(w *wireCounters) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	d := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		c, err := d.DialContext(ctx, network, addr)
+		c, err := d.DialContext(ctx, network, mapDialAddr(addr))
 		if err != nil {
 			return nil, err
 		}

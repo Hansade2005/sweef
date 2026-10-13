@@ -1912,7 +1912,7 @@
   setTag(MessagePort, 'MessagePort'); global.MessagePort = MessagePort;
   function MessageChannel() { if (!(this instanceof MessageChannel)) throw new TypeError("Constructor MessageChannel requires 'new'"); this.port1 = new MessagePort(); this.port2 = new MessagePort(); this.port1._other = this.port2; this.port2._other = this.port1; }
   setTag(MessageChannel, 'MessageChannel'); global.MessageChannel = MessageChannel;
-  global.postMessage = function postMessage(data) { setTimeoutImpl(function () { dispatch(global, new global.MessageEvent('message', { data: data, origin: originOf(currentURL()), source: global })); }, [], 0, false); };
+  global.postMessage = function postMessage(data) { setTimeoutImpl(function () { dispatch(global, new global.MessageEvent('message', { data: data, origin: docOriginStr(), source: global })); }, [], 0, false); };
 
   // ==== 9. Platform ========================================================
   // ---- window identity
@@ -1923,7 +1923,7 @@
   def(global, 'length', { value: 0, writable: true });
   def(global, 'closed', { value: false, writable: true });
   def(global, 'name', { value: '', writable: true });
-  def(global, 'origin', { get: function () { return originOf(currentURL()); } });
+  def(global, 'origin', { get: function () { return docOriginStr(); } });
   def(global, 'isSecureContext', { get: function () { return /^https:/.test(currentURL()); } });
   def(global, 'crossOriginIsolated', { value: false });
   function Window() { illegal(); } setTag(Window, 'Window'); global.Window = Window;
@@ -1993,11 +1993,13 @@
   var urlOverride = null; // set by history.pushState/replaceState (no reload)
   function currentURL() { if (urlOverride) return urlOverride; var u = ''; try { u = sw.url() || ''; } catch (e) { /* ignore */ } return u || 'about:blank'; }
   function originOf(u) { try { return new global.URL(u).origin; } catch (e) { return 'null'; } }
+  // the origin of this document: the host knows about inherited (about:blank, srcdoc) and opaque (sandboxed, data:) origins
+  function docOriginStr() { try { if (typeof sw.docOrigin === 'function') { var o = sw.docOrigin(); if (typeof o === 'string' && o) return o; } } catch (e) { /* fall through */ } return originOf(currentURL()); }
   function Location() { illegal(); }
   var LOC_PARTS = ['protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash', 'origin'];
   LOC_PARTS.forEach(function (part) {
     def(Location.prototype, part, {
-      get: function () { try { return new global.URL(currentURL())[part]; } catch (e) { return ''; } },
+      get: function () { if (part === 'origin') return docOriginStr(); try { return new global.URL(currentURL())[part]; } catch (e) { return ''; } },
       set: function (v) { if (part === 'origin') return; var u = new global.URL(currentURL()); u[part] = v; if (part === 'hash') { var old = currentURL(); if (u.href === old) return; urlOverride = u.href; histRecord('push', u.href, null); historyState = null; fire(global, 'hashchange', { oldURL: old, newURL: u.href }); fire(global, 'popstate', { state: null }); } else sw.navigate(u.href); },
       enumerable: true
     });
@@ -2126,14 +2128,22 @@
 
   // ---- Storage
   function Storage() { illegal(); }
+  // a document without an origin of its own (sandboxed frame, data: URL) gets a SecurityError from the host
+  function storageHost(fn) {
+    try { return fn(); } catch (e) {
+      var m = e && typeof e.message === 'string' ? /^(SecurityError|QuotaExceededError): ([\s\S]*)$/.exec(e.message) : null;
+      if (m) throw DOMException(m[2], m[1]);
+      throw e;
+    }
+  }
   methods(Storage.prototype, {
-    getItem: function (k) { var v = sw.storageGet(this._kind, toStr(k)); return v === undefined || v === null ? null : String(v); },
-    setItem: function (k, v) { var key = toStr(k), val = toStr(v); var old = this.getItem(key); sw.storageSet(this._kind, key, val); storageEvent(this, key, old, val); },
-    removeItem: function (k) { var key = toStr(k); var old = this.getItem(key); sw.storageRemove(this._kind, key); if (old !== null) storageEvent(this, key, old, null); },
-    clear: function () { sw.storageClear(this._kind); storageEvent(this, null, null, null); },
-    key: function (i) { var keys = sw.storageKeys(this._kind) || []; return i >= 0 && i < keys.length ? keys[i] : null; }
+    getItem: function (k) { var key = toStr(k); var v = storageHost(function () { return sw.storageGet(this._kind, key); }.bind(this)); return v === undefined || v === null ? null : String(v); },
+    setItem: function (k, v) { var key = toStr(k), val = toStr(v); var old = this.getItem(key); var kind = this._kind; storageHost(function () { sw.storageSet(kind, key, val); }); storageEvent(this, key, old, val); },
+    removeItem: function (k) { var key = toStr(k); var old = this.getItem(key); var kind = this._kind; storageHost(function () { sw.storageRemove(kind, key); }); if (old !== null) storageEvent(this, key, old, null); },
+    clear: function () { var kind = this._kind; storageHost(function () { sw.storageClear(kind); }); storageEvent(this, null, null, null); },
+    key: function (i) { var kind = this._kind; var keys = storageHost(function () { return sw.storageKeys(kind); }) || []; return i >= 0 && i < keys.length ? keys[i] : null; }
   });
-  getter(Storage.prototype, 'length', function () { return (sw.storageKeys(this._kind) || []).length; });
+  getter(Storage.prototype, 'length', function () { var kind = this._kind; return (storageHost(function () { return sw.storageKeys(kind); }) || []).length; });
   setTag(Storage, 'Storage'); global.Storage = Storage;
   function storageEvent(area, key, oldValue, newValue) { /* same-document writes do not fire 'storage' in browsers; kept as a hook */ }
   function makeStorage(kind) {
@@ -2670,7 +2680,7 @@
   URL.canParse = function (u, b) { try { parseURL(u, b === undefined ? undefined : String(b)); return true; } catch (e) { return false; } };
   URL.parse = function (u, b) { try { return new URL(u, b); } catch (e) { return null; } };
   var blobURLs = new Map(), blobSeq = 0;
-  URL.createObjectURL = function (blob) { var u = 'blob:' + originOf(currentURL()) + '/' + (++blobSeq) + '-' + cryptoObj.randomUUID(); blobURLs.set(u, blob); return u; };
+  URL.createObjectURL = function (blob) { var u = 'blob:' + docOriginStr() + '/' + (++blobSeq) + '-' + cryptoObj.randomUUID(); blobURLs.set(u, blob); return u; };
   URL.revokeObjectURL = function (u) { blobURLs.delete(String(u)); };
   setTag(URL, 'URL'); global.URL = URL; global.webkitURL = URL;
 

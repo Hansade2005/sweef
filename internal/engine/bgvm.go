@@ -38,6 +38,16 @@ type bgRuntime struct {
 	started  atomic.Bool
 	stopped  atomic.Bool
 	stopOnce sync.Once
+
+	cur func() *jsVM // (frames) the VM of the tab's current document; nil = j
+}
+
+// vm is the VM to pump now.
+func (rt *bgRuntime) vm() *jsVM {
+	if rt.cur != nil {
+		return rt.cur()
+	}
+	return rt.j
 }
 
 var bgSeq atomic.Int64
@@ -130,7 +140,11 @@ func (rt *bgRuntime) loop() {
 			}
 		}
 		now := time.Now()
-		_, finished := rt.j.pumpUntil(now.Add(time.Hour), now.Add(15*time.Millisecond))
+		j := rt.vm()
+		finished := true
+		if j != nil {
+			_, finished = j.pumpUntil(now.Add(time.Hour), now.Add(15*time.Millisecond))
+		}
 		rt.taskMu.Lock()
 		more := len(rt.tasks) > 0
 		rt.taskMu.Unlock()
@@ -139,7 +153,7 @@ func (rt *bgRuntime) loop() {
 		}
 		var timer <-chan time.Time
 		if !finished {
-			d := time.Duration(rt.j.wakeMs * float64(time.Millisecond))
+			d := time.Duration(j.wakeMs * float64(time.Millisecond))
 			if d <= 0 {
 				continue
 			}

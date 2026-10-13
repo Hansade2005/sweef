@@ -52,6 +52,7 @@ type Options struct {
 	CacheDir         string // on-disk bytecode cache ("" = $SWEEF_CACHE_DIR or user cache dir; "off" disables)
 	StorageDir       string // profile storage root of the default context: IndexedDB, Cache Storage, service workers ("" = memory only; other contexts: ContextOptions.StorageDir)
 	StorageQuotaMiB  int    // per-origin quota of those (0 = 1024)
+	DisableFrames    bool   // do not load <iframe> documents (frames.go): pages see no content window, as before frames existed
 }
 
 func DefaultOptions() Options {

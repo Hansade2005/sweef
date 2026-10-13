@@ -244,6 +244,9 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 		t.LogConsole("error", "sweef: __swSetDocument failed: "+err.Error())
 	}
 	j.installBindings()
+	if t.isFrame() {
+		_, _ = j.call("__swFrameInit", t.windowName())
+	}
 	return j
 }
 
@@ -1039,6 +1042,7 @@ func (j *jsVM) registerHost() error {
 				return nil, err
 			}
 			j.noteInserted(d, c)
+			j.tab.frameInserted(d, c)
 			return c, nil
 		})},
 		{"insertBefore", doc(func(d *fnet.Doc, a []any) (any, error) {
@@ -1047,10 +1051,13 @@ func (j *jsVM) registerHost() error {
 				return nil, err
 			}
 			j.noteInserted(d, c)
+			j.tab.frameInserted(d, c)
 			return c, nil
 		})},
 		{"removeChild", doc(func(d *fnet.Doc, a []any) (any, error) {
-			return argI(a, 1), d.RemoveChild(argI(a, 0), argI(a, 1))
+			err := d.RemoveChild(argI(a, 0), argI(a, 1))
+			go j.tab.pruneFrames()
+			return argI(a, 1), err
 		})},
 		{"cloneNode", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CloneNode(argI(a, 0), argB(a, 1)), nil })},
 		{"attached", doc(func(d *fnet.Doc, a []any) (any, error) { return d.IsConnected(argI(a, 0)), nil })},
@@ -1064,10 +1071,23 @@ func (j *jsVM) registerHost() error {
 			s, err := d.InnerHTML(argI(a, 0))
 			return s, err
 		})},
-		{"setInnerHTML", doc(func(d *fnet.Doc, a []any) (any, error) { return nil, d.SetInnerHTMLCtx(argI(a, 0), argS(a, 1)) })},
+		{"setInnerHTML", doc(func(d *fnet.Doc, a []any) (any, error) {
+			err := d.SetInnerHTMLCtx(argI(a, 0), argS(a, 1))
+			if err == nil {
+				j.tab.frameInserted(d, argI(a, 0))
+			}
+			return nil, err
+		})},
 		{"outerHTML", doc(func(d *fnet.Doc, a []any) (any, error) { return d.SerializeNode(argI(a, 0)), nil })},
 		{"insertAdjacentHTML", doc(func(d *fnet.Doc, a []any) (any, error) {
-			return nil, d.InsertAdjacentHTML(argI(a, 0), argS(a, 1), argS(a, 2))
+			err := d.InsertAdjacentHTML(argI(a, 0), argS(a, 1), argS(a, 2))
+			if err == nil {
+				j.tab.frameInserted(d, argI(a, 0))
+				if p := d.ParentID(argI(a, 0)); p != 0 {
+					j.tab.frameInserted(d, p)
+				}
+			}
+			return nil, err
 		})},
 		// attributes
 		{"getAttr", doc(func(d *fnet.Doc, a []any) (any, error) {
@@ -1193,51 +1213,71 @@ func (j *jsVM) registerHost() error {
 		}},
 		{"storageGet", func(a []any) (any, error) {
 			kind, key := argS(a, 0), argS(a, 1)
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if kind == "session" {
 				if v, ok := j.session[key]; ok {
 					return v, nil
 				}
 				return nil, nil
 			}
-			if v, ok := j.tab.Context().GetStorageValue(j.tab.origin(), key); ok {
+			if v, ok := j.tab.Context().GetStorageValue(lk, key); ok {
 				return v, nil
 			}
 			return nil, nil
 		}},
 		{"storageSet", func(a []any) (any, error) {
 			kind, key, val := argS(a, 0), argS(a, 1), argS(a, 2)
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if kind == "session" {
 				j.session[key] = val
 			} else {
-				j.tab.Context().SetStorageValue(j.tab.origin(), key, val)
+				j.tab.Context().SetStorageValue(lk, key, val)
 			}
 			return nil, nil
 		}},
 		{"storageRemove", func(a []any) (any, error) {
 			kind, key := argS(a, 0), argS(a, 1)
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if kind == "session" {
 				delete(j.session, key)
 			} else {
-				j.tab.Context().RemoveStorageValue(j.tab.origin(), key)
+				j.tab.Context().RemoveStorageValue(lk, key)
 			}
 			return nil, nil
 		}},
 		{"storageClear", func(a []any) (any, error) {
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if argS(a, 0) == "session" {
 				j.session = map[string]string{}
 			} else {
-				j.tab.Context().ClearStorage(j.tab.origin())
+				j.tab.Context().ClearStorage(lk)
 			}
 			return nil, nil
 		}},
 		{"storageKeys", func(a []any) (any, error) {
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			var keys []string
 			if argS(a, 0) == "session" {
 				for k := range j.session {
 					keys = append(keys, k)
 				}
 			} else {
-				keys = j.tab.Context().StorageKeys(j.tab.origin())
+				keys = j.tab.Context().StorageKeys(lk)
 			}
 			out := make([]any, len(keys))
 			for i, k := range keys {
@@ -1270,6 +1310,18 @@ func (j *jsVM) registerHost() error {
 			return nil, nil
 		}},
 		{"mutation", func(a []any) (any, error) { return nil, nil }},
+		{"docOrigin", func(a []any) (any, error) {
+			if j.tab == nil {
+				return "", nil
+			}
+			if o := j.tab.docOrigin(); o != "" {
+				return o, nil
+			}
+			if j.tab.bc != nil { // opaque: a sandboxed frame, a data: document
+				return "null", nil
+			}
+			return "", nil
+		}},
 		{"wsOpen", func(a []any) (any, error) { return j.wsOpen(argS(a, 0), argS(a, 1)), nil }},
 		{"wsSend", func(a []any) (any, error) { return nil, j.wsSend(argI(a, 0), argS(a, 1), argB(a, 2)) }},
 		{"wsClose", func(a []any) (any, error) { j.wsClose(argI(a, 0)); return nil, nil }},
