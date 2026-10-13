@@ -59,6 +59,8 @@
   // The streams stubs of the base prelude are replaced by the real thing.
   names('streams', 'ReadableStream ReadableStreamDefaultReader ReadableStreamBYOBReader ReadableStreamDefaultController ReadableByteStreamController ReadableStreamBYOBRequest WritableStream WritableStreamDefaultWriter WritableStreamDefaultController TransformStream TransformStreamDefaultController CountQueuingStrategy ByteLengthQueuingStrategy');
   names('codecs', 'CompressionStream DecompressionStream TextEncoderStream TextDecoderStream');
+  names('xpath', 'XPathEvaluator XPathExpression XPathResult XPathNSResolver');
+  names('xpath', 'evaluate createExpression createNSResolver', g.Document.prototype, true);
   Object.defineProperty(g, '__swPlatformLoad', { value: load });
   // V8 stack-trace API that libraries probe for.
   if (!Error.captureStackTrace) {
