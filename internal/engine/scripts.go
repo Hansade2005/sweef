@@ -76,15 +76,21 @@ func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {
 		src = body
 	}
 	_, _ = j.call("__swSetCurrentScript", s.ID)
+	j.mu.Lock()
+	j.curBase = t.URL()
+	if s.Src != "" {
+		j.curBase = name
+	}
+	j.mu.Unlock()
 	te := time.Now()
-	bc := "module"
 	if s.Module {
+		j.prefetchModuleDeps(name, src) // its static imports download in parallel, not one by one from the loader
 		_ = j.runModule(src, name)
 		j.jobs()
 	} else {
 		_, _ = j.runCached(src, name)
-		bc = j.bcState
 	}
+	bc := j.bcState
 	t.tspan("script.exec", name+" "+itoa(len(src))+"B bytecode:"+bc, te)
 	_, _ = j.call("__swSetCurrentScript", 0)
 	if s.Src != "" {

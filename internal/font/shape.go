@@ -139,13 +139,13 @@ func (f *Face) kernGID(a, b int) float64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if ot := f.loadOT(); ot.kern != nil {
-		return float64(ot.kern.pairAdjust(a, b))
+		return float64(ot.kern.pairAdjust(a, b)) * f.sa()
 	}
 	k, err := f.font.Kern(&f.buf, glyphIndex(a), glyphIndex(b), fixed.Int26_6(f.upm*64), xfont.HintingNone)
 	if err != nil {
 		return 0
 	}
-	return float64(k) / 64
+	return float64(k) / 64 * f.sa()
 }
 
 // ShapeRun shapes rs (one script, one face) at size px the way HarfBuzz does

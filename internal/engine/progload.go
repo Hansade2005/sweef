@@ -15,6 +15,7 @@ package engine
 // the same; only who waits differs.
 
 import (
+	"strings"
 	"time"
 
 	fnet "github.com/sweefbrowser/sweef/internal/net"
@@ -64,6 +65,9 @@ func newProgLoad(t *Tab, j *jsVM, doc *fnet.Doc, url string, progressive bool) *
 	scripts := doc.ScriptElements()
 	t.tmark("scripts.start", itoa(len(scripts))+" scripts")
 	for _, s := range scripts {
+		if strings.EqualFold(strings.TrimSpace(s.Type), "importmap") {
+			j.addImportMap(s.Source, url)
+		}
 		if !isJavaScriptType(s.Type) || s.NoModule {
 			j.executed[s.ID] = true
 			continue

@@ -46,7 +46,7 @@ type VarSpec struct {
 }
 
 func fixed1616(v float64) []byte { return be32(uint32(int32(math.Round(v * 65536)))) }
-func f2d14(v float64) []byte    { return be16(int(int16(math.Round(v * 16384))) & 0xffff) }
+func f2d14(v float64) []byte     { return be16(int(int16(math.Round(v*16384))) & 0xffff) }
 
 // AddVariations turns the font into a variable font.
 func (f *Font) AddVariations(v VarSpec) {
@@ -340,4 +340,3 @@ func VarBoxes(family string, withHVAR bool) *Font {
 	f.AddVariations(vs)
 	return f
 }
-

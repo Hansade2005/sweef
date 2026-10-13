@@ -42,7 +42,8 @@
       var id = global.__swIdOf(this);
       var attached = false;
       try { attached = !!sw.attached(id); } catch (e) { /* ignore */ }
-      if (attached || String(v) === '') { origSrc.set.call(this, v); return; }
+      // data: URLs involve no request: they keep the base behaviour (a load event, no natural size)
+      if (attached || String(v) === '' || /^data:/i.test(String(v))) { origSrc.set.call(this, v); return; }
       this.setAttribute('src', String(v));
       start(this, v);
     }

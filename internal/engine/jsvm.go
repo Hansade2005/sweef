@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -143,6 +144,11 @@ type jsVM struct {
 	wakeMs    float64     // set by pumpUntil when a slice ends with a timer pending: ms until it is due
 	bcState   string      // bytecode cache outcome of the last runCached (hit, miss, small), for the load timeline
 	scriptCap time.Time   // pumpUntil stops draining page-inserted scripts at this instant (zero = drain them all)
+	modMu     sync.Mutex
+	modSeen   map[string]bool   // modules whose download prefetchModuleDeps started
+	syncNet   bool              // a module script is being evaluated: requests are made in place (asynchttp.go)
+	curBase   string            // URL of the script being run: relative imports resolve against it
+	importMap map[string]string // <script type=importmap> entries
 	mu        sync.Mutex
 	vm        *quickjs.VM
 	tab       *Tab
@@ -403,9 +409,45 @@ func (j *jsVM) runModule(src, name string) error {
 	if j.closed {
 		return ErrClosed
 	}
-	if _, err := j.vm.Eval(src, quickjs.EvalModule); err != nil {
-		j.tab.LogConsole("error", jsErrorText(err, name))
-		return err
+	j.syncNet = true // a top-level await inside the module is awaited without an event loop: requests complete in place
+	defer func() { j.syncNet = false }()
+	if len(src) < 256 {
+		j.bcState = "small"
+		if _, err := j.vm.Eval(src, quickjs.EvalModule); err != nil {
+			j.tab.LogConsole("error", jsErrorText(err, name))
+			return err
+		}
+		return nil
+	}
+	// like classic scripts, modules replay compiled bytecode on a repeat visit (GitHub's code view is 780 KB of
+	// module source: 3 s of compiling a second time otherwise)
+	cache := j.tab.eng.code
+	key := codeKey("\x00module\x00" + src)
+	bc := cache.get(key)
+	fromCache := bc != nil
+	j.bcState = "miss"
+	if fromCache {
+		j.bcState = "hit"
+	}
+	if bc == nil {
+		var err error
+		if bc, err = j.vm.Compile(src, quickjs.EvalModule); err != nil {
+			j.tab.LogConsole("error", jsErrorText(err, name))
+			return err
+		}
+		cache.put(key, bc)
+	}
+	_, err := j.vm.EvalBytecode(bc)
+	if err != nil {
+		var qe *quickjs.Error
+		if fromCache && !errors.As(err, &qe) {
+			cache.forget(key) // unreadable cache entry: run from source
+			_, err = j.vm.Eval(src, quickjs.EvalModule)
+		}
+		if err != nil {
+			j.tab.LogConsole("error", jsErrorText(err, name))
+			return err
+		}
 	}
 	return nil
 }
@@ -512,6 +554,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		return false, true
 	}
 	j.wakeMs = 0
+	start := time.Now()
 	for {
 		j.drainScripts()
 		j.jobs()
@@ -549,7 +592,8 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		}
 		j.mu.Unlock()
 		sliceOver := !soft.IsZero() && !time.Now().Before(soft)
-		if more || ((delivered || j.hasLiveWork()) && time.Now().Before(deadline)) {
+		httpWait := soft.IsZero() && j.httpInFlight() && time.Now().Before(start.Add(httpGrace))
+		if more || ((delivered || j.hasLiveWork()) && time.Now().Before(deadline)) || httpWait {
 			if sliceOver {
 				return false, false
 			}
@@ -814,6 +858,7 @@ func (j *jsVM) installModuleLoader(docURL string) {
 		if status >= 400 {
 			return "", fmt.Errorf("module %s: HTTP %d", name, status)
 		}
+		j.prefetchModuleDeps(name, body)
 		return body, nil
 	}, func(_ *quickjs.VM, base, name string) (string, error) {
 		if strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://") {
@@ -821,16 +866,62 @@ func (j *jsVM) installModuleLoader(docURL string) {
 		}
 		b := base
 		if !strings.HasPrefix(b, "http://") && !strings.HasPrefix(b, "https://") {
-			b = j.tab.URL()
-			if b == "about:blank" {
-				b = docURL
+			// the importing script has no module name of its own (QuickJS names every evaluated source "<eval>"):
+			// relative specifiers resolve against the script being run, as the browser does, else the document
+			b = j.curBase
+			if !strings.HasPrefix(b, "http://") && !strings.HasPrefix(b, "https://") {
+				b = j.tab.URL()
+				if b == "about:blank" {
+					b = docURL
+				}
 			}
 		}
 		if strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../") || strings.HasPrefix(name, "/") {
 			return resolveURL(b, name)
 		}
-		return "", fmt.Errorf("bare module specifier %q is not supported (no import map)", name)
+		if u, ok := j.mapImport(name); ok {
+			return u, nil
+		}
+		return "", fmt.Errorf("bare module specifier %q is not supported (no import map entry)", name)
 	})
+}
+
+// addImportMap reads a <script type="importmap"> body: its "imports" table maps bare specifiers (and
+// specifier prefixes ending in "/") to URLs, resolved against the document. Scopes are not supported.
+func (j *jsVM) addImportMap(src, docURL string) {
+	var m struct {
+		Imports map[string]string `json:"imports"`
+	}
+	if json.Unmarshal([]byte(src), &m) != nil {
+		return
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.importMap == nil {
+		j.importMap = map[string]string{}
+	}
+	for k, v := range m.Imports {
+		if abs, err := resolveURL(docURL, v); err == nil {
+			j.importMap[k] = abs
+		}
+	}
+}
+
+// mapImport resolves a bare specifier through the import map: an exact entry, else the longest prefix entry.
+func (j *jsVM) mapImport(spec string) (string, bool) {
+	if u, ok := j.importMap[spec]; ok {
+		return u, true
+	}
+	best := ""
+	for k := range j.importMap {
+		if strings.HasSuffix(k, "/") && strings.HasPrefix(spec, k) && len(k) > len(best) {
+			best = k
+		}
+	}
+	if best != "" {
+		return j.importMap[best] + spec[len(best):], true
+	}
+	return "", false
 }
 
 // ---- host object -----------------------------------------------------------------
@@ -1269,8 +1360,32 @@ func (j *jsVM) noteInserted(d *fnet.Doc, id int64) {
 	for _, s := range scripts {
 		if !j.executed[s] {
 			j.scriptQueue = append(j.scriptQueue, s)
+			j.prefetchInserted(d, s)
 		}
 	}
+}
+
+// prefetchInserted starts downloading a script that page code just inserted, so the downloads of a burst of
+// them (webpack chunks, tag managers) overlap each other and the execution of the ones before them; the loader
+// joins the request in flight when its turn comes. Under a script budget the loader reads scripts in order.
+func (j *jsVM) prefetchInserted(d *fnet.Doc, id int64) {
+	t := j.tab
+	if t == nil || t.policy().ScriptMaxBytes > 0 {
+		return
+	}
+	el := d.ScriptElement(id)
+	if el == nil || el.Src == "" || !isJavaScriptType(el.Type) || el.NoModule {
+		return
+	}
+	abs, err := resolveURL(t.URL(), el.Src)
+	if err != nil || !(strings.HasPrefix(abs, "http://") || strings.HasPrefix(abs, "https://")) {
+		return
+	}
+	go func() {
+		t.preloadSem <- struct{}{}
+		defer func() { <-t.preloadSem }()
+		_, _, _ = t.fetchRes(abs, fetchOpts{kind: KindScript, prefetch: true})
+	}()
 }
 
 func (j *jsVM) queueFormSubmit(formID int64) {
@@ -1309,4 +1424,67 @@ func (t *Tab) setURLOnly(raw string) {
 	t.history = append(t.history, u)
 	t.hIdx = len(t.history) - 1
 	t.mu.Unlock()
+}
+
+// httpInFlight reports page requests (fetch, XHR) that have not been answered yet.
+func (j *jsVM) httpInFlight() bool {
+	return j.realtime != nil && j.realtime.httpPending.Load() > 0
+}
+
+// staticImportRE finds the specifiers of static imports and re-exports (not import(...) calls: those may never run).
+var staticImportRE = regexp.MustCompile(`(?:\bimport|\bexport)\s*(?:[^'"();=]*?\bfrom\s*)?['"]([^'"\n]+)['"]`)
+
+// maxPrefetchedModules bounds the speculative reads of one document's module graph.
+const maxPrefetchedModules = 400
+
+// prefetchModuleDeps starts downloading the static imports of a module whose source was just read, and, as they
+// arrive, theirs: QuickJS asks for the modules of a graph one at a time from inside the evaluation, which would
+// make a page with a hundred small modules pay a hundred round trips in a row. The loader then finds each one
+// in flight or already read.
+func (j *jsVM) prefetchModuleDeps(base, src string) {
+	t := j.tab
+	if t == nil || t.policy().ScriptMaxBytes > 0 {
+		return
+	}
+	for _, m := range staticImportRE.FindAllStringSubmatch(src, -1) {
+		spec := m[1]
+		var abs string
+		switch {
+		case strings.HasPrefix(spec, "http://") || strings.HasPrefix(spec, "https://"):
+			abs = spec
+		case strings.HasPrefix(spec, "./") || strings.HasPrefix(spec, "../") || strings.HasPrefix(spec, "/"):
+			u, err := resolveURL(base, spec)
+			if err != nil {
+				continue
+			}
+			abs = u
+		default:
+			u, ok := j.mapImport(spec)
+			if !ok {
+				continue
+			}
+			abs = u
+		}
+		if !(strings.HasPrefix(abs, "http://") || strings.HasPrefix(abs, "https://")) {
+			continue
+		}
+		j.modMu.Lock() // not j.mu: the loader runs inside an evaluation that holds it
+		if j.modSeen == nil {
+			j.modSeen = map[string]bool{}
+		}
+		dup := j.modSeen[abs] || len(j.modSeen) >= maxPrefetchedModules
+		j.modSeen[abs] = true
+		j.modMu.Unlock()
+		if dup {
+			continue
+		}
+		go func(abs string) {
+			t.preloadSem <- struct{}{}
+			body, status, err := t.fetchRes(abs, fetchOpts{kind: KindScript, prefetch: true})
+			<-t.preloadSem
+			if err == nil && status < 400 {
+				j.prefetchModuleDeps(abs, body)
+			}
+		}(abs)
+	}
 }

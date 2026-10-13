@@ -199,33 +199,34 @@ func (e *etab) requeue(f func()) {
 
 // driveLoad steps e's pending progressive load until it is done. onLoad runs once, when the page's load
 // event has fired (or the load ended): the spinner stops and the visit is recorded then, not at the end of
-// the settle budget. Worker only; seq is the navigation this belongs to.
+// the settle budget. Worker only; seq is the navigation this belongs to. One navigation drives at a time: a
+// newer one takes over (the older chain notices at its next step and ends without touching the tab).
 func (e *etab) driveLoad(seq int64, onLoad func()) {
-	if !e.driving.CompareAndSwap(false, true) {
-		return
+	if e.driveSeq.Load() == seq {
+		return // already driven
 	}
+	e.driveSeq.Store(seq)
 	loaded := false
 	last := time.Now()
 	gen := e.t.Generation()
 	var step func()
 	finish := func() {
-		e.driving.Store(false)
 		if !loaded && onLoad != nil {
 			onLoad()
 		}
 		if e.navSeq.Load() == seq {
 			e.paint(false)
 		}
+		e.driveSeq.CompareAndSwap(seq, 0)
 		e.armPump()
 	}
 	step = func() {
-		if e.closed.Load() || e.a.closing.Load() {
-			e.driving.Store(false)
+		if e.driveSeq.Load() != seq || e.navSeq.Load() != seq {
+			e.driveSeq.CompareAndSwap(seq, 0) // superseded (a newer load drives, or the stop button was pressed)
 			return
 		}
-		if e.navSeq.Load() != seq {
-			e.t.StopLoading()
-			e.driving.Store(false)
+		if e.closed.Load() || e.a.closing.Load() {
+			e.driveSeq.CompareAndSwap(seq, 0)
 			return
 		}
 		more, wait := e.t.LoadStep(loadSlice)
@@ -520,6 +521,7 @@ func (a *App) stopLoading(tabID string) {
 	// the UI stops and a late response is dropped.
 	e.navSeq.Add(1)
 	e.loadMode.Store(modeNone)
+	e.w.do(e.t.StopLoading) // what has run stays; the scripts that have not run yet never do
 	a.model.Update(tabID, func(t *state.Tab) { t.Loading, t.Progress = false, 0 })
 	a.markState()
 }

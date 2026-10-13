@@ -36,6 +36,7 @@ import (
 
 	"github.com/sweefbrowser/sweef/internal/font"
 	fnet "github.com/sweefbrowser/sweef/internal/net"
+	"github.com/sweefbrowser/sweef/internal/raster"
 	"github.com/sweefbrowser/sweef/internal/render"
 	"github.com/sweefbrowser/sweef/internal/style"
 )
@@ -57,23 +58,29 @@ type webFonts struct {
 	t   *Tab
 	doc *fnet.Doc
 
-	mu     sync.Mutex
-	set    *font.WebSet
-	parsed map[string][]font.FaceDesc // sheet text + base -> faces (env independent part parsed once)
-	closed bool
+	mu      sync.Mutex
+	set     *font.WebSet
+	parsed  map[string][]font.FaceDesc // sheet text + base -> faces (env independent part parsed once)
+	closed  bool
+	syncSig string // last syncNow input (see there)
 
-	sem     chan struct{}
-	spent   atomic.Int64 // transfer bytes of fonts fetched for this page
-	started atomic.Int64 // faces whose load began
-	wake    chan struct{}
-	gaveUp  atomic.Bool // the headless wait ran out of budget: do not wait again for this document
-	timer   atomic.Bool // a relayout is scheduled
+	sem      chan struct{}
+	spent    atomic.Int64 // transfer bytes of fonts fetched for this page
+	started  atomic.Int64 // faces whose load began
+	wake     chan struct{}
+	gaveUp   atomic.Bool // the headless wait ran out of budget: do not wait again for this document
+	deferred atomic.Bool // a load was refused because the tab is in the background
+	timer    atomic.Bool // a relayout is scheduled
 
-	flights map[string]*fontFlight // raw font files being fetched, by URL
+	flights  map[string]*fontFlight // raw font files being fetched, by URL
+	budgetMu sync.Mutex             // serialises budgeted fetches
+	qmu      sync.Mutex             // the in-order queue used with a page budget
+	queue    []func()
+	qrun     bool
 
-	js     map[int]*font.WebFace // FontFace objects created by script
+	js     map[int]*jsFace // faces page script knows (jsfonts.go)
+	ids    map[*font.WebFace]int
 	jsNext int
-	status string // FontFaceSet.status: "loaded" | "loading"
 }
 
 type fontFlight struct {
@@ -85,7 +92,7 @@ type fontFlight struct {
 
 func newWebFonts(t *Tab, doc *fnet.Doc) *webFonts {
 	return &webFonts{t: t, doc: doc, parsed: map[string][]font.FaceDesc{}, sem: make(chan struct{}, fontConcurrency),
-		wake: make(chan struct{}, 1), flights: map[string]*fontFlight{}, js: map[int]*font.WebFace{}}
+		wake: make(chan struct{}, 1), flights: map[string]*fontFlight{}, js: map[int]*jsFace{}}
 }
 
 // webSet is the document's set, nil while the document has declared no web font.
@@ -118,6 +125,7 @@ func (w *webFonts) close() {
 	w.mu.Lock()
 	w.closed = true
 	s := w.set
+	w.flights = map[string]*fontFlight{} // the raw files are not needed any more
 	w.mu.Unlock()
 	if s != nil {
 		s.Close()
@@ -269,15 +277,49 @@ func (w *webFonts) load(f *font.WebFace) {
 		f.SetFailed(errors.New("too many web fonts on this page"))
 		return
 	}
-	go func() {
+	job := func() {
 		defer func() {
 			if r := recover(); r != nil {
 				f.SetFailed(fmt.Errorf("font loader: %v", r))
 			}
 		}()
+		w.run(f)
+	}
+	if w.t.policy().FontTotalBytes > 0 {
+		// a page budget is spent in the order the text asked for the fonts: one at a time
+		w.enqueue(job)
+		return
+	}
+	go func() {
 		w.sem <- struct{}{}
 		defer func() { <-w.sem }()
-		w.run(f)
+		job()
+	}()
+}
+
+// enqueue runs jobs one after the other, in order, on a worker goroutine.
+func (w *webFonts) enqueue(job func()) {
+	w.qmu.Lock()
+	w.queue = append(w.queue, job)
+	if w.qrun {
+		w.qmu.Unlock()
+		return
+	}
+	w.qrun = true
+	w.qmu.Unlock()
+	go func() {
+		for {
+			w.qmu.Lock()
+			if len(w.queue) == 0 {
+				w.qrun = false
+				w.qmu.Unlock()
+				return
+			}
+			j := w.queue[0]
+			w.queue = w.queue[1:]
+			w.qmu.Unlock()
+			j()
+		}
 	}()
 }
 
@@ -298,7 +340,17 @@ func (w *webFonts) run(f *font.WebFace) {
 	pol := t.policy()
 	icon := looksLikeIconFace(d, f.Trigger)
 	var lastErr error
-	for _, src := range w.candidates(d, pol) {
+	cands := w.candidates(d, pol, icon)
+	if len(cands) == 0 {
+		for _, s := range d.Src {
+			if s.URL != "" && !strings.HasPrefix(s.URL, "data:") && pol.FontWOFFOnly {
+				k := w.knownSizeOf(s.URL)
+				t.noteSkipped(KindFont, s.URL, k, k, "font-format", 0)
+				break
+			}
+		}
+	}
+	for _, src := range cands {
 		sfnt, err := w.fetchSource(f, src, pol, icon)
 		if err == nil {
 			if err = f.SetData(sfnt); err == nil {
@@ -307,6 +359,12 @@ func (w *webFonts) run(f *font.WebFace) {
 			t.LogConsole("warning", "Failed to decode downloaded font: "+srcLabel(src)+" ("+err.Error()+")")
 		}
 		lastErr = err
+		if errors.Is(err, errBackground) {
+			// a background tab makes no page requests: ask again when it comes back
+			f.Retry()
+			w.deferred.Store(true)
+			return
+		}
 		if errors.Is(err, errFontSkipped) {
 			break // the policy applies to every source of the face
 		}
@@ -391,8 +449,8 @@ func formatRank(f string) int {
 // TrueType/OpenType; the file the CSS lists first among equals), then the
 // remaining local() entries. Formats the engine cannot read, sources with
 // unsupported tech() and, under the Data Saver's WOFF-only rule, plain
-// TrueType/OpenType files are left out.
-func (w *webFonts) candidates(d font.FaceDesc, pol DataPolicy) []font.Source {
+// TrueType/OpenType files (icon fonts excepted) are left out.
+func (w *webFonts) candidates(d font.FaceDesc, pol DataPolicy, icon bool) []font.Source {
 	var head, urls, tail []font.Source
 	seenURL := false
 	for _, s := range d.Src {
@@ -420,7 +478,7 @@ func (w *webFonts) candidates(d font.FaceDesc, pol DataPolicy) []font.Source {
 		default:
 			continue
 		}
-		if pol.FontWOFFOnly && (fm == "truetype" || fm == "opentype") {
+		if pol.FontWOFFOnly && !icon && (fm == "truetype" || fm == "opentype") {
 			continue
 		}
 		urls = append(urls, s)
@@ -460,26 +518,33 @@ func isPrivateUse(r rune) bool {
 	return r >= 0xe000 && r <= 0xf8ff || r >= 0xf0000 && r <= 0x10fffd
 }
 
+// Names of icon fonts, from a survey of the usual libraries (Material Icons and
+// Symbols, Font Awesome, Glyphicons, Ionicons, Bootstrap Icons, Remix, Boxicons,
+// Themify, Dashicons, Octicons, Codicons, Feather, Lucide, Tabler, Phosphor,
+// IcoMoon/Fontello exports, Linearicons, Typicons, Entypo, Elusive, Genericons...).
+// A family matches when it contains one of the words, or is (starts with) one of
+// the short tokens.
 var iconFamilyWords = []string{
 	"icon", "glyph", "symbol", "awesome", "fontello", "icomoon", "dashicons", "codicon", "octicon", "feather",
-	"entypo", "typicons", "linearicons", "themify", "boxicons", "remixicon", "ionicons", "foundation-icons",
-	"elusive", "genericons", "lucide", "tabler", "simple-line", "pictogram", "pe-icon", "mdi", "devicon",
-	"zocial", "socicon", "fa-", "fa ", "fas", "far", "fab", "bootstrap-icons", "heroicons", "phosphor",
+	"entypo", "typicons", "themify", "boxicons", "remixicon", "ionicons", "elusive", "genericons", "lucide", "tabler",
+	"simple-line", "pictogram", "devicon", "zocial", "socicon", "heroicons", "phosphor",
 }
+
+var iconFamilyExact = map[string]bool{"fa": true, "fas": true, "far": true, "fab": true, "fal": true, "fad": true, "mdi": true}
+
+var iconFamilyPrefix = []string{"fa-", "fa ", "mdi-", "mdi ", "pe-", "wi-", "ti-"}
 
 func isIconFamilyName(name string) bool {
 	n := strings.ToLower(strings.TrimSpace(name))
-	if n == "fa" || n == "mdi" {
+	if iconFamilyExact[n] {
 		return true
 	}
-	for _, w := range iconFamilyWords {
-		if len(w) <= 3 {
-			// short tokens only as a prefix ("fa-solid", "fas") or whole word
-			if n == w || strings.HasPrefix(n, w+"-") || strings.HasPrefix(n, w+" ") {
-				return true
-			}
-			continue
+	for _, p := range iconFamilyPrefix {
+		if strings.HasPrefix(n, p) {
+			return true
 		}
+	}
+	for _, w := range iconFamilyWords {
 		if strings.Contains(n, w) {
 			return true
 		}
@@ -549,31 +614,6 @@ func (w *webFonts) fetchRaw(abs string, pol DataPolicy, icon bool) ([]byte, erro
 		t.noteSkipped(KindFont, abs, known, known, "font", 0)
 		return nil, errFontSkipped
 	}
-	maxBody := int64(fontMaxBytes)
-	if pol.FontMaxBytes > 0 {
-		if known > int64(pol.FontMaxBytes) {
-			t.noteSkipped(KindFont, abs, known, known, "font-size", 0)
-			return nil, errFontSkipped
-		}
-		maxBody = int64(pol.FontMaxBytes)
-	}
-	if pol.FontTotalBytes > 0 && !icon {
-		left := int64(pol.FontTotalBytes) - w.spent.Load()
-		if left <= 0 || (known > left) {
-			t.noteSkipped(KindFont, abs, known, known, "font-budget", 0)
-			return nil, errFontSkipped
-		}
-		if left < maxBody {
-			maxBody = left
-		}
-	}
-	if left := int64(fontPageMaxBytes) - w.spent.Load(); left < maxBody {
-		maxBody = left
-	}
-	if maxBody <= 0 {
-		return nil, errors.New("font budget of the page is used up")
-	}
-
 	// one request per URL: two faces (a variable font declared for several weights) share it
 	w.mu.Lock()
 	if fl := w.flights[abs]; fl != nil {
@@ -584,9 +624,52 @@ func (w *webFonts) fetchRaw(abs string, pol DataPolicy, icon bool) ([]byte, erro
 	fl := &fontFlight{done: make(chan struct{})}
 	w.flights[abs] = fl
 	w.mu.Unlock()
-	fl.raw, fl.xfer, fl.err = w.fetchNet(abs, pol, maxBody, known)
+	fl.raw, fl.xfer, fl.err = w.fetchLimited(abs, pol, icon, known)
+	if errors.Is(fl.err, errBackground) { // transient: not remembered
+		w.mu.Lock()
+		delete(w.flights, abs)
+		w.mu.Unlock()
+	}
 	close(fl.done)
 	return fl.raw, fl.err
+}
+
+// fetchLimited applies the size limits (per font, per page budget) and fetches.
+// With a page budget the fetches of fonts run one at a time so that the
+// remaining budget is exact when the next one starts.
+func (w *webFonts) fetchLimited(abs string, pol DataPolicy, icon bool, known int64) ([]byte, int64, error) {
+	t := w.t
+	budgeted := pol.FontTotalBytes > 0 && !icon
+	if budgeted {
+		w.budgetMu.Lock()
+		defer w.budgetMu.Unlock()
+	}
+	maxBody := int64(fontMaxBytes)
+	reason := "font-size"
+	if pol.FontMaxBytes > 0 {
+		if known > int64(pol.FontMaxBytes) {
+			t.noteSkipped(KindFont, abs, known, known, "font-size", 0)
+			return nil, 0, errFontSkipped
+		}
+		maxBody = int64(pol.FontMaxBytes)
+	}
+	if budgeted {
+		left := int64(pol.FontTotalBytes) - w.spent.Load()
+		if left <= 0 || known > left {
+			t.noteSkipped(KindFont, abs, known, known, "font-budget", 0)
+			return nil, 0, errFontSkipped
+		}
+		if left < maxBody {
+			maxBody, reason = left, "font-budget"
+		}
+	}
+	if left := int64(fontPageMaxBytes) - w.spent.Load(); left < maxBody {
+		maxBody = left
+	}
+	if maxBody <= 0 {
+		return nil, 0, errors.New("font budget of the page is used up")
+	}
+	return w.fetchNet(abs, pol, maxBody, known, reason)
 }
 
 // fontOrigin is the origin used for the CORS comparison.
@@ -618,7 +701,7 @@ func fontCORSAllowed(page, fontURL string, h http.Header) bool {
 	return acao == "*" || acao == po
 }
 
-func (w *webFonts) fetchNet(abs string, pol DataPolicy, maxBody, known int64) ([]byte, int64, error) {
+func (w *webFonts) fetchNet(abs string, pol DataPolicy, maxBody, known int64, reason string) ([]byte, int64, error) {
 	t := w.t
 	page := t.URL()
 	hdr := map[string]string{}
@@ -649,7 +732,7 @@ func (w *webFonts) fetchNet(abs string, pol DataPolicy, maxBody, known int64) ([
 		return nil, 0, errors.New("font request timed out")
 	}
 	if r.aborted {
-		t.noteSkipped(KindFont, abs, -2, r.declared, "font-size", 0)
+		t.noteSkipped(KindFont, abs, -2, r.declared, reason, 0)
 		return nil, 0, errFontSkipped
 	}
 	cost := r.xfer
@@ -738,11 +821,18 @@ func (w *webFonts) decode(raw []byte) ([]byte, error) {
 }
 
 // settle is called by the layout provider of a document that has no window
-// after each layout: when fonts the layout asked for are still loading it waits
-// for them (within the settle budget) and reports true, which makes the
-// provider lay out again.
-func (w *webFonts) settle(set *font.WebSet) bool {
-	if w == nil || set == nil || w.gaveUp.Load() || set.Pending() == 0 {
+// after each layout, with the set generation the layout started from: when
+// a font arrived during the layout (some text was measured without it) or fonts
+// the layout asked for are still loading, it waits for them (within the
+// settle budget) and reports true, which makes the provider lay out again.
+func (w *webFonts) settle(set *font.WebSet, gen uint64) bool {
+	if w == nil || set == nil {
+		return false
+	}
+	if set.Gen() != gen {
+		return true
+	}
+	if w.gaveUp.Load() || set.Pending() == 0 {
 		return false
 	}
 	budget := w.t.settleBudget()
@@ -750,4 +840,93 @@ func (w *webFonts) settle(set *font.WebSet) bool {
 		budget = 500 * time.Millisecond
 	}
 	return w.waitLoaded(set, budget)
+}
+
+func (w *webFonts) knownSizeOf(abs string) int64 {
+	key, _ := w.t.eng.res.key(w.t.Context(), abs, "")
+	return w.t.knownSize(key)
+}
+
+// scopeCanvasFont points the canvas context's current font at the document's
+// web fonts: families the document declares get their scoped names, and the
+// download of the face the first letter would need starts (canvas text drawn
+// before the font arrives uses the fallback, as in browsers).
+func (h *cvHost) scopeCanvasFont(x *raster.Context) {
+	set := h.j.tab.ds.env.Load().syncNow()
+	if set == nil {
+		return
+	}
+	x.MapFamilies(func(f string) string {
+		if sc, ok := set.Scope(f); ok {
+			return sc
+		}
+		return f
+	})
+	spec := x.Font()
+	st := font.Style{Weight: spec.Weight, Italic: spec.Italic}
+	font.Demand(spec.Families, st, 'x')
+}
+
+// syncNow brings the font set in line with the document's stylesheets without
+// a layout, for code that needs the declarations before any layout ran
+// (document.fonts.load/check, canvas text).
+func (e *tabEnv) syncNow() *font.WebSet {
+	if e == nil || e.fonts == nil {
+		return nil
+	}
+	w, h, dsf, _, _ := e.t.Viewport()
+	if w <= 0 {
+		w = 1280
+	}
+	if h <= 0 {
+		h = 720
+	}
+	if dsf <= 0 {
+		dsf = 1
+	}
+	// the declarations only change with the document: skip the sheet walk when nothing did
+	sig := fmt.Sprintf("%d %d %d %g %s", e.doc.MutationGen(), w, h, dsf, e.t.ColorSchemeName())
+	e.fonts.mu.Lock()
+	if e.fonts.syncSig == sig && e.fonts.set != nil {
+		set := e.fonts.set
+		e.fonts.mu.Unlock()
+		return set
+	}
+	e.fonts.mu.Unlock()
+	set := e.fonts.sync(e.pageSheets(), float64(w), float64(h), dsf, e.t.ColorSchemeName())
+	e.fonts.mu.Lock()
+	e.fonts.syncSig = sig
+	e.fonts.mu.Unlock()
+	return set
+}
+
+// fontCSSUserAgent is the User-Agent for requests to services that choose the
+// font format from it. Google Fonts answers an unknown browser with full TrueType
+// files (several hundred KB per weight, no unicode-range subsets) and a modern
+// Chrome with WOFF2 subsets (tens of KB), which is what a browser that decodes
+// WOFF2 should get; so style sheet requests to its CSS API present a Chrome token.
+func fontCSSUserAgent(host, ua string) string {
+	switch strings.ToLower(host) {
+	case "fonts.googleapis.com":
+		return "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 " + ua
+	}
+	return ua
+}
+
+// resume is called when a background tab comes to the front: fonts whose
+// load was refused meanwhile are asked for again by the next layout.
+func (w *webFonts) resume() {
+	if w != nil && w.deferred.Swap(false) {
+		w.changed()
+	}
+}
+
+// FontsPending is the number of web fonts the page's text asked for that are
+// still downloading (a window that waits for a settled page, such as a headless
+// screenshot, treats the tab as busy while it is above zero).
+func (t *Tab) FontsPending() int {
+	if env := t.ds.env.Load(); env != nil {
+		return env.fonts.webSet().Pending()
+	}
+	return 0
 }

@@ -640,6 +640,9 @@ func (h *cvHost) set(a []any) (any, error) {
 			res = ok
 		case "font":
 			res = x.SetFont(cvS(a, 2))
+			if res == true {
+				h.scopeCanvasFont(x)
+			}
 		case "textAlign":
 			x.SetTextAlign(cvS(a, 2))
 		case "textBaseline":

@@ -60,7 +60,7 @@ func TestFontFaceDescriptors(t *testing.T) {
 	if d.Display != "swap" || d.Features != `"liga" 0, "kern"` || d.Variations != `"wght" 450` {
 		t.Errorf("settings: %q %q %q", d.Display, d.Features, d.Variations)
 	}
-	if d.SizeAdjust != 1.075 || d.AscentOverride != 0.9 || d.DescentOverride != -1 {
+	if d.SizeAdjust != 1.075 || d.AscentOverride != 0.9 || d.Overrides != font.OvrAscent {
 		t.Errorf("metric overrides: %v %v %v", d.SizeAdjust, d.AscentOverride, d.DescentOverride)
 	}
 	if p := ffs[1].Desc; p.WMin != 400 || p.WMax != 400 || p.SMin != 100 || p.Style != 0 || p.Ranges != nil {

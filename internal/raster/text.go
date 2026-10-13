@@ -824,6 +824,16 @@ func (c *Context) SetFont(s string) bool {
 // Font returns the current font spec.
 func (c *Context) Font() FontSpec { return c.st.text.font }
 
+// MapFamilies rewrites the family names of the current font (web fonts: the
+// owner of the context swaps declared names for their document scope).
+func (c *Context) MapFamilies(fn func(string) string) {
+	fams := make([]string, len(c.st.text.font.Families))
+	for i, f := range c.st.text.font.Families {
+		fams[i] = fn(f)
+	}
+	c.st.text.font.Families = fams
+}
+
 // SetTextOptions sets the remaining text attributes.
 func (c *Context) SetTextAlign(a string)      { c.st.text.align = a }
 func (c *Context) SetTextBaseline(b string)   { c.st.text.baseline = b }

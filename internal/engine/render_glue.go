@@ -243,7 +243,7 @@ func (e *tabEnv) pageSheets() []render.Sheet {
 						sb.WriteString(c.Data)
 					}
 				}
-				out = append(out, render.Sheet{Text: sb.String(), BaseURL: base, Media: attrOf(n, "media")})
+				out = append(out, e.withImports(render.Sheet{Text: sb.String(), BaseURL: base, Media: attrOf(n, "media")}, 0, map[string]bool{})...)
 			case "link":
 				rel := strings.ToLower(attrOf(n, "rel"))
 				isSheet, alt := false, false
@@ -259,7 +259,7 @@ func (e *tabEnv) pageSheets() []render.Sheet {
 				if isSheet && !alt && href != "" && attrOf(n, "disabled") == "" {
 					if abs, err := resolveURL(base, href); err == nil {
 						if body, status, err := e.t.fetchResourceKind(abs, KindStyle); err == nil && status < 400 {
-							out = append(out, render.Sheet{Text: body, BaseURL: abs, Media: attrOf(n, "media")})
+							out = append(out, e.withImports(render.Sheet{Text: body, BaseURL: abs, Media: attrOf(n, "media")}, 0, map[string]bool{abs: true})...)
 						}
 					}
 				}
@@ -363,7 +363,7 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 			}
 			// Without a window the fonts the layout asked for are waited for, so the
 			// result does not depend on how fast the network is (webfonts.go)
-			if fontRounds < maxFontRounds && !t.asyncImg.Load() && env.fonts.settle(opts.Fonts) {
+			if fontRounds < maxFontRounds && !t.asyncImg.Load() && env.fonts.settle(opts.Fonts, fgen) {
 				fontRounds++
 				round--
 				continue

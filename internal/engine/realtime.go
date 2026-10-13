@@ -43,12 +43,14 @@ type asyncEvent struct {
 
 // realtime holds a page VM's sockets, workers and their pending events.
 type realtime struct {
-	imgPending atomic.Int32 // detached image requests in flight (imgload.go)
-	mu         sync.Mutex
-	queue      []asyncEvent
-	nextID     int64
-	sockets    map[int64]*websocket.Conn
-	workers    map[int64]*workerVM
+	imgPending  atomic.Int32 // detached image requests in flight (imgload.go)
+	httpPending atomic.Int32 // fetch/XHR requests in flight (asynchttp.go)
+	http        map[int64]httpOutcome
+	mu          sync.Mutex
+	queue       []asyncEvent
+	nextID      int64
+	sockets     map[int64]*websocket.Conn
+	workers     map[int64]*workerVM
 }
 
 func (j *jsVM) rt() *realtime {
@@ -452,6 +454,10 @@ func (j *jsVM) drainAsync() bool {
 			if _, err := j.call("__swWorkerEvent", e.id, e.typ, e.data); err != nil {
 				j.tab.LogConsole("error", jsErrorText(err, "worker "+e.typ))
 			}
+		case "http":
+			if _, err := j.call("__swHttpEvent", e.id); err != nil {
+				j.tab.LogConsole("error", jsErrorText(err, "request callback"))
+			}
 		case "img":
 			if _, err := j.call("__swImgEvent", e.id, e.typ, e.code, atoiSafe(e.data)); err != nil {
 				j.tab.LogConsole("error", jsErrorText(err, "image "+e.typ))
@@ -467,8 +473,8 @@ func (j *jsVM) hasLiveWork() bool {
 		return false
 	}
 	r := j.realtime
-	if r.imgPending.Load() > 0 {
-		return true // a detached image is on its way: the settle waits for its load or error event
+	if r.imgPending.Load() > 0 || r.httpPending.Load() > 0 {
+		return true // a detached image or a page request is on its way: the settle waits for its outcome
 	}
 	r.mu.Lock()
 	if len(r.queue) > 0 {

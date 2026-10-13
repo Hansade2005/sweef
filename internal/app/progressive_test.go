@@ -1,10 +1,15 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -119,3 +124,67 @@ func TestAboutBlankInTheOmnibox(t *testing.T) {
 		}
 	}
 }
+
+// After a progressive load with scripts, timers and images has finished, the app is idle again: no timer, no
+// frame, no CPU (the load driver and the image relayout timers end with the load).
+func TestIdleAfterAProgressiveLoad(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("rusage")
+	}
+	var png bytes.Buffer
+	im := image.NewRGBA(image.Rect(0, 0, 40, 40))
+	for i := range im.Pix {
+		im.Pix[i] = 200
+	}
+	_ = pngEncode(&png, im)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<!doctype html><title>Idle</title><body style="margin:0"><div style="height:100px;background:#d33a3a"></div>
+<img src="/i.png"><img src="/j.png"><script src="/a.js"></script><script src="/b.js" defer></script>`)
+	})
+	mux.HandleFunc("/i.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(png.Bytes())
+	})
+	mux.HandleFunc("/j.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(png.Bytes())
+	})
+	mux.HandleFunc("/a.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprint(w, "setTimeout(function(){ document.title = 'Idle 2'; }, 120);")
+	})
+	mux.HandleFunc("/b.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprint(w, "window.b = 1;")
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	h := newHarness(t, hopts{cfg: Config{InitialURLs: []string{srv.URL + "/"}}})
+	h.waitTitle("Idle 2")
+	h.waitFor("loaded", func() bool { return !h.tab().Loading })
+	h.idle()
+	time.Sleep(700 * time.Millisecond) // image relayouts and the last repaint
+	if h.animating() {
+		t.Fatal("animation timer left running after the load")
+	}
+	if h.app.pending.Load() != 0 {
+		t.Fatalf("worker ops still pending after the load: %d", h.app.pending.Load())
+	}
+	c0 := processCPU()
+	presents := h.win.Presents()
+	time.Sleep(2 * time.Second)
+	cpu := processCPU() - c0
+	if h.win.Presents() != presents {
+		t.Fatal("frames presented while idle after the load")
+	}
+	limit := 100 * time.Millisecond
+	if raceEnabled {
+		limit *= 4
+	}
+	if cpu > limit {
+		t.Fatalf("idle CPU %v over 2s after a load", cpu)
+	}
+}
+
+func pngEncode(w io.Writer, im image.Image) error { return png.Encode(w, im) }

@@ -2,12 +2,16 @@ package engine
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -604,5 +608,391 @@ window.kidsLive = [c0, ch.length].join();
 	}
 	if v := mustEval(t, tab, `window.kidsLive`); v != `"4000,3999"` {
 		t.Fatalf("children is not live: %s", v)
+	}
+}
+
+// Relative imports of a module script resolve against that script's URL (they used to resolve against the
+// document, so MDN's and GitHub's module graphs failed with 404s), and bare specifiers go through the import map.
+func TestModuleImportsResolveAgainstTheImportingScript(t *testing.T) {
+	mux := http.NewServeMux()
+	js := func(path, body string) {
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/javascript")
+			fmt.Fprint(w, body)
+		})
+	}
+	mux.HandleFunc("/docs/page", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><p id="out">-</p>
+<script type="importmap">{"imports":{"lib":"/vendor/lib.js","util/":"/vendor/util/"}}</script>
+<script type="module" src="/static/app/main.js"></script>
+<script type="module">import { who } from './inline-dep.js'; window.inlineWho = who;</script>`)
+	})
+	js("/static/app/main.js", `import { a } from './dep.js'; import { b } from '../shared/b.js'; import { lib } from 'lib'; import { u } from 'util/x.js';
+document.getElementById('out').textContent = [a, b, lib, u].join(',');
+import('./late.js').then(function (m) { window.late = m.late; });`)
+	js("/static/app/dep.js", `export const a = 'a';`)
+	js("/static/shared/b.js", `export const b = 'b';`)
+	js("/static/app/late.js", `export const late = 'late';`)
+	js("/vendor/lib.js", `export const lib = 'lib';`)
+	js("/vendor/util/x.js", `export const u = 'u';`)
+	js("/docs/inline-dep.js", `export const who = 'inline';`)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	if err := tab.Navigate(srv.URL+"/docs/page", nil); err != nil {
+		t.Fatal(err)
+	}
+	tab.Settle(100 * time.Millisecond)
+	if v := mustEval(t, tab, `document.getElementById('out').textContent + '|' + window.inlineWho + '|' + window.late`); v != `"a,b,lib,u|inline|late"` {
+		t.Fatalf("modules: %s\nconsole:\n%s", v, consoleText(tab))
+	}
+}
+
+// innerHTML on a <template> (every template-based framework) and on non-element nodes must parse, not throw.
+func TestTemplateInnerHTML(t *testing.T) {
+	e := New(Options{CacheDir: "off"})
+	defer e.Close()
+	tab, _ := e.NewTab("about:blank")
+	tab.SetDocument(`<html><body></body></html>`, "http://x/")
+	got := mustEval(t, tab, `(function () {
+  var t = document.createElement('template'); t.innerHTML = '<b>x</b> &amp; y';
+  var f = document.createDocumentFragment(); var d = document.createElement('div'); f.appendChild(d); d.innerHTML = '<i>z</i>';
+  return t.innerHTML + '|' + t.content.textContent + '|' + d.innerHTML;
+})()`)
+	var s string
+	_ = json.Unmarshal([]byte(got), &s)
+	if s != "<b>x</b> &amp; y|x & y|<i>z</i>" {
+		t.Fatalf("got %q", s)
+	}
+}
+
+// A module script replays cached bytecode on the next visit and behaves the same.
+func TestModuleBytecodeCache(t *testing.T) {
+	big := "export const x = '" + strings.Repeat("y", 400) + "'; export function f() { return x.length; }"
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><script type="module">import { f } from '/m.js'; window.len = f() + ':' + `+"`"+strings.Repeat("z", 300)+"`"+`.length;</script>`)
+	})
+	mux.HandleFunc("/m.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprint(w, big)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	o := DefaultOptions()
+	o.CacheDir = t.TempDir()
+	e := New(o)
+	defer e.Close()
+	for i := 0; i < 2; i++ {
+		tab, err := e.NewTab(srv.URL + "/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v := mustEval(t, tab, `window.len`); v != `"400:300"` {
+			t.Fatalf("visit %d: %s\nconsole: %s", i, v, consoleText(tab))
+		}
+		tl := tab.LoadTimeline()
+		var state string
+		for _, m := range tl {
+			if m.Name == "script.exec" && strings.Contains(m.Detail, "inline") {
+				state = m.Detail
+			}
+		}
+		want := "bytecode:miss"
+		if i == 1 {
+			want = "bytecode:hit"
+		}
+		if !strings.HasSuffix(state, want) {
+			t.Fatalf("visit %d: the module script was %q, want %s", i, state, want)
+		}
+	}
+}
+
+// The bytecode cache of classic scripts is hit on the second visit (also across engine restarts, through the
+// profile's cache directory), and the timeline says so.
+func TestClassicBytecodeCacheIsHitOnTheSecondVisit(t *testing.T) {
+	body := "window.big = '" + strings.Repeat("q", 1000) + "'.length;"
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><script src="/big.js"></script>`)
+	})
+	mux.HandleFunc("/big.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Cache-Control", "max-age=600")
+		fmt.Fprint(w, body)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	dir := t.TempDir()
+	for visit := 0; visit < 3; visit++ { // each visit is a fresh engine: the code comes back from the disk cache
+		o := DefaultOptions()
+		o.CacheDir = dir
+		e := New(o)
+		tab, err := e.NewTab(srv.URL + "/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var state string
+		for _, m := range tab.LoadTimeline() {
+			if m.Name == "script.exec" && strings.Contains(m.Detail, "/big.js") {
+				state = m.Detail
+			}
+		}
+		want := "bytecode:miss"
+		if visit > 0 {
+			want = "bytecode:hit"
+		}
+		if !strings.HasSuffix(state, want) {
+			t.Fatalf("visit %d: %q, want %s", visit, state, want)
+		}
+		if v := mustEval(t, tab, `window.big`); v != "1000" {
+			t.Fatalf("visit %d: %s", visit, v)
+		}
+		e.Close()
+		time.Sleep(50 * time.Millisecond) // the disk copy is written in the background
+	}
+}
+
+// The window's progressive path ends with the same pixels and document as the headless one on the fidelity pages
+// (with async images, scripts in slices and the settle pump driven by LoadStep).
+func TestProgressiveFinalPaintEqualsBlockingOnFidelityPages(t *testing.T) {
+	dir := "../../testdata/fidelity"
+	files, _ := filepath.Glob(filepath.Join(dir, "*.html"))
+	if len(files) == 0 {
+		t.Skip("no fidelity pages")
+	}
+	step := 1
+	if testing.Short() {
+		step = 6
+	}
+	srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
+	defer srv.Close()
+	blocking := newTabForLoad(t)
+	prog := newTabForLoad(t)
+	prog.SetAsyncImages(true)
+	for i := 0; i < len(files); i += step {
+		name := filepath.Base(files[i])
+		url := srv.URL + "/" + name
+		if err := blocking.Navigate(url, nil); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if err := prog.NavigateProgressive(url, nil); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		prog.PaintRGBA(1280, 800, 1, false) // the first frame: its layout asks for the images
+		prog.LoadFinish()
+		deadline := time.Now().Add(300 * time.Millisecond) // async images land after the last step
+		for time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+		a, ok1 := blocking.PaintRGBA(1280, 800, 1, false)
+		prog.mu.RLock()
+		d := prog.dom
+		prog.mu.RUnlock()
+		d.Touch() // what the update hook does for late images
+		b, ok2 := prog.PaintRGBA(1280, 800, 1, false)
+		if !ok1 || !ok2 {
+			t.Fatalf("%s: no paint", name)
+		}
+		if hashPix(a) != hashPix(b) {
+			t.Errorf("%s: progressive final paint differs from the blocking one", name)
+		}
+		if blocking.HTML(true) != prog.HTML(true) {
+			t.Errorf("%s: final documents differ", name)
+		}
+	}
+}
+
+func hashPix(img *image.RGBA) string {
+	h := sha256.New()
+	for y := img.Rect.Min.Y; y < img.Rect.Max.Y; y++ {
+		o := img.PixOffset(img.Rect.Min.X, y)
+		h.Write(img.Pix[o : o+4*img.Rect.Dx()])
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// Page requests are asynchronous: three fetches overlap, a request that hangs neither holds the tab nor the
+// load event of a window, and a headless load still waits for requests that are in flight (within httpGrace).
+func TestFetchIsAsynchronous(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><script>
+window.log = [];
+var t0 = Date.now();
+Promise.all([1, 2, 3].map(function (i) { return fetch('/slow?i=' + i).then(function (r) { return r.text(); }); }))
+  .then(function (v) { log.push('all:' + v.join('')); window.allMs = Date.now() - t0; });
+var x = new XMLHttpRequest(); x.open('GET', '/slow?i=x'); x.onload = function () { log.push('xhr:' + x.responseText); }; x.send();
+fetch('/hang').then(function () { log.push('hang-done'); }, function () { log.push('hang-failed'); });
+navigator.sendBeacon('/beacon', 'b');
+setTimeout(function () { log.push('timer'); }, 20);
+log.push('script-end');
+</script>`)
+	})
+	var beacons atomic.Int32
+	mux.HandleFunc("/beacon", func(w http.ResponseWriter, r *http.Request) { beacons.Add(1) })
+	mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(300 * time.Millisecond)
+		fmt.Fprint(w, r.URL.Query().Get("i"))
+	})
+	mux.HandleFunc("/hang", func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(1500 * time.Millisecond):
+		case <-r.Context().Done():
+		}
+		fmt.Fprint(w, "late")
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	old := httpGrace
+	httpGrace = 5 * time.Second
+	defer func() { httpGrace = old }()
+
+	// window: the load event does not wait for the hanging request; the tab stays usable meanwhile
+	win := newTabForLoad(t)
+	t0 := time.Now()
+	if err := win.NavigateProgressive(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	var loadAt time.Duration
+	for win.LoadPending() {
+		more, wait := win.LoadStep(10 * time.Millisecond)
+		if loadAt == 0 && win.LoadLoaded() {
+			loadAt = time.Since(t0)
+		}
+		if !more {
+			break
+		}
+		time.Sleep(wait)
+	}
+	if loadAt == 0 || loadAt > 1200*time.Millisecond {
+		t.Fatalf("load event at %v: it waited for the hanging request", loadAt)
+	}
+	if v := mustEval(t, win, `log.join()`); !strings.Contains(v, "script-end,timer") || strings.Contains(v, "hang-done") {
+		t.Fatalf("window, right after load: %s", v)
+	}
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) && !strings.Contains(mustEval(t, win, `log.join()`), "hang-done") {
+		win.Settle(50 * time.Millisecond)
+	}
+	got := mustEval(t, win, `log.join()`)
+	for _, want := range []string{"all:123", "xhr:x", "hang-done"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("window: %q missing from %s", want, got)
+		}
+	}
+	if ms := mustEval(t, win, `window.allMs`); len(ms) > 3 || ms > "699" && len(ms) == 3 {
+		t.Errorf("three 300 ms fetches took %sms: they did not overlap", ms)
+	}
+	if beacons.Load() != 1 {
+		t.Errorf("sendBeacon requests: %d", beacons.Load())
+	}
+
+	// headless: settled means the in-flight requests were answered
+	head := newTabForLoad(t)
+	t0 = time.Now()
+	if err := head.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d < 1300*time.Millisecond || d > 3500*time.Millisecond {
+		t.Errorf("headless Navigate took %v: it must wait for the 1.5 s request, no longer", d)
+	}
+	if v := mustEval(t, head, `log.join()`); !strings.Contains(v, "hang-done") || !strings.Contains(v, "all:123") {
+		t.Fatalf("headless: %s", v)
+	}
+
+	// ... but not for ever: a request that outlives the grace period does not hold the settled page
+	httpGrace = 400 * time.Millisecond
+	head2 := newTabForLoad(t)
+	t0 = time.Now()
+	if err := head2.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d > 2*time.Second {
+		t.Errorf("headless Navigate with a short grace took %v", d)
+	}
+	if v := mustEval(t, head2, `log.join()`); strings.Contains(v, "hang-done") {
+		t.Errorf("the hanging request should still be outstanding: %s", v)
+	}
+}
+
+// A module whose top-level await depends on fetch() completes (requests made under a module evaluation run in place).
+func TestModuleTopLevelAwaitFetch(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><script type="module">const r = await fetch('/d.json'); const j = await r.json(); window.tla = j.v; document.title = 'tla ' + j.v;</script>`)
+	})
+	mux.HandleFunc("/d.json", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"v": 42}`) })
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	done := make(chan error, 1)
+	go func() { done <- tab.Navigate(srv.URL+"/", nil) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("a module with a top-level await on fetch never finished")
+	}
+	if tab.Title() != "tla 42" {
+		t.Fatalf("title %q console %s", tab.Title(), consoleText(tab))
+	}
+}
+
+// The modules of a graph download in parallel (their static imports are found as each source arrives), not one
+// round trip after the other from inside the evaluation.
+func TestModuleGraphDownloadsInParallel(t *testing.T) {
+	mux := http.NewServeMux()
+	var imports strings.Builder
+	for i := 0; i < 10; i++ {
+		fmt.Fprintf(&imports, "import { v%d } from './leaf%d.js';\n", i, i)
+	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><script type="module" src="/entry.js"></script>`)
+	})
+	mux.HandleFunc("/entry.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprint(w, imports.String()+"import { deep } from './mid.js'; window.sum = [v0,v1,v2,v3,v4,v5,v6,v7,v8,v9].join('') + deep;")
+	})
+	mux.HandleFunc("/mid.js", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(150 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprint(w, "import { bottom } from './bottom.js'; export const deep = 'm' + bottom;")
+	})
+	mux.HandleFunc("/bottom.js", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(150 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprint(w, "export const bottom = 'b';")
+	})
+	for i := 0; i < 10; i++ {
+		i := i
+		mux.HandleFunc(fmt.Sprintf("/leaf%d.js", i), func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(150 * time.Millisecond)
+			w.Header().Set("Content-Type", "application/javascript")
+			fmt.Fprintf(w, "export const v%d = '%d';", i, i)
+		})
+	}
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	t0 := time.Now()
+	if err := tab.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	d := time.Since(t0)
+	if v := mustEval(t, tab, `window.sum`); v != `"0123456789mb"` {
+		t.Fatalf("sum %s\nconsole: %s", v, consoleText(tab))
+	}
+	// sequential: 12 modules x 150 ms = 1.8 s; parallel: the entry plus a chain of two levels, about 0.5 s
+	if d > 1100*time.Millisecond {
+		t.Fatalf("the module graph took %v: its modules were fetched one after the other", d)
 	}
 }

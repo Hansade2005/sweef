@@ -179,6 +179,11 @@ func TestIncrementalMatchesFullPaint(t *testing.T) {
 				SnapMinOps, SnapStable, SnapMinShare = 1, 1, 1000
 			}
 			for seed := int64(0); seed < int64(runs); seed++ {
+				// every other seed cuts tall bands into thin stripes (repainted concurrently)
+				StripeRows = 64
+				if seed%2 == 1 {
+					StripeRows = 6
+				}
 				rng := rand.New(rand.NewSource(seed*7 + int64(dpr)))
 				g := &listGen{rng: rng, w: 300, h: 520, face: face}
 				items := g.list(25 + rng.Intn(20))
@@ -222,6 +227,7 @@ func TestIncrementalMatchesFullPaint(t *testing.T) {
 				}
 			}
 			SnapMinOps, SnapStable, SnapMinShare = a, b, c
+			StripeRows = 64
 		}
 	}
 }

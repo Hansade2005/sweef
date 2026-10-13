@@ -51,10 +51,19 @@ type FaceDesc struct {
 	Features   string // font-feature-settings descriptor, raw
 	Variations string // font-variation-settings descriptor, raw
 	// SizeAdjust, AscentOverride, DescentOverride and LineGapOverride are the
-	// metric descriptors (fractions: 1.0 = 100%); a negative override is unset.
+	// metric descriptors (fractions: 1.0 = 100%); a size-adjust of 0 means 1.
+	// Overrides is the set of overrides that were given (OvrAscent|OvrDescent|OvrLineGap).
 	SizeAdjust                                       float64
 	AscentOverride, DescentOverride, LineGapOverride float64
+	Overrides                                        uint8
 }
+
+// Overrides bits.
+const (
+	OvrAscent = 1 << iota
+	OvrDescent
+	OvrLineGap
+)
 
 // Style values of FaceDesc.
 const (
@@ -91,7 +100,7 @@ func (d FaceDesc) Key() string {
 	for _, s := range d.Src {
 		fmt.Fprintf(&b, "%s;%s;%s;%s,", s.URL, s.Local, s.Format, strings.Join(s.Tech, "+"))
 	}
-	fmt.Fprintf(&b, "|%s|%s|%s|%g,%g,%g,%g", d.Display, d.Features, d.Variations, d.SizeAdjust, d.AscentOverride, d.DescentOverride, d.LineGapOverride)
+	fmt.Fprintf(&b, "|%s|%s|%s|%g,%g,%g,%g,%d", d.Display, d.Features, d.Variations, d.SizeAdjust, d.AscentOverride, d.DescentOverride, d.LineGapOverride, d.Overrides)
 	return b.String()
 }
 
@@ -210,9 +219,7 @@ func (f *WebFace) SetData(sfnt []byte) error {
 		return err
 	}
 	f.sfnt, f.base, f.var_, f.insts = sfnt, base, vr, nil
-	if f.Desc.Ranges != nil {
-		base.ur = f.Desc.Ranges
-	}
+	f.Desc.applyTo(base)
 	f.state, f.err = Loaded, nil
 	l.unlock()
 	f.touch(true)
@@ -414,7 +421,7 @@ func (s *WebSet) SetSheetFaces(descs []FaceDesc) bool {
 	s.reindexLocked()
 	wmu.Unlock()
 	webGen.Add(1)
-	s.changed()
+	// no change notification: stylesheet faces are set by the layout pass that uses them
 	return true
 }
 
@@ -873,4 +880,60 @@ func DemandFamily(family string, st Style, r rune) (pending bool) {
 		return false
 	}
 	return s.demand(base, st, r)
+}
+
+// Redescribe replaces the descriptors of a face that has not started loading
+// (FontFace attribute setters). It reports whether the change was applied.
+func (f *WebFace) Redescribe(d FaceDesc) bool {
+	d.Normalize()
+	wmu.Lock()
+	if f.state != Unloaded && f.state != Failed {
+		wmu.Unlock()
+		return false
+	}
+	f.Desc = d
+	s := f.set
+	if s != nil && !s.closed {
+		s.reindexLocked()
+	}
+	wmu.Unlock()
+	if s != nil {
+		webGen.Add(1)
+		s.changed()
+	}
+	return true
+}
+
+// applyTo copies the descriptors that act on the drawn face: unicode-range,
+// size-adjust and the metric overrides.
+func (d *FaceDesc) applyTo(f *Face) {
+	if d.Ranges != nil {
+		f.ur = d.Ranges
+	}
+	if d.SizeAdjust != 0 && d.SizeAdjust != 1 {
+		f.adj = d.SizeAdjust
+	}
+	if d.Overrides != 0 {
+		f.hasOvr = true
+		f.ovrAsc, f.ovrDesc, f.ovrGap = -1, -1, -1
+		if d.Overrides&OvrAscent != 0 {
+			f.ovrAsc = d.AscentOverride
+		}
+		if d.Overrides&OvrDescent != 0 {
+			f.ovrDesc = d.DescentOverride
+		}
+		if d.Overrides&OvrLineGap != 0 {
+			f.ovrGap = d.LineGapOverride
+		}
+	}
+}
+
+// Retry puts a face whose load could not be attempted (the tab was in the
+// background) back to Unloaded, so that the next layout asks for it again.
+func (f *WebFace) Retry() {
+	wmu.Lock()
+	if f.state == Loading {
+		f.state = Unloaded
+	}
+	wmu.Unlock()
 }

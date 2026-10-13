@@ -36,6 +36,7 @@ func main() {
 		console = flag.Bool("console", false, "print the page's console messages (script errors) after the load")
 		minMs   = flag.Float64("min-ms", 25, "hide spans shorter than this unless -full")
 	)
+	flag.IntVar(&consoleMax, "console-width", 400, "with -console: characters of each message to print")
 	prof := flag.String("cpuprofile", "", "write a CPU profile of the load here")
 	flag.Parse()
 	if *prof != "" {
@@ -90,6 +91,8 @@ type prog struct {
 	frames                                     int
 }
 
+var consoleMax = 400
+
 func b2i(b bool) int {
 	if b {
 		return 1
@@ -135,7 +138,7 @@ func run(e *engine.Engine, u string, progressive, full, summary, console bool, m
 	if console {
 		for _, ev := range t.ConsoleLog(0) {
 			if d, ok := ev.Data.(map[string]string); ok {
-				fmt.Printf("   console.%s: %s\n", d["level"], trunc(strings.ReplaceAll(d["text"], "\n", " | "), 400))
+				fmt.Printf("   console.%s: %s\n", d["level"], trunc(strings.ReplaceAll(d["text"], "\n", " | "), consoleMax))
 			}
 		}
 	}

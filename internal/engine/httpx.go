@@ -108,7 +108,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", t.UserAgent())
+	req.Header.Set("User-Agent", fontCSSUserAgent(req.URL.Hostname(), t.UserAgent()))
 	t.setBrowserHeaders(req.Header, req.URL, kind, false)
 	for k, v := range t.ExtraHeaders() {
 		req.Header.Set(k, v)

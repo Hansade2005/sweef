@@ -1526,7 +1526,8 @@
     createElement: function (tag, options) {
       if (arguments.length === 0) throw new TypeError("Failed to execute 'createElement' on 'Document': 1 argument required, but only 0 present.");
       tag = toStr(tag);
-      if (!/^[A-Za-z][^\s\/>\u0000]*$/.test(tag)) throw DOMException("Failed to execute 'createElement' on 'Document': The tag name provided ('" + tag + "') is not a valid name.", 'InvalidCharacterError');
+      // an XML Name may start with a letter, '_' or ':' (document.createElement('_') is valid; MediaWiki's VisualEditor uses it)
+      if (!/^[A-Za-z_:\u00C0-\uFFFF][^\s\/>\u0000]*$/.test(tag)) throw DOMException("Failed to execute 'createElement' on 'Document': The tag name provided ('" + tag + "') is not a valid name.", 'InvalidCharacterError');
       var lower = tag.toLowerCase();
       var is = options && typeof options === 'object' ? options.is : undefined;
       var id = sw.createElement(lower);
@@ -2063,7 +2064,7 @@
     locks: { get: function () { return undefined; } }, wakeLock: { get: function () { return undefined; } }
   });
   methods(Navigator.prototype, {
-    sendBeacon: function (url, data) { try { sw.http('POST', new global.URL(String(url), currentURL()).href, { 'content-type': 'text/plain;charset=UTF-8' }, data === undefined || data === null ? '' : typeof data === 'string' ? data : bodyToString(data)); } catch (e) { return false; } return true; },
+    sendBeacon: function (url, data) { try { sw.httpAsync('POST', new global.URL(String(url), currentURL()).href, { 'content-type': 'text/plain;charset=UTF-8' }, data === undefined || data === null ? '' : typeof data === 'string' ? data : bodyToString(data), true); } catch (e) { return false; } return true; },
     javaEnabled: function () { return false; }, vibrate: function () { return false; }, share: function () { return Promise.reject(DOMException('Share not supported', 'NotAllowedError')); }, canShare: function () { return false; },
     registerProtocolHandler: function () { }, getBattery: function () { return Promise.resolve({ charging: true, level: 1, chargingTime: 0, dischargingTime: Infinity, addEventListener: function () { }, removeEventListener: function () { } }); },
     getGamepads: function () { return []; }, requestMediaKeySystemAccess: function () { return Promise.reject(new Error('unsupported')); }
@@ -2856,7 +2857,7 @@
   Response.json = function (data, init) { init = Object.assign({}, init || {}); var h = new Headers(init.headers); if (!h.has('content-type')) h.set('content-type', 'application/json'); init.headers = h; return new Response(JSON.stringify(data), init); };
   setTag(Response, 'Response'); global.Response = Response;
 
-  // ---- fetch: synchronous __sw.http behind a Promise, started on a microtask
+  // ---- fetch: an asynchronous request behind a Promise, started on a microtask
   function doHttp(method, url, headers, body) {
     var hobj = {};
     if (headers) headers.forEach(function (v, k) { hobj[k] = v; });
@@ -2864,6 +2865,24 @@
     if (!r || typeof r !== 'object') throw new TypeError('Failed to fetch');
     return r;
   }
+  // Asynchronous requests: Go makes them on a goroutine and the event-loop pump calls __swHttpEvent when one is
+  // answered. cb(result) or cb(null, error). A request made while a module is evaluated completes in place.
+  var httpCbs = new Map();
+  function doHttpAsync(method, url, headers, body, cb) {
+    var hobj = {};
+    if (headers) headers.forEach(function (v, k) { hobj[k] = v; });
+    var t;
+    try { t = sw.httpAsync(method, url, hobj, body, false); } catch (e) { cb(null, e); return; }
+    if (t && typeof t === 'object') { cb(t); return; }
+    httpCbs.set(t, cb);
+  }
+  Object.defineProperty(global, '__swHttpEvent', { configurable: true, writable: true, enumerable: false, value: function (token) {
+    var cb = httpCbs.get(token); httpCbs.delete(token);
+    var out = sw.httpTake(token);
+    if (!cb) return false;
+    try { if (out && out.error) cb(null, new Error(out.error)); else cb(out); } catch (e) { reportError(e); }
+    return true;
+  } });
   function responseFrom(r, url) {
     var status = r.status | 0;
     var resp = new Response(r.body === undefined || r.body === null ? '' : r.body, { status: status >= 200 && status <= 599 ? status : 200, statusText: r.statusText || '', headers: r.headers || {} });
@@ -2883,12 +2902,12 @@
       if (req.signal) req.signal.addEventListener('abort', function () { aborted = true; reject(req.signal.reason); });
       queueMicrotaskImpl(function () {
         if (aborted) return;
-        var r;
-        try { r = doHttp(req.method, req.url, req.headers, req._body === null ? null : bodyToString(req._body)); }
-        catch (e) { reject(e instanceof Error ? new TypeError('Failed to fetch: ' + (e.message || e)) : new TypeError('Failed to fetch')); return; }
-        if (aborted) return;
-        if (!r.status && !r.body) { reject(new TypeError('Failed to fetch')); return; }
-        resolve(responseFrom(r, req.url));
+        doHttpAsync(req.method, req.url, req.headers, req._body === null ? null : bodyToString(req._body), function (r, e) {
+          if (aborted) return;
+          if (e) { reject(e instanceof Error ? new TypeError('Failed to fetch: ' + (e.message || e)) : new TypeError('Failed to fetch')); return; }
+          if (!r || (!r.status && !r.body)) { reject(new TypeError('Failed to fetch')); return; }
+          resolve(responseFrom(r, req.url));
+        });
       });
     });
   };
@@ -2965,18 +2984,21 @@
       var self = this, url = this._url, method = this._method, headers = this._reqHeaders;
       fire(this, 'loadstart', {});
       if (bodyStr !== null) fire(this.upload, 'loadstart', {});
-      var run = function () {
-        if (self._aborted) return;
-        var r;
-        try { r = doHttp(method, url, headers, bodyStr); } catch (e) { xhrFail(self, 'error'); return; }
+      var done = function (r, e) {
+        if (self._aborted || self.readyState === 4) return;
+        if (e) { xhrFail(self, 'error'); return; }
         if (bodyStr !== null) { fire(self.upload, 'progress', { lengthComputable: true, loaded: bodyStr.length, total: bodyStr.length }); fire(self.upload, 'load', {}); fire(self.upload, 'loadend', {}); }
-        if (!r.status && !r.body) { xhrFail(self, 'error'); return; }
+        if (!r || (!r.status && !r.body)) { xhrFail(self, 'error'); return; }
         xhrFinish(self, r, url);
       };
       if (this._async) {
-        this._timer = setTimeoutImpl(run, [], 0, false);
+        this._timer = setTimeoutImpl(function () { if (!self._aborted) doHttpAsync(method, url, headers, bodyStr, done); }, [], 0, false);
         if (this.timeout > 0) { var t = this.timeout; setTimeoutImpl(function () { if (self.readyState !== 4 && !self._aborted) { clearTimer(self._timer); self._aborted = true; xhrFail(self, 'timeout'); } }, [], t, false); }
-      } else run();
+      } else {
+        var r, err = null;
+        try { r = doHttp(method, url, headers, bodyStr); } catch (e) { err = e; }
+        done(r, err);
+      }
     },
     abort: function () { if (this.readyState === 0 || this.readyState === 4 && !this._sent) { this.readyState = 0; return; } this._aborted = true; clearTimer(this._timer); if (this._sent) xhrFail(this, 'abort'); this.readyState = 0; }
   });

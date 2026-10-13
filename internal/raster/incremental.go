@@ -5,6 +5,7 @@ import (
 	"image"
 	"math"
 	"os"
+	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -641,6 +642,19 @@ func (cv *Canvas) paint(list []render.Op, info *ListInfo) {
 // so tests and benchmarks can compare).
 var ParallelBands = true
 
+// StripeRows is the least height of a stripe a tall band is cut into.
+var StripeRows = 64
+
+// wideInto reports whether a non-local op's bounds meet the rows of b.
+func wideInto(info *ListInfo, b Band) bool {
+	for i, w := range info.Wide {
+		if w && !info.Bounds[i].Empty() && info.Bounds[i].Y0 < b.Y1 && b.Y0 < info.Bounds[i].Y1 {
+			return true
+		}
+	}
+	return false
+}
+
 // SnapBuilt and SnapUsed count surface snapshots made and repaints that
 // started from one (tests check the snapshot path is exercised).
 var SnapBuilt, SnapUsed, SnapExtended atomic.Int64
@@ -682,14 +696,35 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 	if cv.snap != nil && !(cv.snapN <= len(list) && info.Pre[cv.snapN] == cv.snapPre) {
 		cv.snap = nil // the part under the snapshot changed
 	}
-	// the bands are disjoint rows and each is repainted by its own painter, so
-	// they can be repainted at the same time: the result is the same bytes
-	paintBand := func(b *Band) {
-		region := narrow(info, *b, cv.Surf.R)
-		b.X0, b.X1 = region.X0, region.X1
+	// The bands are disjoint rows and each is repainted by its own painter, so
+	// they can be repainted at the same time: the result is the same bytes. A
+	// tall band is cut into stripes of rows for the same purpose (clipping
+	// vertically is exact), unless a non-local op reaches into it: such an op is
+	// repainted from its whole bounds, which a stripe does not contain.
+	type job struct {
+		band  *Band
+		b     Band
+		extra IRect // region painted
+	}
+	var jobs []job
+	for bi := range bands {
+		b := &bands[bi]
+		n := 1
+		if ParallelBands && b.Y1-b.Y0 >= 2*StripeRows && !wideInto(info, *b) {
+			n = min(runtime.GOMAXPROCS(0), (b.Y1-b.Y0)/StripeRows)
+		}
+		for k := 0; k < n; k++ {
+			s := *b
+			s.Y0, s.Y1 = b.Y0+(b.Y1-b.Y0)*k/n, b.Y0+(b.Y1-b.Y0)*(k+1)/n
+			jobs = append(jobs, job{band: b, b: s})
+		}
+	}
+	run := func(j *job) {
+		region := narrow(info, j.b, cv.Surf.R)
+		j.extra = region
 		if cv.snap != nil {
 			SnapUsed.Add(1)
-			for y := b.Y0; y < b.Y1; y++ {
+			for y := region.Y0; y < region.Y1; y++ {
 				copy(cv.Surf.Row(y, region.X0, region.X1), cv.snap.Row(y, region.X0, region.X1))
 			}
 			p := newPainterOver(cv.Surf, cv.DPR, cv.Env, region)
@@ -699,21 +734,28 @@ func (cv *Canvas) Update(list []render.Op) (bands []Band, full bool) {
 		p := newPainterOn(cv.Surf, cv.DPR, cv.Env, region)
 		p.RunRegion(list, info, region)
 	}
-	if len(bands) == 1 || !ParallelBands {
-		for bi := range bands {
-			paintBand(&bands[bi])
+	if len(jobs) == 1 || !ParallelBands {
+		for i := range jobs {
+			run(&jobs[i])
 		}
 	} else {
 		var wg sync.WaitGroup
-		for bi := range bands[1:] {
+		for i := range jobs[1:] {
 			wg.Add(1)
-			go func(b *Band) {
+			go func(j *job) {
 				defer wg.Done()
-				paintBand(b)
-			}(&bands[bi+1])
+				run(j)
+			}(&jobs[i+1])
 		}
-		paintBand(&bands[0])
+		run(&jobs[0])
 		wg.Wait()
+	}
+	for bi := range bands {
+		bands[bi].X0, bands[bi].X1 = 1<<30, -1<<30
+	}
+	for i := range jobs {
+		b := jobs[i].band
+		b.X0, b.X1 = min(b.X0, jobs[i].extra.X0), max(b.X1, jobs[i].extra.X1)
 	}
 	// keep a snapshot when the same prefix has stayed untouched for a while
 	cv.lcps = append(cv.lcps, lcp)

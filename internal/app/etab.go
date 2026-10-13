@@ -67,7 +67,7 @@ type etab struct {
 	paintH        atomic.Int32 // overlay: painted height (CSS px)
 	lastActive    atomic.Int64
 	wakeQueued    atomic.Bool  // an event-loop slice for async results (detached images) is queued
-	driving       atomic.Bool  // a worker op chain is stepping a progressive load of this tab (driveLoad)
+	driveSeq      atomic.Int64 // navigation whose progressive load a worker op chain is stepping (driveLoad), 0 = none
 	loadErr       atomic.Value // string: error of the last load started by loadURL ("" = ok); read by the agent host
 	restoreScroll atomic.Int32
 

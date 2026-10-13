@@ -126,19 +126,27 @@ func (f *Face) AdvanceUnits(r rune) float64 {
 	return v
 }
 
+// sa is the size-adjust factor of the face (1 for ordinary fonts).
+func (f *Face) sa() float64 {
+	if f.adj == 0 {
+		return 1
+	}
+	return f.adj
+}
+
 // inRange reports whether r is inside the face's unicode-range.
 func (f *Face) inRange(r rune) bool { return f.ur == nil || inRanges(f.ur, r) }
 
 // advanceGIDLocked is the advance of a glyph in font units (variable fonts apply their deltas).
 func (f *Face) advanceGIDLocked(gi int) float64 {
 	if f.vi != nil {
-		return f.vi.advance(gi)
+		return f.vi.advance(gi) * f.sa()
 	}
 	a, err := f.font.GlyphAdvance(&f.buf, glyphIndex(gi), fixed.Int26_6(f.upm*64), xfont.HintingNone)
 	if err != nil {
 		return 0
 	}
-	return float64(a) / 64
+	return float64(a) / 64 * f.sa()
 }
 
 // FTSize is the font size as FreeType (and so Skia and Chromium) sees it:
@@ -183,6 +191,7 @@ func (f *Face) kernUnits(a, b rune) float64 {
 			k = float64(v) / 64
 		}
 	}
+	k *= f.sa()
 	f.kern[key] = k
 	return k
 }
@@ -202,6 +211,9 @@ func (f *Face) RawMetrics() (ascent, descent, lineGap, avgChar, maxAdvance float
 		lineGap = float64(m.Height-m.Ascent-m.Descent) / 64
 	}
 	avgChar, maxAdvance = tableAvgMax(f.data)
+	if a := f.sa(); a != 1 {
+		ascent, descent, lineGap, avgChar, maxAdvance = ascent*a, descent*a, lineGap*a, avgChar*a, maxAdvance*a
+	}
 	return
 }
 
@@ -277,9 +289,22 @@ func (f *Face) Metrics(size float64) Metrics {
 		f.mU = [5]float64{u(m.Ascent), u(m.Descent), u(m.Height - m.Ascent - m.Descent), u(m.XHeight), u(m.CapHeight)}
 		f.mOK = true
 	}
-	k := size / float64(f.upm)
-	return Metrics{Ascent: f.mU[0] * k, Descent: f.mU[1] * k, LineGap: f.mU[2] * k,
+	asz := size * f.sa() // the size-adjusted font size
+	k := asz / float64(f.upm)
+	m := Metrics{Ascent: f.mU[0] * k, Descent: f.mU[1] * k, LineGap: f.mU[2] * k,
 		XHeight: f.mU[3] * k, CapHeight: f.mU[4] * k, UnitsPerEm: f.upm}
+	if f.hasOvr { // @font-face ascent-override, descent-override, line-gap-override: fractions of the adjusted size
+		if f.ovrAsc >= 0 {
+			m.Ascent = f.ovrAsc * asz
+		}
+		if f.ovrDesc >= 0 {
+			m.Descent = f.ovrDesc * asz
+		}
+		if f.ovrGap >= 0 {
+			m.LineGap = f.ovrGap * asz
+		}
+	}
+	return m
 }
 
 // Advance is the horizontal advance of r at size (px), unrounded.
@@ -294,9 +319,9 @@ func (f *Face) Advance(r rune, size float64) float64 {
 		return -1
 	}
 	if f.vi != nil {
-		return f.vi.advance(int(gi)) * size / float64(f.upm)
+		return f.vi.advance(int(gi)) * size * f.sa() / float64(f.upm)
 	}
-	adv, err := f.font.GlyphAdvance(&f.buf, gi, f.scale(size), xfont.HintingNone)
+	adv, err := f.font.GlyphAdvance(&f.buf, gi, f.scale(size*f.sa()), xfont.HintingNone)
 	if err != nil {
 		return -1
 	}
@@ -341,6 +366,7 @@ func (f *Face) Outline(r rune, size float64) []Segment {
 }
 
 func (f *Face) outlineLocked(gi sfnt.GlyphIndex, size float64) (out []Segment) {
+	size *= f.sa()
 	defer func() {
 		if recover() != nil {
 			out = nil // a hostile glyph must not take the browser down
@@ -744,7 +770,7 @@ func (f *Face) TypoMetrics(size float64) (asc, desc float64, ok bool) {
 	if a == 0 && d == 0 {
 		return 0, 0, false
 	}
-	k := FTSize(size) / float64(f.upm)
+	k := FTSize(size) * f.sa() / float64(f.upm)
 	return float64(a) * k, float64(-d) * k, true
 }
 

@@ -524,6 +524,9 @@ func (t *Tab) SetBackground(bg bool) {
 	was := t.ds.bg.Swap(bg)
 	if was && !bg {
 		t.lazyReeval() // visible again: images near the viewport may be due
+		if env := t.ds.env.Load(); env != nil {
+			env.fonts.resume() // and fonts refused while hidden
+		}
 	}
 }
 

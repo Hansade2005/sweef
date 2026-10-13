@@ -25,7 +25,7 @@ var genericFamilies = map[string]bool{
 // parseFontFaceDecls turns the declarations of one @font-face block into a FontFace.
 func parseFontFaceDecls(decls []Decl) (FontFace, bool) {
 	ff := FontFace{}
-	d := font.FaceDesc{AscentOverride: -1, DescentOverride: -1, LineGapOverride: -1}
+	d := font.FaceDesc{}
 	for _, dc := range decls {
 		switch dc.Name {
 		case "font-family":
@@ -63,15 +63,15 @@ func parseFontFaceDecls(decls []Decl) (FontFace, bool) {
 			}
 		case "ascent-override":
 			if v, ok := parsePctFraction(dc.L); ok && v >= 0 {
-				d.AscentOverride = v
+				d.AscentOverride, d.Overrides = v, d.Overrides|font.OvrAscent
 			}
 		case "descent-override":
 			if v, ok := parsePctFraction(dc.L); ok && v >= 0 {
-				d.DescentOverride = v
+				d.DescentOverride, d.Overrides = v, d.Overrides|font.OvrDescent
 			}
 		case "line-gap-override":
 			if v, ok := parsePctFraction(dc.L); ok && v >= 0 {
-				d.LineGapOverride = v
+				d.LineGapOverride, d.Overrides = v, d.Overrides|font.OvrLineGap
 			}
 		}
 	}
@@ -299,4 +299,55 @@ func ParseFontFaces(css string, env *Env) []FontFace {
 	order := 0
 	p := ParseSheet(css, env, OriginAuthor, &order, map[string]int{})
 	return p.Fonts
+}
+
+// NewFaceDesc builds a descriptor the way the FontFace constructor does: the
+// family, the src descriptor text (empty when the source is binary data) and
+// the descriptors keyed by their CSS names ("font-weight", "unicode-range",
+// ...). An invalid value is reported as an error (SyntaxError in script).
+func NewFaceDesc(family, src string, props map[string]string) (font.FaceDesc, error) {
+	decls := []Decl{makeDecl("font-family", family)}
+	if strings.TrimSpace(src) != "" {
+		decls = append(decls, makeDecl("src", src))
+	}
+	for _, name := range []string{"font-style", "font-weight", "font-stretch", "unicode-range", "font-display", "font-feature-settings", "font-variation-settings"} {
+		v, ok := props[name]
+		if !ok || strings.TrimSpace(v) == "" || strings.EqualFold(strings.TrimSpace(v), "normal") && name != "font-style" && name != "font-weight" && name != "font-stretch" {
+			continue
+		}
+		// validate the descriptors that have a syntax of their own
+		lv := strings.ToLower(strings.TrimSpace(v))
+		switch name {
+		case "font-weight":
+			if _, _, ok := parseWeightRange(lv); !ok {
+				return font.FaceDesc{}, errBadDescriptor(name, v)
+			}
+		case "font-style":
+			if _, ok := parseFaceStyle(lv); !ok {
+				return font.FaceDesc{}, errBadDescriptor(name, v)
+			}
+		case "font-stretch":
+			if _, _, ok := parseStretchRange(lv); !ok {
+				return font.FaceDesc{}, errBadDescriptor(name, v)
+			}
+		case "unicode-range":
+			if _, ok := parseUnicodeRange(lv); !ok {
+				return font.FaceDesc{}, errBadDescriptor(name, v)
+			}
+		}
+		decls = append(decls, makeDecl(name, v))
+	}
+	ff, ok := parseFontFaceDecls(decls)
+	if !ok {
+		return font.FaceDesc{}, errBadDescriptor("font-family", family)
+	}
+	return ff.Desc, nil
+}
+
+type descriptorError string
+
+func (e descriptorError) Error() string { return string(e) }
+
+func errBadDescriptor(name, v string) error {
+	return descriptorError("The value provided ('" + v + "') could not be parsed as a valid " + name + ".")
 }

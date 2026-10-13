@@ -285,10 +285,10 @@ func (d *Doc) SetInnerHTMLCtx(id int64, frag string) error {
 	}
 	ctx := n
 	if n.Type != html.ElementNode {
-		ctx = &html.Node{Type: html.ElementNode, Data: "body"}
+		ctx = &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
 	}
 	if n.Type == html.ElementNode && n.Data == "template" {
-		ctx = &html.Node{Type: html.ElementNode, Data: "body"}
+		ctx = &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
 	}
 	sub, err := html.ParseFragment(strings.NewReader(frag), ctx)
 	if err != nil {
@@ -312,7 +312,7 @@ func (d *Doc) InsertAdjacentHTML(id int64, position, frag string) error {
 		if n.Parent != nil && n.Parent.Type == html.ElementNode {
 			ctx = n.Parent
 		} else {
-			ctx = &html.Node{Type: html.ElementNode, Data: "body"}
+			ctx = &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
 		}
 	}
 	sub, err := html.ParseFragment(strings.NewReader(frag), ctx)
