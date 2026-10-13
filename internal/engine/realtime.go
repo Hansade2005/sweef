@@ -227,8 +227,11 @@ type workerVM struct {
 	id     int64
 	inbox  []string
 	closed bool
-	start  time.Time
-	page   *jsVM
+	// started is set (under mu) once the worker's script has run, so its onmessage is installed. Messages that
+	// arrive earlier stay queued: delivering them to a worker that has not run yet would silently drop them.
+	started bool
+	start   time.Time
+	page    *jsVM
 }
 
 func (w *workerVM) close() {
@@ -335,6 +338,7 @@ func (j *jsVM) workerCreate(rawurl, src, typ string) (int64, error) {
 		if w.closed {
 			return
 		}
+		defer func() { w.started = true }()
 		var err error
 		if typ == "module" {
 			vm.SetModuleLoader(func(_ *quickjs.VM, name string) (string, error) {
@@ -405,6 +409,13 @@ func (j *jsVM) pumpWorkers() float64 {
 		w.mu.Lock()
 		if w.closed {
 			w.mu.Unlock()
+			continue
+		}
+		if !w.started {
+			w.mu.Unlock()
+			if next < 0 || next > 1 {
+				next = 1 // look again soon: the script is still starting
+			}
 			continue
 		}
 		w.inboxMu.Lock()
