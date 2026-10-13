@@ -124,3 +124,79 @@ baseline chromium-savedata  run 3: page in=0 out=0 conns=0; browser-internal in=
 [106/345] sweef-off          run 1 https://github.com/golang/go                                 cold= 1283242 warm=  514272 req= 38 ready= 2184ms ok
 [107/345] sweef-standard     run 1 https://github.com/golang/go                                 cold= 1284202 warm=  514225 req= 38 ready= 1829ms ok
 [108/345] sweef-strict       run 1 https://github.com/golang/go                                 cold=  418672 warm=   61245 req= 21 ready=  709ms ok
+[109/345] chromium           run 1 https://github.com/golang/go                                 cold= 2627144 warm=  184171 req=177 ready= 4446ms ok
+[110/345] chromium-savedata  run 1 https://github.com/golang/go                                 cold= 2683627 warm=  220789 req=194 ready= 1540ms ok
+[111/345] sweef-standard     run 2 https://github.com/golang/go                                 cold= 1247951 warm=  513840 req= 37 ready= 1920ms ok
+[112/345] sweef-strict       run 2 https://github.com/golang/go                                 cold=  418383 warm=   61216 req= 21 ready=  519ms ok
+[113/345] chromium           run 2 https://github.com/golang/go                                 cold= 2636077 warm=  260063 req=177 ready= 4350ms ok
+[114/345] chromium-savedata  run 2 https://github.com/golang/go                                 cold= 2624714 warm=  197538 req=177 ready= 4366ms ok
+[115/345] sweef-off          run 2 https://github.com/golang/go                                 cold= 1248487 warm=  513830 req= 37 ready= 2059ms ok
+[116/345] sweef-strict       run 3 https://github.com/golang/go                                 cold=  454498 warm=   61198 req= 22 ready=  599ms ok
+[117/345] chromium           run 3 https://github.com/golang/go                                 cold= 2682843 warm=  183990 req=194 ready= 1477ms ok
+[118/345] chromium-savedata  run 3 https://github.com/golang/go                                 cold= 2635822 warm=  184231 req=177 ready= 3801ms ok
+[119/345] sweef-off          run 3 https://github.com/golang/go                                 cold= 1212427 warm=  514249 req= 36 ready= 2512ms ok
+[120/345] sweef-standard     run 3 https://github.com/golang/go                                 cold= 1211832 warm=  513781 req= 36 ready= 1684ms ok
+[121/345] sweef-off          run 1 https://stackoverflow.com/questions/927358/how-do-i-undo-th… cold=  112261 warm=       0 req=  2 ready=  355ms FAIL main document HTTP 403
+[122/345] sweef-standard     run 1 https://stackoverflow.com/questions/927358/how-do-i-undo-th… cold=  115374 warm=       0 req=  2 ready=  779ms FAIL main document HTTP 403
+[123/345] sweef-strict       run 1 https://stackoverflow.com/questions/927358/how-do-i-undo-th… cold=  123894 warm=       0 req=  2 ready=  606ms FAIL main document HTTP 403
+[124/345] chromium           run 1 https://stackoverflow.com/questions/927358/how-do-i-undo-th… cold=  908826 warm=       0 req=125 ready=  808ms FAIL main document HTTP 403
+[125/345] chromium-savedata  run 1 https://stackoverflow.com/questions/927358/how-do-i-undo-th… cold=  917284 warm=       0 req=123 ready=  772ms FAIL main document HTTP 403
+[126/345] sweef-standard     run 2 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[127/345] sweef-strict       run 2 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[128/345] chromium           run 2 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[129/345] chromium-savedata  run 2 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[130/345] sweef-off          run 2 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[131/345] sweef-strict       run 3 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[132/345] chromium           run 3 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[133/345] chromium-savedata  run 3 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[134/345] sweef-off          run 3 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[135/345] sweef-standard     run 3 https://stackoverflow.com/questions/927358/how-do-i-undo-th… skipped (failed earlier)
+[136/345] sweef-off          run 1 https://www.bbc.com/news                                     cold= 2459414 warm=  124423 req=110 ready=19742ms ok
+[137/345] sweef-standard     run 1 https://www.bbc.com/news                                     cold= 2099340 warm=  143063 req= 89 ready=23461ms ok
+[138/345] sweef-strict       run 1 https://www.bbc.com/news                                     cold=  201519 warm=   84946 req=  9 ready= 3122ms ok
+[139/345] chromium           run 1 https://www.bbc.com/news                                     cold= 2727375 warm=  226668 req=108 ready= 3559ms ok
+[140/345] chromium-savedata  run 1 https://www.bbc.com/news                                     cold= 2728699 warm=  230633 req=108 ready= 3737ms ok
+[141/345] sweef-standard     run 2 https://www.bbc.com/news                                     cold= 2109703 warm=  135932 req= 90 ready=15999ms ok
+[142/345] sweef-strict       run 2 https://www.bbc.com/news                                     cold=  201557 warm=   84827 req=  9 ready= 2941ms ok
+[143/345] chromium           run 2 https://www.bbc.com/news                                     cold= 2721772 warm=  226604 req=108 ready= 3816ms ok
+[144/345] chromium-savedata  run 2 https://www.bbc.com/news                                     cold= 2723668 warm= 1899330 req=108 ready= 4471ms ok
+[145/345] sweef-off          run 2 https://www.bbc.com/news                                     cold= 2462815 warm=  124597 req=109 ready=19083ms ok
+[146/345] sweef-strict       run 3 https://www.bbc.com/news                                     cold=  201332 warm=   84873 req=  9 ready= 3148ms ok
+[147/345] chromium           run 3 https://www.bbc.com/news                                     cold= 3864029 warm=  236331 req=160 ready= 2407ms ok
+[148/345] chromium-savedata  run 3 https://www.bbc.com/news                                     cold= 2732792 warm=  227872 req=108 ready= 3791ms ok
+[149/345] sweef-off          run 3 https://www.bbc.com/news                                     cold= 2452208 warm=  124459 req=109 ready=18770ms ok
+[150/345] sweef-standard     run 3 https://www.bbc.com/news                                     cold= 2107965 warm=  124443 req= 89 ready=13592ms ok
+[151/345] sweef-off          run 1 https://www.theguardian.com/environment/2019/may/06/human-s… cold=   21968 warm=       0 req=  5 ready=  606ms FAIL main document HTTP 404
+[152/345] sweef-standard     run 1 https://www.theguardian.com/environment/2019/may/06/human-s… cold=   21961 warm=       0 req=  5 ready=  900ms FAIL main document HTTP 404
+[153/345] sweef-strict       run 1 https://www.theguardian.com/environment/2019/may/06/human-s… cold=   22002 warm=       0 req=  1 ready=  525ms FAIL main document HTTP 404
+[154/345] chromium           run 1 https://www.theguardian.com/environment/2019/may/06/human-s… cold=  101794 warm=       0 req=  7 ready= 1065ms FAIL main document HTTP 404
+[155/345] chromium-savedata  run 1 https://www.theguardian.com/environment/2019/may/06/human-s… cold=   92564 warm=       0 req=  7 ready= 1233ms FAIL main document HTTP 404
+[156/345] sweef-standard     run 2 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[157/345] sweef-strict       run 2 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[158/345] chromium           run 2 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[159/345] chromium-savedata  run 2 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[160/345] sweef-off          run 2 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[161/345] sweef-strict       run 3 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[162/345] chromium           run 3 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[163/345] chromium-savedata  run 3 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[164/345] sweef-off          run 3 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+[165/345] sweef-standard     run 3 https://www.theguardian.com/environment/2019/may/06/human-s… skipped (failed earlier)
+  retrying sweef-off https://www.npr.org/ run 1 after: navigation not finished within 1m0s
+  retrying sweef-off https://www.npr.org/ run 1 after: navigation not finished within 1m0s
+[166/345] sweef-off          run 1 https://www.npr.org/                                         cold= 4395575 warm=       0 req=  0 ready=60000ms FAIL navigation not finished within 1m0s
+[167/345] sweef-standard     run 1 https://www.npr.org/                                         cold= 2910303 warm=  427379 req= 71 ready=46884ms ok
+[168/345] sweef-strict       run 1 https://www.npr.org/                                         cold=  810600 warm=  304344 req= 14 ready=12628ms ok
+[169/345] chromium           run 1 https://www.npr.org/                                         cold= 6397981 warm= 4530858 req=183 ready= 7829ms ok
+  retrying chromium-savedata https://www.npr.org/ run 1 after: load event not fired within 1m0s
+[170/345] chromium-savedata  run 1 https://www.npr.org/                                         cold= 6362201 warm=  812055 req=181 ready=13482ms ok
+  retrying sweef-standard https://www.npr.org/ run 2 after: navigation not finished within 1m0s
+[171/345] sweef-standard     run 2 https://www.npr.org/                                         cold= 2945173 warm=  440546 req= 71 ready=34342ms ok
+[172/345] sweef-strict       run 2 https://www.npr.org/                                         cold=  814114 warm=  307945 req= 14 ready=13012ms ok
+[173/345] chromium           run 2 https://www.npr.org/                                         cold= 6296846 warm=  877602 req=177 ready=20808ms ok
+[174/345] chromium-savedata  run 2 https://www.npr.org/                                         cold= 5448938 warm= 1622994 req=140 ready=44882ms ok
+[175/345] sweef-off          run 2 https://www.npr.org/                                         skipped (failed earlier)
+[176/345] sweef-strict       run 3 https://www.npr.org/                                         cold=  814235 warm=  307948 req= 14 ready=12621ms ok
+[177/345] chromium           run 3 https://www.npr.org/                                         cold= 5866933 warm= 1416239 req=175 ready= 3887ms ok
+  retrying chromium-savedata https://www.npr.org/ run 3 after: load event not fired within 1m0s
+[178/345] chromium-savedata  run 3 https://www.npr.org/                                         cold= 5592525 warm= 1809311 req=167 ready= 4999ms ok
+[179/345] sweef-off          run 3 https://www.npr.org/                                         skipped (failed earlier)
