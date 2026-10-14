@@ -3,6 +3,7 @@ package agent
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -32,6 +33,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	verbose := fs.Bool("v", false, "print status events and debug lines")
 	thoughts := fs.Bool("thoughts", false, "request and print thought summaries")
 	noThink := fs.Bool("no-thinking", false, "disable thinking (valid at effort <= high)")
+	jsonOut := fs.Bool("json", false, "machine-readable: print only one JSON object {answer,text,stop,stats} on stdout (for benchmarks)")
 	baseURL := fs.String("base-url", "", "API base URL (default $ANTHROPIC_BASE_URL or https://api.anthropic.com)")
 	fs.Usage = func() {
 		fmt.Fprintf(out, "usage: sweef agent [flags] \"<task>\"\n\nRuns the browser agent headlessly. Needs ANTHROPIC_API_KEY.\n\n")
@@ -52,6 +54,10 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	if key == "" {
 		fmt.Fprintln(out, "sweef agent: ANTHROPIC_API_KEY is not set")
 		return 2
+	}
+	realOut := out
+	if *jsonOut {
+		out = io.Discard // human-readable progress is suppressed; the JSON object goes to realOut
 	}
 	cfg := Config{APIKey: key, Model: *model, Effort: *effort, MaxTurns: *maxTurns, MaxCostUSD: *maxCost, ThoughtSummaries: *thoughts}
 	cfg.BaseURL = *baseURL
@@ -110,11 +116,14 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	var final RunStats
 	exit := 0
 	midline := false
+	var textBuf strings.Builder
+	var doneText string
 	st, _ := ag.Run(ctx, task, func(e Event) {
 		outMu.Lock()
 		defer outMu.Unlock()
 		switch e.Kind {
 		case EventText:
+			textBuf.WriteString(e.Text)
 			fmt.Fprint(out, e.Text)
 			midline = !strings.HasSuffix(e.Text, "\n")
 		case EventThought:
@@ -134,6 +143,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 		case EventConfirm:
 			// prompting happens in ConfirmFunc
 		case EventDone:
+			doneText = e.Text
 			if midline {
 				fmt.Fprintln(out)
 				midline = false
@@ -151,6 +161,16 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 		}
 	})
 	final = st
+	if *jsonOut {
+		b, _ := json.Marshal(struct {
+			Answer string   `json:"answer"` // the done-tool summary (what the user reads)
+			Text   string   `json:"text"`   // all assistant text
+			Stop   string   `json:"stop"`
+			Stats  RunStats `json:"stats"`
+		}{doneText, textBuf.String(), final.Stop, final})
+		fmt.Fprintln(realOut, string(b))
+		return exit
+	}
 	printStats(out, final)
 	return exit
 }

@@ -23,7 +23,7 @@ Sweef is not a fork of Chromium. It has its own CSS layout engine, rasterizer, s
 
 ## Benchmark against Vercel agent-browser
 
-Same 11-step agent flow (open a landing page, snapshot, click through to a login form, fill it, submit, open a React app, click in it, eval, snapshot) on a local fixture site. Median of 7 runs, a fresh daemon for every run, agent-browser 0.27 on Chromium 1194. Reproduce with `bench/run.sh`.
+Same 11-step agent flow (open a landing page, snapshot, click through to a login form, fill it, submit, open a React app, click in it, eval, snapshot) on a local fixture site. Median of 7 runs, a fresh daemon for every run, agent-browser 0.27 on Chromium 1194. Reproduce with `bench/run.sh`. A harness for the same question on 39 real public sites (including the failures), and for real-LLM agent runs, is in `bench/realsites/`.
 
 | step | Sweef | agent-browser | ratio |
 |---|---|---|---|

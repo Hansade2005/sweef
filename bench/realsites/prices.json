@@ -1,0 +1,10 @@
+{
+  "_note": "USD per million tokens, first-party API list prices (claude-api model table cached 2026-10-06). Edit and verify against your invoice. Cost in Mode B results is computed from reported token usage with this one table for BOTH agents; the Sweef binary's own cost estimate is recorded separately.",
+  "cache_read_mult": 0.1,
+  "cache_write_mult": 1.25,
+  "models": {
+    "claude-haiku-5-5": { "in": 0.10, "out": 0.50, "long_threshold": 100000, "in_long": 0.50, "out_long": 2.50 },
+    "claude-sonnet-5-5": { "in": 2.00, "out": 10.00 },
+    "claude-opus-5-5": { "in": 4.00, "out": 20.00 }
+  }
+}
