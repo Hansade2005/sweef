@@ -672,6 +672,9 @@ func (p *mediaPlayer) videoLoop() {
 				p.dropped.Add(n - 1)
 			}
 		}
+		// a decoder with frame threads returns pictures whose last rows are still being reconstructed: wait for
+		// it here, on the video goroutine, so the paint path never blocks on a decode
+		pic.Wait()
 		shown, haveShown, shownPic = s, true, pic
 		purge(s.PTS)
 		resized := p.vs.setPicture(pic)

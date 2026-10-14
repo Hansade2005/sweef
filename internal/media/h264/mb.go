@@ -717,7 +717,7 @@ func (d *Decoder) decodePCM(mbType uint32) error {
 	pcmPre := 0
 	if d.cabacOn {
 		// after the terminating bin the stream continues byte aligned
-		pos := (d.cab.pos + 7) &^ 7
+		pos := (d.cab.bitPos() + 7) &^ 7
 		r = &bitReader{b: d.cab.data, pos: pos, end: len(d.cab.data) * 8}
 	} else if d.dpOn {
 		pcmPre = -1

@@ -65,6 +65,13 @@ type Decoder struct {
 	lenSize int
 	lastSPS *SPS // the most recent sequence parameter set (ReorderDepth)
 
+	// frame threading (threads.go)
+	threads  int
+	inflight []*picCtx // pictures being reconstructed, oldest first
+	ctx      *picCtx   // the picture whose macroblock data is being collected
+	tpool    *tablePool
+	pooled   bool // the tables in use belong to the pool
+
 	// reference pictures
 	shortRef   []*Picture
 	longRef    [16]*Picture
@@ -139,6 +146,7 @@ type Decoder struct {
 	mapColToList0Field [2][2][16 + 32]int
 	colParity          int
 	colFieldOff        int
+	colLong            bool // the colocated picture is a long-term reference
 
 	// current macroblock
 	mbx, mby, mbIdx int
@@ -186,6 +194,7 @@ func NewDecoder() *Decoder {
 
 // Reset drops all reference pictures (used when seeking).
 func (d *Decoder) Reset() {
+	d.Flush()
 	d.removeAllRefs()
 	d.curPic, d.cur = nil, nil
 	d.picActive = false
@@ -306,6 +315,7 @@ func (d *Decoder) DecodeFrame(data []byte) (img *yuv.Frame, err error) {
 				DebugPanic(r, debug.Stack())
 			}
 			d.selectPlane(0)
+			d.abortCtx()
 			d.picActive = false
 			d.curPic, d.cur = nil, nil
 			d.firstField = false
@@ -340,7 +350,11 @@ func (d *Decoder) DecodeFrame(data []byte) (img *yuv.Frame, err error) {
 		return nil, nil
 	}
 	d.OutPOC, d.OutSeq = pic.poc, pic.seq
-	return d.pictureFrame(pic), firstErr
+	fr := d.pictureFrame(pic)
+	if !pic.complete() {
+		fr.SetWait(func() { pic.waitRows(progDone) })
+	}
+	return fr, firstErr
 }
 
 // pictureFrame wraps a decoded picture as a cropped output frame.
@@ -521,6 +535,15 @@ func (d *Decoder) allocTables(sps *SPS) {
 // startPicture begins a new frame, field or second field.
 func (d *Decoder) startPicture(h *sliceHeader) error {
 	sps := h.sps
+	threaded := d.canThread(h)
+	if !threaded && (len(d.inflight) > 0 || d.pooled) {
+		// a picture that is decoded here needs complete references and tables of its own
+		d.Flush()
+		if d.pooled {
+			d.allocTables(sps)
+			d.pooled = false
+		}
+	}
 	if d.first != nil && d.first.sps != sps && (d.mbW != sps.MbW || d.mbH != sps.MbH || d.f.cf != sps.ChromaFormat || d.f.bdY != sps.BitDepthLuma || d.f.bdC != sps.BitDepthChroma) {
 		d.flushForNewSequence()
 	}
@@ -611,7 +634,10 @@ func (d *Decoder) startPicture(h *sliceHeader) error {
 	}
 	d.lastStruct, d.lastDrop = d.picStructure, d.droppable
 	// reset the slice table of this picture / field
-	for k := 0; k < d.numPlanes(); k++ {
+	if threaded {
+		d.beginThreaded()
+	}
+	for k := 0; k < d.numPlanes() && !threaded; k++ {
 		d.selectPlane(k)
 		if d.fieldPic {
 			for r := btoi(d.picStructure == picBottom); r < d.mbH; r += 2 {
@@ -636,6 +662,9 @@ func (d *Decoder) startPicture(h *sliceHeader) error {
 	d.sliceNum = 0
 	d.decodedMB = 0
 	d.picActive = true
+	if d.ctx != nil {
+		d.ctx.last = d.cloneForSlice()
+	}
 	return nil
 }
 
@@ -655,6 +684,7 @@ func (d *Decoder) makeGapFrame(h *sliceHeader, maxFrameNum int) bool {
 	pic.fieldPOC = [2]int{0, 0}
 	pic.seq = d.seqNo
 	if prev != nil && prev.w == pic.w && prev.h == pic.h && prev.cf == pic.cf {
+		prev.waitRows(progDone)
 		copy(pic.y, prev.y)
 		copy(pic.cb, prev.cb)
 		copy(pic.cr, prev.cr)
@@ -697,14 +727,18 @@ func (d *Decoder) finishPicture() {
 	d.picActive = false
 	pic := d.curPic
 	h := d.first
-	for k := 0; k < d.numPlanes(); k++ {
-		d.selectPlane(k)
-		if d.decodedMB < d.numPlanes()*d.mbCountPicture() {
-			d.conceal(pic)
+	if d.ctx != nil {
+		d.threadedFinish()
+	} else {
+		for k := 0; k < d.numPlanes(); k++ {
+			d.selectPlane(k)
+			if d.decodedMB < d.numPlanes()*d.mbCountPicture() {
+				d.conceal(pic, d.concealSource(pic))
+			}
+			d.deblockPicture(pic)
 		}
-		d.deblockPicture(pic)
+		d.selectPlane(0)
 	}
-	d.selectPlane(0)
 	st := &d.poc
 	if !d.droppable {
 		if d.executeRefMarking(h, d.picStructure, d.firstField) {
@@ -731,14 +765,21 @@ func (d *Decoder) mbCountPicture() int {
 	return d.mbW * d.mbH
 }
 
-// conceal copies undecoded macroblocks from the nearest reference picture.
-func (d *Decoder) conceal(pic *Picture) {
-	var src *Picture
+// concealSource returns the picture undecoded macroblocks of pic are copied from: the most recent short-term
+// reference.
+func (d *Decoder) concealSource(pic *Picture) *Picture {
 	for _, p := range d.shortRef {
 		if p != pic {
-			src = p
-			break
+			return p
 		}
+	}
+	return nil
+}
+
+// conceal copies undecoded macroblocks from the nearest reference picture src (neutral grey when there is none).
+func (d *Decoder) conceal(pic, src *Picture) {
+	if src != nil {
+		src.waitRows(progDone)
 	}
 	neutralY := uint16(1) << uint(d.f.bdY-1)
 	neutralC := uint16(1) << uint(d.f.bdC-1)

@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+
+	"github.com/sweefbrowser/sweef/internal/media/wavefront"
 )
 
 func (d *Decoder) deblockPicture(pic *Picture) {
@@ -24,12 +26,17 @@ func (d *Decoder) deblockPicture(pic *Picture) {
 		}
 		return
 	}
+	fast := deblockFast && d.f.cat <= 1
 	rows := (d.mbH - row0 + step - 1) / step
 	workers := min(runtime.GOMAXPROCS(0), 4)
 	if !deblockParallel || workers < 2 || rows < 6 || d.mbW < 6 {
 		for mby := row0; mby < d.mbH; mby += step {
 			for mbx := 0; mbx < d.mbW; mbx++ {
-				d.deblockMB(mbx, mby)
+				if fast {
+					d.deblockMBFast(mbx, mby)
+				} else {
+					d.deblockMB(mbx, mby)
+				}
 			}
 		}
 		return
@@ -39,7 +46,7 @@ func (d *Decoder) deblockPicture(pic *Picture) {
 	// edge filtering reaches into the one above) must have finished: rows run as a wavefront two macroblocks
 	// apart. Each worker uses its own copy of the decoder state (the per-macroblock geometry lives there);
 	// the pictures and tables it reads are shared.
-	progress := make([]atomic.Int32, rows) // macroblocks finished per row
+	progress := wavefront.New(rows) // macroblocks finished per row
 	var next atomic.Int32
 	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ {
@@ -56,15 +63,14 @@ func (d *Decoder) deblockPicture(pic *Picture) {
 				mby := row0 + r*step
 				for x := 0; x < d.mbW; x++ {
 					if r > 0 {
-						need := int32(min(x+2, d.mbW))
-						for spin := 0; progress[r-1].Load() < need; spin++ {
-							if spin > 64 {
-								runtime.Gosched()
-							}
-						}
+						progress.Wait(r-1, min(x+2, d.mbW))
 					}
-					dd.deblockMB(x, mby)
-					progress[r].Store(int32(x + 1))
+					if fast {
+						dd.deblockMBFast(x, mby)
+					} else {
+						dd.deblockMB(x, mby)
+					}
+					progress.Done(r, x+1)
 				}
 			}
 		}()

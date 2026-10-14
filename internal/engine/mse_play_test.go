@@ -556,6 +556,15 @@ func TestMediaCapabilitiesDecodingInfo(t *testing.T) {
 	if r["supported"] != true || r["smooth"] != true || r["powerEfficient"] != false {
 		t.Errorf("720p30: %v", r)
 	}
+	// H.264 1080p30 is smooth since frame threading (it was not before), 1080p60 is not claimed
+	evalJSON(t, tab, `navigator.mediaCapabilities.decodingInfo({type:'media-source', video:{contentType:'video/mp4; codecs="avc1.640028"', width:1920, height:1080, framerate:30, bitrate:5000000}}).then(function(x){return x})`, &r)
+	if r["supported"] != true || r["smooth"] != true {
+		t.Errorf("H.264 1080p30: %v", r)
+	}
+	evalJSON(t, tab, `navigator.mediaCapabilities.decodingInfo({type:'media-source', video:{contentType:'video/mp4; codecs="avc1.640028"', width:1920, height:1080, framerate:60, bitrate:8000000}}).then(function(x){return x})`, &r)
+	if r["supported"] != true || r["smooth"] != false {
+		t.Errorf("H.264 1080p60 should be supported but not claimed smooth: %v", r)
+	}
 	evalJSON(t, tab, `navigator.mediaCapabilities.decodingInfo({type:'media-source', video:{contentType:'video/webm; codecs="vp09.00.10.08"', width:3840, height:2160, framerate:60, bitrate:20000000}}).then(function(x){return x})`, &r)
 	if r["supported"] != true || r["smooth"] != false {
 		t.Errorf("2160p60 should be supported but not smooth: %v", r)

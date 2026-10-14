@@ -54,6 +54,10 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   (temporary sessions), `setMediaKeys`, `encrypted` / `waitingforkey` events, and `cenc`, `cens`, `cbc1` and `cbcs` decryption of
   fragmented MP4 in the MSE pipeline. Widevine, PlayReady and FairPlay still reject with `NotSupportedError`; no persistent
   sessions, no encrypted WebM, no encrypted progressive `src` ([docs/media-streaming.md](docs/media-streaming.md)).
+- `h264.Decoder.SetThreads` / `Flush` and `yuv.Frame.Wait`; a 1080p High profile H.264 fixture with ffmpeg MD5s
+  (`internal/media/testdata/h264_1080p_high.mp4`), differential tests for the new kernels (motion compensation, CABAC,
+  deblocking, VP9 loop filter, video blit) and benchmarks (`BenchmarkH264Decode1080p`, `BenchmarkConvert1080p`,
+  `BenchmarkDrawVideoFrame*`); `TestPlaybackQuality` can paint the page while it plays (`SWEEF_BENCH_PAINT=WxH`).
 - Dedicated Workers run on a full script VM of their own goroutine: IndexedDB, Cache Storage, `navigator.storage`, the Origin Private
   File System with `FileSystemSyncAccessHandle`, `fetch`, WebAssembly and nested workers work inside them; real
   `SharedWorker`, `BroadcastChannel` and `navigator.locks`; structured clone with transferred `MessagePort`s and `ArrayBuffer`s.
@@ -141,6 +145,26 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - A download name cannot leave the downloads directory (`../x`, `..\x`), clicking a link never navigates the top level to `data:` or runs `vbscript:`, and the settings page ignores section names it does not define.
 
 ### Performance
+- H.264 video decoding uses frame threads (up to one per core, at most four; `SWEEF_H264_THREADS` overrides, 0 turns them
+  off), a faster deblocking filter, motion compensation, CABAC engine and display conversion. Measured on a shared
+  4 vCPU VM, medians of five alternating runs of the old and the new build (frames per second of the whole decode /
+  CPU time per frame): 720p30 clip 54 to 167 fps (23.5 to 15.4 ms), 1080p30 clip 24.8 to 97 fps (50.7 to 33.1 ms),
+  1080p60 clip 28 to 130 fps (46.7 to 27.2 ms). Every picture is identical to the old decoder's (ffmpeg MD5s of a new
+  1080p fixture, the repository's conformance streams, 2, 3 and 4 threads, `-race`). Details in
+  [docs/media-streaming.md](docs/media-streaming.md).
+- Native player, 20 s of 1080p30 H.264 through the page: dropped frames 21%, 53% and 43% before, 0.5%, 0.3% and 12% after
+  (load average 3.6 to 7; the 8.7% in the previous measurement was at load 1), and 1080p60 59 to 67% before, 1.8% (load 4)
+  to 36% (load 14) after. Painted into a fullscreen box with the page repainting at 60 Hz: 40 to 68% dropped before,
+  0% after.
+- Video frames are converted and drawn much faster: the RGBA conversion of a 1080p picture 7.6 to 8.8 ms to 3.4 to 3.8 ms
+  (four goroutines), drawing it scaled into a 1920x1080 / 1280x720 / 640x360 box 28 to 30 / 19 to 22 / 6.5 to 7.8 ms to
+  0.55 / 2.5 to 3.4 / 0.5 to 0.8 ms (pixel-identical to the general image shader), one page paint with a 1080p picture
+  40 to 87 ms to 8 to 12 ms (median); opaque solid fills (page backgrounds) replace pixels instead of blending them.
+- VP9 1080p: 56 to 44 ms of CPU per frame (48 fps both before and after; the frame rate was already above real time) from
+  a loop filter without per-sample overhead, inter prediction written into the frame and waits that sleep instead of
+  yielding in a loop (which used 46% of the CPU of a profile taken on a busy machine). The H.264 deblocking wavefront
+  uses the same waits.
+- `navigator.mediaCapabilities` reports H.264 up to 1080p30 as smooth (the pixel-rate budget was 720p30).
 - Opening the omnibox dropdown: rows and section headings are pooled and reused, and rows no longer get `id`/index
   attribute writes when they move (about 13.0 ms to 11.3 ms median in-process at 1x with history present; the shadow
   change takes roughly another 1 ms off).

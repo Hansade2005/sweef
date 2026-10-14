@@ -23,6 +23,14 @@ type Picture struct {
 // Valid reports whether the picture holds pixels.
 func (p Picture) Valid() bool { return p.p.valid() }
 
+// Wait blocks until the picture is completely decoded (pictures of a decoder that works on several frames at
+// once are returned while their last rows are still being reconstructed).
+func (p Picture) Wait() {
+	if p.p.frm != nil {
+		p.p.frm.Wait()
+	}
+}
+
 // Size is the picture size in pixels.
 func (p Picture) Size() (int, int) { return p.w, p.h }
 

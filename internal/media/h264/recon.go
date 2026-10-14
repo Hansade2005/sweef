@@ -85,6 +85,14 @@ func (d *Decoder) refFor(l, r int) *refEntry {
 	return nil
 }
 
+// planeWeights is the weighted prediction state of one colour plane of a rectangle.
+type planeWeights struct {
+	wt, ofs [2]int
+	logWD   int
+	maxv    int32
+	direct  bool // a single prediction that needs no weighting: written straight into the picture
+}
+
 // mcRect performs motion compensated prediction of one rectangle (4x4 block
 // units, macroblock relative) into the current picture, reading the motion
 // from the caches.
@@ -117,6 +125,12 @@ func (d *Decoder) mcRect(r rect) {
 		if ent == nil || ent.pic == nil {
 			continue
 		}
+		if ent.pic != d.curPic && !ent.pic.complete() {
+			// a reference still being reconstructed: wait for the rows this block reads (the interpolation
+			// filter reaches three lines below the block; chroma never reaches further). A block that lies
+			// above the picture reads its first row.
+			ent.pic.waitRows(max(1, min(py+int(mvs[l].y>>2)+bh+3, ent.pic.h)))
+		}
 		ents[l] = ent
 		used[l] = true
 		nUse++
@@ -131,8 +145,53 @@ func (d *Decoder) mcRect(r rect) {
 	} else if h.isB() && h.pps.WeightedBipredIdc == 2 && nUse == 2 {
 		mode = 2
 	}
-	// a single unweighted prediction goes straight into the picture
-	direct := nUse == 1 && mode == 0
+	nPl := 3
+	if cat == 0 {
+		nPl = 1
+	}
+	wref := refs
+	if d.mbMbaff() {
+		wref = [2]int{refs[0] >> 1, refs[1] >> 1}
+	}
+	lone := btoi(!used[0]) // the list of a single prediction
+	var pw [3]planeWeights
+	allDirect := true
+	for c := 0; c < nPl; c++ {
+		w := &pw[c]
+		w.maxv = d.f.maxY
+		w.logWD = h.logWDLuma
+		bd := d.f.bdY
+		if c > 0 {
+			w.maxv, bd = d.f.maxC, d.f.bdC
+			w.logWD = h.logWDChroma
+		}
+		switch mode {
+		case 1:
+			for l := 0; l < 2; l++ {
+				if !used[l] {
+					continue
+				}
+				if c == 0 {
+					w.wt[l], w.ofs[l] = h.pw[l].lumaW[wref[l]], h.pw[l].lumaO[wref[l]]
+				} else {
+					w.wt[l], w.ofs[l] = h.pw[l].chromaW[wref[l]][c-1], h.pw[l].chromaO[wref[l]][c-1]
+				}
+				w.ofs[l] <<= uint(bd - 8)
+			}
+		case 2:
+			tab := 0
+			if d.mbMbaff() {
+				tab = 1 + d.mby&1
+			}
+			w1 := int(d.implicitW[tab][refs[0]][refs[1]])
+			w.wt = [2]int{64 - w1, w1}
+			w.logWD = 5
+		}
+		// a single unweighted prediction goes straight into the picture, and so does one whose explicit
+		// weight is 1 and offset 0 (x264 sends weights for planes that did not change)
+		w.direct = nUse == 1 && (mode == 0 || (mode == 1 && w.wt[lone] == 1<<uint(w.logWD) && w.ofs[lone] == 0))
+		allDirect = allDirect && w.direct
+	}
 	var dOff [3]int
 	for c := 0; c < 3; c++ {
 		switch {
@@ -152,19 +211,16 @@ func (d *Decoder) mcRect(r rect) {
 		m := mvs[l]
 		var dst [3][]uint16
 		var dstr [3]int
-		for c := 0; c < 3; c++ {
-			if direct {
-				if c > 0 && cat == 0 {
-					break
-				}
+		for c := 0; c < nPl; c++ {
+			if pw[c].direct {
 				pl, _ := d.planeOf(c)
 				dst[c], dstr[c] = pl[dOff[c]:], d.mbStr[c]
 			} else {
 				dst[c], dstr[c] = d.pred[l][c*256:], 16
 			}
 		}
-		pl, stride, pw, ph := refPlaneView(ent, 0)
-		d.lumaMC(dst[0], dstr[0], pl, stride, pw, ph, px+int(m.x>>2), py+int(m.y>>2), int(m.x&3), int(m.y&3), bw, bh, d.f.maxY)
+		pl, stride, pw0, ph0 := refPlaneView(ent, 0)
+		d.lumaMC(dst[0], dstr[0], pl, stride, pw0, ph0, px+int(m.x>>2), py+int(m.y>>2), int(m.x&3), int(m.y&3), bw, bh, d.f.maxY)
 		switch cat {
 		case 1:
 			my := int(m.y)
@@ -191,118 +247,72 @@ func (d *Decoder) mcRect(r rect) {
 			}
 		}
 	}
-	if direct {
+	if allDirect {
 		return
 	}
-	nPl := 3
-	if cat == 0 {
-		nPl = 1
-	}
-	wref := refs
-	if d.mbMbaff() {
-		wref = [2]int{refs[0] >> 1, refs[1] >> 1}
-	}
 	for c := 0; c < nPl; c++ {
+		w := &pw[c]
+		if w.direct {
+			continue
+		}
 		dst, _ := d.planeOf(c)
 		ds := d.mbStr[c]
-		pw, ph := bw, bh
+		pwid, ph := bw, bh
 		off := d.mbOff[c] + r.y*4*ds + r.x*4
-		maxv := d.f.maxY
-		logWD := h.logWDLuma
-		bd := d.f.bdY
 		if c > 0 {
-			maxv, bd = d.f.maxC, d.f.bdC
-			logWD = h.logWDChroma
 			switch cat {
 			case 1:
-				pw, ph = bw/2, bh/2
+				pwid, ph = bw/2, bh/2
 				off = d.mbOff[c] + r.y*2*ds + r.x*2
 			case 2:
-				pw = bw / 2
+				pwid = bw / 2
 				off = d.mbOff[c] + r.y*4*ds + r.x*2
 			}
 		}
-		var wt, ofs [2]int
-		switch mode {
-		case 1:
-			for l := 0; l < 2; l++ {
-				if !used[l] {
-					continue
-				}
-				if c == 0 {
-					wt[l], ofs[l] = h.pw[l].lumaW[wref[l]], h.pw[l].lumaO[wref[l]]
-				} else {
-					wt[l], ofs[l] = h.pw[l].chromaW[wref[l]][c-1], h.pw[l].chromaO[wref[l]][c-1]
-				}
-				ofs[l] <<= uint(bd - 8)
-			}
-		case 2:
-			tab := 0
-			if d.mbMbaff() {
-				tab = 1 + d.mby&1
-			}
-			w1 := int(d.implicitW[tab][refs[0]][refs[1]])
-			wt = [2]int{64 - w1, w1}
-			logWD = 5
-		}
 		src := c * 256
-		// a single explicitly weighted prediction whose weight is 1 and offset 0 (x264 sends weights for planes
-		// that did not change) is a plain copy
-		identity := false
-		if mode == 1 && nUse == 1 {
-			l := 0
-			if !used[0] {
-				l = 1
-			}
-			identity = wt[l] == 1<<uint(logWD) && ofs[l] == 0
+		kind := 0 // 0 copy, 1 average, 2 explicit bi-prediction, 3 explicit single prediction
+		switch {
+		case nUse == 2 && mode == 0:
+			kind = 1
+		case nUse == 2:
+			kind = 2
+		case mode == 1:
+			kind = 3
 		}
+		w0, w1 := int32(w.wt[0]), int32(w.wt[1])
+		logWD, maxv := w.logWD, w.maxv
 		for y := 0; y < ph; y++ {
-			dd := dst[off+y*ds : off+y*ds+pw]
-			switch {
-			case identity:
-				l := 0
-				if !used[0] {
-					l = 1
-				}
-				copy(dd, d.pred[l][src+y*16:src+y*16+pw])
-			case nUse == 2 && mode == 0:
-				a := d.pred[0][src+y*16:]
-				b := d.pred[1][src+y*16:]
+			dd := dst[off+y*ds : off+y*ds+pwid]
+			switch kind {
+			case 0:
+				copy(dd, d.pred[lone][src+y*16:src+y*16+pwid])
+			case 1:
+				a := d.pred[0][src+y*16:][:len(dd)]
+				b := d.pred[1][src+y*16:][:len(dd)]
 				for x := range dd {
-					dd[x] = uint16((int(a[x]) + int(b[x]) + 1) >> 1)
+					dd[x] = uint16((uint32(a[x]) + uint32(b[x]) + 1) >> 1)
 				}
-			case nUse == 2:
-				a := d.pred[0][src+y*16:]
-				b := d.pred[1][src+y*16:]
-				w0, w1 := wt[0], wt[1]
-				o := (ofs[0] + ofs[1] + 1) >> 1
+			case 2:
+				a := d.pred[0][src+y*16:][:len(dd)]
+				b := d.pred[1][src+y*16:][:len(dd)]
+				o := int32((w.ofs[0] + w.ofs[1] + 1) >> 1)
+				sh, rnd := uint(logWD+1), int32(1)<<uint(logWD)
 				for x := range dd {
-					v := ((int(a[x])*w0 + int(b[x])*w1 + (1 << uint(logWD))) >> uint(logWD+1)) + o
-					dd[x] = clipPix(int32(v), maxv)
+					dd[x] = clipPix(((int32(a[x])*w0+int32(b[x])*w1+rnd)>>sh)+o, maxv)
 				}
-			case mode == 1:
-				l := 0
-				if !used[0] {
-					l = 1
-				}
-				a := d.pred[l][src+y*16 : src+y*16+len(dd)]
-				w0, o := int32(wt[l]), int32(ofs[l])
+			default:
+				a := d.pred[lone][src+y*16:][:len(dd)]
+				wl, o := int32(w.wt[lone]), int32(w.ofs[lone])
 				if logWD >= 1 {
 					sh, rnd := uint(logWD), int32(1)<<uint(logWD-1)
 					for x := range dd {
-						dd[x] = clipPix(((int32(a[x])*w0+rnd)>>sh)+o, int32(maxv))
+						dd[x] = clipPix(((int32(a[x])*wl+rnd)>>sh)+o, maxv)
 					}
 				} else {
 					for x := range dd {
-						dd[x] = clipPix(int32(a[x])*w0+o, int32(maxv))
+						dd[x] = clipPix(int32(a[x])*wl+o, maxv)
 					}
 				}
-			default:
-				l := 0
-				if !used[0] {
-					l = 1
-				}
-				copy(dd, d.pred[l][src+y*16:src+y*16+pw])
 			}
 		}
 	}

@@ -301,27 +301,30 @@ func (d *Decoder) predictInter(plane, x, y, w, h, blockIdx int) {
 		stepY := (16 * yScale) >> 14
 		startX := (baseX << 4) + dX
 		startY := (baseY << 4) + dY
-		d.blockInterPred(ref, plane, startX, startY, stepX, stepY, w, h, b.interpFilter, d.predBuf[rl][:w*h])
+		if rl == 0 {
+			// the first (or only) prediction goes straight into the frame
+			d.blockInterPred(ref, plane, startX, startY, stepX, stepY, w, h, b.interpFilter, d.cur.pix[plane][y*d.cur.stride[plane]+x:], d.cur.stride[plane])
+		} else {
+			d.blockInterPred(ref, plane, startX, startY, stepX, stepY, w, h, b.interpFilter, d.predBuf[1][:w*h], w)
+		}
 	}
-	fr := d.cur
-	stride := fr.stride[plane]
-	pix := fr.pix[plane]
-	for i := 0; i < h; i++ {
-		row := pix[(y+i)*stride+x : (y+i)*stride+x+w]
-		if isCompound {
-			p0 := d.predBuf[0][i*w : i*w+w]
+	if isCompound {
+		fr := d.cur
+		stride := fr.stride[plane]
+		pix := fr.pix[plane]
+		for i := 0; i < h; i++ {
+			row := pix[(y+i)*stride+x : (y+i)*stride+x+w]
 			p1 := d.predBuf[1][i*w : i*w+w]
 			for j := range row {
-				row[j] = uint16((int(p0[j]) + int(p1[j]) + 1) >> 1)
+				row[j] = uint16((uint32(row[j]) + uint32(p1[j]) + 1) >> 1)
 			}
-		} else {
-			copy(row, d.predBuf[0][i*w:i*w+w])
 		}
 	}
 }
 
 // blockInterPred implements spec 8.5.2.4.
-func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, filter int, out []uint16) {
+// The prediction is written to out with ostride samples per row.
+func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, filter int, out []uint16, ostride int) {
 	lastX := ref.pw[plane] - 1
 	lastY := ref.ph[plane] - 1
 	stride := ref.stride[plane]
@@ -353,7 +356,7 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 		}
 		if fx == 0 && fy == 0 {
 			for r := 0; r < h; r++ {
-				copy(out[r*w:r*w+w], win[(r+3)*wstride+3:(r+3)*wstride+3+w])
+				copy(out[r*ostride:r*ostride+w], win[(r+3)*wstride+3:(r+3)*wstride+3+w])
 			}
 			return
 		}
@@ -376,9 +379,12 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 			for r := r0; r < r1; r++ {
 				src := win[r*wstride : r*wstride+w+7]
 				dst := inter[r*w : r*w+w]
+				// eight views of the row, shifted by one sample each, so that the loop has no bounds checks
+				s0, s1, s2, s3 := src[:len(dst)], src[1:][:len(dst)], src[2:][:len(dst)], src[3:][:len(dst)]
+				s4, s5, s6, s7 := src[4:][:len(dst)], src[5:][:len(dst)], src[6:][:len(dst)], src[7:][:len(dst)]
 				for c := range dst {
-					s := int32(src[c])*f0 + int32(src[c+1])*f1 + int32(src[c+2])*f2 + int32(src[c+3])*f3 +
-						int32(src[c+4])*f4 + int32(src[c+5])*f5 + int32(src[c+6])*f6 + int32(src[c+7])*f7
+					s := int32(s0[c])*f0 + int32(s1[c])*f1 + int32(s2[c])*f2 + int32(s3[c])*f3 +
+						int32(s4[c])*f4 + int32(s5[c])*f5 + int32(s6[c])*f6 + int32(s7[c])*f7
 					v := (s + 64) >> 7
 					if uint32(v) > uint32(maxV) {
 						if v < 0 {
@@ -393,7 +399,7 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 		}
 		if fy == 0 {
 			for r := 0; r < h; r++ {
-				copy(out[r*w:r*w+w], inter[(r+3)*istride:(r+3)*istride+w])
+				copy(out[r*ostride:r*ostride+w], inter[(r+3)*istride:(r+3)*istride+w])
 			}
 			return
 		}
@@ -401,7 +407,7 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 		f0, f1, f2, f3, f4, f5, f6, f7 := f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7]
 		maxV := d.maxV
 		for r := 0; r < h; r++ {
-			o := out[r*w : r*w+w]
+			o := out[r*ostride : r*ostride+w]
 			p0 := inter[r*istride : r*istride+w]
 			p1 := inter[(r+1)*istride : (r+1)*istride+w]
 			p2 := inter[(r+2)*istride : (r+2)*istride+w]
@@ -449,7 +455,7 @@ func (d *Decoder) blockInterPred(ref *Frame, plane, x, y, xStep, yStep, w, h, fi
 			for t := 0; t < 8; t++ {
 				s += f[t] * int32(inter[((p>>4)+t)*w+c])
 			}
-			out[r*w+c] = d.clipPix((s + 64) >> 7)
+			out[r*ostride+c] = d.clipPix((s + 64) >> 7)
 		}
 	}
 }

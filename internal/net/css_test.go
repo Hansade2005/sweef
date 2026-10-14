@@ -3,6 +3,7 @@ package net
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -431,8 +432,13 @@ func TestCSSLargePageCost(t *testing.T) {
 		}
 	}
 	t.Logf("10k-node page, %d rules: snapshot %v", rules, best)
-	if best > 100*time.Millisecond && !raceEnabled { // measured ~28ms; the race detector is ~10x slower
-
-		t.Fatalf("snapshot too slow: %v", best)
+	// Measured ~28 ms on Linux and ~105 ms on a loaded macOS runner; a quadratic regression costs seconds, so the
+	// bound only has to separate those. The race detector is ~10x slower and is not checked.
+	limit := 100 * time.Millisecond
+	if runtime.GOOS != "linux" {
+		limit = 300 * time.Millisecond
+	}
+	if best > limit && !raceEnabled {
+		t.Fatalf("snapshot too slow: %v (limit %v)", best, limit)
 	}
 }

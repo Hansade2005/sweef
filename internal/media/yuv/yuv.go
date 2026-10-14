@@ -55,7 +55,23 @@ type Frame struct {
 	Stride        [3]int
 	Matrix        int  // H.273 matrix_coefficients; MatrixUnspecified if unknown
 	FullRange     bool // full-range (JPEG) samples
+	wait          func()
 }
+
+// Wait blocks until the samples of the frame are complete. Decoders that reconstruct several pictures at the
+// same time hand out a frame while its last rows are still being written; every other frame is complete when
+// it is returned and Wait does nothing.
+func (f *Frame) Wait() {
+	if f.wait != nil {
+		f.wait()
+	}
+}
+
+// Pending reports whether the frame may still be incomplete (a function for Wait is installed).
+func (f *Frame) Pending() bool { return f.wait != nil }
+
+// SetWait installs the function Wait calls.
+func (f *Frame) SetWait(w func()) { f.wait = w }
 
 // New allocates a frame of the given geometry.
 func New(f Format, depth, w, h int) *Frame {
@@ -77,6 +93,7 @@ func New(f Format, depth, w, h int) *Frame {
 // the frame is not 8-bit or its chroma layout has no YCbCr equivalent.
 // Monochrome frames get neutral chroma at 4:2:0.
 func (f *Frame) ToYCbCr() (*image.YCbCr, bool) {
+	f.Wait()
 	if f.Depth != 8 {
 		return nil, false
 	}

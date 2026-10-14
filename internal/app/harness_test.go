@@ -181,8 +181,18 @@ func (h *harness) px(x, y int) color.RGBA { return h.win.Screen().RGBAAt(x, y) }
 func (h *harness) wantPx(x, y int, want string) {
 	h.t.Helper()
 	w, _ := ParseColor(want)
+	near := func(g color.RGBA) bool {
+		return abs(int(g.R)-int(w.R)) <= 3 && abs(int(g.G)-int(w.G)) <= 3 && abs(int(g.B)-int(w.B)) <= 3
+	}
+	// A page's first paint can land a moment after its title or load state changes (a loaded CI runner showed a
+	// white pixel there), so the colour has to appear within a few seconds; it is still checked exactly.
+	deadline := time.Now().Add(5 * time.Second)
 	g := h.px(x, y)
-	if abs(int(g.R)-int(w.R)) > 3 || abs(int(g.G)-int(w.G)) > 3 || abs(int(g.B)-int(w.B)) > 3 {
+	for !near(g) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		g = h.px(x, y)
+	}
+	if !near(g) {
 		h.t.Fatalf("pixel (%d,%d) = #%02x%02x%02x, want %s", x, y, g.R, g.G, g.B, want)
 	}
 }

@@ -12,6 +12,7 @@ package engine
 // gesture), looping, so it can be shorter than the run.
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -30,6 +31,7 @@ type playbackReport struct {
 	Pictures       int     // pictures actually delivered to the page
 	GapMS          []float64
 	LateMS         []float64
+	PaintMS        []float64 // time of each page paint when SWEEF_BENCH_PAINT is set
 }
 
 func quantile(v []float64, p float64) float64 {
@@ -86,7 +88,15 @@ func playClip(t *testing.T, path string, secs float64) playbackReport {
 			t.Logf("element state: %s", st)
 		}
 	}()
-	evalJSON(t, tab, "(function(){var v=document.createElement('video');v.id='v';v.width=640;v.height=360;v.muted=true;v.loop=true;v.preload='auto';v.src='/clip"+ext+"';document.body.appendChild(v);v.play().catch(function(){});return 1})()", nil)
+	vw, vh := 640, 360
+	paintW, paintH := 0, 0
+	if p := os.Getenv("SWEEF_BENCH_PAINT"); p != "" { // "1280x720": the video fills a page of that size and it is painted at 60 Hz
+		if _, err := fmt.Sscanf(p, "%dx%d", &paintW, &paintH); err != nil || paintW <= 0 || paintH <= 0 {
+			t.Fatalf("SWEEF_BENCH_PAINT=%q: want WIDTHxHEIGHT", p)
+		}
+		vw, vh = paintW, paintH
+	}
+	evalJSON(t, tab, "(function(){var v=document.createElement('video');v.id='v';v.width="+strconv.Itoa(vw)+";v.height="+strconv.Itoa(vh)+";v.muted=true;v.loop=true;v.preload='auto';v.src='/clip"+ext+"';document.body.appendChild(v);v.play().catch(function(){});return 1})()", nil)
 	waitTrue(t, tab, "document.getElementById('v').readyState >= 3", 20*time.Second)
 	waitTrue(t, tab, "document.getElementById('v').currentTime > 0.3", 20*time.Second)
 	var r playbackReport
@@ -104,7 +114,19 @@ func playClip(t *testing.T, path string, secs float64) playbackReport {
 	t0q, t0d := qj()
 	c0, w0 := cpuTime(), time.Now()
 	for time.Since(w0) < time.Duration(secs*float64(time.Second)) {
-		tab.Settle(100 * time.Millisecond)
+		if paintW == 0 {
+			tab.Settle(100 * time.Millisecond)
+			continue
+		}
+		// paint the page the way the window does (incrementally: the video box is what changes), 60 times a second
+		tp := time.Now()
+		tab.PaintRGBAOpts(PaintOptions{Width: paintW, Height: paintH, DSF: 1, Incremental: true})
+		r.PaintMS = append(r.PaintMS, float64(time.Since(tp).Microseconds())/1000)
+		if rest := time.Second/60 - time.Since(tp); rest > 0 {
+			tab.Settle(rest)
+		} else {
+			tab.Settle(time.Millisecond)
+		}
 	}
 	r.Wall = time.Since(w0)
 	r.CPU = cpuTime() - c0
@@ -156,6 +178,10 @@ func TestPlaybackQuality(t *testing.T) {
 	rate := 0.0
 	if r.Total > 0 {
 		rate = 100 * r.Dropped / r.Total
+	}
+	if len(r.PaintMS) > 0 {
+		sort.Float64s(r.PaintMS)
+		t.Logf("page paint (%s): %d paints, ms median %.1f p95 %.1f max %.1f", os.Getenv("SWEEF_BENCH_PAINT"), len(r.PaintMS), quantile(r.PaintMS, .5), quantile(r.PaintMS, .95), quantile(r.PaintMS, 1))
 	}
 	t.Logf("%s %.0fx%.0f: %.1fs wall, %.0f frames reported (%.1f fps), %.0f dropped (%.2f%%), %d pictures delivered; "+
 		"picture interval ms median %.1f p95 %.1f p99 %.1f max %.1f; picture lateness at the player clock ms median %.0f p95 %.0f max %.0f; CPU %.0f%% of one core (%.1fs CPU in %.1fs)",

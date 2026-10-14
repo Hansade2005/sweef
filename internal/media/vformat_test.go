@@ -20,6 +20,7 @@ func vpicRaw(p vpic) []byte {
 		return toYUV(p.ycc).b
 	}
 	f := p.frm
+	f.Wait() // a frame of a decoder with frame threads may still be being reconstructed
 	var out []byte
 	put := func(pl []uint16, stride, w, h int) {
 		for y := 0; y < h; y++ {
