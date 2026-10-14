@@ -166,6 +166,8 @@ type Tab struct {
 	wk    *bgWorker    // set on the hidden tab of a worker (workers.go)
 	fr    frameSet     // child frames of the document and, for a frame, its pump (frames.go)
 
+	isoState atomic.Pointer[isolation] // COOP/COEP state of the current document (coi.go)
+
 	navSite atomic.Pointer[string] // schemeful site of the document being loaded (partition.go)
 
 	asyncImg   atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
@@ -319,11 +321,21 @@ func (t *Tab) navigate(rawurl string, headers map[string]string, progressive boo
 			t.LogConsole("error", fmt.Sprintf("Refused to display '%s' in a frame because it set '%s'.", res.finalURL, why))
 			t.fr.blocked.Store(true)
 			t.fr.opaque.Store(true)
+			t.setIsolation(nil, "about:blank")
+			t.setDocument("<!doctype html><html><head></head><body></body></html>", "about:blank", false)
+			return nil
+		}
+		if blocked, why := t.frameCOEPBlocked(res.header, res.finalURL); blocked {
+			t.LogConsole("error", fmt.Sprintf("Refused to display '%s' in a frame because it lacks %s.", res.finalURL, why))
+			t.fr.blocked.Store(true)
+			t.fr.opaque.Store(true)
+			t.setIsolation(nil, "about:blank")
 			t.setDocument("<!doctype html><html><head></head><body></body></html>", "about:blank", false)
 			return nil
 		}
 		t.fr.blocked.Store(false)
 	}
+	t.setIsolation(res.header, res.finalURL)
 	t.setDocument(res.body, res.finalURL, progressive)
 	t.mu.Lock()
 	// history bookkeeping (goBack/goForward)
@@ -469,7 +481,10 @@ func flattenHeaders(h map[string][]string) map[string]string {
 
 // SetDocument parses html, rebuilds the DOM, runs init scripts + page scripts,
 // fires load.
-func (t *Tab) SetDocument(htmlSrc, finalURL string) { t.setDocument(htmlSrc, finalURL, false) }
+func (t *Tab) SetDocument(htmlSrc, finalURL string) {
+	t.setIsolation(nil, finalURL)
+	t.setDocument(htmlSrc, finalURL, false)
+}
 
 func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	tp := time.Now()

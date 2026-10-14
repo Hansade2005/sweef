@@ -19,6 +19,7 @@ package engine
 // detached (on memory.grow or instance close), so the garbage collector can never reuse it under the VM.
 
 import (
+	"encoding/binary"
 	"fmt"
 	"reflect"
 	"sync"
@@ -166,6 +167,13 @@ func (r qjsRaw) newExternalBuffer(vm *quickjs.VM, b []byte) quickjs.Value {
 	return mkValue(vm, jv)
 }
 
+// newSharedBuffer wraps the memory at base (length len(b)) in a SharedArrayBuffer-class object. The memory is
+// owned by sab.go (or a shared wasm memory) and outlives the VM, and QuickJS gets no free function for it.
+func (r qjsRaw) newSharedBuffer(vm *quickjs.VM, b []byte, base unsafe.Pointer) quickjs.Value {
+	jv := lib.XJS_NewArrayBuffer(r.tls, r.ctx, uintptr(base), lib.Tsize_t(len(b)), 0, 0, 1)
+	return mkValue(vm, jv)
+}
+
 // newCopyBuffer returns a fresh ArrayBuffer holding a copy of b.
 func (r qjsRaw) newCopyBuffer(vm *quickjs.VM, b []byte) quickjs.Value {
 	var p uintptr
@@ -237,6 +245,22 @@ func qjsSelfTest() error {
 		return fmt.Errorf("interrupt deadline forgive self-test failed (%v)", d)
 	}
 	vm.SetEvalTimeout(0)
+	// a shared buffer over Go memory: the SharedArrayBuffer class, readable from Go, never detached
+	sh := r.newSharedBuffer(vm, backing, unsafe.Pointer(&backing[0]))
+	satom, err := vm.NewAtom("shbuf")
+	if err != nil {
+		return err
+	}
+	if err := vm.SetPropertyValue(g, satom, sh); err != nil {
+		return err
+	}
+	got, err = vm.Eval(`var su = new Uint8Array(shbuf); su[3] = 55; (shbuf instanceof SharedArrayBuffer) + ':' + Atomics.add(new Int32Array(shbuf, 4, 1), 0, 1) + ':' + shbuf.byteLength`, quickjs.EvalGlobal)
+	if err != nil || got != "true:"+itoa(int(binary.LittleEndian.Uint32(backing[4:8])-1))+":8" || backing[3] != 55 {
+		return fmt.Errorf("shared buffer self-test failed: %v %v %v", got, err, backing)
+	}
+	if b, ok := r.bufferBytes(&sh); !ok || len(b) != 8 || unsafe.SliceData(b) != unsafe.SliceData(backing) {
+		return fmt.Errorf("shared buffer is not readable from Go")
+	}
 	r.detach(&ab)
 	got, err = vm.Eval(`u.length + ':' + buf.byteLength`, quickjs.EvalGlobal)
 	if err != nil || got != "0:0" {

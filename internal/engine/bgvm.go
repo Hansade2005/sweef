@@ -65,6 +65,7 @@ func (e *Engine) newBGRuntime(owner *Tab, docURL string) (*bgRuntime, error) {
 	t.url = u
 	t.consoleRing, t.netRing = owner.consoleRing, owner.netRing
 	t.inheritContext(owner)
+	t.inheritIsolation(owner)
 	doc, err := fnet.ParseDocument(emptyWorkerDoc, docURL)
 	if err != nil {
 		return nil, err
@@ -91,6 +92,7 @@ func (e *Engine) newBGRuntime(owner *Tab, docURL string) (*bgRuntime, error) {
 		t.close()
 		return nil, err
 	}
+	_, _ = j.call("__swCoiBind")
 	return rt, nil
 }
 
@@ -174,6 +176,7 @@ func (rt *bgRuntime) stop() {
 	rt.stopOnce.Do(func() {
 		rt.stopped.Store(true)
 		close(rt.quit)
+		rt.j.sabInterrupt() // a worker blocked in Atomics.wait must come back to notice
 		rt.nudge()
 		if rt.started.Load() {
 			<-rt.done

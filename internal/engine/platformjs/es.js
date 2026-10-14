@@ -1,6 +1,6 @@
 // ES2024-2026 built-ins QuickJS lacks: Array.fromAsync, explicit resource management
-// library pieces (Symbol.dispose, DisposableStack, AsyncDisposableStack, SuppressedError)
-// and Atomics.waitAsync. Syntax (`using`, `await using`) cannot be polyfilled.
+// library pieces (Symbol.dispose, DisposableStack, AsyncDisposableStack, SuppressedError).
+// Syntax (`using`, `await using`) cannot be polyfilled.
 function isCtor(f) {
   if (typeof f !== 'function') return false;
   try { Reflect.construct(String, [], f); return true; } catch (e) { return false; }
@@ -159,34 +159,4 @@ function makeStack(Name, isAsync) {
 makeStack('DisposableStack', false);
 makeStack('AsyncDisposableStack', true);
 
-// ---- Atomics.waitAsync (single agent: only a same-agent notify can wake a waiter) -------------------------
-if (typeof Atomics !== 'undefined' && H.missing(Atomics, 'waitAsync')) {
-  var waiters = [];
-  def(Atomics, 'waitAsync', function waitAsync(ta, index, value, timeout) {
-    if (!(ta instanceof Int32Array || (typeof BigInt64Array !== 'undefined' && ta instanceof BigInt64Array)) || !(ta.buffer instanceof SharedArrayBuffer)) throw new TypeError('Atomics.waitAsync requires an Int32Array or BigInt64Array on a SharedArrayBuffer');
-    index = Math.trunc(Number(index)) || 0;
-    if (index < 0 || index >= ta.length) throw new RangeError('index out of range');
-    var t = timeout === undefined ? Infinity : Number(timeout);
-    if (t !== t) t = Infinity;
-    if (t < 0) t = 0;
-    if (Atomics.load(ta, index) != value) return { async: false, value: 'not-equal' };
-    if (t === 0) return { async: false, value: 'timed-out' };
-    var w = { ta: ta, index: index };
-    w.promise = new Promise(function (res) {
-      w.resolve = function (v) { var i = waiters.indexOf(w); if (i >= 0) waiters.splice(i, 1); if (w.timer) clearTimeout(w.timer); res(v); };
-    });
-    if (t !== Infinity) w.timer = setTimeout(function () { w.resolve('timed-out'); }, t);
-    waiters.push(w);
-    return { async: true, value: w.promise };
-  });
-  var nativeNotify = Atomics.notify;
-  def(Atomics, 'notify', function notify(ta, index, count) {
-    var n = nativeNotify.call(Atomics, ta, index, count);
-    var left = count === undefined ? Infinity : Math.max(0, Math.trunc(Number(count)) || 0);
-    for (var i = 0; i < waiters.length && left > 0;) {
-      var w = waiters[i];
-      if (w.ta.buffer === ta.buffer && w.ta.byteOffset + w.index * w.ta.BYTES_PER_ELEMENT === ta.byteOffset + (Math.trunc(Number(index)) || 0) * ta.BYTES_PER_ELEMENT) { w.resolve('ok'); n++; left--; } else i++;
-    }
-    return n;
-  });
-}
+// Atomics.waitAsync, wait and notify live in sab_prelude.js (Go wait queue shared by every VM of an agent cluster).

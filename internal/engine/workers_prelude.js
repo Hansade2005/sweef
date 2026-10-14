@@ -76,7 +76,7 @@
         throw mkErr('DataCloneError', 'Value not transferable.');
       }
     });
-    var data = global.__swSer(message, ports);
+    var data = global.__swSer(message, ports, true);
     return {
       data: data,
       commit: function () {

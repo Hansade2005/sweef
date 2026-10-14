@@ -1965,7 +1965,7 @@
   def(global, 'name', { value: '', writable: true });
   def(global, 'origin', { get: function () { return docOriginStr(); } });
   def(global, 'isSecureContext', { get: function () { var u = currentURL(); return /^(https|sweef):/.test(u) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]|[^/:]*\.localhost)(:|\/|$)/.test(u); } });
-  def(global, 'crossOriginIsolated', { value: false });
+  def(global, 'crossOriginIsolated', { get: function () { return host('coi') ? !!sw.coi() : false; }, enumerable: true });
   function Window() { illegal(); } setTag(Window, 'Window'); global.Window = Window;
   Object.setPrototypeOf(Window.prototype, EventTarget.prototype);
   (function () { // make `window` an EventTarget without changing globalThis's prototype chain surprises
@@ -2543,7 +2543,8 @@
     if (v instanceof Date) return new Date(v.getTime());
     if (v instanceof RegExp) return new RegExp(v.source, v.flags);
     if (v instanceof ArrayBuffer) return v.slice(0);
-    if (ArrayBuffer.isView(v)) return new v.constructor(v);
+    if (global.__swSAB && v instanceof global.__swSAB) return typeof global.__swSabShare === 'function' ? global.__swSabShare(v) : v;
+    if (ArrayBuffer.isView(v)) return v.buffer && global.__swSAB && v.buffer instanceof global.__swSAB ? new v.constructor(clone(v.buffer, seen), v.byteOffset, v instanceof DataView ? v.byteLength : v.length) : new v.constructor(v);
     if (v instanceof Map) { out = new Map(); seen.set(v, out); v.forEach(function (val, k) { out.set(clone(k, seen), clone(val, seen)); }); return out; }
     if (v instanceof Set) { out = new Set(); seen.set(v, out); v.forEach(function (val) { out.add(clone(val, seen)); }); return out; }
     if (v instanceof Error) { out = new (global[v.name] || Error)(v.message); out.stack = v.stack; return out; }

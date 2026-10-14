@@ -163,6 +163,10 @@ type jsVM struct {
 	// closeHooks run after the QuickJS VM is closed: feature files hang their native teardown here (wasm.go).
 	closeHooks []func()
 
+	clMu    sync.Mutex
+	cluster *agentCluster // SharedArrayBuffer agent cluster (sab.go)
+	sabv    *vmSAB
+
 	closerMu sync.Mutex
 	closers  []func() // run first when the VM closes (host extensions, media players, audio streams); they must not call into the VM
 
@@ -247,6 +251,7 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 	if _, err := j.call("__swSetDocument", docURL, "loading"); err != nil {
 		t.LogConsole("error", "sweef: __swSetDocument failed: "+err.Error())
 	}
+	_, _ = j.call("__swCoiBind")
 	j.installBindings()
 	if t.isFrame() {
 		_, _ = j.call("__swFrameInit", t.windowName())

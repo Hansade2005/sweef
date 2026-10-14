@@ -75,7 +75,6 @@
     ['pwa', L, 'Notification NotificationEvent Permissions PermissionStatus PushManager PushSubscription PushSubscriptionOptions PushEvent PushMessageData PushSubscriptionChangeEvent SyncManager SyncEvent PeriodicSyncManager PeriodicSyncEvent Lock LockManager __pwa __pwaEvent __pwaDispatch'],
     ['pwa', N, 'permissions locks setAppBadge clearAppBadge', 1]
   ];
-  if (typeof Atomics === 'object') T.push(['es', Atomics, 'waitAsync', 0, 1]);
   if (g.HTMLVideoElement) T.push(['devices', g.HTMLVideoElement.prototype, 'requestPictureInPicture disablePictureInPicture', 1, 1]);
   for (var i = 0; i < T.length; i++) {
     var row = T[i], ns = row[2].split(' ');
