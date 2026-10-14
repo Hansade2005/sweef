@@ -68,6 +68,13 @@ func (r *Ring) Since(sinceSID int64) []Event {
 
 func (r *Ring) All() []Event { return r.Since(0) }
 
+// Seq is the SID of the newest entry (0 for none).
+func (r *Ring) Seq() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.seq
+}
+
 // Trim halves the live window — called by the memory governor under pressure.
 func (r *Ring) Trim() {
 	r.mu.Lock()
@@ -121,6 +128,8 @@ type Tab struct {
 	netRing     *Ring
 	stateRing   *Ring
 	dialogRing  *Ring
+	devHL       atomic.Int64 // node highlighted by Developer Tools (0 none)
+	dev         *dtLog       // Developer Tools network recorder (devtools_net.go); shared with frames and worker tabs
 
 	js      *jsVM // per-document JavaScript VM (nil when JS is disabled)
 	history []*url.URL
@@ -198,6 +207,7 @@ func newTab(e *Engine, id string) *Tab {
 		netRing:     NewRing(e.opts.NetworkRingSize),
 		stateRing:   NewRing(e.opts.StateRingSize),
 		dialogRing:  NewRing(64),
+		dev:         newDtLog(),
 		bindingRing: NewRing(256),
 		vpW:         e.opts.ViewportWidth,
 		vpH:         e.opts.ViewportHeight,
@@ -388,6 +398,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	t.swPrepareNavigation(u.String())
 	synth, method, target, hdrs, _, err := t.routedRequest("GET", u.String(), headers, "")
 	if err != nil {
+		t.dev.begin(t.documentKind(), "GET", u.String(), headers, "").fail(err.Error())
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": u.String(), "error": err.Error()}})
 		return nil, err
 	}
@@ -405,9 +416,11 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	start := time.Now()
 	var res *http.Response
 	var docMI *meterInfo
+	var dr *dtRec
 	if synth != nil {
 		res = synth
 		rec.Headers = map[string]string{"x-sweef-route": "fulfill"}
+		dr = t.dev.begin(t.documentKind(), method, target, rec.Headers, "")
 	} else {
 		req, err := http.NewRequestWithContext(t.eng.ctx, method, target, nil)
 		if err != nil {
@@ -425,15 +438,18 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		rec.Headers = flattenHeaders(req.Header)
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 		t.emit(EvRequest, rec)
+		dr = t.dev.begin(t.documentKind(), method, target, rec.Headers, "")
 		t.touchNet()
 		mreq, mi := withMeter(req, t.Context(), t, t.documentKind(), pol)
 		if res, err = t.eng.clientFor(t.Context()).Do(mreq); err != nil {
+			dr.fail(err.Error())
 			return nil, err
 		}
 		docMI = mi
 	}
 	if isDownloadResponse(res.Header) && res.StatusCode < 400 {
 		defer res.Body.Close()
+		dr.done(res.StatusCode, res.Header, "", 0, nil, target)
 		t.saveDownload(u.String(), suggestedName(res.Header, u.String(), ""), res.Header.Get("Content-Type"), res.Body)
 		return nil, errDownloaded
 	}
@@ -454,6 +470,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		b, err = io.ReadAll(io.LimitReader(res.Body, limit))
 	}
 	if err != nil {
+		dr.fail(err.Error())
 		return nil, err
 	}
 	body = b
@@ -477,6 +494,17 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
 	t.emit(EvResponse, rec)
+	{
+		var xfer int64
+		cs := rec.Headers["x-sweef-cache"]
+		if docMI != nil {
+			xfer = docMI.hdrBytes.Load() + docMI.rawBytes.Load()
+			if docMI.fromCache.Load() {
+				xfer = 0
+			}
+		}
+		dr.done(res.StatusCode, res.Header, cs, xfer, body, rec.FinalURL)
+	}
 	status, text := res.StatusCode, string(body)
 	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec, header: res.Header}, nil
 }
@@ -676,9 +704,15 @@ func (t *Tab) ConsoleLog(sinceSID int64) []Event { return t.consoleRing.Since(si
 func (t *Tab) NetworkLog(sinceSID int64) []Event { return t.netRing.Since(sinceSID) }
 func (t *Tab) StateLog(sinceSID int64) []Event   { return t.stateRing.Since(sinceSID) }
 
-func (t *Tab) LogConsole(level, text string) {
-	e := t.consoleRing.Push(Event{Tab: t.ID, Kind: EvConsole, At: time.Now(),
-		Data: map[string]string{"level": level, "text": text}})
+func (t *Tab) LogConsole(level, text string) { t.logConsoleAt(level, text, "") }
+
+// logConsoleAt is LogConsole with the place the call came from ("url:line:col"), which Developer Tools shows.
+func (t *Tab) logConsoleAt(level, text, loc string) {
+	d := map[string]string{"level": level, "text": text}
+	if loc != "" {
+		d["loc"] = loc
+	}
+	e := t.consoleRing.Push(Event{Tab: t.ID, Kind: EvConsole, At: time.Now(), Data: d})
 	t.emit(EvConsole, e.Data)
 }
 

@@ -7,6 +7,7 @@
   /* capture icons live here, not in shared/icons.js: the design-system sheet draws every shared icon and its paint golden is pinned */
   SW.I.camera = '<rect x="3.500" y="6.500" width="12" height="11" rx="2.500"/><path d="M15.500 10.500l5-2.500v8l-5-2.500"/>';
   SW.I.screen = '<rect x="3.500" y="4.500" width="17" height="12" rx="2.500"/><path d="M8.500 20h7M12 16.500V20"/>';
+  SW.I.code = '<path d="M8.500 7.500L4 12l4.500 4.500M15.500 7.500L20 12l-4.500 4.500M13.500 5.500l-3 13"/>';
   var st = function () { return SW.state; };
   function activeTab() { var s = st(), a = s.tabs || []; for (var i = 0; i < a.length; i++) if (a[i].id === s.active) return a[i]; return a[0] || {}; }
   function field(k, d) { var s = st(), t = activeTab(); return s[k] != null ? s[k] : (t[k] != null ? t[k] : d); }
@@ -108,6 +109,20 @@
   SW.sk = { focus: function () { withSk(function (s) { s.focus(); }); }, ask: function (t, src) { withSk(function (s) { s.ask(t, src); }); }, newChat: function () { withSk(function (s) { s.newChat(); }); }, send: function (t, m) { withSk(function (s) { s.send(t, m); }); } };
   SW.on("agent.event", function (ev) { if (!SW.sidekick) { skBuf.push(["onEvent", ev]); withSk(function () {}); } });
   SW.on("agent.chat.load", function (p) { if (!SW.sidekick) { skBuf.push(["loadChat", p]); withSk(function () {}); } });
+  /* developer tools: the docked panel is parsed when it is first opened (devtools.js) */
+  var dtState = 0;
+  function renderDevtools() {
+    var d = st().devtools, open = !!(d && d.open), el = $("devtools");
+    el.classList.toggle("hide", !open);
+    if (open) {
+      var mx = Math.max(160, (window.innerHeight || 700) - 220);
+      if (!(SW.devtools && SW.devtools.drag)) el.style.height = SW.clamp(+SW.setting("devtools.height", 320) || 320, 160, mx) + "px";
+    }
+    if (!open && !SW.devtools) return;
+    if (SW.devtools) return SW.devtools.sync();
+    if (dtState) return; dtState = 1;
+    SW.lazy(["/chrome/devtools.css", "/shared/vlist.js", "/chrome/devtools.js"], function () { if (SW.devtools) SW.devtools.sync(); });
+  }
   SW.palette = { open: function (m) { SW.lazy(["/chrome/palette.js"], function () { SW.palette.open(m); }); } };
 
   /* tabs ------------------------------------------------------------------- */
@@ -434,6 +449,7 @@
       mi("search", S.menu.find, { kbd: SW.mod + "+F", on: openFind }), mi("cmd", S.menu.palette, { kbd: SW.mod + "+K", on: function () { SW.palette.open(); } }),
       mi("spark", sbOpen() ? S.f(S.menu.hideSidekick) : S.f(S.menu.sidekick), { kbd: SW.mod + "+Shift+A", on: function () { setSidebar(!sbOpen()); } }), h("div.sep"),
       (st().perm || {}).available ? mi((st().perm || {}).dnd ? "belloff" : "bell", S.perm.dnd, { sub: (st().perm || {}).dnd ? S.perm.dndOn : null, on: function () { post("settings.set", { key: "notifications.dnd", value: !(st().perm || {}).dnd }); } }) : null,
+      h("div.moretools", mi("code", S.menu.moreTools, { keep: true, on: function (e) { var b = e.currentTarget, sub = b.nextSibling, open = sub.classList.toggle("hide") === false; b.setAttribute("aria-expanded", open ? "true" : "false"); } }), h("div.moresub.hide", mi("code", S.menu.devtools, { kbd: "F12", on: function () { post("devtools.open", {}); } }))),
       mi("gear", S.menu.settings, { on: page("sweef://settings") }), mi("info", S.f(S.menu.about), { on: page("sweef://settings#about") }), mi("flag", S.menu.reportSite, { on: function () { post("menu.open", { name: "reportSite" }); } }));
     openPop(E.menu, m, { role: "menu" });
   }
@@ -489,6 +505,7 @@
       case "tab.closeActive": return post("tab.close", { id: st().active }); case "nav.reload": return post("nav.reload");
       case "sidebar.toggle": return setSidebar(!sbOpen()); case "agent.chat.new": setSidebar(true); return SW.sk.newChat();
       case "find.open": return openFind(); case "bookmark.toggle": return E.star.click(); case "palette": return SW.palette.open();
+      case "devtools.toggle": return post(st().devtools ? "devtools.close" : "devtools.open", {});
       case "focusOmnibox": return focusOmni(); case "sidebar.focus": setSidebar(true); return SW.sk.focus();
     }
   }
@@ -514,7 +531,7 @@
   /* wiring ----------------------------------------------------------------- */
   var first = true;
   SW.on("render", function () {
-    renderTabs(); renderToolbar(); applyLayout(); renderInc(); renderPerm();
+    renderTabs(); renderToolbar(); applyLayout(); renderInc(); renderPerm(); renderDevtools();
     var s = st(), mx = s.window && s.window.maximized ? "1" : ""; if (mx) document.documentElement.setAttribute("data-maximized", "1"); else document.documentElement.removeAttribute("data-maximized");
     var mxb = $("wc").querySelector(".mx"); if (mxb && mxb._m !== !!mx) { mxb._m = !!mx; SW.clear(mxb); mxb.appendChild(icon(mx ? "restore" : "maxi", 14)); mxb.setAttribute("aria-label", mx ? S.win.restore : S.win.max); }
     sizeTabs();

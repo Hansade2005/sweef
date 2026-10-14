@@ -23,7 +23,7 @@ func TestDebug(t *testing.T) {
 		}
 	}
 	tab, _ := e.NewTab("")
-	tab.AddInitScript(mockJS)
+	tab.AddInitScript(mockJS + "\n" + devtoolsMockJS)
 	tab.SetViewport(sc.W, sc.H, 1, false, false)
 	if err := tab.Navigate(srv.URL+"/"+sc.Page+sc.Query, nil); err != nil {
 		t.Fatal(err)

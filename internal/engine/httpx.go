@@ -89,6 +89,12 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 		return nil, err
 	}
 	if r, handled, err := t.swFetch(o, abs, kind); handled { // a service worker controls the document
+		dr := t.dev.begin(kind, strings.ToUpper(method), abs, nil, o.body)
+		if err != nil {
+			dr.fail(err.Error())
+		} else if r != nil {
+			dr.done(r.status, r.header, "service worker", int64(len(r.body)), r.body, abs)
+		}
 		return r, err
 	}
 	if t.IsOfflineMode() {
@@ -99,10 +105,12 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	}
 	synth, m2, target, hdrs2, body2, rerr := t.routedRequest(strings.ToUpper(method), abs, o.headers, o.body)
 	if rerr != nil {
+		t.dev.begin(kind, strings.ToUpper(method), abs, o.headers, o.body).fail(rerr.Error())
 		return nil, fmt.Errorf("TypeError: Failed to fetch (%s)", rerr.Error())
 	}
 	if synth != nil {
 		rb, _ := io.ReadAll(synth.Body)
+		t.dev.begin(kind, m2, abs, hdrs2, body2).done(synth.StatusCode, synth.Header, "route fulfill", int64(len(rb)), rb, abs)
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: fnet.RequestRecord{Method: m2, URL: abs, FinalURL: abs, Status: synth.StatusCode, Headers: map[string]string{"x-sweef-route": "fulfill"}}})
 		return &httpResp{status: synth.StatusCode, header: synth.Header, body: rb, finalURL: abs, declared: -1, synth: true}, nil
 	}
@@ -126,6 +134,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	}
 	rec := fnet.RequestRecord{Method: req.Method, URL: abs, Headers: flattenHeaders(req.Header)}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
+	dr := t.dev.begin(kind, req.Method, abs, rec.Headers, body)
 	start := time.Now()
 	req, mi := withMeter(req, t.Context(), t, kind, t.policy())
 	mi.maxBody = o.maxBody
@@ -135,11 +144,13 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	defer func() { t.tspan("http."+string(kind), abs, start) }()
 	if err != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": abs, "error": err.Error()}})
+		dr.fail(err.Error())
 		return nil, fmt.Errorf("TypeError: Failed to fetch (%s)", err.Error())
 	}
 	defer res.Body.Close()
 	if berr := t.coepBlocks(kind, res.Request.URL.String(), res.Header); berr != nil {
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": abs, "error": berr.Error()}})
+		dr.fail(berr.Error())
 		return nil, berr
 	}
 	declared := mi.declared.Load()
@@ -154,6 +165,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 		out.xfer = mi.hdrBytes.Load() + mi.rawBytes.Load()
 		out.finalURL = res.Request.URL.String()
 		t.recordResponse(&rec, res, start, out.cacheState)
+		dr.done(res.StatusCode, res.Header, out.cacheState, out.xfer, nil, out.finalURL)
 		return out, nil
 	}
 	// big enough for the largest real bundles (YouTube's main script is about 11 MB); a body is cut silently
@@ -178,7 +190,23 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	out.finalURL = res.Request.URL.String()
 	out.cacheState = mi.cacheState() // a redirect chain ends with the last hop's outcome
 	t.recordResponse(&rec, res, start, out.cacheState)
+	xfer := out.xfer
+	if out.fromCache {
+		xfer = 0
+	}
+	dr.done(res.StatusCode, res.Header, devCacheLabel(out), xfer, data, out.finalURL)
 	return out, nil
+}
+
+// devCacheLabel is the cache column of the Network panel: what the HTTP cache did with the request.
+func devCacheLabel(r *httpResp) string {
+	if r.cacheState != "" {
+		return r.cacheState
+	}
+	if r.fromCache {
+		return "hit"
+	}
+	return ""
 }
 
 // recordResponse pushes the response event. cacheState ("hit", "revalidated", "miss: no-store", ...) is

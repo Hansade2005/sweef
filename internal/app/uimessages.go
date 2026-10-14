@@ -380,6 +380,10 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 		if (strings.HasPrefix(typ, "ctx.") || typ == "edit.op" || typ == "omni.pasteAndGo") && a.onCtxMessage(src, typ, raw) {
 			return
 		}
+		if strings.HasPrefix(typ, "devtools.") {
+			a.onDevtoolsMessage(src, typ, raw)
+			return
+		}
 		if strings.HasPrefix(typ, "data.") && a.onDataMessage(typ, raw, tabFor("")) {
 			return
 		}

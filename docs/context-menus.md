@@ -27,7 +27,6 @@ Menus: link, image, media, selection, editable, plain page (Back, Forward, Reloa
 
 ## Hooks
 
-- `DevToolsOpener func(a *App, tabID string)`: `Inspect` calls `a.openDevTools(tabID)`, which calls this when set.
 - `a.copySelection(e)`, `cutSelection`, `pasteClipboard`, `selectAll`: thin calls into `clipboardOp` (`input.go`) for the tab the
   menu was opened for; the selection work lives in the engine.
 

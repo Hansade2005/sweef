@@ -198,6 +198,7 @@ type jsVM struct {
 	modSeen   map[string]bool   // modules whose download prefetchModuleDeps started
 	syncNet   bool              // a module script is being evaluated: requests are made in place (asynchttp.go)
 	curBase   string            // URL of the script being run: relative imports resolve against it
+	curScript string            // name of the script whose top level is executing, for console locations (Developer Tools)
 	importMap map[string]string // <script type=importmap> entries
 	mu        sync.Mutex
 	vm        *quickjs.VM
@@ -460,9 +461,11 @@ func (j *jsVM) run(src, name string) (any, error) {
 	if j.closed {
 		return nil, ErrClosed
 	}
+	j.curScript = name
+	defer func() { j.curScript = "" }()
 	r, err := j.vm.Eval(src, quickjs.EvalGlobal)
 	if err != nil {
-		j.tab.LogConsole("error", jsErrorText(err, name))
+		j.tab.logConsoleAt("error", jsErrorText(err, name), errLoc(err, name))
 	}
 	return r, err
 }
@@ -495,6 +498,8 @@ func (j *jsVM) runCached(src, name string) (any, error) {
 		}
 		cache.put(key, bc)
 	}
+	j.curScript = name
+	defer func() { j.curScript = "" }()
 	r, err := j.vm.EvalBytecode(bc)
 	if err != nil {
 		var qe *quickjs.Error
@@ -504,7 +509,7 @@ func (j *jsVM) runCached(src, name string) (any, error) {
 			r, err = j.vm.Eval(src, quickjs.EvalGlobal)
 		}
 		if err != nil {
-			j.tab.LogConsole("error", jsErrorText(err, name))
+			j.tab.logConsoleAt("error", jsErrorText(err, name), errLoc(err, name))
 		}
 	}
 	return r, err
@@ -517,7 +522,8 @@ func (j *jsVM) runModule(src, name string) error {
 		return ErrClosed
 	}
 	j.syncNet = true // a top-level await inside the module is awaited without an event loop: requests complete in place
-	defer func() { j.syncNet = false }()
+	j.curScript = name
+	defer func() { j.syncNet, j.curScript = false, "" }()
 	if len(src) < 256 {
 		j.bcState = "small"
 		if _, err := j.vm.Eval(src, quickjs.EvalModule); err != nil {
@@ -557,6 +563,24 @@ func (j *jsVM) runModule(src, name string) error {
 		}
 	}
 	return nil
+}
+
+// errLoc is the place an error was thrown, "name:line:col": the innermost frame of its stack, in the script that was
+// running. A function of another script called from there is attributed to this one; the stack text says what it is.
+func errLoc(err error, name string) string {
+	var qe *quickjs.Error
+	if name == "" || !errors.As(err, &qe) {
+		return ""
+	}
+	for _, ln := range strings.Split(qe.Stack, "\n") {
+		if i := strings.Index(ln, "<eval>:"); i >= 0 {
+			rest := strings.TrimRight(ln[i+len("<eval>:"):], ") ")
+			if rest != "" && rest[0] >= '0' && rest[0] <= '9' {
+				return name + ":" + rest
+			}
+		}
+	}
+	return ""
 }
 
 func jsErrorText(err error, name string) string {
@@ -1265,7 +1289,13 @@ func (j *jsVM) registerHost() error {
 				level = "log"
 			}
 			if j.tab != nil {
-				j.tab.LogConsole(level, argS(a, 1))
+				loc := argS(a, 2) // "line:col" in the script being run
+				if loc != "" && j.curScript != "" {
+					loc = j.curScript + ":" + loc
+				} else {
+					loc = ""
+				}
+				j.tab.logConsoleAt(level, argS(a, 1), loc)
 			}
 			return nil, nil
 		}},

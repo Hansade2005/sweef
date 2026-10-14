@@ -42,7 +42,16 @@
     return { x: 0, y: 0, width: 0, height: 0 };
   }
   function hostMutation(op, id) { if (host('mutation')) { try { sw.mutation(op, id); } catch (e) { /* ignore */ } } }
-  function hostLog(level, text) { try { sw.log(level, text); } catch (e) { /* ignore */ } }
+  function hostLog(level, text, loc) { try { sw.log(level, text, loc || ''); } catch (e) { /* ignore */ } }
+  // where a console call came from: "line:col" of the caller (the frame after this function and the console method),
+  // for Developer Tools; the host adds the name of the script whose top level is running
+  function callerLoc() {
+    try {
+      var f = String(new Error().stack || '').split('\n')[2] || '', m = /<eval>:(\d+:\d+)\)?\s*$/.exec(f);
+      return m ? m[1] : '';
+    } catch (e) { /* ignore */ }
+    return '';
+  }
 
   function def(obj, name, desc) {
     desc.configurable = true;
@@ -127,6 +136,8 @@
     if (type === 1 && tag.indexOf('-') > 0) maybeUpgrade(w, tag);
     return w;
   }
+  // Developer Tools edits a node the way page script would, so MutationObservers and custom elements see the change
+  def(global, '__swDevNode', { value: function (id) { return wrap(+id); }, enumerable: false });
   function wrapAll(ids) { var out = []; if (ids) for (var i = 0; i < ids.length; i++) { var w = wrap(ids[i]); if (w) out.push(w); } return out; }
   function requireNode(v, what) {
     if (!isNodeObj(v)) throw new TypeError("Failed to execute '" + what + "': parameter 1 is not of type 'Node'.");
@@ -433,8 +444,9 @@
   // Errors from listeners/timers/microtasks: log + window 'error' event, never throw.
   var reportingError = false;
   function reportError(e) {
-    var msg = (e && e.stack) ? String(e.stack) : String(e && e.message !== undefined ? e.name + ': ' + e.message : e);
-    hostLog('error', 'Uncaught ' + msg);
+    var head = String(e && e.message !== undefined ? e.name + ': ' + e.message : e), st = (e && e.stack) ? String(e.stack) : '';
+    var msg = st ? (st.indexOf(head) < 0 ? head + '\n' + st : st) : head;
+    hostLog('error', 'Uncaught ' + msg, '');
     if (reportingError) return;
     reportingError = true;
     try {
@@ -2283,7 +2295,7 @@
     return out.join(' ');
   }
   var consoleIndent = '', counts = {}, consoleTimers = {};
-  function logAt(level) { return function () { hostLog(level, consoleIndent + formatArgs(slice.call(arguments))); }; }
+  function logAt(level) { return function () { hostLog(level, consoleIndent + formatArgs(slice.call(arguments)), callerLoc()); }; }
   var consoleObj = {
     log: logAt('log'), info: logAt('info'), warn: logAt('warn'), error: logAt('error'), debug: logAt('debug'),
     trace: function () { var e = new Error(); hostLog('log', consoleIndent + 'Trace: ' + formatArgs(slice.call(arguments)) + '\n' + String(e.stack || '')); },

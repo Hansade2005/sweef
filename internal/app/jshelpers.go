@@ -249,6 +249,7 @@ const helperJS = `(function(G){
   try {
     var sty = D.createElement('style');
     sty.textContent = 'html{overflow-y:hidden !important}';
+    sty.setAttribute('data-sweef-internal', ''); // Developer Tools leaves it out of the tree, the sources and the matched rules
     (D.head || D.documentElement).appendChild(sty);
   } catch(x){}
   // privileged bridge only for sweef:// documents

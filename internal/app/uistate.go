@@ -38,6 +38,9 @@ func (a *App) buildState() map[string]any {
 	snap["data"] = a.dataState()
 	snap["media"] = a.mediaState(act, hasAct)
 	snap["perm"] = a.permState(act, hasAct)
+	if dt := a.devtoolsSnapshot(); dt != nil {
+		snap["devtools"] = dt
+	}
 	return snap
 }
 
@@ -212,6 +215,12 @@ func (a *App) sendTo(e *etab, typ string, payload any) {
 	// a page that left its sweef:// document (an error page, a redirect) has no bridge: skip it quietly
 	js := "(typeof sweef !== 'undefined' && sweef.__recv) ? sweef.__recv(" + jsString(typ) + "," + jsJSON(payload) + ") : undefined"
 	e.w.do(func() {
+		// A tab that showed a Sweef page and has since navigated to a web page is still on the list of UI pages.
+		// What the browser sends to its UI (tabs, settings, Developer Tools state) must never be evaluated in a
+		// web page's JavaScript: the page could have defined window.sweef.
+		if e.kind == "page" && !strings.HasPrefix(e.t.URL(), "sweef://") {
+			return
+		}
 		if _, err := e.t.Evaluate(js); err != nil {
 			a.logf("%s <- %s: %v", e.kind, typ, err)
 		}

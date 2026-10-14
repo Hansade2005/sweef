@@ -294,6 +294,7 @@ Three states: **works** (covered by tests), **partial** (works for the common ca
 | Exposed bindings: page calls recorded, JSON replies returned to the page | works |
 | Wait states: attached, visible, hidden, enabled, load, `networkidle` | works |
 | Console, network (incl. POST bodies) and DOM-mutation logs (bounded rings), HAR export | works |
+| Developer Tools: `F12` or `Ctrl+Shift+I` (`Cmd+Opt+I` on macOS) opens a resizable panel docked under the page with a Console (live log, errors with file and line and their stack, a prompt that evaluates in the page), Network (every request with status, type, size, cache state and a waterfall, trackers marked as blocked, headers and a body preview), Elements (DOM tree, the CSS rules that match, computed style, box model, the selected node highlighted on the page, live edits of attributes, text and `style`), Sources (scripts and stylesheets with a pretty printer) and Application (cookies, storage) ([docs/devtools.md](docs/devtools.md)) | works on Linux (X11 and headless); Windows and macOS compile-checked only; no breakpoints, no source maps, no click-to-pick |
 | Cookies (RFC 6265 jar per context), storage state save/load | works |
 | Multiple isolated contexts, tabs, history | works |
 | Emulation: viewport, UA, offline, color scheme, extra headers, geolocation, permissions | works |

@@ -106,6 +106,9 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 		}
 		list = kept
 	}
+	if hl := t.highlightOps(ext.res, doc); len(hl) > 0 { // Developer Tools: the selected element's box model
+		list = append(list[:len(list):len(list)], hl...)
+	}
 	if o.ScrollY > 0 {
 		moved := make([]render.Op, 0, len(list)+2)
 		moved = append(moved, render.PushTransform{M: [6]float64{1, 0, 0, 1, 0, -float64(o.ScrollY)}})

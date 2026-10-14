@@ -154,6 +154,7 @@ type App struct {
 	zoomBitsV           atomic.Uint64
 	omniSeq             int
 	uiPages             map[*etab]bool // page tabs showing sweef:// pages that said ui.ready
+	dt                  devtoolsState  // Developer Tools binding (devtools.go)
 	compatDismissed     map[string]bool
 	compatErrs          map[string]int
 	pageTypes           pageTypeCache

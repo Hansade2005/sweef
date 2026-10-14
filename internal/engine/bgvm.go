@@ -65,7 +65,7 @@ func (e *Engine) newBGRuntime(owner *Tab, docURL string) (*bgRuntime, error) {
 		return nil, err
 	}
 	t.url = u
-	t.consoleRing, t.netRing = owner.consoleRing, owner.netRing
+	t.consoleRing, t.netRing, t.dev = owner.consoleRing, owner.netRing, owner.dev
 	t.inheritContext(owner)
 	t.inheritIsolation(owner)
 	doc, err := fnet.ParseDocument(emptyWorkerDoc, docURL)

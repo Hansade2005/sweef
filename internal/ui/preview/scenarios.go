@@ -211,6 +211,21 @@ func Scenarios() []Scenario {
 	add(Scenario{Name: "data-newtab-incognito", Page: "newtab/index.html", W: 1280, H: 800, State: dsInc})
 	add(Scenario{Name: "data-stop-light", Page: "datastop/index.html", Query: "?url=https%3A%2F%2Fgrocer.example.com%2Fstore%2Fpower-sporting-goods", W: 1280, H: 800, State: dsOut})
 	add(Scenario{Name: "data-stop-dark", Page: "datastop/index.html", Query: "?url=https%3A%2F%2Fgrocer.example.com%2Fstore%2Fpower-sporting-goods", W: 1280, H: 800, State: with(dark, "data", dataState(1.04, "strict")), Setup: `document.querySelectorAll(".acts .btn")[1].click();`})
+	// ---- Developer Tools (docs/devtools.md): the docked panel, driven by devtools_mock.js
+	dtSettings := func(base M, panel string, h int) M {
+		s := M{"theme": base["theme"], "density": "comfortable", "devtools.panel": panel, "devtools.height": h}
+		return with(base, "settings", s, "sidebar.open", false, "devtools", M{"open": true, "tab": "t1", "readOnly": false},
+			"url", "https://shop.example.com/cart", "title", "Cart", "tabs", []M{tab("t1", "Cart", "https://shop.example.com/cart")}, "page.type", "shop")
+	}
+	add(Scenario{Name: "devtools-console-light", Page: "chrome/index.html", W: 1280, H: 800, State: dtSettings(light, "console", 330), Backdrop: "shop"})
+	add(Scenario{Name: "devtools-network-dark", Page: "chrome/index.html", W: 1280, H: 800, State: dtSettings(dark, "network", 360), Backdrop: "shop",
+		Then: `SW.$$("#devtools .dt-nr")[6].click();`})
+	add(Scenario{Name: "devtools-network-light", Page: "chrome/index.html", W: 1280, H: 800, State: dtSettings(light, "network", 330), Backdrop: "shop"})
+	add(Scenario{Name: "devtools-elements-light", Page: "chrome/index.html", W: 1280, H: 800, State: dtSettings(light, "elements", 380), Backdrop: "shop",
+		Then: `SW.$$("#devtools .dt-er").filter(function(r){return r.textContent.indexOf('id="cart"')>=0})[0].click();`})
+	add(Scenario{Name: "devtools-sources-dark", Page: "chrome/index.html", W: 1280, H: 800, State: dtSettings(dark, "sources", 340), Backdrop: "shop",
+		Then: `SW.$$("#devtools .dt-si")[1].click();`})
+	add(Scenario{Name: "devtools-application-light", Page: "chrome/index.html", W: 1280, H: 800, State: dtSettings(light, "application", 300), Backdrop: "shop"})
 	add(Scenario{Name: "data-stop-incognito", Page: "datastop/index.html", Query: "?url=https%3A%2F%2Fgrocer.example.com%2F", W: 1280, H: 800, State: with(inc, "data", dataState(1.04, "strict"))})
 	add(Scenario{Name: "data-sidekick-light", Page: "chrome/index.html", W: 1280, H: 800, State: with(light, "data", dataState(0.394, "standard")), Backdrop: "article",
 		Setup: `SW.sk.send("Compare the three best-reviewed trail shoes under $120");` + ev("action", "id", "a1", "label", "Searched the web", "detail", "best trail shoes under $120", "status", "ok", "ms", 842) + ev("action", "id", "a2", "label", "Read runnersworld.com", "status", "ok", "ms", 311) + ev("text", "text", "I compared three well-reviewed pairs: the **Speedgoat 5** at $119, the **Peregrine 13** at $110 and the **Challenger 7** at $104. The Challenger is the best all-rounder at the lowest price.") + ev("done", "ttft", 388, "tps", 82, "data", M{"bytes": 421_888, "savedEstimated": 1_310_720, "skipped": 41, "lite": true, "available": true})})

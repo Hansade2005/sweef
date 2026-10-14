@@ -260,6 +260,7 @@ func (a *App) activateTab(id string) {
 	}
 	e.lastActive.Store(time.Now().UnixNano())
 	if prev != id {
+		a.devtoolsFollow(id)
 		a.comp.SetPage(nil)
 		a.resetScroll()
 		a.paintedDocH = 0

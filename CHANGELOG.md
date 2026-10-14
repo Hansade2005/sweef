@@ -19,7 +19,7 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - Tab actions: Duplicate (keeps history), Close other tabs, Close tabs to the right, Mute site, New tab to the right.
 - New tab page: Edit shortcut and Remove on top-site tiles (`newtab.sites` setting); bookmarks can be edited from the bar.
 - Undo and Redo in text fields; a page that cancels `mousedown` keeps the focus where it was.
-- `Inspect` calls `App.openDevTools`, which uses the `DevToolsOpener` hook (a toast until developer tools are installed).
+- `Inspect` opens Developer Tools for the tab.
 
 ### Fixed
 - **Windows: the Start-menu and desktop shortcut started a console that closed at once.** The GUI launcher (`Sweef.exe`) and the
@@ -30,6 +30,25 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   `SyntaxError` at the cut. The limit is now 128 MiB.
 - A tab that left its `sweef://` page no longer logs a `ReferenceError` for every UI state update.
 - The GUI writes panics and fatal runtime errors to `crash.log` (`%LocalAppData%\Sweef` on Windows).
+- **Developer Tools.** `F12`, `Ctrl+Shift+I` (`Cmd+Opt+I` on macOS), the menu (More tools, Developer tools) and the command
+  palette open a resizable panel docked under the page (the height is the setting `devtools.height`). Console: live
+  `console.*` and uncaught errors with level and text filters, `file:line`, stacks and repeat counts, plus a prompt that
+  evaluates in the page with history. Network: every request with status, type, size, time, cache state (`x-sweef-cache`)
+  and a waterfall, entries blocked by the tracker blocker marked, a preserve-log switch, request and response headers and a
+  text, JSON or image preview. Elements: the DOM tree, the matched CSS rules (with the losing declarations struck through),
+  computed style and box model, the selected node highlighted on the page, and live edits of attributes, text, nodes and
+  `element.style`. Sources: the page's scripts and stylesheets with line numbers and a pretty printer. Application: cookies,
+  `localStorage`, `sessionStorage`. Windows and macOS are unverified at runtime. Adds 148 KB to the Linux binary
+  (37,175,422 to 37,326,974 bytes stripped). See [docs/devtools.md](docs/devtools.md).
+- Engine inspection API on `Tab` (`internal/engine/devtools_*.go`): a network recorder with bodies under a budget, the DOM and
+  CSS views, a node highlight drawn into the page's display list, an evaluator that describes its result, sources and storage.
+  Console entries carry the script and line they came from when the engine knows it.
+- App entry points for a page context menu's "Inspect": `openDevTools(tabID)` and `openDevToolsAt(tabID, x, y)`.
+
+### Fixed
+- An uncaught error raised from a listener, timer or microtask is logged with its name and message, not only its stack.
+- The app no longer evaluates its UI messages (state patches, which now include the Developer Tools binding) in a tab whose
+  document is a web page, which could have defined `window.sweef` while the tab was still on the internal-page list.
 
 ## [0.1.0-alpha] - 2026-10-14
 

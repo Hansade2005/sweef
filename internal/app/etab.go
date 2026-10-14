@@ -127,6 +127,7 @@ func (e *etab) route(req *http.Request) (int, string, bool) {
 	}
 	top, _ := e.topURL.Load().(string)
 	if d := e.a.priv.Check(top, raw); d.Block {
+		e.t.DevNoteBlocked(raw, "blocked by the tracker blocker ("+u.Hostname()+")")
 		e.blocked.Add(1)
 		e.a.prof.Stats.AddBlocked(1)
 		e.a.noteBlocked(e, u.Hostname())

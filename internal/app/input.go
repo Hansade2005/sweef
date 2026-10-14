@@ -677,6 +677,12 @@ func (a *App) shortcut(ev shell.Event) bool {
 		return true
 	}
 	switch {
+	case key == "F12", ctrl && shift && !alt && (key == "i" || ev.Code == "KeyI"), ctrl && alt && !shift && runtime.GOOS == "darwin" && (key == "i" || ev.Code == "KeyI"):
+		a.toggleDevTools()
+	case ctrl && shift && !alt && (key == "j" || ev.Code == "KeyJ"):
+		a.openDevToolsPanel(act, "console")
+	case ctrl && shift && !alt && (key == "c" || ev.Code == "KeyC"):
+		a.openDevToolsPanel(act, "elements")
 	case ctrl && shift && key == "t":
 		a.reopenClosed()
 	case ctrl && key == "f4":

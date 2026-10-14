@@ -70,6 +70,9 @@ var Schema = []Spec{
 	{Key: "onboarding.done", Kind: KBool, Default: false, Group: "general"},
 	// New tab page tiles: {original address: {hide, title, url}} (Remove and Edit shortcut in the tile's context menu).
 	{Key: "newtab.sites", Kind: KObject, Default: map[string]any{}, Group: "general", Norm: normNewtabSites},
+	// Developer Tools (docs/devtools.md): the height of the docked panel and the panel that was open last.
+	{Key: "devtools.height", Kind: KInt, Default: 320, Min: 160, Max: 1200, Group: "developer"},
+	{Key: "devtools.panel", Kind: KEnum, Default: "console", Enum: []string{"console", "network", "elements", "sources", "application"}, Group: "developer"},
 
 	// Notifications, Web Push and background sync (docs/notifications.md, docs/push.md).
 	{Key: "notifications.dnd", Kind: KBool, Default: false, Group: "notifications"},

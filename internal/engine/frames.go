@@ -312,7 +312,7 @@ func (t *Tab) newFrameTab(elem int64, a frameAttrs, top *Tab) *Tab {
 	c := newTab(t.eng, fmt.Sprintf("%s.f%d", t.ID, elem))
 	c.ctx = t.Context()
 	t.copyEnvironmentTo(c) // init scripts (the window's input helper), request interception (tracker blocker), bindings
-	c.consoleRing, c.netRing = t.consoleRing, t.netRing
+	c.consoleRing, c.netRing, c.dev = t.consoleRing, t.netRing, t.dev
 	c.SetUpdateHook(t.contentChanged) // images that arrive in the frame repaint the page
 	// emulation settings follow the page the frame is in
 	t.mu.RLock()

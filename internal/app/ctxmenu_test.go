@@ -302,14 +302,12 @@ func TestCtxPageMenuAndInspect(t *testing.T) {
 	h, srv := newCtxHarness(t)
 	h.pageRightClick(650, 350)
 	h.wantMenu("page", "Back (disabled)", "Forward (disabled)", "Reload", "Save page as…", "Print…", "View page source", "Inspect")
-	var got string
-	DevToolsOpener = func(a *App, id string) { got = id }
-	t.Cleanup(func() { DevToolsOpener = nil })
 	active := h.app.model.Active(h.app.winID)
 	h.ctxPick("Inspect")
-	if got != active {
-		t.Fatalf("Inspect opened devtools for %q, want %q", got, active)
-	}
+	h.waitFor("developer tools open for the active tab", func() bool {
+		open, tab := h.devtoolsOpen()
+		return open && tab == active
+	})
 	h.pageRightClick(650, 350)
 	h.wantMenu("page")
 	n := len(h.tabIDs())
@@ -318,14 +316,6 @@ func TestCtxPageMenuAndInspect(t *testing.T) {
 	if u := h.tab().URL; u != "view-source:"+srv.URL+"/" {
 		t.Fatalf("url %q", u)
 	}
-}
-
-func TestCtxInspectDefaultIsAToast(t *testing.T) {
-	h, _ := newCtxHarness(t)
-	h.pageRightClick(650, 350)
-	h.wantMenu("page")
-	h.ctxPick("Inspect") // no opener installed: must not panic
-	h.idle()
 }
 
 func TestCtxPageCanCancelTheMenu(t *testing.T) {
