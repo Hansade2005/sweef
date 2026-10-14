@@ -571,6 +571,7 @@
         try { track = global.__swCapTrack(JSON.parse(sw.waStreamOut(ctx._id, n._gid)), {}); } catch (e) { track = null; }
       }
       ms.addTrack(track || global.__swMakeTrack('audio', 'MediaStreamAudioDestinationNode')); n.__stream = ms;
+      try { Object.defineProperty(ms.getAudioTracks()[0], '__wactx', { value: ctx }); } catch (e) { /* not extensible */ }
     }
   });
   attr(DEFS.MediaStreamAudioDestinationNode.cls, 'stream', function () { return this.__stream; });
@@ -662,7 +663,13 @@
       var n = this.__srcs[k];
       if (n.__endedL || (n.__h && n.__h.ended) || n.onended || nodeInfo(n).stopAt !== undefined) { any = true; break; }
     }
-    return any || Object.keys(this.__ext).length > 0 || this.__els.length > 0 || (this.__suspends && this.__suspends.length > 0);
+    return any || this.__pull > 0 || Object.keys(this.__ext).length > 0 || this.__els.length > 0 || (this.__suspends && this.__suspends.length > 0);
+  };
+  // A MediaRecorder reading the track of a MediaStreamAudioDestinationNode needs the graph to render in real time.
+  global.__swWaPull = function (track, on) {
+    var c = track.__wactx; if (!c) return;
+    c.__pull = Math.max(0, (c.__pull || 0) + (on ? 1 : -1));
+    if (on) c._ensureTimer();
   };
   BaseAudioContext.prototype._ensureTimer = function () {
     var ctx = this;

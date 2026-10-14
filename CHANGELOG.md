@@ -29,7 +29,15 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   `btoa`/`atob`; faster IndexedDB cursors; page visibility; echo cancellation, noise suppression and automatic gain on
   the WebRTC send path; `MediaStreamTrackProcessor`, `MediaStreamTrackGenerator` and `VideoTrackGenerator`; WebRTC
   `MediaCapabilities`. The compatibility status of Google Meet, WhatsApp Web and YouTube, with what was and was not tried
-  against the live sites, is in [docs/compat.md](docs/compat.md). `MediaRecorder` is still absent.
+  against the live sites, is in [docs/compat.md](docs/compat.md).
+- **`MediaRecorder` and `BlobEvent`.** Record `getUserMedia` / `getDisplayMedia` streams, `canvas.captureStream()` and
+  `MediaStreamAudioDestinationNode` streams to WebM (VP8, Opus) or Ogg Opus (RFC 7845), with `timeslice`, `pause()`,
+  `resume()`, `requestData()`, `audioBitrateMode`, the specified state machine and `InvalidStateError` / `NotSupportedError` /
+  `InvalidModificationError` behaviour, an honest `isTypeSupported()`, and a stop when every track ends. Encoding (a streaming
+  resampler, an Opus mixer, VP8, WebM and Ogg writers) runs off the JS thread in the new `internal/mediarec`; the chunks
+  concatenate into a file that plays in `<audio>` / `<video>` and decodes with the repo's demuxers. Voice-note flows such as
+  WhatsApp Web's no longer hit `NotSupportedError` (the real site was not tried). No MP4, VP9 or H.264 recording; only the
+  first video track is recorded ([docs/mediarecorder.md](docs/mediarecorder.md)).
 - **Iframes render and take input.** Every `<iframe>` is now a child document with its own JavaScript VM, layout and
   paint, drawn into the parent at the iframe's box (clipped, with the transforms, opacity and radius of its ancestors),
   scrollable inside its box, repainted when it changes, and loaded lazily for `loading="lazy"`. `srcdoc`, nested frames,

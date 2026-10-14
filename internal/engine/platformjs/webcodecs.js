@@ -9,6 +9,7 @@ var N = {};
   try { delete g['__swWc_' + k]; } catch (e) { /* ignore */ }
 });
 if (typeof N.fromBuf !== 'function' || typeof sw.wcNew !== 'function') return;
+H.wcTake = N.take; // MediaRecorder takes its chunks from the same blob store
 
 function ex(name, msg) { return new g.DOMException(msg, name); }
 function host(fn) { try { return fn(); } catch (e) { throw H.hostErr(e); } }

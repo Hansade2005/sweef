@@ -33,8 +33,8 @@ devices. Use it if an unverified backend misbehaves.
   `false` for all three, and `{echoCancellation:{exact:true}}` is an `OverconstrainedError`. `{ideal:true}` is accepted
   and simply not honoured. A call with two people on speakers will echo.
 * **Resampling.** Microphones deliver 16-bit PCM at the device's own rate; the consumer resamples.
-* **`MediaRecorder`** is not part of this work (it still throws), and `audiooutput` devices are only listed when a
-  provider registers them.
+* **`audiooutput` devices** are only listed when a provider registers them. Recording a captured stream is
+  `MediaRecorder`: [mediarecorder.md](mediarecorder.md).
 * **User activation for `getDisplayMedia`** is not enforced.
 * **Frames.** Iframes do not run scripts in this engine, so only the top-level document can ask for a device.
   `internal/capture/policy.FrameAllowed` implements the rule for a cross-origin frame (parent policy and `allow`

@@ -170,7 +170,8 @@ type jsVM struct {
 	cluster *agentCluster // SharedArrayBuffer agent cluster (sab.go)
 	sabv    *vmSAB
 	wasmh   *wasmHost
-	wch     *wcHost // WebCodecs (webcodecs.go)
+	wch     *wcHost  // WebCodecs (webcodecs.go)
+	rech    *recHost // MediaRecorder (mediarecorder.go)
 
 	closerMu sync.Mutex
 	closers  []func() // run first when the VM closes (host extensions, media players, audio streams); they must not call into the VM

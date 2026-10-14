@@ -42,6 +42,20 @@ Chromium client, which Sweef does not do.
 the headers above. Chromium also gets `403` in the same environment (benchmark results, main document status for
 chromium and chromium-savedata). Not worked around.
 
+### WhatsApp Web: voice notes (MediaRecorder)
+
+Before this change `MediaRecorder.start()` threw `NotSupportedError`, so the voice-note button could not record. Now
+`getUserMedia({audio})` followed by `new MediaRecorder(stream, {mimeType: 'audio/ogg; codecs=opus'})` (or WebM Opus, the usual
+fallback) records, delivers `dataavailable` and `stop` in the right order, and the resulting `Blob` plays through
+`<audio>.src = URL.createObjectURL(blob)` with the right duration. That exact flow is a test against a local server
+(`TestMediaRecorderWhatsAppVoiceNoteFlow`) with the synthetic microphone; the encoded files also decode with ffmpeg.
+
+**WhatsApp Web itself was not run.** Unverified: whether its page code gets as far as the composer (it needs a linked phone,
+Workers, IndexedDB at scale, WebAssembly and WebSocket traffic that were not exercised), what MIME type and bitrate it asks
+for, whether it re-muxes or analyses the audio with `AudioContext.decodeAudioData` (the repo decodes Ogg Opus and WebM Opus),
+and whether it uploads the blob in a form its servers accept. Video notes and calls are separate (WebRTC, see
+[webrtc-interop.md](webrtc-interop.md)). Details and limits: [mediarecorder.md](mediarecorder.md).
+
 ### Dynamic imports in bundled modules
 
 On some Vite/Rolldown sites (lonelyplanet.com seen) a `import("./chunk.js")` inside a module is requested relative to
@@ -71,7 +85,7 @@ the API exists, behaves as specified in those tests and (for the media paths) wa
 | `RTCPeerConnection`: offer/answer, ICE, DTLS-SRTP, data channels, `getStats`, `jitterBufferTarget`, codec preferences, simulcast send, encoded transforms (`RTCRtpScriptTransform`, insertable streams) | Meet, WhatsApp | Implemented, interoperating with pion peers in tests and with Sweef itself. Codecs: VP8 and Opus only. Real-time H.264 is in the separate H.264 work (`docs/webrtc.md`); Meet and WhatsApp offer VP8/VP9/H.264/AV1 and need one in common, which VP8 provides, but this was not tried against their servers. |
 | Screen sharing, `getDisplayMedia` | Meet | Implemented where the host app provides a source; untested live. |
 | `MediaStreamTrackProcessor`, `MediaStreamTrackGenerator`, `VideoTrackGenerator` | Meet (effects), WhatsApp | Implemented on the WebCodecs `VideoFrame` / `AudioData` storage; tested with a fake camera and over a peer connection. |
-| `MediaRecorder` | WhatsApp voice notes | **Not implemented**: the constructor exists and `start()` throws `NotSupportedError`. Voice-note recording does not work. |
+| `MediaRecorder` | WhatsApp voice notes | Implemented (WebM VP8/Opus, Ogg Opus); the voice-note flow works against the synthetic microphone, **not tried on the real site**. See [mediarecorder.md](mediarecorder.md). |
 | Web Audio (`AudioContext`, worklets, `MediaStreamAudioSourceNode`, `MediaStreamAudioDestinationNode`) | Meet, WhatsApp | Implemented. Worklets run in the page's VM, not on a separate audio thread. |
 | `OffscreenCanvas`, `requestVideoFrameCallback` | Meet (backgrounds) | Implemented; WebGL-based segmentation models are limited by the software WebGL. |
 | Fullscreen API | YouTube, Meet | Implemented: the element covers the window, the app hides its chrome, Esc/F11 leave. |
