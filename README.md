@@ -13,8 +13,8 @@ Sweef is not a fork of Chromium. It has its own CSS layout engine, rasterizer, s
 
 | | Playwright + Chromium | Sweef |
 |---|---|---|
-| Install | ~250 MB browser download | **21 MB static binary** |
-| Memory | ~90 to 150 MB idle, 1.1 GB process tree under agent-browser | **13 MB idle, 22 MB typical page, 52 MB peak on a script-heavy Wikipedia article** |
+| Install | ~250 MB browser download | **37.5 MiB static binary** (39.3 MB stripped, linux/amd64, measured 2026-10-14) |
+| Memory | ~90 to 150 MB idle, 1.1 GB process tree under agent-browser | **13 MB idle, 22 MB typical page, 52 MB peak on a script-heavy Wikipedia article** (measured 2026-10-11, before the WebRTC and WebAssembly work; an empty daemon is 3.4 MB resident today; not yet re-measured per page) |
 | CPU | 2 to 4 cores wanted | **1 core** |
 | Agent interface | CDP + language bindings | **MCP native**, plus a framed JSON-RPC socket and a Node SDK |
 | Page view for the model | DOM dumps or custom snapshots | **Playwright-format accessibility tree** with small `[ref=eN]` handles |
@@ -117,7 +117,7 @@ meaningful, not the absolute milliseconds.
 | New tab (p50) | 7.5 ms | 49.8 ms |
 | Start to first UI frame, cold cache | 492 ms | 770 ms |
 | Memory, 1 tab / 10 tabs (PSS, whole process tree) | 101 / 260 MiB | 370 / 506 MiB |
-| Installed size | 25 MiB | 596 MiB |
+| Installed size | 37.5 MiB (binary; was 25 MiB when measured, before WebRTC, WebAssembly and the web platform layer) | 596 MiB |
 | Idle CPU, static page | 0.00% | 0.45% |
 
 Where Chromium is ahead, and we say so:
@@ -126,8 +126,12 @@ Where Chromium is ahead, and we say so:
   (QuickJS has no JIT), and real pages settle later in Sweef (Wikivoyage 1.4x, MDN 2.7x; Wikipedia is a tie).
   Sweef paints a first frame early, so pages become visible sooner than they finish.
 * **Typing p99** is about the same (19 ms against 18 ms), and Sweef starts the dropdown-closed case slower.
-* **Compatibility:** no DRM, no extensions, no WebRTC, no WebAssembly yet, no colour fonts; sites that need them show
-  an "Open in system browser" action.
+* **Compatibility:** no extensions and no colour fonts. WebRTC calls, WebAssembly, IndexedDB, service workers, push,
+  camera and microphone capture, iframes and popups are implemented (feature map below), but **none of it has been
+  verified against the live sites that matter most**: YouTube, Google Meet, Zoom and WhatsApp Web were not tested (the
+  build sandbox has no UDP and YouTube serves it no media); see [docs/compat.md](docs/compat.md). DRM streaming
+  (Netflix, Spotify, Prime) needs a Widevine module the user already has plus a signing arrangement we do not have yet
+  ([docs/drm.md](docs/drm.md)). Pages that need something we lack show an "Open in system browser" action.
 
 In-process numbers on an idle machine (`go run ./internal/app/cmd/appbench`, `internal/app/BENCH.md`): typing with the
 dropdown open is 4.6 ms p50 / 7.5 ms p99 at 1x and 6.3 / 9.7 ms at 2x; the first key that opens the dropdown was 12.7 to 13 ms
@@ -300,6 +304,18 @@ Three states: **works** (covered by tests), **partial** (works for the common ca
 | Canvas 2D: paths, text, gradients, patterns, filters, shadows, compositing, `ImageData`, `OffscreenCanvas`, `toDataURL` | works |
 | WebGL 1 and 2: GLSL ES 1.00 and 3.00 compiler, full state machine, MSAA, transform feedback, UBOs, instancing; three.js, PixiJS and regl render correctly | works |
 | Media: `<video>` and `<audio>` element behavior, MSE, text tracks, Web Audio (all node types, worklets, offline rendering) | works (codec limits below) |
+| WebRTC: `RTCPeerConnection`, data channels, VP8 and Opus calls, jitter buffers, NACK, PLI, congestion control, `getStats` ([docs/webrtc.md](docs/webrtc.md)) | works between two Sweef peers on loopback; **real Meet, Zoom and Jitsi calls untested** |
+| Camera, microphone and screen capture: `getUserMedia`, `getDisplayMedia`, `enumerateDevices`, permission prompts and indicator ([docs/capture.md](docs/capture.md)) | works on Linux (V4L2 and PulseAudio, synthetic devices in tests); Windows and macOS compile-checked only |
+| WebAssembly: full JS API on wazero, live `memory.buffer`, workers, shared memory and atomics ([docs/webassembly.md](docs/webassembly.md)) | works; an Emscripten pthreads program was not tried |
+| `SharedArrayBuffer`, `Atomics` (blocking `wait` in workers), cross-origin isolation (COOP + COEP) | works |
+| WebCodecs: video and audio decoders for VP8, VP9, H.264, HEVC, AV1, Opus, AAC, MP3, Vorbis; VP8 and Opus encoders ([docs/webcodecs.md](docs/webcodecs.md)) | partial (no H.264 or AV1 encoder, no hardware path) |
+| IndexedDB, Cache Storage, OPFS, `navigator.storage` with quota and eviction, on a disk-resident ordered store ([docs/storage.md](docs/storage.md)) | works |
+| Storage partitioned by top-level site (cookies, `localStorage`, IndexedDB, caches, service workers, HTTP cache) ([docs/storage-partitioning.md](docs/storage-partitioning.md)) | works |
+| Service workers with fetch interception, Web Push, notifications, Background and Periodic Sync, Web Locks ([docs/service-workers.md](docs/service-workers.md), [docs/push.md](docs/push.md)) | works on Linux; push only while the browser runs |
+| Iframes painted into the page and interactive (clicks, typing, scrolling), `window.open` and popups with `opener`, `postMessage` and the popup blocker ([docs/frames-popups.md](docs/frames-popups.md)) | works against local test servers; real Google, Facebook and Stripe flows untested; no cross-window DOM access |
+| Audio output (pure-Go PulseAudio on Linux; oto on Windows and macOS) | works on Linux; Windows and macOS compile-checked only |
+| H.264 and VP9 playback: 1080p30 in real time on 4 cores, 1080p60 when the machine is not busy ([docs/media-streaming.md](docs/media-streaming.md)) | works (measured on synthetic clips) |
+| Encrypted media: EME with Clear Key; Widevine through a user-installed CDM in the `sweef-cdm` helper; PlayReady and FairPlay stubs ([docs/drm.md](docs/drm.md)) | Clear Key works; **Widevine, PlayReady and FairPlay untested against real services**; no bundled CDM |
 | Browser extensions | not planned |
 
 ## Rendering fidelity
@@ -340,7 +356,7 @@ Set `SWEEF_RENDERER=flow` to fall back to the old schematic layout.
 ## Architecture
 
 ```
-cmd/sweef              CLI (mcp | serve | fetch | snapshot | shot | eval | call | version)
+cmd/sweef              CLI (gui | mcp | serve | fetch | snapshot | shot | eval | call | pushd | version)
 internal/engine        Browser, BrowserContext, Tab, Locator, actions, waits,
                        dialogs, routes, storage state, PNG renderer, RSS governor,
                        jsvm.go (QuickJS VM + host bridge), scripts.go (loader + lifecycle),
@@ -350,7 +366,14 @@ internal/render        CSS layout engine and display list (block, inline, flex, 
 internal/raster        Rasterizer, Canvas 2D context, page painter
 internal/font          Font loading, metrics, shaping-lite, glyph outlines
 internal/gl            Software WebGL 1/2 (state machine, rasterizer) + internal/gl/glsl compiler
-internal/media         Container parsing, audio decode, frames; media/webaudio DSP graph
+internal/media         Container parsing, audio decode, frames; media/webaudio DSP graph;
+                       h264, vp8, vp9, hevc, av1 decoders; vp8enc encoder; cdm (key systems)
+internal/rtcmedia      WebRTC media pipeline (jitter buffers, NACK/PLI, congestion control)
+internal/capture       Camera, microphone and screen capture (V4L2, PulseAudio, compositor)
+internal/audioout      Audio output mixer and platform backends
+internal/sitestore     Disk-resident per-site storage (IndexedDB, caches, OPFS, quota)
+internal/webpush       Web Push client (RFC 8291/8292); internal/pushd the relay
+cmd/sweef-cdm          Helper that hosts a user-installed Widevine CDM (the only dynamically linked binary)
 internal/net           HTML parser, DOM tree with stable ids, CSS selector engine,
                        locator engines, accessible names, snapshot v2, routes, cookie jar
 internal/rpc           SWF1 wire protocol server (framed JSON over TCP/unix)
@@ -376,6 +399,10 @@ Requires Go 1.26 (the `go` toolchain downloads it automatically when `GOTOOLCHAI
 
 ## Roadmap
 
+- Verify on real hardware and sites: YouTube, Google Meet, Zoom, WhatsApp Web, real sign-in popups, Windows and macOS audio, capture and notifications
+- Netflix-class DRM: a Widevine signing arrangement, and PlayReady and FairPlay verified on real machines
+- Zoom web: an H.264 encoder (it may expect one) and an Emscripten pthreads run
+- Iframes: scrollbars, cross-window DOM access, popups that inherit a sandbox
 - `sweef watch` live event stream
 - Playwright trace format subset for the trace viewer
 - Faster first execution of large framework bundles
