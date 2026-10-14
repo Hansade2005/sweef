@@ -623,6 +623,10 @@ func (c *ctx) installHit(rb *lbox) {
 	p := c.painter
 	hits := p.hits
 	c.res.Hit = func(x, y float64) *html.Node {
+		n, _, _ := c.res.HitAt(x, y)
+		return n
+	}
+	c.res.HitAt = func(x, y float64) (*html.Node, float64, float64) {
 		for i := len(hits) - 1; i >= 0; i-- {
 			h := hits[i]
 			if h.noPE {
@@ -676,10 +680,10 @@ func (c *ctx) installHit(rb *lbox) {
 				}
 			}
 			if ok {
-				return h.n
+				return h.n, px, py
 			}
 		}
-		return nil
+		return nil, 0, 0
 	}
 }
 

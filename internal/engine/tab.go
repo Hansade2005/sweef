@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/html"
+
 	fnet "github.com/sweefbrowser/sweef/internal/net"
 	"github.com/sweefbrowser/sweef/internal/raster"
 )
@@ -168,6 +170,8 @@ type Tab struct {
 	progMode   atomic.Bool               // the current navigation is progressive: page-initiated navigations are too
 	tr         atomic.Pointer[loadTrace] // timeline of the current navigation (loadtrace.go)
 	traceNet   atomic.Bool               // record DNS/connect/TLS/first byte of every request
+
+	win winState // frames, opener/popups, messaging (windows.go, frames.go)
 }
 
 func newTab(e *Engine, id string) *Tab {
@@ -191,6 +195,8 @@ func newTab(e *Engine, id string) *Tab {
 	if t.vpH == 0 {
 		t.vpH = 720
 	}
+	t.win.popups = NewRing(64)
+	e.regWin(t)
 	return t
 }
 
@@ -204,6 +210,8 @@ func (t *Tab) Context() *BrowserContext {
 
 func (t *Tab) close() {
 	if t.closed.CompareAndSwap(false, true) {
+		t.closeFrames()
+		t.eng.unregWin(t)
 		dropBitmapSources(t.ID)
 		if env := t.ds.env.Load(); env != nil {
 			env.fonts.close() // releases the document's web font set
@@ -286,7 +294,11 @@ func (t *Tab) navigate(rawurl string, headers map[string]string, progressive boo
 		t.emit(EvFailure, map[string]any{"url": rawurl, "error": err.Error()})
 		return err
 	}
+	t.commitCOOP(res.coop, res.finalURL)
 	t.setDocument(res.body, res.finalURL, progressive)
+	if !progressive {
+		t.waitFrames(frameWaitBudget) // a headless caller reads the page right after: let its frames load
+	}
 	t.mu.Lock()
 	// history bookkeeping (goBack/goForward)
 	if t.hIdx+1 < len(t.history) {
@@ -304,6 +316,7 @@ type fetchResult struct {
 	finalURL string
 	status   int
 	har      fnet.RequestRecord
+	coop     string // Cross-Origin-Opener-Policy response header
 }
 
 func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error) {
@@ -342,7 +355,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 			return nil, err
 		}
 		req.Header.Set("User-Agent", t.UserAgent())
-		t.setBrowserHeaders(req.Header, req.URL, KindDocument, true)
+		t.setDocHeaders(req.Header, req.URL)
 		for k, v := range t.ExtraHeaders() {
 			req.Header.Set(k, v)
 		}
@@ -415,7 +428,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
 	t.emit(EvResponse, rec)
 	status, text := res.StatusCode, string(body)
-	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec}, nil
+	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec, coop: coopHeader(res.Header)}, nil
 }
 
 func flattenHeaders(h map[string][]string) map[string]string {
@@ -431,6 +444,7 @@ func flattenHeaders(h map[string][]string) map[string]string {
 func (t *Tab) SetDocument(htmlSrc, finalURL string) { t.setDocument(htmlSrc, finalURL, false) }
 
 func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
+	t.closeFrames() // the frames of the document being replaced
 	tp := time.Now()
 	doc, err := fnet.ParseDocument(htmlSrc, finalURL)
 	t.tspan("doc.parse", itoa(len(htmlSrc))+" bytes", tp)
@@ -463,6 +477,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	old := t.js
 	t.js = nil
 	t.mu.Unlock()
+	t.syncFrames(true) // <iframe>s of the new document start loading now, like in a browser
 	// Freeing every object the previous page allocated takes milliseconds;
 	// nothing can reach the old VM any more, so do it off the critical path.
 	if old != nil {
@@ -587,6 +602,10 @@ type SnapshotOptions = fnet.SnapshotOptions
 // AriaSnapshotV2 renders the Playwright-format accessibility tree with options.
 func (t *Tab) AriaSnapshotV2(o SnapshotOptions) (string, error) {
 	t.settle(0) // deliver queued socket/worker events and due timers first
+	t.syncFrames(false)
+	if o.Frame == nil {
+		o.Frame = func(n *html.Node) (string, []string) { return t.snapshotFrame(n, o) }
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if t.dom == nil {
@@ -652,6 +671,9 @@ func (t *Tab) ensureJS() (*jsVM, error) {
 		return nil, fmt.Errorf("javascript engine unavailable")
 	}
 	_, _ = j.call("__swSetDocument", docURL, "complete")
+	if t.needsOriginOverride() {
+		_, _ = j.call("__swSetOrigin", t.origin())
+	}
 	t.mu.Lock()
 	if t.js == nil && t.dom == d {
 		t.js = j
@@ -678,6 +700,9 @@ func (t *Tab) Fill(sel, value string) error { return t.Fill2(sel, value) }
 // SubmitFormFor submits the form enclosing sel (GET navigates with the query,
 // POST sends application/x-www-form-urlencoded) and installs the response.
 func (t *Tab) SubmitFormFor(sel string) error {
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.SubmitFormFor(in)
+	}
 	t.mu.RLock()
 	d := t.dom
 	t.mu.RUnlock()
@@ -688,7 +713,8 @@ func (t *Tab) SubmitFormFor(sel string) error {
 	if err != nil {
 		return err
 	}
-	return t.submitForm(method, action, values)
+	bid, _, _ := d.BackendByEngine(sel)
+	return t.submitFormTargeted(d, bid, method, action, values)
 }
 
 // SubmitFormBackend submits the form with (or enclosing) the given node id.
@@ -703,7 +729,7 @@ func (t *Tab) SubmitFormBackend(id int64) error {
 	if err != nil {
 		return err
 	}
-	return t.submitForm(method, action, values)
+	return t.submitFormTargeted(d, id, method, action, values)
 }
 
 func (t *Tab) submitForm(method, action string, values map[string]string) error {
@@ -753,7 +779,7 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	t.touchNet()
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", t.UserAgent())
-	t.setBrowserHeaders(req.Header, req.URL, KindDocument, true)
+	t.setDocHeaders(req.Header, req.URL)
 	for k, v := range t.ExtraHeaders() {
 		req.Header.Set(k, v)
 	}
@@ -785,6 +811,7 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 	rec.ResponseHeaders = flattenHeaders(res.Header)
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
 	final := res.Request.URL.String()
+	t.commitCOOP(coopHeader(res.Header), final)
 	t.SetDocument(string(b), final)
 	t.mu.Lock()
 	if fu, err := url.Parse(final); err == nil {

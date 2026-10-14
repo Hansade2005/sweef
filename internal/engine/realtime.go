@@ -481,6 +481,9 @@ func (j *jsVM) drainAsync() bool {
 
 // hasLiveWork reports open sockets or workers with queued work.
 func (j *jsVM) hasLiveWork() bool {
+	if j.tab != nil && j.tab.inboxLen() > 0 {
+		return true
+	}
 	if j.realtime == nil {
 		return false
 	}

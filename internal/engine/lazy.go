@@ -360,6 +360,7 @@ func (t *Tab) SetScrollY(y int) {
 		y = 0
 	}
 	t.ds.scrollY.Store(int64(y))
+	t.startLazyFramesNear()
 	t.lazyReeval()
 }
 

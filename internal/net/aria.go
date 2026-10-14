@@ -24,6 +24,10 @@ type SnapshotOptions struct {
 	InteractiveOnly bool   // keep only ref-bearing nodes + their heading context
 	MaxTextLen      int    // characters kept per text/paragraph node (0 = 200)
 	MaxDepth        int    // 0 = unlimited
+	// Frame, when set, supplies the snapshot lines of the document inside an <iframe>
+	// element (already indented relative to the iframe line, refs qualified with the
+	// frame prefix it returns), so one snapshot covers the page and its frames.
+	Frame func(n *html.Node) (ref string, lines []string)
 }
 
 func (o *SnapshotOptions) defaults() {
@@ -48,6 +52,7 @@ type snapNode struct {
 	children    []*snapNode
 	interactive bool
 	heading     bool
+	raw         []string // pre-rendered lines nested under this node (an iframe's document)
 }
 
 // ---- role computation ------------------------------------------------------
@@ -470,7 +475,16 @@ func (d *Doc) buildSnap(n *html.Node, o *SnapshotOptions, depth int) []*snapNode
 			}
 		}
 		if n.Data == "iframe" {
-			return []*snapNode{{role: "iframe", name: name}}
+			sn := &snapNode{role: "iframe", name: name}
+			if o.Frame != nil {
+				if ref, lines := o.Frame(n); len(lines) > 0 {
+					sn.raw = lines
+					if ref != "" {
+						sn.attrs = append(sn.attrs, "frame="+ref)
+					}
+				}
+			}
+			return []*snapNode{sn}
 		}
 		return []*snapNode{{role: "img", name: name}}
 	}
@@ -628,7 +642,7 @@ func filterInteractive(nodes []*snapNode) []*snapNode {
 	var out []*snapNode
 	for _, n := range nodes {
 		kids := filterInteractive(n.children)
-		if n.ref != 0 || len(kids) > 0 {
+		if n.ref != 0 || len(kids) > 0 || len(n.raw) > 0 {
 			c := *n
 			c.children = kids
 			out = append(out, &c)
@@ -641,7 +655,7 @@ func countLines(nodes []*snapNode) int {
 	n := 0
 	for _, k := range nodes {
 		n++
-		n += countLines(k.children)
+		n += countLines(k.children) + len(k.raw)
 	}
 	return n
 }
@@ -718,7 +732,7 @@ func (w *snapWriter) node(n *snapNode, indent int) {
 	if len(attrs) > 0 {
 		sb.WriteString(" [" + strings.Join(attrs, " ") + "]")
 	}
-	hasBlock := n.href != "" || len(n.children) > 0
+	hasBlock := n.href != "" || len(n.children) > 0 || len(n.raw) > 0
 	switch {
 	case n.hasValue && !hasBlock:
 		sb.WriteString(": " + yamlScalar(n.value))
@@ -738,6 +752,9 @@ func (w *snapWriter) node(n *snapNode, indent int) {
 		}
 		for _, c := range n.children {
 			w.node(c, indent+1)
+		}
+		for _, ln := range n.raw {
+			w.line(indent+1, ln)
 		}
 	default:
 		w.line(indent, sb.String())

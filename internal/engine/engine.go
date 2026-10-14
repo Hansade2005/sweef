@@ -172,6 +172,8 @@ type Engine struct {
 	acceptLang atomic.Value // string: Engine.SetAcceptLanguage
 	code       *codeCache
 
+	wm winRegistry // window ids and the embedder's popup / close / focus hooks (windows.go)
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	closed atomic.Bool

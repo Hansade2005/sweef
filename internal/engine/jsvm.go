@@ -233,6 +233,9 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 	if _, err := j.call("__swSetDocument", docURL, "loading"); err != nil {
 		t.LogConsole("error", "sweef: __swSetDocument failed: "+err.Error())
 	}
+	if t.needsOriginOverride() {
+		_, _ = j.call("__swSetOrigin", t.origin())
+	}
 	j.installBindings()
 	return j
 }
@@ -555,9 +558,16 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 	}
 	j.wakeMs = 0
 	for {
+		if j.tab != nil {
+			j.tab.syncFrames(false) // <iframe>s that page code inserted
+		}
 		j.drainScripts(soft)
 		j.jobs()
 		delivered := j.drainAsync()
+		if j.drainInbox() { // postMessage from other windows
+			delivered = true
+			j.jobs()
+		}
 		next := float64(-1)
 		if j.tab == nil || !j.tab.suspended() {
 			// A background tab under the Data Saver runs no timers (no polling, no
@@ -632,6 +642,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 
 // Settle pumps the page's event loop for up to d (exported for RPC waits).
 func (t *Tab) Settle(d time.Duration) {
+	t.runTasks()
 	if t.beforeDCL() {
 		return
 	}
@@ -655,6 +666,8 @@ func (t *Tab) beforeDCL() bool {
 
 // settle is the short pump used after every action.
 func (t *Tab) settle(d time.Duration) {
+	t.runTasks() // navigations other windows asked this one for
+	t.syncFrames(false)
 	if t.beforeDCL() {
 		return
 	}
@@ -739,7 +752,17 @@ func (j *jsVM) evaluate(expr string) (json.RawMessage, error) {
 		j.mu.Unlock()
 		return nil, fmt.Errorf("%s", jsErrorText(err, ""))
 	}
-	defer val.Free()
+	// Release the value under the VM lock: a frame's event loop (frames.go) and the
+	// window that drives its tab may use the same VM from different goroutines, and
+	// QuickJS's allocator is not safe against a concurrent free. No return path
+	// below holds j.mu, so locking here cannot deadlock.
+	defer func() {
+		j.mu.Lock()
+		if !j.closed {
+			val.Free()
+		}
+		j.mu.Unlock()
+	}()
 
 	// Await thenables.
 	isPromise, _ := j.vm.Call("__swIsThenable", val)
@@ -1184,7 +1207,7 @@ func (j *jsVM) registerHost() error {
 				}
 				return nil, nil
 			}
-			if v, ok := j.tab.Context().GetStorageValue(j.tab.origin(), key); ok {
+			if v, ok := j.tab.Context().GetStorageValue(j.tab.storageKey(), key); ok {
 				return v, nil
 			}
 			return nil, nil
@@ -1194,7 +1217,7 @@ func (j *jsVM) registerHost() error {
 			if kind == "session" {
 				j.session[key] = val
 			} else {
-				j.tab.Context().SetStorageValue(j.tab.origin(), key, val)
+				j.tab.Context().SetStorageValue(j.tab.storageKey(), key, val)
 			}
 			return nil, nil
 		}},
@@ -1203,7 +1226,7 @@ func (j *jsVM) registerHost() error {
 			if kind == "session" {
 				delete(j.session, key)
 			} else {
-				j.tab.Context().RemoveStorageValue(j.tab.origin(), key)
+				j.tab.Context().RemoveStorageValue(j.tab.storageKey(), key)
 			}
 			return nil, nil
 		}},
@@ -1211,7 +1234,7 @@ func (j *jsVM) registerHost() error {
 			if argS(a, 0) == "session" {
 				j.session = map[string]string{}
 			} else {
-				j.tab.Context().ClearStorage(j.tab.origin())
+				j.tab.Context().ClearStorage(j.tab.storageKey())
 			}
 			return nil, nil
 		}},
@@ -1222,7 +1245,7 @@ func (j *jsVM) registerHost() error {
 					keys = append(keys, k)
 				}
 			} else {
-				keys = j.tab.Context().StorageKeys(j.tab.origin())
+				keys = j.tab.Context().StorageKeys(j.tab.storageKey())
 			}
 			out := make([]any, len(keys))
 			for i, k := range keys {
@@ -1399,14 +1422,6 @@ func (j *jsVM) queueFormSubmit(formID int64) {
 		return
 	}
 	j.pendingNav = "form://" + strconv.FormatInt(formID, 10)
-}
-
-func (t *Tab) origin() string {
-	u, err := url.Parse(t.URL())
-	if err != nil || u.Host == "" {
-		return t.URL()
-	}
-	return u.Scheme + "://" + u.Host
 }
 
 // setURLOnly updates the tab URL without a navigation (history.pushState).

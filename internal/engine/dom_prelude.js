@@ -1161,9 +1161,15 @@
       var href = a.getAttribute('href');
       if (href && !/^\s*javascript:/i.test(href)) {
         if (a.hasAttribute('download')) { startDownload(a.href, a.getAttribute('download') || ''); return; }
-        if (/^#/.test(href.trim())) { global.location.hash = href.trim(); } else sw.navigate(a.href);
+        if (/^#/.test(href.trim())) { global.location.hash = href.trim(); } else navigateLink(a);
       }
     }
+  }
+  // a link with a target other than _self opens in a frame, another window or a new one (host: windows.go)
+  function navigateLink(a) {
+    var tg = a.getAttribute('target');
+    if (tg && !/^\s*_self\s*$/i.test(tg) && typeof sw.navTarget === 'function') { sw.navTarget(a.href, tg, a.getAttribute('rel') || ''); return; }
+    sw.navigate(a.href);
   }
   // <a download>: blob: URLs are read here (their bytes live in this VM);
   // everything else is fetched by Go into the downloads directory.
@@ -1995,12 +2001,14 @@
   // ---- Location
   var urlOverride = null; // set by history.pushState/replaceState (no reload)
   function currentURL() { if (urlOverride) return urlOverride; var u = ''; try { u = sw.url() || ''; } catch (e) { /* ignore */ } return u || 'about:blank'; }
-  function originOf(u) { try { return new global.URL(u).origin; } catch (e) { return 'null'; } }
+  // a document that inherits (about:blank, srcdoc) or lacks (sandbox) an origin has it set by the host
+  var forcedOrigin = null;
+  function originOf(u) { if (forcedOrigin !== null && u === currentURL()) return forcedOrigin; try { return new global.URL(u).origin; } catch (e) { return 'null'; } }
   function Location() { illegal(); }
   var LOC_PARTS = ['protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash', 'origin'];
   LOC_PARTS.forEach(function (part) {
     def(Location.prototype, part, {
-      get: function () { try { return new global.URL(currentURL())[part]; } catch (e) { return ''; } },
+      get: function () { if (part === 'origin' && forcedOrigin !== null) return forcedOrigin; try { return new global.URL(currentURL())[part]; } catch (e) { return ''; } },
       set: function (v) { if (part === 'origin') return; var u = new global.URL(currentURL()); u[part] = v; if (part === 'hash') { var old = currentURL(); urlOverride = u.href; fire(global, 'hashchange', { oldURL: old, newURL: u.href }); fire(global, 'popstate', { state: historyState }); } else sw.navigate(u.href); },
       enumerable: true
     });
@@ -3044,7 +3052,8 @@
   // keyboard: keydown -> (keypress + beforeinput + value update + input for printable) -> keyup
   var PRINTABLE_INPUT = /^(text|password|email|number|tel|url|search|date|time|datetime-local|month|week|color|hidden)$/;
   function dispatchKey(id, key, mods) {
-    var el = targetOf(id);
+    // no target: the focused element, as for a real key press (the page body when nothing has focus)
+    var el = (id === 0 || id === null || id === undefined) && activeElement && activeElement.isConnected ? activeElement : targetOf(id);
     if (!el) return true;
     key = String(key); mods = mods || {};
     var init = Object.assign({ key: key, code: codeFor(key), bubbles: true, cancelable: true }, mods);
@@ -3233,6 +3242,7 @@
   }
 
   function exportFn(name, fn) { Object.defineProperty(global, name, { value: fn, writable: true, configurable: true, enumerable: false }); }
+  exportFn('__swSetOrigin', function (o) { forcedOrigin = o === null || o === undefined ? null : String(o); });
   exportFn('__swDispatch', function (id, type, init) { try { return dispatchFromGo(id, type, init); } catch (e) { reportError(e); return true; } });
   exportFn('__swDispatchKey', function (id, key, mods) { try { return dispatchKey(id, key, mods); } catch (e) { reportError(e); return true; } });
   exportFn('__swMouse', function (type, x, y, init) { try { return mouseFromGo(type, x, y, init); } catch (e) { reportError(e); return true; } });
