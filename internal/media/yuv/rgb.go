@@ -24,6 +24,7 @@ func coeffsFor(matrix, height int) matrixCoeffs {
 // otherwise) and round-to-nearest, matching the usual 8-bit pipeline within
 // rounding. Identity-matrix 4:4:4 frames (GBR) are copied through.
 func (f *Frame) RGBA() *image.RGBA {
+	f.Wait()
 	w, h := f.Width, f.Height
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	d := uint(f.Depth)

@@ -291,6 +291,8 @@ func composite(dst *Surface, m *Mask, sh Shader, op CompositeOp, cl *clipState) 
 	unb := op.unbounded()
 	w := r.W()
 	allCov := m == nil && cl.M == nil // full coverage everywhere: no coverage row at all
+	// an opaque colour over everything (the page background, a card): the pixels are simply replaced
+	opaqueFill := allCov && isSolid && op == SourceOver && ss.c[3] == 255
 	if isSolid && m != nil && cl.M == nil && op == SourceOver {
 		// the common shape fill / shadow: a solid colour through a coverage mask
 		x0, x1 := max(r.X0, m.B.X0), min(r.X1, m.B.X1)
@@ -324,6 +326,10 @@ func composite(dst *Surface, m *Mask, sh Shader, op CompositeOp, cl *clipState) 
 		}
 		for y := r.Y0 + lo; y < r.Y0+hi; y++ {
 			if allCov {
+				if isSolid && opaqueFill {
+					fillRowSolid(dst.Row(y, r.X0, r.X1), ss.c)
+					continue
+				}
 				if !isSolid {
 					sh.ShadeRow(r.X0, y, w, src)
 				}

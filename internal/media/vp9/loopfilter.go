@@ -4,6 +4,8 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+
+	"github.com/sweefbrowser/sweef/internal/media/wavefront"
 )
 
 // Loop filter (spec 8.8).
@@ -61,7 +63,7 @@ func (d *Decoder) loopFilterFrame() {
 		}
 		return
 	}
-	progress := make([]atomic.Int32, 3*rows) // superblocks finished per (plane, row)
+	progress := wavefront.New(3 * rows) // superblocks finished per (plane, row)
 	var next atomic.Int32
 	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ {
@@ -76,17 +78,12 @@ func (d *Decoder) loopFilterFrame() {
 				plane, r := t/rows, t%rows
 				for c := 0; c < cols; c++ {
 					if r > 0 {
-						need := int32(min(c+2, cols))
-						for spin := 0; progress[t-1].Load() < need; spin++ {
-							if spin > 64 {
-								runtime.Gosched()
-							}
-						}
+						progress.Wait(t-1, min(c+2, cols))
 					}
 					for pass := 0; pass < 2; pass++ {
 						d.loopFilterSB(plane, pass, r*8, c*8)
 					}
-					progress[t].Store(int32(c + 1))
+					progress.Done(t, c+1)
 				}
 			}
 		}()
@@ -217,9 +214,7 @@ func (d *Decoder) loopFilterSB(plane, pass, row, col int) {
 				pos = py*stride + px
 				across, along = stride, 1
 			}
-			for k := 0; k < cnt; k++ {
-				filterSample(pix, uint(d.bitDepth), pos+k*along, across, lim, blimit, thresh, filterSize)
-			}
+			filterSegment(pix, uint(d.bitDepth), pos, across, along, cnt, lim, blimit, thresh, filterSize)
 		}
 	}
 }
@@ -231,8 +226,8 @@ func abs32(v int32) int32 {
 	return v
 }
 
-func clampSigned(v int32, sh uint) int32 {
-	lo, hi := -(int32(128) << sh), (int32(128)<<sh)-1
+// clampS clamps v to lo..hi (the signed sample range of the filter arithmetic).
+func clampS(v, lo, hi int32) int32 {
 	if v < lo {
 		return lo
 	}
@@ -242,93 +237,98 @@ func clampSigned(v int32, sh uint) int32 {
 	return v
 }
 
-func filterSample(pix []uint16, bd uint, pos, across, limit, blimit, thresh, filterSize int) {
+// filterSegment filters cnt samples along an edge (spec 8.8.2 for each of them): pos is the first sample on the
+// q side, across the step across the edge and along the step along it. The thresholds are computed once for
+// the segment; the 8-sample filter is written out and the 16-sample one slides a window sum.
+func filterSegment(pix []uint16, bd uint, pos, across, along, cnt, limit, blimit, thresh, filterSize int) {
 	sh := bd - 8
-	q0 := int32(pix[pos])
-	q1 := int32(pix[pos+across])
-	q2 := int32(pix[pos+2*across])
-	q3 := int32(pix[pos+3*across])
-	p0 := int32(pix[pos-across])
-	p1 := int32(pix[pos-2*across])
-	p2 := int32(pix[pos-3*across])
-	p3 := int32(pix[pos-4*across])
 	lim := int32(limit) << sh
-	hev := abs32(p1-p0) > int32(thresh)<<sh || abs32(q1-q0) > int32(thresh)<<sh
-	if abs32(p3-p2) > lim || abs32(p2-p1) > lim || abs32(p1-p0) > lim ||
-		abs32(q1-q0) > lim || abs32(q2-q1) > lim || abs32(q3-q2) > lim ||
-		abs32(p0-q0)*2+abs32(p1-q1)/2 > int32(blimit)<<sh {
-		return
-	}
+	blim := int32(blimit) << sh
+	thr := int32(thresh) << sh
 	one := int32(1) << sh
-	flat := false
-	if filterSize >= tx8x8 {
-		flat = abs32(p1-p0) <= one && abs32(q1-q0) <= one && abs32(p2-p0) <= one && abs32(q2-q0) <= one && abs32(p3-p0) <= one && abs32(q3-q0) <= one
-	}
-	if filterSize == tx4x4 || !flat {
-		off := int32(128) << sh
-		ps1, ps0, qs0, qs1 := p1-off, p0-off, q0-off, q1-off
-		var f int32
-		if hev {
-			f = clampSigned(ps1-qs1, sh)
+	off := int32(128) << sh
+	lo, hi := -off, off-1
+	for k := 0; k < cnt; k++ {
+		pos := pos + k*along
+		q0 := int32(pix[pos])
+		q1 := int32(pix[pos+across])
+		q2 := int32(pix[pos+2*across])
+		q3 := int32(pix[pos+3*across])
+		p0 := int32(pix[pos-across])
+		p1 := int32(pix[pos-2*across])
+		p2 := int32(pix[pos-3*across])
+		p3 := int32(pix[pos-4*across])
+		dp1p0, dq1q0 := abs32(p1-p0), abs32(q1-q0)
+		if abs32(p3-p2) > lim || abs32(p2-p1) > lim || dp1p0 > lim || dq1q0 > lim || abs32(q2-q1) > lim || abs32(q3-q2) > lim ||
+			abs32(p0-q0)*2+abs32(p1-q1)/2 > blim {
+			continue
 		}
-		f = clampSigned(f+3*(qs0-ps0), sh)
-		f1 := clampSigned(f+4, sh) >> 3
-		f2 := clampSigned(f+3, sh) >> 3
-		pix[pos] = uint16(clampSigned(qs0-f1, sh) + off)
-		pix[pos-across] = uint16(clampSigned(ps0+f2, sh) + off)
-		if !hev {
-			f = (f1 + 1) >> 1
-			pix[pos+across] = uint16(clampSigned(qs1-f, sh) + off)
-			pix[pos-2*across] = uint16(clampSigned(ps1+f, sh) + off)
+		flat := filterSize >= tx8x8 && dp1p0 <= one && dq1q0 <= one && abs32(p2-p0) <= one && abs32(q2-q0) <= one && abs32(p3-p0) <= one && abs32(q3-q0) <= one
+		if !flat {
+			hev := dp1p0 > thr || dq1q0 > thr
+			ps1, ps0, qs0, qs1 := p1-off, p0-off, q0-off, q1-off
+			var f int32
+			if hev {
+				f = clampS(ps1-qs1, lo, hi)
+			}
+			f = clampS(f+3*(qs0-ps0), lo, hi)
+			f1 := clampS(f+4, lo, hi) >> 3
+			f2 := clampS(f+3, lo, hi) >> 3
+			pix[pos] = uint16(clampS(qs0-f1, lo, hi) + off)
+			pix[pos-across] = uint16(clampS(ps0+f2, lo, hi) + off)
+			if !hev {
+				f = (f1 + 1) >> 1
+				pix[pos+across] = uint16(clampS(qs1-f, lo, hi) + off)
+				pix[pos-2*across] = uint16(clampS(ps1+f, lo, hi) + off)
+			}
+			continue
 		}
-		return
-	}
-	flat2 := false
-	if filterSize >= tx16x16 {
-		flat2 = true
-		for k := 4; k < 8; k++ {
-			if abs32(int32(pix[pos-(k+1)*across])-p0) > one || abs32(int32(pix[pos+k*across])-q0) > one {
-				flat2 = false
-				break
+		flat2 := false
+		if filterSize >= tx16x16 {
+			flat2 = true
+			for j := 4; j < 8; j++ {
+				if abs32(int32(pix[pos-(j+1)*across])-p0) > one || abs32(int32(pix[pos+j*across])-q0) > one {
+					flat2 = false
+					break
+				}
 			}
 		}
-	}
-	if filterSize == tx8x8 || !flat2 {
-		wideFilter(pix, pos, across, 3)
-	} else {
-		wideFilter(pix, pos, across, 4)
+		if filterSize == tx8x8 || !flat2 {
+			// the 8-sample filter: output i is the rounded mean of the sample i and the seven around it
+			pix[pos-3*across] = uint16((3*p3 + 2*p2 + p1 + p0 + q0 + 4) >> 3)
+			pix[pos-2*across] = uint16((2*p3 + p2 + 2*p1 + p0 + q0 + q1 + 4) >> 3)
+			pix[pos-across] = uint16((p3 + p2 + p1 + 2*p0 + q0 + q1 + q2 + 4) >> 3)
+			pix[pos] = uint16((p2 + p1 + p0 + 2*q0 + q1 + q2 + q3 + 4) >> 3)
+			pix[pos+across] = uint16((p1 + p0 + q0 + 2*q1 + q2 + 2*q3 + 4) >> 3)
+			pix[pos+2*across] = uint16((p0 + q0 + q1 + 2*q2 + 3*q3 + 4) >> 3)
+		} else {
+			wide16(pix, pos, across)
+		}
 	}
 }
 
-// wideFilter applies the 8-sample (log2Size 3) or 16-sample (log2Size 4) smoothing filter across an
-// edge: output i is the rounded mean of sample i and the 2n+1 samples around it (edge samples repeated).
-// A sliding window sum makes it linear in n instead of quadratic.
-func wideFilter(pix []uint16, pos, across int, log2Size uint) {
-	n := (1 << (log2Size - 1)) - 1
-	var s [16]int32 // s[k+8] = sample at offset k, k in [-(n+1), n]
-	for k := -(n + 1); k <= n; k++ {
-		s[k+8] = int32(pix[pos+k*across])
+// wide16 applies the 16-sample smoothing filter across an edge: output i is the rounded mean of sample i and
+// the 15 samples around it (the edge samples repeated beyond the filtered range). A sliding window sum makes
+// it linear.
+func wide16(pix []uint16, pos, across int) {
+	var s [32]int32 // s[k+16] = the sample at offset k, k in [-8, 7]; the edge values repeated outside
+	for k := -8; k <= 7; k++ {
+		s[k+16] = int32(pix[pos+k*across])
 	}
-	at := func(k int) int32 { // sample at offset k with the window clamped to the filtered range
-		if k < -(n + 1) {
-			k = -(n + 1)
-		} else if k > n {
-			k = n
-		}
-		return s[k+8]
+	for k := 0; k < 8; k++ {
+		s[k] = s[8]
+		s[24+k] = s[23]
 	}
-	var f [16]int32
-	// window sum for i = -n: samples -n-n .. -n+n
 	var w int32
-	for j := -n; j <= n; j++ {
-		w += at(-n + j)
+	for k := -14; k <= 0; k++ {
+		w += s[k+16]
 	}
-	round := int32(1) << (log2Size - 1)
-	for i := -n; i < n; i++ {
-		f[i+8] = (w + s[i+8] + round) >> log2Size
-		w += at(i+n+1) - at(i-n)
+	var f [14]int32
+	for i := -7; i < 7; i++ {
+		f[i+7] = (w + s[i+16] + 8) >> 4
+		w += s[i+8+16] - s[i-7+16]
 	}
-	for i := -n; i < n; i++ {
-		pix[pos+i*across] = uint16(f[i+8])
+	for i := -7; i < 7; i++ {
+		pix[pos+i*across] = uint16(f[i+7])
 	}
 }

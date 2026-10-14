@@ -11,6 +11,9 @@ type Surface struct {
 	R      IRect
 	Stride int // bytes per row
 	Pix    []uint8
+	// Opaque promises that every pixel has alpha 255 (set by whoever fills the surface, never inferred); it
+	// lets DrawImage take the fast video path.
+	Opaque bool
 }
 
 // NewSurface allocates a transparent surface of size w x h at the origin.
@@ -52,6 +55,16 @@ func (s *Surface) Clear() { clear(s.Pix) }
 // when the surface origin is 0,0).
 func (s *Surface) Image() *image.RGBA {
 	return &image.RGBA{Pix: s.Pix, Stride: s.Stride, Rect: image.Rect(s.R.X0, s.R.Y0, s.R.X1, s.R.Y1)}
+}
+
+// FromRGBAOpaque views an image.RGBA whose pixels are all opaque as a surface without copying them: the caller
+// promises not to change the image while the surface is in use.
+func FromRGBAOpaque(m *image.RGBA) *Surface {
+	b := m.Rect
+	if b.Min.X != 0 || b.Min.Y != 0 {
+		return FromImage(m)
+	}
+	return &Surface{R: IRect{0, 0, b.Dx(), b.Dy()}, Stride: m.Stride, Pix: m.Pix, Opaque: true}
 }
 
 // FromImage converts any image to a premultiplied surface at the origin.

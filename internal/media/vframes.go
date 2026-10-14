@@ -3,8 +3,10 @@ package media
 import (
 	"fmt"
 	"image"
+	"os"
 	"runtime"
 	"sort"
+	"strconv"
 	"sync"
 
 	"github.com/sweefbrowser/sweef/internal/media/h264"
@@ -28,6 +30,9 @@ type vdecoder interface {
 type vpic struct {
 	ycc *image.YCbCr
 	frm *yuv.Frame
+	// lazy: frm is plain 8-bit 4:2:0 (possibly still being reconstructed, with frame threading); it is waited
+	// for and converted to RGBA straight from the sample planes when it is shown
+	lazy bool
 }
 
 func (p vpic) valid() bool { return p.ycc != nil || p.frm != nil }
@@ -35,6 +40,9 @@ func (p vpic) valid() bool { return p.ycc != nil || p.frm != nil }
 // rgba converts the picture for display.
 func (p vpic) rgba(bt709 bool) *image.RGBA {
 	if p.frm != nil {
+		if p.lazy {
+			return frameToRGBA(p.frm, bt709)
+		}
 		return p.frm.RGBA()
 	}
 	return yuvToRGBA(p.ycc, bt709)
@@ -54,11 +62,25 @@ func framePic(fr *yuv.Frame) vpic {
 		return vpic{}
 	}
 	if fr.Depth == 8 && fr.Format == yuv.F420 && !fr.FullRange && (fr.Matrix == yuv.MatrixUnspecified || fr.Matrix == yuv.MatrixBT601 || fr.Matrix == 6 || fr.Matrix == yuv.MatrixBT709) {
+		if fr.Pending() {
+			return vpic{frm: fr, lazy: true}
+		}
 		if img, ok := fr.ToYCbCr(); ok {
 			return vpic{ycc: img}
 		}
 	}
 	return vpic{frm: fr}
+}
+
+// framePicDisplay is framePic for pictures that are shown (and possibly skipped): a plain 8-bit 4:2:0 frame is
+// kept as it is and converted to RGBA, straight from the decoder's planes, when (and only when) it is shown,
+// instead of being narrowed to a YCbCr image first. Only for decoders whose pictures are never overwritten
+// (the H.264 and VP9 decoders allocate every picture anew; the others were not checked).
+func framePicDisplay(fr *yuv.Frame) vpic {
+	if fr != nil && fr.Depth == 8 && fr.Format == yuv.F420 && !fr.FullRange && (fr.Matrix == yuv.MatrixUnspecified || fr.Matrix == yuv.MatrixBT601 || fr.Matrix == 6 || fr.Matrix == yuv.MatrixBT709) {
+		return vpic{frm: fr, lazy: true}
+	}
+	return framePic(fr)
 }
 
 type vp8Adapter struct{ d *vp8.Decoder }
@@ -72,7 +94,7 @@ func (a *vp9Adapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Deco
 func (a *vp9Adapter) Reset()                                   { a.d.Reset() }
 func (a *vp9Adapter) DecodePic(data []byte) (vpic, error) {
 	fr, err := a.d.DecodeFrame(data)
-	return framePic(fr), err
+	return framePicDisplay(fr), err
 }
 
 type h264Adapter struct{ d *h264.Decoder }
@@ -81,7 +103,7 @@ func (a *h264Adapter) Decode(data []byte) (*image.YCbCr, error) { return a.d.Dec
 func (a *h264Adapter) Reset()                                   { a.d.Reset() }
 func (a *h264Adapter) DecodePic(data []byte) (vpic, error) {
 	fr, err := a.d.DecodeFrame(data)
-	return framePic(fr), err
+	return framePicDisplay(fr), err
 }
 
 type hevcAdapter struct{ d *hevc.Decoder }
@@ -106,6 +128,7 @@ func newNativeDecoder(vs *vstream) vdecoder {
 		if err := d.SetAVCC(vs.cfg); err != nil {
 			return nil
 		}
+		d.SetThreads(h264FrameThreads())
 		return &h264Adapter{d}
 	case "hevc":
 		d := hevc.NewDecoder()
@@ -117,6 +140,21 @@ func newNativeDecoder(vs *vstream) vdecoder {
 		return newAV1Adapter(vs.cfg)
 	}
 	return nil
+}
+
+// h264FrameThreads is how many H.264 pictures are reconstructed at the same time: one per core up to four (a
+// frame thread only runs while the player asks for pictures, so the rest of the page keeps its share), none on
+// a single core. SWEEF_H264_THREADS overrides it (0 or 1 turn it off).
+func h264FrameThreads() int {
+	if v := os.Getenv("SWEEF_H264_THREADS"); v != "" {
+		n, _ := strconv.Atoi(v)
+		return n
+	}
+	n := min(runtime.GOMAXPROCS(0), 4)
+	if n < 2 {
+		return 0
+	}
+	return n
 }
 
 // HasNativeVideo reports whether codec (ffprobe style name) can be decoded

@@ -401,3 +401,15 @@ func lerpRow(dst, orig []uint8, k []uint8, n int) {
 		}
 	}
 }
+
+// fillRowSolid sets every pixel of the row to the colour c (the result of blending an opaque colour over
+// anything): the first pixel is written and the row doubled onto itself.
+func fillRowSolid(row []uint8, c [4]uint8) {
+	if len(row) < 4 {
+		return
+	}
+	row[0], row[1], row[2], row[3] = c[0], c[1], c[2], c[3]
+	for n := 4; n < len(row); n *= 2 {
+		copy(row[n:], row[:n])
+	}
+}

@@ -9,6 +9,9 @@ func (c *Context) DrawImage(img *Surface, sx, sy, sw, sh, dx, dy, dw, dh float64
 	if img == nil || sw == 0 || sh == 0 || dw == 0 || dh == 0 || img.W() == 0 || img.H() == 0 {
 		return
 	}
+	if c.drawImageFast(img, sx, sy, sw, sh, dx, dy, dw, dh) {
+		return
+	}
 	// normalise negative sizes (flips)
 	m := Translate(dx, dy).Mul(Scale(dw/sw, dh/sh)).Mul(Translate(-sx, -sy))
 	is := NewImageShader(img, c.st.ctm.Mul(m), false, false, c.filterMode(), c.st.alpha)

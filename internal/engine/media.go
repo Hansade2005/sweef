@@ -147,6 +147,13 @@ func (n *netSource) have() [][2]int64 {
 	return out
 }
 
+// opaqueVideoFrame is a converted video picture: an opaque RGBA image that nothing changes afterwards, which lets
+// the painter draw it without copying it (raster.Painter looks for OpaqueFrame).
+type opaqueVideoFrame struct{ *image.RGBA }
+
+// OpaqueFrame returns the image.
+func (f opaqueVideoFrame) OpaqueFrame() *image.RGBA { return f.RGBA }
+
 // videoSource is the BitmapSource for one <video> node. Frames arrive either
 // as decoded pictures from a player (converted to RGBA only when something
 // paints or reads them) or as ready images from the legacy frame provider.
@@ -168,7 +175,7 @@ func (v *videoSource) Bitmap() image.Image {
 		img := pic.RGBA() // the conversion runs outside the lock
 		v.mu.Lock()
 		if v.seq == seq && v.frame == nil && img != nil {
-			v.frame = img
+			v.frame = opaqueVideoFrame{img}
 		}
 		f := v.frame
 		v.mu.Unlock()
@@ -176,7 +183,7 @@ func (v *videoSource) Bitmap() image.Image {
 			return f
 		}
 		if img != nil {
-			return img
+			return opaqueVideoFrame{img}
 		}
 		v.mu.Lock()
 	}

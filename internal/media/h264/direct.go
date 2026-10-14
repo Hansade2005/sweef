@@ -43,10 +43,13 @@ func (d *Decoder) directRefListInit(h *sliceHeader, structure int) {
 		cur.refPOC[1] = cur.refPOC[0]
 	}
 	d.colFieldOff = 0
+	d.colLong = false
 	if d.listCount != 2 || h.numRef[1] == 0 {
 		return
 	}
 	ref1 := &d.refList[1][0]
+	// taken now: the marking of a later picture may change it while this one is still being decoded
+	d.colLong = ref1.pic.longRef
 	if structure == picFrame {
 		col := ref1.pic.fieldPOC
 		curPOC := cur.poc
@@ -156,6 +159,9 @@ func (d *Decoder) colocatedMB() colocated {
 	var c colocated
 	col := d.refList[1][0].pic
 	c.pic = col
+	if col != d.curPic && !col.complete() {
+		col.waitRows(min((d.mby+1)*16, col.h)) // the macroblock row of the colocated macroblock is decoded
+	}
 	stride := d.mbStride
 	mbxy := d.mbIdx
 	curIL := d.mbField
@@ -264,7 +270,7 @@ func (d *Decoder) predSpatialDirect(mask uint8) {
 		ref[0], ref[1] = 0, 0
 	}
 	c := d.colocatedMB()
-	longCol := d.refList[1][0].pic.longRef
+	longCol := d.colLong
 	for i8 := 0; i8 < 4; i8++ {
 		if mask&(1<<uint(i8)) == 0 {
 			continue

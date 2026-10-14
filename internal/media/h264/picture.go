@@ -6,6 +6,9 @@ package h264
 // the same frame-sized macroblock grid as frame pictures (the macroblock
 // rows of the two fields interleave).
 
+import "sync"
+import "sync/atomic"
+
 type mv16 struct{ x, y int16 }
 
 // Picture structure codes (also used as field masks).
@@ -56,6 +59,12 @@ type Picture struct {
 	refPOC   [2][2][32]int
 
 	nonExist bool
+
+	// progress of a picture reconstructed on its own goroutine (see threads.go): the number of luma rows that
+	// are final, progDone when the picture is complete
+	prog  atomic.Int32
+	pmu   sync.Mutex
+	pcond *sync.Cond
 }
 
 const pocInvalid = 1 << 30
@@ -65,6 +74,7 @@ func (d *Decoder) mbIndexBase() int { return 2*(d.mbW+1) + 1 }
 func newPicture(id int32, sps *SPS) *Picture {
 	mbW, mbH := sps.MbW, sps.MbH
 	p := &Picture{id: id, mbW: mbW, mbH: mbH, mbStride: mbW + 1, w: mbW * 16, h: mbH * 16}
+	p.prog.Store(progDone)
 	p.ys = p.w
 	p.y = make([]uint16, p.w*p.h)
 	switch sps.ChromaFormat {

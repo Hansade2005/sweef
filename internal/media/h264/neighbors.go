@@ -443,59 +443,46 @@ func (d *Decoder) writeBackMotion(mbType uint32) {
 	pic := d.curPic
 	idx := d.mbIdx
 	for list := 0; list < 2; list++ {
-		if list == 1 && !usesList(mbType, 1) {
-			for b := 0; b < 4; b++ {
-				pic.refIdx[1][idx*4+b] = refNotUsed
-				pic.refID[1][idx*4+b] = -1
-			}
-			for k := 0; k < 16; k++ {
-				pic.mv[1][idx*16+k] = mv16{}
-			}
-			if d.cabacOn {
-				for k := 0; k < 16; k++ {
-					d.mvd[1][idx*16+k] = [2]uint8{}
-				}
-			}
-			break
+		mvDst := pic.mv[list][idx*16 : idx*16+16 : idx*16+16]
+		var mvdDst [][2]uint8
+		if d.cabacOn {
+			mvdDst = d.mvd[list][idx*16 : idx*16+16 : idx*16+16]
 		}
-		if list == 0 && !usesList(mbType, 0) {
-			for b := 0; b < 4; b++ {
-				pic.refIdx[0][idx*4+b] = refNotUsed
-				pic.refID[0][idx*4+b] = -1
+		refIdx := pic.refIdx[list][idx*4 : idx*4+4 : idx*4+4]
+		refID := pic.refID[list][idx*4 : idx*4+4 : idx*4+4]
+		if !usesList(mbType, list) {
+			for b := range refIdx {
+				refIdx[b] = refNotUsed
+				refID[b] = -1
 			}
-			for k := 0; k < 16; k++ {
-				pic.mv[0][idx*16+k] = mv16{}
-			}
+			clear(mvDst)
 			if d.cabacOn {
-				for k := 0; k < 16; k++ {
-					d.mvd[0][idx*16+k] = [2]uint8{}
-				}
+				clear(mvdDst)
+			}
+			if list == 1 {
+				break
 			}
 			continue
 		}
 		mvc := &d.mvCache[list]
 		for y := 0; y < 4; y++ {
-			for x := 0; x < 4; x++ {
-				pic.mv[list][idx*16+y*4+x] = mvc[c0+y*8+x]
-			}
+			*(*[4]mv16)(mvDst[y*4:]) = *(*[4]mv16)(mvc[c0+y*8:])
 		}
 		if d.cabacOn {
-			mvdc := &d.mvdCache[list]
-			for y := 0; y < 4; y++ {
-				for x := 0; x < 4; x++ {
-					if mbType&mbSkip != 0 {
-						d.mvd[list][idx*16+y*4+x] = [2]uint8{}
-					} else {
-						d.mvd[list][idx*16+y*4+x] = mvdc[c0+y*8+x]
-					}
+			if mbType&mbSkip != 0 {
+				clear(mvdDst)
+			} else {
+				mvdc := &d.mvdCache[list]
+				for y := 0; y < 4; y++ {
+					*(*[4][2]uint8)(mvdDst[y*4:]) = *(*[4][2]uint8)(mvdc[c0+y*8:])
 				}
 			}
 		}
 		refc := &d.refCache[list]
 		for b := 0; b < 4; b++ {
 			r := refc[scan8[b*4]]
-			pic.refIdx[list][idx*4+b] = r
-			pic.refID[list][idx*4+b] = d.refIdentity(list, int(r))
+			refIdx[b] = r
+			refID[b] = d.refIdentity(list, int(r))
 		}
 	}
 	if d.hdr.isB() && d.cabacOn && mbType&mb8x8 != 0 {

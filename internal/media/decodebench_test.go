@@ -46,6 +46,7 @@ func TestDecodeSpeed(t *testing.T) {
 	t0 := time.Now()
 	cpu0 := cpuSeconds()
 	var lastPic Picture
+	var inflight []Picture
 	for _, s := range ss {
 		data, _ := s.Bytes()
 		d := dec.Disposable(data)
@@ -62,7 +63,11 @@ func TestDecodeSpeed(t *testing.T) {
 		dispN++
 		if pic.Valid() {
 			lastPic = pic
+			inflight = append(inflight, pic)
 		}
+	}
+	for _, p := range inflight {
+		p.Wait() // a decoder with frame threads returns pictures that are still being reconstructed
 	}
 	total := time.Since(t0)
 	cpu := cpuSeconds() - cpu0

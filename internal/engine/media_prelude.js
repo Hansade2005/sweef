@@ -2111,12 +2111,13 @@
   (function () {
     if (!global.navigator || 'mediaCapabilities' in global.navigator) return;
     // Megapixels per second the decoder sustains with dropped frames under about 2% on a 4-core machine, per codec
-    // (measured with TestPlaybackQuality, see docs/media-streaming.md): H.264 720p30 = 27.6, VP9 1080p30 = 62.2;
-    // AV1 and HEVC are held at 480p30-and-a-bit because their key frames cost several frame times (AV1 720p30
-    // decodes at 33 fps with a 147 ms 95th percentile) or were not measured (HEVC, VP8).
+    // (measured with TestPlaybackQuality, see docs/media-streaming.md): H.264 1080p30 = 62.2 (with frame threads;
+    // it was 720p30 = 27.6 before), VP9 1080p30 = 62.2; AV1 and HEVC are held at 480p30-and-a-bit because their
+    // key frames cost several frame times (AV1 720p30 decodes at 33 fps with a 147 ms 95th percentile) or were
+    // not measured (HEVC, VP8).
     function smoothMpx(ct) {
       ct = String(ct).toLowerCase();
-      if (/avc[13]|h264/.test(ct)) return 28;
+      if (/avc[13]|h264/.test(ct)) return 63;
       if (/vp09|vp9/.test(ct)) return 63;
       if (/av01|av1/.test(ct)) return 14;
       if (/hev1|hvc1|hevc/.test(ct)) return 14;

@@ -76,6 +76,18 @@ func (d *Decoder) decodeMBEntry() error {
 }
 
 func (d *Decoder) decodeSlice(h *sliceHeader, r *bitReader) error {
+	if err := d.prepareSlice(h, r); err != nil {
+		return err
+	}
+	if d.ctx != nil {
+		return d.threadedSlice(h, r)
+	}
+	return d.runSlice(r)
+}
+
+// prepareSlice does what a slice needs from the headers: the slice parameters, the reference lists and the
+// direct prediction and weight tables.
+func (d *Decoder) prepareSlice(h *sliceHeader, r *bitReader) error {
 	d.hdr = h
 	d.br = r
 	if h.sps.SeparatePlanes {
@@ -107,6 +119,12 @@ func (d *Decoder) decodeSlice(h *sliceHeader, r *bitReader) error {
 			d.setupImplicit(h)
 		}
 	}
+	return nil
+}
+
+// runSlice decodes the macroblocks of the slice prepared by prepareSlice.
+func (d *Decoder) runSlice(r *bitReader) error {
+	h := d.hdr
 	d.resBr = r
 	d.dpOn = h.nalType == 2
 	if d.dpOn && len(d.dpLost) != len(d.sliceTable) {
@@ -138,10 +156,13 @@ func (d *Decoder) decodeSlice(h *sliceHeader, r *bitReader) error {
 		if err != nil {
 			return err
 		}
+		if d.ctx != nil {
+			d.ctx.mbDecoded(d)
+		}
 		eos := false
 		if d.cabacOn {
 			eos = d.cab.terminate() != 0
-			if d.cab.pos > r.end+64 {
+			if d.cab.bitPos() > r.end+64 {
 				return corrupt()
 			}
 		}

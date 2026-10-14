@@ -1076,7 +1076,16 @@ func (p *Painter) bitmap(o render.Bitmap) {
 	if img == nil {
 		return
 	}
-	s := FromImage(img)
+	var s *Surface
+	if of, ok := img.(interface{ OpaqueFrame() *image.RGBA }); ok {
+		// a decoded video frame: opaque and never changed afterwards, so it is drawn from where it is (no copy)
+		if f := of.OpaqueFrame(); f != nil {
+			s = FromRGBAOpaque(f)
+		}
+	}
+	if s == nil {
+		s = FromImage(img)
+	}
 	if s.W() == 0 || s.H() == 0 {
 		return
 	}
