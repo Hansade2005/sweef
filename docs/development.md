@@ -43,6 +43,7 @@ functions and a JavaScript prelude (`internal/engine/*_prelude.js`).
 | [updates.md](updates.md) | update trust model and file formats |
 | [agent.md](agent.md) | the agent loop, caching strategy, safety gates, measured cost |
 | [compat.md](compat.md) | what is supported and what is a known gap |
+| [frames-popups.md](frames-popups.md) | iframes, window.open, popups, postMessage between windows: what works, what does not |
 
 A change that alters one of these needs an ADR ([adr/](adr/README.md)) or at least a discussion in the issue.
 

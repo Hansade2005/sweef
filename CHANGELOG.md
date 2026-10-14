@@ -18,6 +18,26 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   longer shared between a private window and the normal one.
 
 ### Added
+- **Iframes render and take input.** Every `<iframe>` is now a child document with its own JavaScript VM, layout and
+  paint, drawn into the parent at the iframe's box (clipped, with the transforms, opacity and radius of its ancestors),
+  scrollable inside its box, repainted when it changes, and loaded lazily for `loading="lazy"`. `srcdoc`, nested frames,
+  `sandbox` (scripts, same-origin, popups, forms, top navigation), `X-Frame-Options` and CSP `frame-ancestors` are
+  supported. Pointer, wheel, keyboard and text input are routed to the frame under the pointer or holding focus, in the
+  desktop browser and through the engine API (`MouseClick`, `Keyboard`, `WheelAt`). Not supported: access to another
+  window's DOM beyond what same-origin proxies forward, process isolation, scrollbars inside frames. See
+  [docs/frames-popups.md](docs/frames-popups.md).
+- **`window.open` and popups.** `window.open` returns a `WindowProxy` (`opener`, `name`, `closed`, `close()`, `focus()`,
+  `postMessage`, `location`, same-origin property access and calls); links and forms honour `target` (`_blank`, `_top`, `_parent`, frame and window
+  names, `rel=opener` / `noopener`); windows open only during a user gesture (5 s in the engine, 2 s in the app, one
+  popup per gesture) and a blocked popup is recorded (`Page.popups`) and shown as a toast; `window.close()` closes windows
+  that script opened; `postMessage` works across frames, the opener and popups with `targetOrigin` and structured clone
+  of common types; `Cross-Origin-Opener-Policy` can sever the opener. In the desktop browser a popup is a tab next to
+  its opener with an accent bar in the tab strip. An OAuth round trip (popup, cross-origin redirect back, `opener.postMessage`,
+  `window.close`) is covered by tests against local servers; real Google or Facebook sign-in was not tried. Not supported:
+  small-window features (size, position).
+- Agent: the snapshot includes the content of frames with frame-qualified refs (`f1e5`), and click, fill, type, press and the
+  other ref actions reach elements inside same-origin and cross-origin frames. The Sidekick reads a frame only when the
+  site of the frame is one the person allowed. `Page.frames` and `Page.popups` RPC methods.
 - Cross-origin isolation, `SharedArrayBuffer` and `Atomics` across the page and its dedicated Workers: `crossOriginIsolated` follows
   COOP `same-origin` plus COEP `require-corp` / `credentialless`, `SharedArrayBuffer` exists only then, `Atomics.wait` blocks in
   Workers (and throws on the page), `notify` and `waitAsync` work across VMs. COEP is enforced for cross-origin scripts,
@@ -39,7 +59,7 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   `SharedWorker`, `BroadcastChannel` and `navigator.locks`; structured clone with transferred `MessagePort`s and `ArrayBuffer`s.
 - `<iframe>` documents are loaded as nested browsing contexts: separate origin, window and VM, `postMessage` with origin checks,
   `parent`/`top`/`frameElement`, same-origin `contentWindow`/`contentDocument`, `sandbox`, `srcdoc`, `X-Frame-Options` and CSP
-  `frame-ancestors`. Frames are not painted or given input yet ([docs/storage-partitioning.md](docs/storage-partitioning.md)).
+  `frame-ancestors` ([docs/storage-partitioning.md](docs/storage-partitioning.md)); painting and input are in the entry above.
 - `BrowserContext.SetPartitionPolicy`, `GrantThirdPartyCookies`, `engine.SetHostMap` (resolver override), `Options.DisableFrames`.
 - Real camera, microphone and tab/window capture for `getUserMedia`, `getDisplayMedia` and `enumerateDevices`: V4L2 cameras and PulseAudio/PipeWire microphones on Linux (pure Go), a permission prompt with per-site choices and in-use indicators, `SWEEF_FAKE_DEVICES=1` test devices and `capdemo`; Windows and macOS backends are included but unverified on hardware (`docs/capture.md`).
 
@@ -95,6 +115,12 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - `scripts/release/build.sh` also builds `sweef-cdm` next to `sweef` (`--skip-cdm-host` to omit); packages do not install it yet.
 
 ### Changed
+- A page that embeds a third-party frame now makes real requests for it, unless the Data Saver's click-to-load frames are on.
+  The README's data-saver comparison with Chromium was measured before frames were loaded and still says Sweef fetches no
+  iframe documents.
+- `Tab.Keyboard` types into the focused element (it dispatched to the document before).
+- `window.open` from page script is no longer "open a tab from the chrome, return null": it goes through the engine
+  (popup blocker, opener link, named windows).
 - The release binary-size budget is 40 MiB (was 32 MiB): WebRTC (pion), WebAssembly (wazero) and the web platform layer add about 12 MiB. The stripped linux/amd64 build is about 34.7 MiB.
 - IndexedDB, Cache Storage and the origin private file system are stored in one disk-resident ordered key-value store per origin (goleveldb) instead of an append-only log replayed into memory: memory no longer depends on database size (a 1 GB database opens in 44 ms and reads at about 30 MB resident), cursors stream, transactions commit as one atomic batch, `clear()` and `deleteDatabase` are O(1), values and cache bodies above 64 KiB are files, and a crash or kill leaves each transaction whole or absent. The origin private file system now persists across restarts and is no longer limited to 256 MiB of memory.
 - `navigator.storage.persist()` no longer always succeeds in a persistent context: it asks the application's policy and answers no without one. `StorageQuotaMiB` is now a cap per origin that overrides the derived one (0 = derived), not a fixed 1 GiB.

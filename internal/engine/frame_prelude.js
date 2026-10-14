@@ -206,10 +206,12 @@
           case 'self': case 'window': case 'frames': return proxy;
           case 'parent': { var i1 = host('frInfo', win); return windowFor(i1.parent || win); }
           case 'top': return windowFor(host('frInfo', win).top);
-          case 'opener': return null;
+          case 'opener': { var oid = host('frInfo', win).opener; return oid ? windowFor(oid) : null; }
           case 'length': return host('frInfo', win).length;
           case 'location': return host('frAccess', win) ? remoteCall(win, 'get', 0, 'location') : locationFor(win);
-          case 'focus': case 'blur': case 'close': return function () { };
+          case 'focus': return function () { host('frName', 'focus', win); };
+          case 'close': return function () { host('frName', 'close', win); };
+          case 'blur': return function () { };
         }
         if (/^\d+$/.test(p)) { var kids = host('frChildren', win); return kids[+p] !== undefined ? windowFor(kids[+p]) : undefined; }
         if (host('frAccess', win)) return remoteCall(win, 'get', 0, p);
@@ -242,7 +244,7 @@
   function define(name, get, set) { Object.defineProperty(global, name, { get: get, set: set || function () { }, configurable: true, enumerable: true }); }
   define('parent', function () { var s = me(); return s.framed ? windowFor(s.parent) : global; });
   define('top', function () { var s = me(); return s.framed ? windowFor(s.top) : global; });
-  define('opener', function () { return null; }, function () { });
+  define('opener', function () { var o = host('frInfo', me().win).opener; return o ? windowFor(o) : null; }, function () { });
   define('frameElement', function () {
     var s = me();
     if (!s.framed || !host('frAccess', s.parent)) return null;
@@ -262,7 +264,16 @@
       has: function (t, k) { return k in global; }
     });
   });
-  define('name', function () { return me().nameValue === undefined ? '' : me().nameValue; }, function (v) { me().nameValue = String(v); });
+  define('name', function () { return host('frName'); }, function (v) { host('frName', 'setName', String(v)); });
+  // window.open / close / focus (windows.go): popups are windows of the same group, reached like frames
+  global.open = function open(url, target, features) {
+    var u = url === undefined || url === null ? '' : String(url);
+    var tg = target === undefined || target === null || String(target) === '' ? '_blank' : String(target);
+    var id = host('frName', 'open', u, tg, features === undefined || features === null ? '' : String(features));
+    return id ? windowFor(id) : null;
+  };
+  global.close = function close() { host('frName', 'close', me().win); };
+  global.focus = function focus() { host('frName', 'focus', me().win); };
   Object.defineProperty(global, '__swFrameInit', { value: function (nm) { me().nameValue = nm || ''; return true; } });
 
   // ---- <iframe> --------------------------------------------------------------------------------------------------
@@ -320,6 +331,10 @@
           var ports = (m.ports || []).map(global.__swPorts.adopt), data, bad = false;
           try { data = global.__swDe(m.data, ports); } catch (e) { bad = true; }
           global.dispatchEvent(bad ? new global.MessageEvent('messageerror', {}) : new global.MessageEvent('message', { data: data, origin: m.origin, source: windowFor(m.src), ports: ports }));
+          return true;
+        }
+        case 'storage': {
+          global.dispatchEvent(new global.StorageEvent('storage', { key: m.key, oldValue: m.old, newValue: m.new, url: m.url, storageArea: global.localStorage }));
           return true;
         }
         case 'cb': {

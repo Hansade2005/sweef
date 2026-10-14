@@ -22,6 +22,10 @@ type Locator struct {
 }
 
 func (t *Tab) Locator(sel string) *Locator {
+	// a ref from a snapshot that includes frames ("f1e5", "f1f2e5") lives in that frame
+	if c, inner, ok := t.routeFrameSel(sel); ok {
+		return c.Locator(inner)
+	}
 	return &Locator{tab: t, sel: sel, nth: -1}
 }
 

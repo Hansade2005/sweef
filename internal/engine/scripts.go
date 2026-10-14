@@ -50,6 +50,11 @@ func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {
 	}
 	j.executed[s.ID] = true
 	j.mu.Unlock()
+	if !t.scriptsAllowed() {
+		// sandboxed without allow-scripts: page scripts never run
+		t.LogConsole("warning", "Blocked script execution in a sandboxed frame (allow-scripts is not set)")
+		return
+	}
 
 	src := s.Source
 	name := "<inline script>"

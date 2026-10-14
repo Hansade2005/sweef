@@ -22,7 +22,8 @@ func (t *Tab) Generation() uint64 {
 	if d == nil {
 		return 0
 	}
-	return d.MutationGen() + d.PaintGen()
+	// frame documents painted into this one count: a frame that changes changes the page's pixels
+	return d.MutationGen() + d.PaintGen() + t.win.frameGen.Load()
 }
 
 // PaintOptions selects how PaintRGBAOpts rasterises.
@@ -36,6 +37,10 @@ type PaintOptions struct {
 	// paint of this tab (see incremental.go); the result is then the damaged
 	// sub-rectangle of the surface unless the whole surface had to be repainted.
 	Incremental bool
+	// ScrollY paints the document scrolled by this many CSS px (used for frame
+	// documents, which scroll inside their box; the GUI scrolls top-level pages
+	// by moving a taller texture).
+	ScrollY int
 }
 
 // PaintRGBA rasterises the page straight to an RGBA image (no PNG round
@@ -62,7 +67,8 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 		o.DSF = 1
 	}
 	t0 := time.Now()
-	gen0 := doc.MutationGen()
+	gen0 := t.Generation()
+	t.setPaintDSF(o.DSF)
 	l := doc.Layout(o.Width)
 	tLayout := time.Since(t0)
 	ext, _ := l.Ext.(*renderExt)
@@ -99,6 +105,12 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 			kept = append(kept, op)
 		}
 		list = kept
+	}
+	if o.ScrollY > 0 {
+		moved := make([]render.Op, 0, len(list)+2)
+		moved = append(moved, render.PushTransform{M: [6]float64{1, 0, 0, 1, 0, -float64(o.ScrollY)}})
+		moved = append(moved, list...)
+		list = append(moved, render.PopTransform{})
 	}
 	env := raster.PaintEnv{Bitmap: ext.env.Bitmap}
 	if !o.Transparent {

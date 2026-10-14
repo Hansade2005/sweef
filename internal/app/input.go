@@ -145,11 +145,13 @@ func b2i(b bool) int {
 
 func (a *App) runMove(e *etab, tgt string, px, py, mods int, hover bool) {
 	e.w.do(func() {
-		_, _ = e.t.Evaluate("__sweefPtr('move'," + itoa(px) + "," + itoa(py) + ",0," + itoa(mods) + ")")
+		tt, lx, ly := e.pointerTarget(tgt, px, py)
+		e.leaveHover(tt)
+		_, _ = tt.Evaluate("__sweefPtr('move'," + itoa(lx) + "," + itoa(ly) + ",0," + itoa(mods) + ")")
 		cur := shell.CursorDefault
 		if hover {
 			var c string
-			err := e.eval("__sweefCursor("+itoa(px)+","+itoa(py)+")", &c)
+			err := e.evalOn(tt, "__sweefCursor("+itoa(lx)+","+itoa(ly)+")", &c)
 			if err == nil {
 				cur = cursorFor(c)
 			}
@@ -248,6 +250,9 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 	px, py := int(ev.X), int(ev.Y)
 	if tgt == "page" {
 		px, py = a.pageCoords(ev.X, ev.Y)
+		if down {
+			e.t.NoteUserActivation() // a click is the gesture that allows window.open
+		}
 	}
 	mods := modBits(ev.Mods)
 	btn := ev.Button
@@ -257,8 +262,13 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 			return
 		}
 		e.w.do(func() {
+			tt, lx, ly := e.pointerTarget(tgt, px, py)
+			if tgt == "page" {
+				e.t.FocusFrame(tt) // keyboard input follows the click into a frame
+				tt.NoteUserActivation()
+			}
 			e.t.MarkUserActivation() // a real click: sites may now ask for permissions
-			_, _ = e.t.Evaluate("__sweefPtr('down'," + itoa(px) + "," + itoa(py) + "," + itoa(btn) + "," + itoa(mods) + ")")
+			_, _ = tt.Evaluate("__sweefPtr('down'," + itoa(lx) + "," + itoa(ly) + "," + itoa(btn) + "," + itoa(mods) + ")")
 			e.afterOp()
 		})
 		return
@@ -268,15 +278,25 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 	}
 	clicked := math.Abs(ev.X-a.mouse.downX) < 6 && math.Abs(ev.Y-a.mouse.downY) < 6
 	e.w.do(func() {
-		_, _ = e.t.Evaluate("__sweefPtr('up'," + itoa(px) + "," + itoa(py) + "," + itoa(btn) + "," + itoa(mods) + ")")
+		tt, lx, ly := e.pointerTarget(tgt, px, py)
+		if tt != e.t && !tt.ScriptsAllowed() {
+			// a frame whose sandbox lacks allow-scripts runs no script, not even the input helper: click it natively
+			if clicked {
+				_ = tt.MouseClick(lx, ly)
+			}
+			e.afterOp()
+			a.post(func() { a.afterPageInput(e) })
+			return
+		}
+		_, _ = tt.Evaluate("__sweefPtr('up'," + itoa(lx) + "," + itoa(ly) + "," + itoa(btn) + "," + itoa(mods) + ")")
 		if clicked {
 			var res struct {
 				Open string `json:"open"`
 				BG   bool   `json:"bg"`
 				Lite *int   `json:"lite"` // index of a tapped Data Saver placeholder
 			}
-			_ = e.eval("__sweefPtr('click',"+itoa(px)+","+itoa(py)+","+itoa(btn)+","+itoa(mods)+")", &res)
-			if res.Lite != nil {
+			_ = e.evalOn(tt, "__sweefPtr('click',"+itoa(lx)+","+itoa(ly)+","+itoa(btn)+","+itoa(mods)+")", &res)
+			if res.Lite != nil && tt == e.t {
 				a.dataTapAt(e, *res.Lite)
 			}
 			if res.Open != "" {
@@ -310,7 +330,8 @@ func (a *App) contextMenu(e *etab, tgt string, px, py, mods int, wx, wy float64)
 		Selection string `json:"selection"`
 		Editable  bool   `json:"editable"`
 	}
-	_ = e.eval("__sweefPtr('context',"+itoa(px)+","+itoa(py)+",2,"+itoa(mods)+")", &res)
+	tt, lx, ly := e.pointerTarget(tgt, px, py)
+	_ = e.evalOn(tt, "__sweefPtr('context',"+itoa(lx)+","+itoa(ly)+",2,"+itoa(mods)+")", &res)
 	e.afterOp()
 	if res.Prevented {
 		return
@@ -346,6 +367,11 @@ func (a *App) onWheel(ev shell.Event) {
 		return
 	}
 	e.lastInput.Store(time.Now().UnixNano())
+	// a frame under the pointer that can still scroll takes the wheel; otherwise the page scrolls
+	wx, wy := a.pageCoords(ev.X, ev.Y)
+	if e.t.WheelAt(wx, wy, int(ev.DX/a.zoomF()), int(ev.DY/a.zoomF())) {
+		return
+	}
 	if ev.Precise { // trackpad: pixel-accurate deltas already feel smooth, do not add easing
 		a.scroll.ScrollTo(a.scroll.Target+ev.DY*a.scale, true)
 		a.stepScroll(0)
@@ -358,7 +384,8 @@ func (a *App) onWheel(ev shell.Event) {
 	x, y := a.pageCoords(ev.X, ev.Y)
 	dx, dy := int(ev.DX), int(ev.DY)
 	e.w.tryDo(func() { // let page script see the wheel (lazy loaders listen to it)
-		_, _ = e.t.Evaluate("__swWheel(" + itoa(dx) + "," + itoa(dy) + "," + itoa(x) + "," + itoa(y) + ")")
+		tt, lx, ly := e.t.FrameHit(x, y)
+		_, _ = tt.Evaluate("__swWheel(" + itoa(dx) + "," + itoa(dy) + "," + itoa(lx) + "," + itoa(ly) + ")")
 		e.drainBindings()
 	})
 }
@@ -419,7 +446,7 @@ func (a *App) onKeyDown(ev shell.Event) {
 			shift := ev.Mods&shell.ModShift != 0
 			e.w.do(func() {
 				editing := false
-				_ = e.eval("__sweefEditing()", &editing)
+				_ = e.evalOn(e.inputTab(), "__sweefEditing()", &editing)
 				if !editing {
 					a.post(func() { a.scrollKey(" ", shift) })
 				}
@@ -427,15 +454,19 @@ func (a *App) onKeyDown(ev shell.Event) {
 		}
 		return
 	}
+	if isPage {
+		e.t.FocusedTab().NoteUserActivation() // a key press is a user gesture too
+	}
 	e.w.do(func() {
 		var ok bool
+		tt := e.inputTab()
 		if key != "Escape" {
 			e.t.MarkUserActivation()
 		}
-		_ = e.eval("__sweefKey("+jsString(key)+","+itoa(mods)+")", &ok)
+		_ = e.evalOn(tt, "__sweefKey("+jsString(key)+","+itoa(mods)+")", &ok)
 		editing := false
 		if isPage {
-			_ = e.eval("__sweefEditing()", &editing)
+			_ = e.evalOn(tt, "__sweefEditing()", &editing)
 		}
 		e.afterOp()
 		if isPage && !editing && (ok || true) {
@@ -512,18 +543,22 @@ func (a *App) onText(text string) {
 	}
 	e.lastInput.Store(time.Now().UnixNano())
 	isPage := e.kind == "page"
+	if isPage {
+		e.t.FocusedTab().NoteUserActivation()
+	}
 	e.w.do(func() {
+		tt := e.inputTab()
 		for _, r := range text {
 			if r < 0x10000 {
 				t0 := time.Now()
 				e.t.MarkUserActivation()
-				_, _ = e.t.Evaluate("__sweefKey(" + jsString(string(r)) + ",0)")
+				_, _ = tt.Evaluate("__sweefKey(" + jsString(string(r)) + ",0)")
 				if e.kind == "chrome" {
 					// the chrome page's own JavaScript handler, for the stats breakdown
 					a.comp.RecordPaint("chrome: input handler (JS)", time.Since(t0))
 				}
 			} else {
-				_, _ = e.t.Evaluate("__sweefInsert(" + jsString(string(r)) + ")")
+				_, _ = tt.Evaluate("__sweefInsert(" + jsString(string(r)) + ")")
 			}
 		}
 		e.afterOp()
@@ -544,22 +579,23 @@ func (a *App) clipboardOp(op string) {
 		clip = a.win.Clipboard()
 	}
 	e.w.do(func() {
+		tt := e.inputTab()
 		switch op {
 		case "copy", "cut":
 			var sel string
-			_ = e.eval("__sweefSel()", &sel)
+			_ = e.evalOn(tt, "__sweefSel()", &sel)
 			if sel != "" {
 				a.post(func() { a.win.SetClipboard(sel) })
 			}
 			if op == "cut" {
-				_, _ = e.t.Evaluate("__sweefEdit('cut')")
+				_, _ = tt.Evaluate("__sweefEdit('cut')")
 			}
 		case "paste":
 			if clip != "" {
-				_, _ = e.t.Evaluate("__sweefInsert(" + jsString(clip) + ")")
+				_, _ = tt.Evaluate("__sweefInsert(" + jsString(clip) + ")")
 			}
 		case "selectall":
-			_, _ = e.t.Evaluate("__sweefEdit('selectall')")
+			_, _ = tt.Evaluate("__sweefEdit('selectall')")
 		}
 		e.afterOp()
 	})

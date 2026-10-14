@@ -1191,9 +1191,15 @@
       var href = a.getAttribute('href');
       if (href && !/^\s*javascript:/i.test(href)) {
         if (a.hasAttribute('download')) { startDownload(a.href, a.getAttribute('download') || ''); return; }
-        if (/^#/.test(href.trim())) { global.location.hash = href.trim(); } else sw.navigate(a.href);
+        if (/^#/.test(href.trim())) { global.location.hash = href.trim(); } else navigateLink(a);
       }
     }
+  }
+  // a link with a target other than _self opens in a frame, another window or a new one (host: windows.go)
+  function navigateLink(a) {
+    var tg = a.getAttribute('target');
+    if (tg && !/^\s*_self\s*$/i.test(tg) && typeof sw.frName === 'function') { sw.frName('nav', a.href, tg, a.getAttribute('rel') || ''); return; }
+    sw.navigate(a.href);
   }
   // <a download>: blob: URLs are read here (their bytes live in this VM);
   // everything else is fetched by Go into the downloads directory.
@@ -3176,7 +3182,8 @@
   // keyboard: keydown -> (keypress + beforeinput + value update + input for printable) -> keyup
   var PRINTABLE_INPUT = /^(text|password|email|number|tel|url|search|date|time|datetime-local|month|week|color|hidden)$/;
   function dispatchKey(id, key, mods) {
-    var el = targetOf(id);
+    // no target: the focused element, as for a real key press (the page body when nothing has focus)
+    var el = (id === 0 || id === null || id === undefined) && activeElement && activeElement.isConnected ? activeElement : targetOf(id);
     if (!el) return true;
     key = String(key); mods = mods || {};
     var init = Object.assign({ key: key, code: codeFor(key), bubbles: true, cancelable: true }, mods);

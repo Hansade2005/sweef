@@ -69,7 +69,9 @@ func (t *Tab) windowName() string {
 	if t.bc != nil {
 		return t.bc.name
 	}
-	return ""
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.win.name
 }
 
 type frHost struct{ j *jsVM }
@@ -91,8 +93,8 @@ func (h *frHost) reach(win int64) *Tab {
 		return nil
 	}
 	a, b := me.topTab(), t.topTab()
-	if a == nil || a != b {
-		return nil
+	if a == nil || b == nil || (a != b && !windowsRelated(a, b)) {
+		return nil // another page tree, unless it is the opener or a popup of this one (windows.go)
 	}
 	return t
 }
@@ -165,11 +167,17 @@ func (h *frHost) fns() map[string]hostFn {
 			if t == nil {
 				return map[string]any{"closed": true, "parent": int64(0), "top": int64(0), "length": 0}, nil
 			}
-			out := map[string]any{"closed": false, "parent": int64(0), "top": t.topTab().winID, "length": len(t.FrameTabs())}
+			out := map[string]any{"closed": t.WindowClosed(), "parent": int64(0), "top": t.topTab().winID, "length": len(t.FrameTabs()), "opener": int64(0)}
+			if o := t.Opener(); o != nil {
+				out["opener"] = o.winID
+			}
 			if t.isFrame() {
 				out["parent"] = t.bc.parent.winID
 				// a window whose <iframe> was removed from the document is closed
-				_ = t.bc.parent.withDoc(func(d *fnet.Doc) error { out["closed"] = !d.IsConnected(t.bc.elem); return nil })
+				_ = t.bc.parent.withDoc(func(d *fnet.Doc) error {
+					out["closed"] = out["closed"] == true || !d.IsConnected(t.bc.elem)
+					return nil
+				})
 			}
 			return out, nil
 		},
@@ -285,10 +293,51 @@ func (h *frHost) fns() map[string]hostFn {
 			if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "data:") {
 				return nil, nil
 			}
-			go func() { _ = t.Navigate(target, nil) }()
+			if t.isFrame() {
+				go func() { _ = t.Navigate(target, nil) }()
+				return nil, nil
+			}
+			if me != t && !navSchemeAllowed(me.URL(), target) {
+				return nil, nil
+			}
+			me.queueNavigation(target, navSpec{}, t) // a window is navigated by the goroutine that owns it
 			return nil, nil
 		},
-		"frName": func(a []any) (any, error) { return h.me().windowName(), nil },
+		"frName": func(a []any) (any, error) {
+			me := h.me()
+			if me == nil {
+				return "", nil
+			}
+			switch argS(a, 0) {
+			case "":
+				return me.windowName(), nil
+			case "setName":
+				me.setWindowName(argS(a, 1))
+			case "open": // window.open(url, target, features): the window id it refers to, or 0
+				if w := me.openFromScript(argS(a, 1), argS(a, 2), argS(a, 3)); w != nil {
+					return w.winID, nil
+				}
+				return int64(0), nil
+			case "close":
+				t := h.reach(argI(a, 1))
+				if t == nil {
+					return false, nil
+				}
+				if t == me.Top() || t == me || (t.win.scriptOpened && t.win.opener.Load() == me.Top()) {
+					return t.closeFromScript(), nil
+				}
+				return false, nil
+			case "focus":
+				if t := h.reach(argI(a, 1)); t != nil {
+					t.focusFromScript()
+				}
+			case "nav": // an anchor or form with a target other than _self
+				rel, tg := argS(a, 3), argS(a, 2)
+				me.navigateTarget(navSpec{rawURL: argS(a, 1), target: tg, noOpener: anchorNoOpener(tg, rel), noReferrer: relHas(rel, "noreferrer")})
+				return true, nil
+			}
+			return nil, nil
+		},
 		// ---- Storage Access API ----
 		"saHas": func(a []any) (any, error) { return h.me() != nil && h.me().hasStorageAccess(), nil },
 		"saRequest": func(a []any) (any, error) {

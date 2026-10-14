@@ -40,6 +40,8 @@ type bgRuntime struct {
 	stopOnce sync.Once
 
 	cur func() *jsVM // (frames) the VM of the tab's current document; nil = j
+
+	tick func() // (frames) called after every slice of the loop: repaint the embedding page when the frame changed
 }
 
 // vm is the VM to pump now.
@@ -146,6 +148,9 @@ func (rt *bgRuntime) loop() {
 		finished := true
 		if j != nil {
 			_, finished = j.pumpUntil(now.Add(time.Hour), now.Add(15*time.Millisecond))
+		}
+		if rt.tick != nil {
+			rt.tick()
 		}
 		rt.taskMu.Lock()
 		more := len(rt.tasks) > 0

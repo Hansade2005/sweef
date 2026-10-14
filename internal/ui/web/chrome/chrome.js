@@ -123,7 +123,7 @@
       if (md) { var mt = t.camera && t.mic ? S.media.usingBoth : t.camera ? S.media.usingCam : t.mic ? S.media.usingMic : S.media.usingShare; r.md.appendChild(icon(t.camera ? "camera" : t.sharing ? "screen" : "mic", 13)); r.md.appendChild(h("i.mdot")); r.md.setAttribute("title", mt); r.md.setAttribute("role", "img"); r.md.setAttribute("aria-label", mt); }
     }
     r.tx.setAttribute("aria-label", S.tab.close); r.tx.setAttribute("title", S.tab.close);
-    el.classList.toggle("pinned", !!t.pinned); el.classList.toggle("crashed", !!t.crashed);
+    el.classList.toggle("pinned", !!t.pinned); el.classList.toggle("crashed", !!t.crashed); el.classList.toggle("popup", !!t.popup);
     el.setAttribute("aria-selected", active ? "true" : "false"); el.setAttribute("tabindex", active ? "0" : "-1");
   }
   function renderTabs() {

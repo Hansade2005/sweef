@@ -150,7 +150,12 @@ func attrKeysOf(d *fnet.Doc, backendID int64) []string {
 // semantics: <a href> navigates, submit buttons post their form, labels focus
 // their control.
 func (t *Tab) Click(sel string) error {
-	t.pw.activate()
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.Click(in)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	l := t.Locator(sel)
 	// A ref that resolves to something that can never be clicked fails at
 	// once instead of waiting for it to become visible.
@@ -177,6 +182,7 @@ func (t *Tab) Click(sel string) error {
 var nonRenderable = map[string]bool{"script": true, "style": true, "head": true, "meta": true, "link": true, "title": true, "template": true, "noscript": true}
 
 func (t *Tab) clickBackend(bid int64, sel string) error {
+	t.NoteUserActivation() // an agent click stands in for a person: it may open popups
 	info := t.infoForBackend(bid)
 	// pointer sequence first: page JS may preventDefault or navigate itself
 	t.fire(bid, "pointerdown", nil)
@@ -223,6 +229,11 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 			if err != nil {
 				return err
 			}
+			if tg, ok, _ := t.GetAttributeByBackend(bid, "target"); ok && strings.TrimSpace(tg) != "" && !strings.EqualFold(strings.TrimSpace(tg), "_self") {
+				rel, _, _ := t.GetAttributeByBackend(bid, "rel")
+				t.navigateTarget(navSpec{rawURL: u, target: tg, noOpener: anchorNoOpener(tg, rel), noReferrer: relHas(rel, "noreferrer")})
+				return nil
+			}
 			return t.Navigate(u, nil)
 		}
 	case "label":
@@ -261,6 +272,12 @@ func (t *Tab) infoForBackend(bid int64) *fnet.Info {
 
 // Hover dispatches mouseenter/mouseover on the matched element.
 func (t *Tab) Hover(sel string) error {
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.Hover(in)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).BackendID()
 	if err != nil {
 		return err
@@ -274,6 +291,12 @@ func (t *Tab) Hover(sel string) error {
 
 // Focus moves DOM focus to the element (dispatches focus/focusin).
 func (t *Tab) Focus(sel string) error {
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.Focus(in)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).BackendID()
 	if err != nil {
 		return err
@@ -287,7 +310,13 @@ func (t *Tab) Focus(sel string) error {
 
 // Type simulates per-character keystrokes into an input target.
 func (t *Tab) Type(sel, text string, delay time.Duration) error {
-	t.pw.activate()
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.Type(in, text, delay)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
+	t.NoteUserActivation()
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -326,7 +355,13 @@ func (t *Tab) appendValue(bid int64, s string) error {
 // Press sends one or more key presses ("Enter", "Control+a", "Tab"). Enter on
 // a form field submits the enclosing form like real browsers do.
 func (t *Tab) Press(sel, keys string) error {
-	t.pw.activate()
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.Press(in, keys)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
+	t.NoteUserActivation()
 	bid, err := t.Locator(sel).BackendID()
 	if err != nil {
 		return err
@@ -348,7 +383,11 @@ func (t *Tab) Press(sel, keys string) error {
 
 // Keyboard sends a raw key sequence to the focused element/body.
 func (t *Tab) Keyboard(keys string) error {
-	t.pw.activate()
+	// keys go to the document that has focus: a frame after the person clicked into it
+	if leaf := t.FocusedTab(); leaf != t {
+		return leaf.Keyboard(keys)
+	}
+	t.NoteUserActivation()
 	t.jsCall("__swDispatchKey", 0, keys)
 	t.afterAction()
 	return nil
@@ -357,6 +396,12 @@ func (t *Tab) Keyboard(keys string) error {
 // Fill sets a value instantly (Playwright fill fast-path). Works on inputs,
 // textareas and selects (select matches value OR visible label).
 func (t *Tab) Fill2(sel, value string) error {
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.Fill2(in, value)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -388,6 +433,12 @@ func (t *Tab) Check(sel string) error   { return t.setChecked(sel, true) }
 func (t *Tab) Uncheck(sel string) error { return t.setChecked(sel, false) }
 
 func (t *Tab) setChecked(sel string, want bool) error {
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.setChecked(in, want)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -403,6 +454,12 @@ func (t *Tab) setChecked(sel string, want bool) error {
 
 // SelectOption picks option(s) by value or visible label; supports multi.
 func (t *Tab) SelectOption(sel, value string) error {
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.SelectOption(in, value)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -442,14 +499,31 @@ func (t *Tab) SetValueRaw(sel, value string) error {
 
 // ---- mouse / touch / drag / scroll ------------------------------------------
 
-func (t *Tab) MouseMove(x, y int) { t.jsCall("__swMouse", "mousemove", x, y) }
-func (t *Tab) MouseDown(x, y int) { t.pw.activate(); t.jsCall("__swMouse", "mousedown", x, y) }
-func (t *Tab) MouseUp(x, y int)   { t.jsCall("__swMouse", "mouseup", x, y) }
+func (t *Tab) MouseMove(x, y int) { t.mouseEvent("mousemove", x, y) }
+func (t *Tab) MouseDown(x, y int) { t.mouseEvent("mousedown", x, y) }
+func (t *Tab) MouseUp(x, y int)   { t.mouseEvent("mouseup", x, y) }
+
+// mouseEvent dispatches a mouse event at a document point, into the frame that is
+// under the point when there is one.
+func (t *Tab) mouseEvent(typ string, x, y int) {
+	leaf, lx, ly := t.FrameHit(x, y)
+	if leaf != t && typ == "mousedown" {
+		t.FocusFrame(leaf)
+	}
+	if typ == "mousedown" {
+		leaf.NoteUserActivation()
+	}
+	leaf.jsCall("__swMouse", typ, lx, ly)
+}
 
 // MouseClick hit-tests coordinates against deterministic bounding boxes and
 // clicks whatever element covers the point.
 func (t *Tab) MouseClick(x, y int) error {
-	t.pw.activate()
+	if leaf, lx, ly := t.FrameHit(x, y); leaf != t {
+		t.FocusFrame(leaf)
+		return leaf.MouseClick(lx, ly)
+	}
+	t.FocusFrame(t)
 	bid, err := t.hitTest(x, y)
 	if err != nil {
 		t.jsCall("__swMouse", "click", x, y)
@@ -460,6 +534,12 @@ func (t *Tab) MouseClick(x, y int) error {
 
 // Tap dispatches touchstart/touchend and follows link semantics.
 func (t *Tab) Tap(sel string) error {
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.Tap(in)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -486,6 +566,12 @@ func (t *Tab) Drag(source, target string) error {
 
 // ScrollIntoView records scroll state and dispatches scroll events.
 func (t *Tab) ScrollIntoView(sel string) error {
+	if c, in, ok := t.routeFrameSel(sel); ok {
+		return c.ScrollIntoView(in)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).WaitBackend("attached", 5*time.Second)
 	if err != nil {
 		return err
@@ -507,6 +593,9 @@ func (t *Tab) ScrollIntoView(sel string) error {
 
 // MouseWheel accumulates wheel deltas (agents use it to trigger lazy-loaders).
 func (t *Tab) MouseWheel(dx, dy int) error {
+	if leaf := t.FocusedTab(); leaf != t && leaf.ScrollFrameBy(dy) {
+		return nil
+	}
 	t.jsCall("__swWheel", dx, dy)
 	t.afterAction()
 	if dy != 0 {

@@ -115,6 +115,11 @@ func (c *ctx) setupReplaced(b *lbox) bool {
 		r.iw, r.ih, r.hasIW, r.hasIH = 300, 150, true, true
 		if n.Data == "iframe" && attr(n, "data-sweef-lite") == "frame" {
 			setupLite(r, n, "frame")
+		} else if n.Data == "iframe" && c.env != nil {
+			// a live frame document: its pixels are read at raster time like a canvas
+			if fe, ok := c.env.(FrameEnv); ok && fe.HasFrame(n) {
+				r.bitmap = true
+			}
 		}
 	case "svg":
 		r.iw, r.ih, r.hasIW, r.hasIH = 300, 150, true, true

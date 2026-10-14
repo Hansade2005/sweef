@@ -686,6 +686,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 
 // Settle pumps the page's event loop for up to d (exported for RPC waits).
 func (t *Tab) Settle(d time.Duration) {
+	t.runTasks()
 	if t.beforeDCL() {
 		return
 	}
@@ -709,6 +710,7 @@ func (t *Tab) beforeDCL() bool {
 
 // settle is the short pump used after every action.
 func (t *Tab) settle(d time.Duration) {
+	t.runTasks() // navigations other windows asked this one for
 	if t.beforeDCL() {
 		return
 	}
@@ -793,7 +795,17 @@ func (j *jsVM) evaluate(expr string) (json.RawMessage, error) {
 		j.mu.Unlock()
 		return nil, fmt.Errorf("%s", jsErrorText(err, ""))
 	}
-	defer val.Free()
+	// Release the value under the VM lock: a frame's event loop (frames.go) and the
+	// window that drives its tab may use the same VM from different goroutines, and
+	// QuickJS's allocator is not safe against a concurrent free. No return path
+	// below holds j.mu, so locking here cannot deadlock.
+	defer func() {
+		j.mu.Lock()
+		if !j.closed {
+			val.Free()
+		}
+		j.mu.Unlock()
+	}()
 
 	// Await thenables.
 	isPromise, _ := j.vm.Call("__swIsThenable", val)
@@ -1270,7 +1282,16 @@ func (j *jsVM) registerHost() error {
 			if kind == "session" {
 				j.session[key] = val
 			} else {
-				j.tab.Context().SetStorageValue(lk, key, val)
+				c := j.tab.Context()
+				old, had := c.GetStorageValue(lk, key)
+				c.SetStorageValue(lk, key, val)
+				if !had || old != val {
+					var op *string
+					if had {
+						op = &old
+					}
+					j.storageChanged(lk, &key, op, &val)
+				}
 			}
 			return nil, nil
 		}},
@@ -1283,7 +1304,12 @@ func (j *jsVM) registerHost() error {
 			if kind == "session" {
 				delete(j.session, key)
 			} else {
-				j.tab.Context().RemoveStorageValue(lk, key)
+				c := j.tab.Context()
+				old, had := c.GetStorageValue(lk, key)
+				c.RemoveStorageValue(lk, key)
+				if had {
+					j.storageChanged(lk, &key, &old, nil)
+				}
 			}
 			return nil, nil
 		}},
@@ -1296,6 +1322,7 @@ func (j *jsVM) registerHost() error {
 				j.session = map[string]string{}
 			} else {
 				j.tab.Context().ClearStorage(lk)
+				j.storageChanged(lk, nil, nil, nil)
 			}
 			return nil, nil
 		}},
@@ -1514,14 +1541,6 @@ func (j *jsVM) queueFormSubmit(formID int64) {
 		return
 	}
 	j.pendingNav = "form://" + strconv.FormatInt(formID, 10)
-}
-
-func (t *Tab) origin() string {
-	u, err := url.Parse(t.URL())
-	if err != nil || u.Host == "" {
-		return t.URL()
-	}
-	return u.Scheme + "://" + u.Host
 }
 
 // setURLOnly updates the tab URL without a navigation (history.pushState).
