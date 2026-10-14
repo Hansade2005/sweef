@@ -36,7 +36,7 @@ func fracMul16(a, b int) int {
 
 func bitexactCos(x int) int {
 	if uint(x) <= bitexactThetaMax {
-		return bitexactCosTable[x]
+		return int(bitexactCosTable[x])
 	}
 	return bitexactCosCalc(x)
 }
@@ -68,7 +68,7 @@ func bitexactLog2tanCalc(isin, icos int) int {
 
 func bitexactLog2tanTheta(itheta int) int {
 	if uint(itheta) <= bitexactThetaMax {
-		return bitexactLog2tanThetaTable[itheta]
+		return int(bitexactLog2tanThetaTable[itheta])
 	}
 	imid := bitexactCos(itheta)
 	iside := bitexactCos(16384 - itheta)

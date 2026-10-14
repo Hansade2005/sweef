@@ -24,11 +24,11 @@ import (
 	"github.com/sweefbrowser/sweef/internal/gl"
 )
 
-//go:embed webgl_prelude.js
-var webglPreludeJS string
+//go:embed webgl_prelude.js.z
+var webglPreludeJSZ string
 
 func init() {
-	registerPrelude("webgl", webglPreludeJS)
+	registerPreludeZ("webgl", webglPreludeJSZ)
 	registerHostExtension("webgl", func(j *jsVM) map[string]hostFn {
 		h := &glHost{j: j, ctxs: map[int]*glCtx{}, next: 1, imgCache: map[string][]any{}}
 		return map[string]hostFn{

@@ -1,0 +1,3 @@
+36921470 stripped linux/amd64 sweef (scripts/release/build.sh flags), bytes
+# The size of the last accepted build. cmd/sweef/binsize_linux_test.go fails when the binary is more than 1 MiB bigger.
+# Update it in the commit that grows or shrinks the binary on purpose, and say why in CHANGELOG.md.

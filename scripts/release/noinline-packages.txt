@@ -1,0 +1,41 @@
+# Packages the release build compiles without inlining (go build -gcflags=<pattern>=-l), one pattern per line.
+#
+# Inlining copies small functions into their callers and records every copy in the function metadata (.gopclntab),
+# so it costs binary size twice. In packages that run once per connection, per message or per user action the speed it
+# buys is not measurable and the bytes are. Everything on a per-pixel, per-byte, per-node or per-request path stays
+# inlined: the rasteriser, layout, style, the DOM and the HTML parser, the codecs, WebGL, fonts, the JavaScript engine,
+# wazero, goleveldb, compress/*, image/*, the tracker filter, the omnibox, history search, the runtime and
+# the core standard library (strings, bytes, strconv, sort, sync, io, bufio, ...).
+#
+# This list is used by scripts/release/build.sh and cmd/sweef/binsize_linux_test.go. A plain `go build ./cmd/sweef`
+# does not use it (development builds stay fast and debuggable); the release is what the size budget is about.
+# The measured effect and the benchmarks behind each entry: docs/development.md, "Binary size budget". Add a package
+# only with a benchmark that shows no change, and say so in the CHANGELOG.
+
+# WebRTC: ICE, DTLS, SCTP, SRTP set-up and signalling; per-packet work is a few microseconds against a frame's milliseconds
+github.com/pion/...
+# connection set-up and per-request plumbing: a request is microseconds of Go against milliseconds of network, and the
+# bytes of a record are moved by assembly (AES-GCM, ChaCha20) and io.Copy, which stay inlined
+net
+net/http/...
+crypto/tls
+crypto/x509
+encoding/asn1
+encoding/gob
+mime/...
+golang.org/x/net/websocket
+golang.org/x/net/dns/...
+golang.org/x/net/ipv4
+golang.org/x/net/ipv6
+golang.org/x/net/internal/...
+# control plane: the agent loop, MCP, RPC, push, update; bound by the network or the model, not by CPU
+github.com/sweefbrowser/sweef/internal/agent
+github.com/sweefbrowser/sweef/internal/agentbridge
+github.com/sweefbrowser/sweef/internal/mcp
+github.com/sweefbrowser/sweef/internal/rpc
+github.com/sweefbrowser/sweef/internal/update
+github.com/sweefbrowser/sweef/internal/pushd
+github.com/sweefbrowser/sweef/internal/webpush/...
+github.com/sweefbrowser/sweef/cmd/...
+# the browser's UI controller (message dispatch, settings, tabs); the work it triggers is in the engine
+github.com/sweefbrowser/sweef/internal/app

@@ -24,10 +24,13 @@ import (
 	"time"
 
 	fnet "github.com/sweefbrowser/sweef/internal/net"
+	"github.com/sweefbrowser/sweef/internal/zpack"
 )
 
-//go:embed sw_scope.js
-var swScopeJS string
+//go:embed sw_scope.js.z
+var swScopeJSZ string
+
+var swScopeLazy zpack.Lazy
 
 var errSWStopped = errors.New("service worker stopped")
 
@@ -137,7 +140,7 @@ func (m *swManager) startRuntime(w *swWorker) (*swRuntime, error) {
 	wake := func() { rt.nudge() }
 	t.onWake.Store(&wake)
 	info, _ := json.Marshal(map[string]any{"scriptURL": w.scriptURL})
-	if _, err := j.run(strings.Replace(swScopeJS, "__SW_INFO__", string(info), 1), "service worker scope"); err != nil {
+	if _, err := j.run(strings.Replace(swScopeLazy.Get(swScopeJSZ), "__SW_INFO__", string(info), 1), "service worker scope"); err != nil {
 		return fail(err)
 	}
 	if w.typ == "module" {

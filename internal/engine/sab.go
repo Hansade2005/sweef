@@ -550,11 +550,11 @@ func (j *jsVM) sabDeliver(tok int64, res string) {
 	}
 }
 
-//go:embed sab_prelude.js
-var sabPreludeJS string
+//go:embed sab_prelude.js.z
+var sabPreludeJSZ string
 
 func init() {
-	registerPrelude("sab", sabPreludeJS)
+	registerPreludeZ("sab", sabPreludeJSZ)
 	registerHostExtension("sab", func(j *jsVM) map[string]hostFn {
 		j.sabRegisterNatives()
 		return nil

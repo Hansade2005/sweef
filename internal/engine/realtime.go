@@ -20,8 +20,8 @@ import (
 	"time"
 )
 
-//go:embed dom_prelude_ext.js
-var domPreludeExt string
+//go:embed dom_prelude_ext.js.z
+var domPreludeExtZ string
 
 type asyncEvent struct {
 	kind   string // ws | worker

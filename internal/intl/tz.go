@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	_ "time/tzdata" // the IANA database travels with the binary: Windows and minimal containers have none
 )
 
 var (
@@ -20,7 +19,10 @@ func location(name string) *time.Location {
 	if l, ok := locs[name]; ok {
 		return l
 	}
-	l, err := time.LoadLocation(name)
+	l, err := time.LoadLocation(name) // the operating system's database first, like time/tzdata's fallback
+	if err != nil {
+		l, err = loadEmbeddedZone(name) // the IANA database travels with the binary (tzdata.go)
+	}
 	if err != nil {
 		l = nil
 	}

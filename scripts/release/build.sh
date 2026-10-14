@@ -5,6 +5,8 @@
 #
 # Env: VERSION, COMMIT, SOURCE_DATE_EPOCH, DIST (default ./dist),
 #      SWEEF_MAIN_PKG (default ./cmd/sweef), SWEEF_MAX_BINARY_BYTES (default 41943040),
+#      SWEEF_MIN_HEADROOM_BYTES (default 2097152: warn when less budget is left), SWEEF_SIZE_TABLE=1 (always print
+#      the per-package size table for linux targets; it is printed anyway when a binary is over budget),
 #      STRICT_VERSION=1 (fail if the built binary does not report $VERSION)
 #
 # Output layout:
@@ -25,7 +27,7 @@ while [ $# -gt 0 ]; do
     --check-repro) CHECK_REPRO=1; shift ;;
     --skip-launchers) LAUNCHERS=0; shift ;;
     --skip-cdm-host) CDM_HOST=0; shift ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
@@ -35,14 +37,27 @@ resolve_all
 MAIN_PKG="${SWEEF_MAIN_PKG:-./cmd/sweef}"
 # 40 MiB: the binary carries WebRTC (pion, about +4.5 MiB), WebAssembly (wazero, about +3.7 MiB), the media codecs and
 # the web platform layer; it was 32 MiB before those. Raise it deliberately, with a line in CHANGELOG.md.
+# cmd/sweef/binsize_linux_test.go reads this default, so there is one place to change. How to see what is big and how
+# to add data without breaking the budget: docs/development.md, "Binary size budget".
 MAX_BYTES="${SWEEF_MAX_BINARY_BYTES:-41943040}"
+MIN_HEADROOM="${SWEEF_MIN_HEADROOM_BYTES:-2097152}"
 export CGO_ENABLED=0
 export GOFLAGS="${GOFLAGS:-} -mod=readonly"
 export SOURCE_DATE_EPOCH
 
 log "version=$VERSION commit=$COMMIT epoch=$SOURCE_DATE_EPOCH go=$(go env GOVERSION)"
 
-LDFLAGS="-s -w -buildid= -X main.version=$VERSION -X main.commit=$COMMIT"
+# -funcalign=16: the linker aligns functions to 32 bytes on amd64 (arm64 already uses 16). 16 is enough for the CPU's
+# fetch and the linker still honours any larger alignment a function asks for (PCALIGN in assembly, aligned loops),
+# so only the padding goes: about 260 KB. See docs/development.md, "Binary size budget", for the benchmarks.
+LDFLAGS="-s -w -buildid= -funcalign=16 -X main.version=$VERSION -X main.commit=$COMMIT"
+
+# Packages compiled without inlining, for size: scripts/release/noinline-packages.txt (read by cmd/sweef/binsize_linux_test.go
+# too). Only the browser binary gets them. bash 3.2 (macOS runners) has no mapfile, hence the loop.
+GCFLAGS=()
+while IFS= read -r pat; do
+  case "$pat" in ''|'#'*) ;; *) GCFLAGS+=("-gcflags=$pat=-l") ;; esac
+done < "$ROOT/scripts/release/noinline-packages.txt"
 
 # Windows resources (manifest: DPI v2, long paths, UTF-8; version info; icon) are linked in
 # via .syso files that live next to the main package only for the duration of the build.
@@ -78,7 +93,7 @@ build_one() { # os arch outdir
   local os="$1" arch="$2" out="$3" ext=""
   [ "$os" = windows ] && ext=".exe"
   mkdir -p "$out"
-  ( cd "$ROOT" && GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags "$LDFLAGS" -o "$out/sweef$ext" "$MAIN_PKG" ) \
+  ( cd "$ROOT" && GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false ${GCFLAGS[@]+"${GCFLAGS[@]}"} -ldflags "$LDFLAGS" -o "$out/sweef$ext" "$MAIN_PKG" ) \
     || die "build failed for $os/$arch"
   if [ "$LAUNCHERS" = 1 ] && { [ "$os" = darwin ] || [ "$os" = windows ]; }; then
     local lf="-s -w -buildid="
@@ -101,10 +116,29 @@ build_one() { # os arch outdir
       || die "sweef-cdm build failed for $os/$arch"
   fi
   local size; size="$(wc -c < "$out/sweef$ext" | tr -d ' ')"
-  printf '    %-14s %10s bytes (%s MiB)\n' "$os/$arch" "$size" "$((size / 1048576))" >&2
-  if [ "$size" -gt "$MAX_BYTES" ]; then
-    die "$os/$arch binary is $size bytes, over the budget of $MAX_BYTES (SWEEF_MAX_BINARY_BYTES). Investigate before shipping."
+  printf '    %-14s %10s bytes (%s MiB), headroom %s bytes (%s MiB) of the %s byte budget\n' "$os/$arch" "$size" \
+    "$(awk -v n="$size" 'BEGIN{printf "%.2f", n/1048576}')" "$((MAX_BYTES - size))" \
+    "$(awk -v n="$((MAX_BYTES - size))" 'BEGIN{printf "%.2f", n/1048576}')" "$MAX_BYTES" >&2
+  if [ "$os" = linux ] && { [ "$size" -gt "$MAX_BYTES" ] || [ "${SWEEF_SIZE_TABLE:-0}" = 1 ]; }; then
+    size_table "$os" "$arch" "$out/sweef$ext"
   fi
+  if [ "$size" -gt "$MAX_BYTES" ]; then
+    die "$os/$arch binary is $size bytes, over the budget of $MAX_BYTES (SWEEF_MAX_BINARY_BYTES). Investigate before shipping: docs/development.md, \"Binary size budget\"."
+  fi
+  if [ $((MAX_BYTES - size)) -lt "$MIN_HEADROOM" ]; then
+    warn "$os/$arch has only $((MAX_BYTES - size)) bytes of size budget left (warning threshold $MIN_HEADROOM). New features should shrink something first."
+  fi
+}
+
+# size_table prints where the bytes of a linux binary are: builds an unstripped copy (symbols are needed) and runs
+# tools/sizeprof on it. Best effort: it never fails the build.
+size_table() { # os arch strippedbinary
+  local full; full="$(mktemp "${TMPDIR:-/tmp}/sweef-full.XXXXXX")"
+  if ( cd "$ROOT" && GOOS="$1" GOARCH="$2" go build -trimpath -buildvcs=false ${GCFLAGS[@]+"${GCFLAGS[@]}"} -ldflags "-buildid= -funcalign=16" -o "$full" "$MAIN_PKG" ) \
+     && ( cd "$ROOT" && go run ./tools/sizeprof -bin "$full" -stripped "$3" -top 40 ) >&2; then :; else
+    warn "could not produce the size table for $1/$2"
+  fi
+  rm -f "$full"
 }
 
 build_all() { # outroot

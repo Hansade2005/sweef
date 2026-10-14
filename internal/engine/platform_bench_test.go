@@ -36,14 +36,14 @@ func BenchmarkBuildVM(b *testing.B) { benchBuild(b) }
 // benchmarks can be run back to back to see what the layer costs at start-up.
 func BenchmarkBuildVMWithoutPlatform(b *testing.B) {
 	extMu.Lock()
-	src, hostFn := preludeExtras["platform"], hostExtensions["platform"]
-	delete(preludeExtras, "platform")
+	src, hostFn := preludeZExtras["platform"], hostExtensions["platform"]
+	delete(preludeZExtras, "platform")
 	delete(hostExtensions, "platform")
 	extMu.Unlock()
 	preludeOnce, preludeBytecode = sync.Once{}, nil
 	defer func() {
 		extMu.Lock()
-		preludeExtras["platform"], hostExtensions["platform"] = src, hostFn
+		preludeZExtras["platform"], hostExtensions["platform"] = src, hostFn
 		extMu.Unlock()
 		preludeOnce, preludeBytecode = sync.Once{}, nil
 	}()

@@ -39,11 +39,11 @@ import (
 	"github.com/sweefbrowser/sweef/internal/rtcmedia"
 )
 
-//go:embed webrtc_prelude.js
-var webrtcPreludeJS string
+//go:embed webrtc_prelude.js.z
+var webrtcPreludeJSZ string
 
 func init() {
-	registerPrelude("webrtc", webrtcPreludeJS)
+	registerPreludeZ("webrtc", webrtcPreludeJSZ)
 	registerHostExtension("webrtc", func(j *jsVM) map[string]hostFn { return newRTCHost(j).fns() })
 	registerAsyncHandler("rtc", func(j *jsVM, e asyncEvent) {
 		if _, err := j.call("__swRtcEvent", e.id, e.typ, e.data); err != nil {

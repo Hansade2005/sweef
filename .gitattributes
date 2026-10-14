@@ -1,1 +1,5 @@
 * text=auto eol=lf
+
+# Deflated embeds (internal/zpack): arbitrary bytes, never convert line endings.
+*.z binary
+*.zar binary

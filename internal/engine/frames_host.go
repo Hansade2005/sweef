@@ -15,11 +15,11 @@ import (
 	fnet "github.com/sweefbrowser/sweef/internal/net"
 )
 
-//go:embed frame_prelude.js
-var framePreludeJS string
+//go:embed frame_prelude.js.z
+var framePreludeJSZ string
 
 func init() {
-	registerPrelude("frames", framePreludeJS)
+	registerPreludeZ("frames", framePreludeJSZ)
 	registerHostExtension("frames", func(j *jsVM) map[string]hostFn { return (&frHost{j: j}).fns() })
 	registerAsyncHandler("frame", func(j *jsVM, e asyncEvent) {
 		if _, err := j.call("__swFrameEvent", e.data); err != nil && j.tab != nil {

@@ -17,8 +17,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/net/http2"
 )
 
 // client.go - direct Anthropic Messages API client over net/http.
@@ -225,11 +223,10 @@ func newTransport() *http.Transport {
 		ReadBufferSize:        64 << 10,
 	}
 	// Health-check idle HTTP/2 connections so a half-dead socket is replaced
-	// before the user's next message instead of stalling it.
-	if t2, err := http2.ConfigureTransports(tr); err == nil {
-		t2.ReadIdleTimeout = 30 * time.Second
-		t2.PingTimeout = 10 * time.Second
-	}
+	// before the user's next message instead of stalling it. net/http's own HTTP/2 does this since Go 1.24
+	// (HTTP2Config.SendPingTimeout is x/net/http2's ReadIdleTimeout); importing golang.org/x/net/http2 for it
+	// linked a second HTTP/2 stack into the binary.
+	tr.HTTP2 = &http.HTTP2Config{SendPingTimeout: 30 * time.Second, PingTimeout: 10 * time.Second}
 	return tr
 }
 

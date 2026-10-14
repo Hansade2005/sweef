@@ -15,11 +15,11 @@ import (
 	"github.com/sweefbrowser/sweef/internal/style"
 )
 
-//go:embed fonts_prelude.js
-var fontsPreludeJS string
+//go:embed fonts_prelude.js.z
+var fontsPreludeJSZ string
 
 func init() {
-	registerPrelude("webfonts", fontsPreludeJS)
+	registerPreludeZ("webfonts", fontsPreludeJSZ)
 	registerHostExtension("webfonts", func(j *jsVM) map[string]hostFn { return (&fontHost{j: j}).fns() })
 }
 
