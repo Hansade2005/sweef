@@ -165,6 +165,9 @@ jobs:
   package-macos:
     needs: [meta, build]
     runs-on: macos-14
+    # macOS is an unverified alpha platform: the pure-Go universal binary does not pass codesign's strict
+    # validation yet. Do not block the Windows and Linux release on it (the release simply has no macOS asset).
+    continue-on-error: true
     env:
       VERSION: ${{ needs.meta.outputs.version }}
       COMMIT: ${{ needs.meta.outputs.commit }}
