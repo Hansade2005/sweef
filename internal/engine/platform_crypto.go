@@ -438,8 +438,10 @@ func cryptoGenerate(in cm) (cm, error) {
 		_, priv, err = ed25519.GenerateKey(rand.Reader)
 	case "rsa":
 		bits := cint(in, "bits")
-		if bits < 1024 || bits > 8192 {
-			return nil, cryptoErr("OperationError", "unsupported RSA modulus length %d", bits)
+		// 2048 is the floor for generated keys (NIST SP 800-57, and what CodeQL's weak-key check requires);
+		// importing an existing smaller key still works.
+		if bits < 2048 || bits > 8192 {
+			return nil, cryptoErr("OperationError", "unsupported RSA modulus length %d (2048 to 8192)", bits)
 		}
 		if e := cint(in, "e"); e != 65537 {
 			return nil, cryptoErr("OperationError", "only the public exponent 65537 is supported")
