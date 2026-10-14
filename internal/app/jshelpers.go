@@ -111,7 +111,7 @@ const helperJS = `(function(G){
     try { el.dispatchEvent(inputEvent('input', {bubbles:true, inputType: inputType, data: null})); } catch(x){}
   }
   G.__sweefEditState = function(el){
-    var h = hist.get(el) || {u: [], r: []}, hasSel = false, tag = el.localName;
+    var us = G.__swUndoState ? G.__swUndoState(el) : {u: false, r: false}, h = {u: us.u ? [1] : [], r: us.r ? [1] : []}, hasSel = false, tag = el.localName;
     if (tag === 'input' || tag === 'textarea') { try { hasSel = el.selectionStart !== el.selectionEnd; } catch(x){} }
     else { try { var s = G.getSelection(); hasSel = !!s && !s.isCollapsed; } catch(x){} }
     var empty = (tag === 'input' || tag === 'textarea') ? !(el.value || '').length : !(el.textContent || '').length;
@@ -169,6 +169,7 @@ const helperJS = `(function(G){
     if (op === 'cut') return G.__swCutSelection ? G.__swCutSelection() : false;
     if (op === 'undo') return G.__swUndo ? G.__swUndo(false) : false;
     if (op === 'redo') return G.__swUndo ? G.__swUndo(true) : false;
+    if (op === 'delete') return G.__swDeleteSel ? G.__swDeleteSel() : false;
     return false;
   };
   // document.execCommand('copy' | 'cut'): the copy or cut event runs, then what it left (or the selection) goes to the clipboard
@@ -279,6 +280,7 @@ const helperJS2 = `(function(G){
       else return false;
       return true;
     } catch(x2){ return false; }
+  };
   // a key chord the window handles itself (copy, paste, undo...): the page sees keydown and keyup, and the answer is
   // false when it cancelled the keydown
   G.__sweefChord = function(key, m){

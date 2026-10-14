@@ -935,6 +935,9 @@
   };
   global.__swInsertText = function (text, kind) { return insertText(String(text), kind || 'insertText', 'type'); };
   global.__swUndo = function (redo) { return undoRedo(!!redo); };
+  // what the context menu offers: can this editing host undo / redo
+  global.__swUndoState = function (el) { var h = isTextCtl(el) ? el : editHostOf(el); if (!h) return { u: false, r: false }; var u = undoOf(h); return { u: u.undo.length > 0, r: u.redo.length > 0 }; };
+  global.__swDeleteSel = function () { return deleteContent(false, false); };
   global.__swSelectAll = function () { sw.selAll(); scheduleSelChange(); return true; };
   global.__swEditable = function (el) { return isTextCtl(el) || editHostOf(el) !== null; };
 
