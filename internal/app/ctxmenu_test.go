@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"fmt"
+	"github.com/sweefbrowser/sweef/internal/app/omnibox"
 	"image"
 	"image/color"
 	"image/png"
@@ -201,7 +202,11 @@ func TestCtxImageMenu(t *testing.T) {
 }
 
 func TestCtxSelectionMenu(t *testing.T) {
-	h, _ := newCtxHarness(t)
+	h, srv := newCtxHarness(t)
+	// the search engine is a local page: a live site would keep the app from going idle on a runner without internet
+	saved := omnibox.Engines[0].Template
+	omnibox.Engines[0].Template = srv.URL + "/?q=%s"
+	t.Cleanup(func() { omnibox.Engines[0].Template = saved })
 	// The engine's document selection is still a stub (another change implements it), so the report the page helper
 	// would give for a selected paragraph is fed to the menu builder directly; the helper's side is covered by the
 	// editable-field tests, which use the real input selection.
