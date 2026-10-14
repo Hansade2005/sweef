@@ -76,6 +76,8 @@ func featComplex(c complexSel, f *SelFeatures, add func(string), nested bool) {
 				add("data-sw-focused")
 			case "fullscreen", "-webkit-full-screen":
 				add("data-sw-fullscreen")
+			case "popover-open":
+				add("data-sw-popover-open")
 			case "read-only", "read-write":
 				add("readonly")
 			case "lang", "dir":

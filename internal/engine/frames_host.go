@@ -226,7 +226,7 @@ func (h *frHost) fns() map[string]hostFn {
 			if t != me && !sameOriginTabs(me, t) {
 				return nil, jsErr("SecurityError", "Blocked a frame with origin \"%s\" from accessing a cross-origin frame.", originOrNull(me))
 			}
-			tj, err := t.ensureJS()
+			tj, err := t.ensureFrameJS()
 			if err != nil {
 				return nil, jsErr("InvalidAccessError", "The frame has no scripting context: %v", err)
 			}
@@ -249,7 +249,7 @@ func (h *frHost) fns() map[string]hostFn {
 			if !sameOriginTabs(me, p) {
 				return "{\"k\":\"j\",\"s\":\"null\"}", nil
 			}
-			pj, err := p.ensureJS()
+			pj, err := p.ensureFrameJS()
 			if err != nil {
 				return nil, jsErr("InvalidAccessError", "%v", err)
 			}

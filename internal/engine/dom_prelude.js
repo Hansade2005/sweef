@@ -135,7 +135,10 @@
     if (!type) return null;
     var tag = type === 1 ? sw.tagName(id) : '';
     w = makeWrapper(id, classFor(id, type, tag));
-    if (type === 1 && tag.indexOf('-') > 0) maybeUpgrade(w, tag);
+    if (type === 1) {
+      if (tag === 'template') sawTemplate = true;
+      else if (tag.indexOf('-') > 0) maybeUpgrade(w, tag);
+    }
     return w;
   }
   // Developer Tools edits a node the way page script would, so MutationObservers and custom elements see the change
@@ -149,9 +152,26 @@
   // custom elements (filled by CustomElementRegistry later)
   var ceDefinitions = new Map(); // name -> {ctor, observed}
   var ceUpgrading = null;
+  // Template contents are inert: their elements belong to a document without a custom element registry, so a script that
+  // walks template.content (Polymer parses its templates that way) must not construct them, with bindings such as
+  // shown-items="[[shownItems]]" still in their attributes. The contents sit in the host tree under the <template>
+  // (until .content moves them into a fragment), so check both homes.
+  // Elements made by an inert document (the template contents owner document, document.implementation.createHTMLDocument)
+  // are not upgraded either, until they are inserted into a connected tree.
+  var INERT = Symbol('inertFragment'), INERT_EL = Symbol('inertElement');
+  var sawTemplate = false, templateDocument = null, noUpgrade = false;
+  function inTemplateContent(w) {
+    if (w[INERT] || w[FRAG] && w[FRAG][INERT]) return true;
+    for (var p = sw.parent(w[ID]); p; p = sw.parent(p)) {
+      if (sw.tagName(p) === 'template') return true;
+      var pw = wrappers.get(p);
+      if (pw && pw[FRAG] && pw[FRAG][INERT]) return true;
+    }
+    return false;
+  }
   function maybeUpgrade(w, tag) {
     var d = ceDefinitions.get(tag);
-    if (!d || Object.getPrototypeOf(w) === d.ctor.prototype) return;
+    if (!d || noUpgrade || w[INERT_EL] || Object.getPrototypeOf(w) === d.ctor.prototype || inTemplateContent(w)) return;
     Object.setPrototypeOf(w, d.ctor.prototype);
     var prev = ceUpgrading; ceUpgrading = w;
     try { new d.ctor(); } catch (e) { reportError(e); } finally { ceUpgrading = prev; }
@@ -159,12 +179,16 @@
   }
   function ceConnected(w) {
     if (!w || w.nodeType !== 1) return;
-    if (typeof w.connectedCallback === 'function' && ceDefinitions.has(w.localName)) { try { w.connectedCallback(); } catch (e) { reportError(e); } }
+    if (w[INERT_EL]) delete w[INERT_EL];
+    var d = ceDefinitions.get(w.localName);
+    if (d && Object.getPrototypeOf(w) !== d.ctor.prototype) maybeUpgrade(w, w.localName); // adopted out of a template: upgrade now (also runs connectedCallback)
+    else if (d && typeof w.connectedCallback === 'function') { try { w.connectedCallback(); } catch (e) { reportError(e); } }
     var kids = sw.children(w[ID]);
     for (var i = 0; i < kids.length; i++) { var k = wrappers.get(kids[i]); if (k) ceConnected(k); }
   }
   function ceDisconnected(w) {
     if (!w || w.nodeType !== 1) return;
+    if (popoverOpen(w)) hidePopoverImpl(w, false, false); // a popover that leaves the document closes without events
     if (typeof w.disconnectedCallback === 'function' && ceDefinitions.has(w.localName)) { try { w.disconnectedCallback(); } catch (e) { reportError(e); } }
     var kids = sw.children(w[ID]);
     for (var i = 0; i < kids.length; i++) { var k = wrappers.get(kids[i]); if (k) ceDisconnected(k); }
@@ -232,7 +256,9 @@
     BeforeUnloadEvent: ['Event', {}],
     CloseEvent: ['Event', { wasClean: false, code: 0, reason: '' }],
     SubmitEvent: ['Event', { submitter: null }],
-    ClipboardEvent: ['Event', { clipboardData: null }]
+    ClipboardEvent: ['Event', { clipboardData: null }],
+    ToggleEvent: ['Event', { oldState: '', newState: '' }],
+    BeforeToggleEvent: ['ToggleEvent', {}]
   };
   var eventFieldsOf = { Event: {} };
   (function buildEventClasses() {
@@ -383,7 +409,9 @@
   // Inline event handler attributes (onclick="..."): compiled on first use and again when the attribute changes.
   // The scope is the element, then the document, as in browsers (the form owner is left out).
   var attrHandlers = new WeakMap();
+  var scriptsBlocked = false; // a frame sandboxed without allow-scripts: its markup's inline handlers must not run
   function attributeHandler(el, type) {
+    if (scriptsBlocked) return undefined;
     var src = el.getAttribute('on' + type);
     if (src === null || src === undefined) return undefined;
     var per = attrHandlers.get(el);
@@ -447,11 +475,28 @@
   function fire(target, type, init) { return dispatch(target, makeEventFor(type, init)); }
 
   // Errors from listeners/timers/microtasks: log + window 'error' event, never throw.
+  // Text for an uncaught value. The engine's stacks carry no "Name: message" header, so an Error is printed as
+  // "Name: message" and then its stack (a stack that already shows the message is kept as is); anything else that can
+  // be thrown (a string, a number, null, a plain object) has no stack, so say what it is and what its type is.
+  function describeThrown(e) {
+    try {
+      if (e instanceof Error || (e !== null && typeof e === 'object' && typeof e.name === 'string' && typeof e.message === 'string')) {
+        var head = String(e.name || 'Error') + ': ' + String(e.message), stack = typeof e.stack === 'string' ? e.stack : '';
+        if (!stack) return head;
+        return e.message !== '' && stack.indexOf(String(e.message)) >= 0 ? stack : head + '\n' + stack;
+      }
+      if (e !== null && (typeof e === 'object' || typeof e === 'function')) {
+        var shown;
+        try { shown = JSON.stringify(e); } catch (x) { /* circular */ }
+        if (shown === undefined) { try { shown = String(e); } catch (x) { shown = Object.prototype.toString.call(e); } }
+        return 'non-Error ' + typeof e + ' thrown (' + ((e.constructor && e.constructor.name) || 'Object') + '): ' + shown + (typeof e.stack === 'string' ? '\n' + e.stack : '');
+      }
+      return 'non-Error ' + typeof e + ' thrown: ' + (typeof e === 'string' ? JSON.stringify(e) : String(e));
+    } catch (x) { return 'unprintable value thrown'; }
+  }
   var reportingError = false;
   function reportError(e) {
-    var head = String(e && e.message !== undefined ? e.name + ': ' + e.message : e), st = (e && e.stack) ? String(e.stack) : '';
-    var msg = st ? (st.indexOf(head) < 0 ? head + '\n' + st : st) : head;
-    hostLog('error', 'Uncaught ' + msg, '');
+    hostLog('error', 'Uncaught ' + describeThrown(e), '');
     if (reportingError) return;
     reportingError = true;
     try {
@@ -644,13 +689,25 @@
   setTag(NamedNodeMap, 'NamedNodeMap'); global.NamedNodeMap = NamedNodeMap;
   function namedNodeMap(el) {
     var m = Object.create(NamedNodeMap.prototype);
-    Object.defineProperty(m, '_el', { value: el });
+    Object.defineProperty(m, '_el', { value: el, configurable: true });
+    // The index properties have to be visible to `in`, Object.keys and getOwnPropertyDescriptor, not only to `get`:
+    // Array.prototype.map/forEach/slice.call(el.attributes) skip an index that `in` denies, and returned empty arrays.
     return new Proxy(m, {
       get: function (t, k) {
         if (k === 'length') return t._names().length;
         if (typeof k === 'string' && /^\d+$/.test(k)) return t.item(+k);
         if (typeof k === 'string' && !(k in t) && sw.hasAttr(el[ID], k)) return attrOf(el, k);
         return t[k];
+      },
+      has: function (t, k) {
+        if (k === 'length') return true;
+        if (typeof k === 'string' && /^\d+$/.test(k)) return +k < t._names().length;
+        return k in t;
+      },
+      ownKeys: function (t) { var keys = [], n = t._names().length; for (var i = 0; i < n; i++) keys.push(String(i)); return keys; },
+      getOwnPropertyDescriptor: function (t, k) {
+        if (typeof k === 'string' && /^\d+$/.test(k)) { var a = t.item(+k); return a ? { value: a, configurable: true, enumerable: true, writable: false } : undefined; }
+        return Object.getOwnPropertyDescriptor(t, k);
       }
     });
   }
@@ -860,17 +917,20 @@
   var Node = makeClass('Node', EventTarget);
   var NODE_CONSTS = { ELEMENT_NODE: 1, ATTRIBUTE_NODE: 2, TEXT_NODE: 3, CDATA_SECTION_NODE: 4, ENTITY_REFERENCE_NODE: 5, ENTITY_NODE: 6, PROCESSING_INSTRUCTION_NODE: 7, COMMENT_NODE: 8, DOCUMENT_NODE: 9, DOCUMENT_TYPE_NODE: 10, DOCUMENT_FRAGMENT_NODE: 11, NOTATION_NODE: 12, DOCUMENT_POSITION_DISCONNECTED: 1, DOCUMENT_POSITION_PRECEDING: 2, DOCUMENT_POSITION_FOLLOWING: 4, DOCUMENT_POSITION_CONTAINS: 8, DOCUMENT_POSITION_CONTAINED_BY: 16, DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC: 32 };
   for (var nc in NODE_CONSTS) { constant(Node, nc, NODE_CONSTS[nc]); constant(Node.prototype, nc, NODE_CONSTS[nc]); }
+  // A DocumentFragment is a JS-only container (negative id, children in _kids). The Node.prototype accessors below have to
+  // work on one too: scripts such as the Shady DOM polyfill capture Node.prototype's descriptors and call them on any node.
+  function isFrag(n) { return n[ID] < 0; }
   getters(Node.prototype, {
-    nodeType: { get: function () { return sw.nodeType(this[ID]); } },
-    nodeName: { get: function () { var t = this.nodeType; return t === 1 ? this.tagName : t === 3 ? '#text' : t === 8 ? '#comment' : t === 9 ? '#document' : t === 10 ? (sw.tagName(this[ID]) || 'html') : '#node'; } },
-    parentNode: { get: function () { return this[FRAG] || wrap(sw.parent(this[ID])); } },
+    nodeType: { get: function () { return isFrag(this) ? 11 : sw.nodeType(this[ID]); } },
+    nodeName: { get: function () { var t = this.nodeType; return t === 11 ? '#document-fragment' : t === 1 ? this.tagName : t === 3 ? '#text' : t === 8 ? '#comment' : t === 9 ? '#document' : t === 10 ? (sw.tagName(this[ID]) || 'html') : '#node'; } },
+    parentNode: { get: function () { return isFrag(this) ? null : this[FRAG] || wrap(sw.parent(this[ID])); } },
     parentElement: { get: function () { var p = this.parentNode; return p && p.nodeType === 1 ? p : null; } },
-    childNodes: { get: function () { var self = this; var s = slots(this); return s.childNodes || (s.childNodes = liveList(NodeList, genCached(function () { return wrapAll(sw.children(self[ID])); }))); } },
-    firstChild: { get: function () { return wrap(sw.firstChild(this[ID])); } },
-    lastChild: { get: function () { return wrap(sw.lastChild(this[ID])); } },
-    nextSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; return k[k.indexOf(this) + 1] || null; } return wrap(sw.nextSibling(this[ID])); } },
-    previousSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; return k[k.indexOf(this) - 1] || null; } return wrap(sw.prevSibling(this[ID])); } },
-    ownerDocument: { get: function () { return this.nodeType === 9 ? null : documentWrapper; } },
+    childNodes: { get: function () { var self = this; var s = slots(this); return s.childNodes || (s.childNodes = isFrag(this) ? liveList(NodeList, function () { return self._kids.slice(); }) : liveList(NodeList, genCached(function () { return wrapAll(sw.children(self[ID])); }))); } },
+    firstChild: { get: function () { return isFrag(this) ? this._kids[0] || null : wrap(sw.firstChild(this[ID])); } },
+    lastChild: { get: function () { return isFrag(this) ? this._kids[this._kids.length - 1] || null : wrap(sw.lastChild(this[ID])); } },
+    nextSibling: { get: function () { if (isFrag(this)) return null; if (this[FRAG]) { var k = this[FRAG]._kids; return k[k.indexOf(this) + 1] || null; } return wrap(sw.nextSibling(this[ID])); } },
+    previousSibling: { get: function () { if (isFrag(this)) return null; if (this[FRAG]) { var k = this[FRAG]._kids; return k[k.indexOf(this) - 1] || null; } return wrap(sw.prevSibling(this[ID])); } },
+    ownerDocument: { get: function () { return this.nodeType === 9 ? null : sawTemplate && inTemplateContent(this) ? templateOwnerDocument() : documentWrapper; } },
     isConnected: { get: function () { return this[ID] > 0 && sw.attached(this[ID]); } },
     baseURI: { get: function () { return currentURL(); } },
     nodeValue: {
@@ -878,9 +938,10 @@
       set: function (v) { var t = this.nodeType; if (t === 3 || t === 8) setCharacterData(this, toStr(v)); }
     },
     textContent: {
-      get: function () { var t = this.nodeType; if (t === 9 || t === 10) return null; if (t === 3 || t === 8) return sw.nodeValue(this[ID]); return sw.textContent(this[ID]); },
+      get: function () { var t = this.nodeType; if (t === 9 || t === 10) return null; if (t === 3 || t === 8) return sw.nodeValue(this[ID]); if (t === 11) return this._kids.map(function (k) { return k.nodeType === 8 ? '' : k.textContent; }).join(''); return sw.textContent(this[ID]); },
       set: function (v) {
         var t = this.nodeType; v = v === null || v === undefined ? '' : String(v);
+        if (t === 11) { while (this._kids.length) this.removeChild(this._kids[0]); if (v !== '') this.appendChild(documentWrapper.createTextNode(v)); return; }
         if (t === 3 || t === 8) { setCharacterData(this, v); return; }
         if (t !== 1 && t !== 9) return;
         var removed = wrapAll(sw.children(this[ID]));
@@ -1271,20 +1332,104 @@
     offsetLeft: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.ox : b.x); } },
     offsetParent: { get: function () { return this.isConnected && this.localName !== 'body' && this.localName !== 'html' ? (this.parentElement && this.parentElement.closest('body') ? documentWrapper.body : null) : null; } },
     isContentEditable: { get: function () { var v = this.getAttribute('contenteditable'); return v === '' || v === 'true' || v === 'plaintext-only'; } },
-    nonce: { get: function () { return this.getAttribute('nonce') || ''; }, set: function (v) { this.setAttribute('nonce', toStr(v)); } },
-    form: { get: function () { return this.closest('form'); } },
-    labels: { get: function () { var id = this.id; return nodeListOf(id ? queryAll(documentWrapper, 'label[for="' + cssStr(id) + '"]') : []); } },
-    validity: { get: function () { return { valid: true, valueMissing: false, typeMismatch: false, patternMismatch: false, tooLong: false, tooShort: false, rangeUnderflow: false, rangeOverflow: false, stepMismatch: false, badInput: false, customError: false }; } },
-    validationMessage: { get: function () { return ''; } },
-    willValidate: { get: function () { return true; } }
+    nonce: { get: function () { return this.getAttribute('nonce') || ''; }, set: function (v) { this.setAttribute('nonce', toStr(v)); } }
   });
   methods(HTMLElement.prototype, {
     focus: function () { focusElement(this); },
     blur: function () { if (activeElement === this) blurActive(null); },
     click: function () { clickElement(this); },
-    checkValidity: function () { return true; }, reportValidity: function () { return true; }, setCustomValidity: function () { },
-    showPopover: function () { }, hidePopover: function () { }, togglePopover: function () { return false; }
+    showPopover: function () { showPopoverImpl(this); },
+    hidePopover: function () { hidePopoverImpl(this, true, true); },
+    togglePopover: function (force) {
+      var open = popoverOpen(this);
+      if (force === undefined ? open : !force) hidePopoverImpl(this, true, true); else showPopoverImpl(this);
+      return popoverOpen(this);
+    }
   });
+  getters(HTMLElement.prototype, {
+    popover: {
+      get: function () { var v = this.getAttribute('popover'); if (v === null) return null; v = v.toLowerCase(); return v === '' || v === 'auto' ? 'auto' : 'manual'; },
+      set: function (v) { if (v === null || v === undefined) this.removeAttribute('popover'); else this.setAttribute('popover', toStr(v)); }
+    }
+  });
+  // ---- Popover API. The open state lives in the host attribute data-sw-popover-open (the way focus and fullscreen are
+  // carried to the style engine), which `:popover-open` and the UA style sheet's display:none for closed popovers read.
+  var popoverStack = [], popoverDismissInstalled = false;
+  function popoverType(el) { var v = el.getAttribute('popover'); if (v === null) return null; v = v.toLowerCase(); return v === '' || v === 'auto' ? 'auto' : 'manual'; }
+  function popoverOpen(el) { var s = el[SLOT]; return !!(s && s.popoverOpen); }
+  function setPopoverOpen(el, on) {
+    slots(el).popoverOpen = on;
+    try { if (on) sw.setAttr(el[ID], 'data-sw-popover-open', ''); else sw.removeAttr(el[ID], 'data-sw-popover-open'); } catch (e) { /* ignore */ }
+    hostMutation('attr', el[ID]);
+  }
+  // The toggle event is queued as a task; opening and closing again before it runs coalesces into one task that keeps the
+  // first old state, and nothing fires when the popover ended up where it started.
+  function popoverToggleEvents(el, oldState) {
+    var s = slots(el);
+    if (s.toggleTask) { oldState = s.toggleTask.old; clearTimer(s.toggleTask.id); }
+    var task = s.toggleTask = { old: oldState };
+    task.id = setTimeoutImpl(function () {
+      s.toggleTask = null;
+      var now = popoverOpen(el) ? 'open' : 'closed';
+      if (now === task.old) return;
+      try { el.dispatchEvent(new global.ToggleEvent('toggle', { oldState: task.old, newState: now })); } catch (e) { reportError(e); }
+    }, [], 0, false);
+  }
+  function requirePopover(el, what) {
+    if (!popoverType(el)) throw DOMException("Failed to execute '" + what + "' on 'HTMLElement': The element does not have a 'popover' attribute defined.", 'NotSupportedError');
+  }
+  function showPopoverImpl(el) {
+    requirePopover(el, 'showPopover');
+    if (popoverOpen(el)) return;
+    if (!el.isConnected) throw DOMException("Failed to execute 'showPopover' on 'HTMLElement': Invalid on disconnected popover elements.", 'InvalidStateError');
+    var type = popoverType(el);
+    var before = new global.BeforeToggleEvent('beforetoggle', { cancelable: true, oldState: 'closed', newState: 'open' });
+    el.dispatchEvent(before);
+    if (before.defaultPrevented || popoverOpen(el) || !el.isConnected || popoverType(el) !== type) return;
+    if (type === 'auto') {
+      // opening an auto popover closes the other auto popovers that do not contain it
+      popoverStack.slice().forEach(function (o) { if (o !== el && !o.contains(el) && popoverOpen(o)) hidePopoverImpl(o, true, false); });
+      popoverStack.push(el);
+      installPopoverDismiss();
+    }
+    setPopoverOpen(el, true);
+    popoverToggleEvents(el, 'closed');
+  }
+  function hidePopoverImpl(el, events, check) {
+    if (check) requirePopover(el, 'hidePopover');
+    if (!popoverOpen(el)) return;
+    var i = popoverStack.indexOf(el);
+    if (i >= 0) popoverStack.splice(i).slice(1).forEach(function (o) { if (popoverOpen(o)) hidePopoverImpl(o, events, false); });
+    if (events) el.dispatchEvent(new global.BeforeToggleEvent('beforetoggle', { oldState: 'open', newState: 'closed' }));
+    if (!popoverOpen(el)) return;
+    setPopoverOpen(el, false);
+    if (events) popoverToggleEvents(el, 'open');
+  }
+  function installPopoverDismiss() {
+    if (popoverDismissInstalled) return;
+    popoverDismissInstalled = true;
+    var downTarget = null;
+    var topAuto = function () { return popoverStack.length ? popoverStack[popoverStack.length - 1] : null; };
+    documentWrapper.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !e.defaultPrevented && topAuto()) hidePopoverImpl(topAuto(), true, false); }, false);
+    documentWrapper.addEventListener('pointerdown', function (e) { downTarget = e.target; }, true);
+    documentWrapper.addEventListener('mousedown', function (e) { downTarget = e.target; }, true);
+    documentWrapper.addEventListener('click', function (e) {
+      var t = e.target, d = downTarget; downTarget = null;
+      // light dismiss: a press and release outside every open auto popover (and not on a button that invokes one) closes them
+      var invokes = function (n) { var b = n && n.closest ? n.closest('[popovertarget]') : null; return !!b; };
+      popoverStack.slice().reverse().forEach(function (p) { if (popoverOpen(p) && !p.contains(t) && !(d && p.contains(d)) && !invokes(t)) hidePopoverImpl(p, true, false); });
+    }, false);
+  }
+  function popoverInvoker(el) {
+    var id = el.getAttribute('popovertarget'); if (id === null) return false;
+    var t = el.getRootNode && el.getRootNode().getElementById ? el.getRootNode().getElementById(id) : documentWrapper.getElementById(id);
+    if (!t || !popoverType(t)) return true;
+    var action = (el.getAttribute('popovertargetaction') || 'toggle').toLowerCase();
+    if (action !== 'show' && action !== 'hide') action = 'toggle';
+    var open = popoverOpen(t);
+    if (open && action !== 'show') hidePopoverImpl(t, true, false); else if (!open && action !== 'hide') { try { showPopoverImpl(t); } catch (e) { /* not connected */ } }
+    return true;
+  }
   function focusable(el) { return el && el.nodeType === 1; }
   function blurActive(next) {
     var prev = activeElement;
@@ -1318,6 +1463,10 @@
   function defaultAction(el) {
     if (!el || el.nodeType !== 1) return;
     var tag = el.localName;
+    if ((tag === 'button' || tag === 'input') && el.hasAttribute('popovertarget') && !el.hasAttribute('disabled')) {
+      var itype = (el.getAttribute('type') || (tag === 'button' ? 'submit' : 'text')).toLowerCase();
+      if (tag === 'button' || itype === 'button' || itype === 'submit' || itype === 'reset' || itype === 'image') popoverInvoker(el);
+    }
     if (tag === 'input') {
       var type = (el.getAttribute('type') || 'text').toLowerCase();
       if (type === 'checkbox' || type === 'radio') { fire(el, 'input', { bubbles: true, cancelable: false }); fire(el, 'change', { bubbles: true, cancelable: false }); return; }
@@ -1391,6 +1540,29 @@
     var C = makeClass(name, sup, function () { return Reflect.construct(HTMLElement, arguments, new.target || C); });
     HTML_CLASSES[name].forEach(function (tag) { TAG_CLASS[tag] = C; });
   });
+  // form, labels and the constraint validation API belong to the form-associated elements only, not to every HTMLElement:
+  // a script that probes `'labels' in el` or `'form' in el` to tell native properties from its own must see the real shape.
+  (function () {
+    var formG = { get: function () { return this.closest('form'); } };
+    var labelsG = { get: function () { var id = this.id; return nodeListOf(id ? queryAll(documentWrapper, 'label[for="' + cssStr(id) + '"]') : []); } };
+    var validation = { checkValidity: function () { return true; }, reportValidity: function () { return true; }, setCustomValidity: function () { } };
+    var constraint = {
+    validity: { get: function () { return { valid: true, valueMissing: false, typeMismatch: false, patternMismatch: false, tooLong: false, tooShort: false, rangeUnderflow: false, rangeOverflow: false, stepMismatch: false, badInput: false, customError: false }; } },
+      validationMessage: { get: function () { return ''; } },
+      willValidate: { get: function () { return true; } }
+    };
+    ['HTMLInputElement', 'HTMLSelectElement', 'HTMLTextAreaElement', 'HTMLButtonElement', 'HTMLFieldSetElement', 'HTMLOutputElement', 'HTMLObjectElement'].forEach(function (n) {
+      if (!global[n]) return;
+      var P = global[n].prototype;
+      getters(P, { form: formG });
+      getters(P, constraint);
+      methods(P, validation);
+    });
+    ['HTMLInputElement', 'HTMLSelectElement', 'HTMLTextAreaElement', 'HTMLButtonElement', 'HTMLOutputElement', 'HTMLMeterElement', 'HTMLProgressElement'].forEach(function (n) {
+      if (global[n]) getters(global[n].prototype, { labels: labelsG });
+    });
+    ['HTMLLabelElement', 'HTMLLegendElement'].forEach(function (n) { if (global[n]) getters(global[n].prototype, { form: formG }); });
+  })();
   var SVGElement = makeClass('SVGElement', Element);
   getters(SVGElement.prototype, { style: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'style'), dataset: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'dataset'), ownerSVGElement: { get: function () { var p = this.parentNode; return p && p.closest ? p.closest('svg') : null; } }, viewportElement: { get: function () { return this.ownerSVGElement; } } });
   methods(SVGElement.prototype, { focus: HTMLElement.prototype.focus, blur: HTMLElement.prototype.blur, getBBox: function () { return this.getBoundingClientRect(); }, getScreenCTM: function () { return null; }, getCTM: function () { return null; }, createSVGPoint: function () { return { x: 0, y: 0, matrixTransform: function () { return this; } }; } });
@@ -1553,7 +1725,7 @@
     content: {
       get: function () {
         var s = slots(this);
-        if (!s.content) s.content = documentWrapper.createDocumentFragment();
+        if (!s.content) { s.content = documentWrapper.createDocumentFragment(); Object.defineProperty(s.content, INERT, { value: true }); }
         var kids = wrapAll(sw.children(this[ID]));
         var self = this;
         kids.forEach(function (k) { sw.removeChild(self[ID], k[ID]); s.content._kids.push(k); k[FRAG] = s.content; });
@@ -1625,16 +1797,6 @@
     Object.defineProperty(f, '_kids', { value: [] });
     return f;
   });
-  getters(DocumentFragment.prototype, {
-    nodeType: { get: function () { return 11; } }, nodeName: { get: function () { return '#document-fragment'; } },
-    parentNode: { get: function () { return null; } }, parentElement: { get: function () { return null; } },
-    childNodes: { get: function () { var self = this; var s = slots(this); return s.childNodes || (s.childNodes = liveList(NodeList, function () { return self._kids.slice(); })); } },
-    firstChild: { get: function () { return this._kids[0] || null; } }, lastChild: { get: function () { return this._kids[this._kids.length - 1] || null; } },
-    nextSibling: { get: function () { return null; } }, previousSibling: { get: function () { return null; } },
-    isConnected: { get: function () { return false; } }, nodeValue: { get: function () { return null; }, set: function () { } },
-    textContent: { get: function () { return this._kids.map(function (k) { return k.nodeType === 8 ? '' : k.textContent; }).join(''); }, set: function (v) { this.replaceChildren(); if (v !== '' && v !== null && v !== undefined) this.appendChild(new Text(toStr(v))); } },
-    host: { get: function () { return null; } }, mode: { get: function () { return 'open'; } }
-  });
   getters(DocumentFragment.prototype, ParentNodeGetters);
   methods(DocumentFragment.prototype, ParentNodeMethods);
   methods(DocumentFragment.prototype, {
@@ -1643,6 +1805,9 @@
     getElementsByClassName: function (cls) { return collectionOf(queryAll(this, '.' + String(cls).trim().split(/\s+/).join('.'))); }
   });
   global.ShadowRoot = makeClass('ShadowRoot', DocumentFragment);
+  // host and mode belong to ShadowRoot, not DocumentFragment: a script that subclasses DocumentFragment (the Shady DOM
+  // polyfill's own ShadowRoot) assigns this.host, which a getter-only accessor inherited from DocumentFragment would swallow.
+  getters(global.ShadowRoot.prototype, { host: { get: function () { return null; } }, mode: { get: function () { return 'open'; } } });
 
   // --- Document -------------------------------------------------------------
   var Document = makeClass('Document', Node, function Document() { return createDetachedDocument(); });
@@ -1705,6 +1870,8 @@
     all: { get: function () { return collectionOf(queryAll(this, '*')); } },
     timeline: { get: function () { return { currentTime: nowMs() }; } }
   });
+  // The "template contents owner document": the document every template's content belongs to.
+  function templateOwnerDocument() { return templateDocument || (templateDocument = createDetachedDocument()); }
   var domImplementation = {
     createHTMLDocument: function (title) { var d = createDetachedDocument(); if (title !== undefined) d.title = title; return d; },
     createDocument: function () { return createDetachedDocument(); },
@@ -1720,8 +1887,12 @@
       var lower = tag.toLowerCase();
       var is = options && typeof options === 'object' ? options.is : undefined;
       var id = sw.createElement(lower);
-      var w = wrap(id);
-      if (is) w.setAttribute('is', is);
+      var inert = this._detachedRoot !== undefined; // an inert document has no custom element registry: nothing is constructed
+      if (inert) noUpgrade = true;
+      var w;
+      try { w = wrap(id); } finally { noUpgrade = false; }
+      if (inert) Object.defineProperty(w, INERT_EL, { value: true, configurable: true });
+      if (is) slots(w).isValue = String(is); // the "is value" is not an attribute: getAttribute('is') stays null
       hostMutation('create', id);
       return w;
     },
@@ -1840,19 +2011,75 @@
   // ==== 6. Reflected attributes (generated) ================================
   // "prop" or "prop=attr" with a kind suffix: ":b" boolean, ":i" integer
   // (":i=default"), ":u" URL-resolved, ":e" enumerated-string, default string.
-  var REFLECT = ('title lang dir=dir:e hidden:b tabIndex=tabindex:i=-1 accessKey=accesskey draggable=draggable:tb spellcheck=spellcheck:tb translate=translate:yb ' +
-    'contentEditable=contenteditable:e inert:b popover autofocus:b role=role:n ' +
-    'href=href:n src=src:n type name alt placeholder disabled:b selected:b lang htmlFor=for for=for action method target rel download ' +
-    'width:i height:i loading srcset sizes content charset async:b defer:b crossOrigin=crossorigin:n integrity referrerPolicy=referrerpolicy ' +
-    'autocomplete required:b readOnly=readonly:b multiple:b min max step pattern maxLength=maxlength:i=-1 minLength=minlength:i=-1 size:i=20 rows:i=2 cols:i=20 wrap ' +
-    'colSpan=colspan:i=1 rowSpan=rowspan:i=1 scope headers open:b label default:b cite dateTime=datetime data ' +
-    'controls:b autoplay:b loop:b muted:b poster preload playsInline=playsinline:b kind srclang isMap=ismap:b useMap=usemap shape coords ping hreflang ' +
-    'media sandbox allow allowFullscreen=allowfullscreen:b scrolling frameBorder=frameborder align vAlign=valign valign bgColor=bgcolor border cellPadding=cellpadding cellSpacing=cellspacing ' +
-    'noValidate=novalidate:b formAction=formaction formMethod=formmethod formTarget=formtarget formNoValidate=formnovalidate:b formEnctype=formenctype enctype encoding=enctype acceptCharset=accept-charset accept capture dirName=dirname ' +
-    'inputMode=inputmode list=list:skip nonce:skip slot:skip part:skip id:skip className:skip value=value:v checked:skip start:i=1 reversed:b span:i=1 abbr axis char charOff=charoff compact:b declare:b ' +
-    'noWrap=nowrap:b longDesc=longdesc lowsrc marginHeight=marginheight marginWidth=marginwidth noHref=nohref:b noResize=noresize:b noShade=noshade:b standby summary version vspace:i hspace:i ' +
-    'httpEquiv=http-equiv scheme optimum:i low:i high:i decoding fetchPriority=fetchpriority enterKeyHint=enterkeyhint virtualKeyboardPolicy=virtualkeyboardpolicy autocapitalize elementTiming=elementtiming ' +
-    'blocking is=is:n itemId=itemid itemProp=itemprop itemRef=itemref itemScope=itemscope:b itemType=itemtype').split(/\s+/);
+  // Each reflected property lives on the interface(s) that own it, as in the HTML spec: `'href' in div` and `'data' in el` are
+  // false, `'labels' in input` is true. Scripts tell native properties from their own with exactly these probes (Polymer
+  // Resin sanitises every property that exists on a freshly made element, and must see none on a custom element).
+  // Targets are tag names, HTML*Element interface names, or '*' for HTMLElement itself.
+  var REFLECT = [
+    ['*', 'title lang dir=dir:e hidden:b tabIndex=tabindex:i=-1 accessKey=accesskey draggable=draggable:tb spellcheck=spellcheck:tb translate=translate:yb contentEditable=contenteditable:e inert:b autofocus:b role=role:n enterKeyHint=enterkeyhint inputMode=inputmode virtualKeyboardPolicy=virtualkeyboardpolicy autocapitalize nonce:skip slot:skip part:skip id:skip className:skip'],
+    ['a area link base', 'href=href:n'],
+    ['img script iframe embed source track input HTMLMediaElement', 'src=src:n'],
+    ['a link script source style button input ol li ul embed object', 'type'],
+    ['a img iframe form input select textarea button fieldset output object meta map slot embed details', 'name'],
+    ['img area input', 'alt'],
+    ['input textarea', 'placeholder'],
+    ['input select textarea button fieldset optgroup option link', 'disabled:b'],
+    ['option', 'selected:b'],
+    ['label', 'htmlFor=for'],
+    ['form', 'action method noValidate=novalidate:b enctype encoding=enctype acceptCharset=accept-charset'],
+    ['a area base form', 'target'],
+    ['a area link', 'rel'],
+    ['a area', 'download ping'],
+    ['a area link', 'hreflang'],
+    ['img canvas video iframe embed object input source', 'width:i height:i'],
+    ['img iframe', 'loading'],
+    ['img source', 'srcset sizes'],
+    ['meta', 'content httpEquiv=http-equiv scheme'],
+    ['meta script', 'charset'],
+    ['script', 'async:b defer:b'],
+    ['img script link HTMLMediaElement', 'crossOrigin=crossorigin:n'],
+    ['script link', 'integrity'],
+    ['a area img iframe link script', 'referrerPolicy=referrerpolicy'],
+    ['input select textarea form', 'autocomplete'],
+    ['input select textarea', 'required:b'],
+    ['input textarea', 'readOnly=readonly:b maxLength=maxlength:i=-1 minLength=minlength:i=-1 dirName=dirname'],
+    ['input select', 'multiple:b'],
+    ['input meter', 'min'],
+    ['input meter progress', 'max'],
+    ['input', 'step pattern size:i=20 accept capture'],
+    ['select', 'size:i=0'],
+    ['textarea', 'rows:i=2 cols:i=20 wrap'],
+    ['td th', 'colSpan=colspan:i=1 rowSpan=rowspan:i=1 headers abbr axis'],
+    ['th', 'scope'],
+    ['details dialog', 'open:b'],
+    ['option optgroup track', 'label'],
+    ['track', 'default:b kind srclang'],
+    ['blockquote q ins del', 'cite'],
+    ['ins del time', 'dateTime=datetime'],
+    ['object', 'data declare:b standby'],
+    ['HTMLMediaElement', 'controls:b autoplay:b loop:b muted:b preload'],
+    ['video', 'poster playsInline=playsinline:b'],
+    ['img', 'isMap=ismap:b decoding longDesc=longdesc lowsrc'],
+    ['img object', 'useMap=usemap border vspace:i hspace:i'],
+    ['area', 'shape coords noHref=nohref:b'],
+    ['link source style', 'media'],
+    ['iframe', 'sandbox allow allowFullscreen=allowfullscreen:b scrolling frameBorder=frameborder marginHeight=marginheight marginWidth=marginwidth'],
+    ['div p hr table caption col colgroup tbody thead tfoot tr td th iframe img object embed legend input h1 h2 h3 h4 h5 h6', 'align'],
+    ['tr td th tbody thead tfoot col colgroup', 'vAlign=valign char charOff=charoff'],
+    ['body table tr td th', 'bgColor=bgcolor'],
+    ['table', 'border cellPadding=cellpadding cellSpacing=cellspacing summary'],
+    ['button input', 'formAction=formaction formMethod=formmethod formTarget=formtarget formNoValidate=formnovalidate:b formEnctype=formenctype'],
+    ['li button data param meter progress', 'value=value:v'],
+    ['ol', 'start:i=1 reversed:b'],
+    ['col colgroup', 'span:i=1'],
+    ['td th', 'noWrap=nowrap:b'],
+    ['ul ol dl menu', 'compact:b'],
+    ['hr', 'noShade=noshade:b'],
+    ['html', 'version'],
+    ['meter', 'optimum:i low:i high:i'],
+    ['img link script iframe', 'fetchPriority=fetchpriority'],
+    ['script link style', 'blocking']
+  ];
   // Props that specialised prototypes already own (never clobber those).
   var _unusedProtos = [InputP, TextAreaP, SelectP, OptionP, FormP, global.HTMLButtonElement.prototype, global.HTMLAnchorElement.prototype, global.HTMLAreaElement.prototype, global.HTMLLinkElement.prototype, global.HTMLBaseElement.prototype, ImgP, global.HTMLCanvasElement.prototype, global.HTMLDetailsElement.prototype, global.HTMLDialogElement.prototype, global.HTMLProgressElement.prototype, global.HTMLMeterElement.prototype, global.HTMLTimeElement.prototype, global.HTMLLIElement.prototype, global.HTMLDataElement.prototype, global.HTMLOutputElement.prototype, global.HTMLScriptElement.prototype, global.HTMLIFrameElement.prototype, global.HTMLSourceElement.prototype, global.HTMLEmbedElement.prototype, global.HTMLTrackElement.prototype, global.HTMLMediaElement.prototype, global.HTMLObjectElement.prototype];
   function reflectDescriptor(attr, kind, dflt) {
@@ -1867,18 +2094,27 @@
       default: return { get: function () { var v = sw.getAttr(this[ID], attr); return v === null || v === undefined ? '' : v; }, set: function (v) { this.setAttribute(attr, toStr(v)); } };
     }
   }
-  REFLECT.forEach(function (spec) {
-    var m = /^([A-Za-z]+)(?:=([a-z-]+))?(?::([a-z]+)(?:=(-?\d+))?)?$/.exec(spec);
-    if (!m) throw new Error('bad reflect spec ' + spec);
-    var prop = m[1], attr = m[2] || prop.toLowerCase(), kind = m[3] || 's', dflt = m[4];
-    if (kind === 'skip') return;
-    if (hasOwn.call(HTMLElement.prototype, prop)) return;
-    var d = reflectDescriptor(attr, kind, dflt);
-    def(HTMLElement.prototype, prop, { get: d.get, set: d.set, enumerable: true });
-    // SVG elements share the string reflectors for the few that make sense
-    if (/^(tabIndex|role|hidden|title|lang|dataset|type|href|target|download|name)$/.test(prop) && !hasOwn.call(SVGElement.prototype, prop)) def(SVGElement.prototype, prop, { get: d.get, set: d.set, enumerable: true });
+  REFLECT.forEach(function (entry) {
+    var targets = [];
+    entry[0].split(' ').forEach(function (t) {
+      var C = t === '*' ? HTMLElement : /^HTML/.test(t) ? global[t] : TAG_CLASS[t];
+      if (C && targets.indexOf(C) < 0) targets.push(C);
+    });
+    entry[1].split(' ').forEach(function (spec) {
+      var m = /^([A-Za-z]+)(?:=([a-z-]+))?(?::([a-z]+)(?:=(-?\d+))?)?$/.exec(spec);
+      if (!m) throw new Error('bad reflect spec ' + spec);
+      var prop = m[1], attr = m[2] || prop.toLowerCase(), kind = m[3] || 's', dflt = m[4];
+      if (kind === 'skip') return;
+      var d = reflectDescriptor(attr, kind, dflt);
+      targets.forEach(function (C) {
+        if (hasOwn.call(C.prototype, prop)) return;
+        def(C.prototype, prop, { get: d.get, set: d.set, enumerable: true });
+      });
+      // SVG elements share the string reflectors for the few that make sense
+      if (/^(tabIndex|role|hidden|title|lang|dataset|type|href|target|download|name)$/.test(prop) && !hasOwn.call(SVGElement.prototype, prop)) def(SVGElement.prototype, prop, { get: d.get, set: d.set, enumerable: true });
+    });
   });
-  // `value` on plain HTMLElement reflects the attribute; input/textarea/select own live accessors above.
+  // input/textarea/select own live `value` accessors above; the others in the `value` row reflect the attribute.
   _unusedProtos.length = 0;
   getters(Element.prototype, { role: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'role') });
   // ARIA reflection: ariaLabel <-> aria-label etc.
@@ -3624,6 +3860,7 @@
   exportFn('__swSetHidden', function (h, quiet) { h = !!h; if (h === pageHidden) return false; pageHidden = h; if (!quiet) { try { fire(documentWrapper, 'visibilitychange', { bubbles: true }); } catch (e) { reportError(e); } } return true; });
   exportFn('__swFireLifecycle', function (name) { try { return fireLifecycle(name); } catch (e) { reportError(e); return true; } });
   exportFn('__swSetDocument', function (url, state) { return setDocument(url, state); });
+  exportFn('__swBlockScripts', function () { scriptsBlocked = true; });
   exportFn('__swDefaultAction', function (id) { try { defaultAction(wrap(+id)); return true; } catch (e) { reportError(e); return false; } });
   exportFn('__swSerialize', function (v) { try { return serialize(v); } catch (e) { return { name: e && e.name, message: String(e && e.message || e) }; } });
   exportFn('__swSetCurrentScript', function (id) { currentScript = id ? wrap(+id) : null; return true; });

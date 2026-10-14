@@ -20,8 +20,36 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - New tab page: Edit shortcut and Remove on top-site tiles (`newtab.sites` setting); bookmarks can be edited from the bar.
 - Undo and Redo in text fields; a page that cancels `mousedown` keeps the focus where it was.
 - `Inspect` opens Developer Tools for the tab.
+- **The Popover API** (`popover`, `showPopover` / `hidePopover` / `togglePopover`, `popovertarget`, `:popover-open`, `beforetoggle` /
+  `toggle`): a closed popover is no longer painted (YouTube's tooltips showed as grey squares). See [docs/web-platform.md](docs/web-platform.md).
 
 ### Fixed
+- **youtube.com renders and plays.** Search results and the watch page show real titles, thumbnails and avatars, and the player plays
+  AV1 + Opus through MSE (see "youtube.com" in [docs/compat.md](docs/compat.md) for what was measured and what is still wrong: no
+  icons in the mini guide, no sound check, slow first paint, and a home page without videos because the server sends none to a visit
+  without cookies). Each of these was a difference from browsers that a library YouTube ships depends on:
+  - `host` and `mode` moved from `DocumentFragment.prototype` to `ShadowRoot.prototype`, and the `Node.prototype` accessors
+    (`firstChild`, `lastChild`, `childNodes`, `parentNode`, `nextSibling`, `textContent`, ...) work on fragments: the Shady DOM
+    polyfill failed with an empty `Uncaught` in `attachShadow` and saw every shadow root as empty.
+  - An uncaught value is printed as `Name: message` plus the stack, or, for a thrown string, number, object or `null`, with its
+    type (`Uncaught non-Error string thrown: "..."`); engine stacks have no header, so errors used to read as an empty `Uncaught`.
+  - `Element.attributes` is array-like (`Array.prototype.map/slice/forEach.call(el.attributes)` returned holes).
+  - Custom elements in `<template>` content and in nodes made by the template's owner document are inert (not constructed until
+    imported or inserted), as in browsers; Polymer walks its templates with bindings still in the attributes.
+  - Reflected properties live on the interfaces that own them (`href`, `src`, `data`, `name`, `type`, ... no longer exist on every
+    `HTMLElement`), `form`/`labels`/`validity`/`willValidate`/`checkValidity` are on form controls only, and
+    `createElement(name, {is})` no longer sets an `is` attribute. Polymer Resin replaced the `data` of every custom element with
+    its placeholder because of these.
+  - A same-origin `<iframe sandbox="allow-same-origin">` has a window the embedder can use (`contentWindow.history`); its own
+    scripts and inline handlers stay blocked. `bind`/`call`/`apply` of a method taken from another window run on the caller's
+    `this`: a page that borrows an iframe's `History.prototype.replaceState` and binds it to its own `window.history` no longer
+    fails with "origin 'null'".
+  - A `position: fixed` box inside an absolutely positioned one is laid out (it stayed 0x0: YouTube's masthead was invisible).
+  - A lowercase `viewbox` attribute next to the real `viewBox` of an inline SVG no longer overrides it (the logo was drawn at the
+    wrong scale).
+  - The default single-task script timeout is 30 s instead of 5 s (`--js-timeout-ms`): YouTube's first render has tasks longer than
+    5 s on a loaded machine, and the interrupted task left the watch page at "Video unavailable".
+- The embedded UI archive (`internal/ui/web.zar`) was out of date with `chrome.css`; regenerated (`make embeds`).
 - **Windows: the Start-menu and desktop shortcut started a console that closed at once.** The GUI launcher (`Sweef.exe`) and the
   command-line binary (`sweef.exe`) differ only in case, so on Windows (and on macOS inside `Sweef.app`) one overwrote the other.
   The launcher is now `SweefLauncher.exe` / `SweefLauncher`. This also explains why the macOS `.app` failed `codesign`.

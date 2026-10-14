@@ -993,12 +993,24 @@ func (c *ctx) finishOOF(b *lbox) {
 	if len(b.oofKids) == 0 {
 		return
 	}
-	kids := b.oofKids
-	b.oofKids = nil
-	for _, k := range kids {
-		c.layoutAbs(k, b)
+	// Laying out one of these can register more (a position:fixed box inside an absolutely positioned one has the
+	// viewport, that is the root box, as its containing block): they are added to b.oofKids while it is emptied, so
+	// keep going until nothing new shows up, and keep every kid for later passes.
+	var all []*lbox
+	seen := make(map[*lbox]struct{}, len(b.oofKids))
+	for len(b.oofKids) > 0 {
+		kids := b.oofKids
+		b.oofKids = nil
+		for _, k := range kids {
+			if _, dup := seen[k]; dup {
+				continue
+			}
+			seen[k] = struct{}{}
+			all = append(all, k)
+			c.layoutAbs(k, b)
+		}
 	}
-	b.oofKids = kids
+	b.oofKids = all
 }
 
 func (c *ctx) layoutAbs(k, cb *lbox) {

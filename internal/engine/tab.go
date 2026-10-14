@@ -744,7 +744,27 @@ func (t *Tab) Evaluate(expr string) (json.RawMessage, error) {
 
 // ensureJS returns the tab's VM, binding one to the current document when the
 // page loaded without scripts (lazy VM).
-func (t *Tab) ensureJS() (*jsVM, error) {
+func (t *Tab) ensureJS() (*jsVM, error) { return t.ensureJSFor(false) }
+
+// ensureFrameJS is ensureJS for a same-origin script reaching into this frame (contentWindow, frameElement). A frame
+// sandboxed without allow-scripts still has a window object the embedder can read and call (a page that parks an
+// <iframe sandbox="allow-same-origin" src="about:blank"> to borrow its History object does exactly that); only the
+// frame's own scripts and inline handlers stay blocked, which the VM is told about.
+func (t *Tab) ensureFrameJS() (*jsVM, error) { return t.ensureJSFor(true) }
+
+func (t *Tab) ensureJSFor(remote bool) (*jsVM, error) {
+	// the document can be replaced while the VM is built (a frame finishing its load): bind to the new one
+	for try := 0; ; try++ {
+		j, err := t.ensureJSOnce(remote)
+		if err != errDocChanged || try >= 2 {
+			return j, err
+		}
+	}
+}
+
+var errDocChanged = fmt.Errorf("document changed")
+
+func (t *Tab) ensureJSOnce(remote bool) (*jsVM, error) {
 	t.mu.RLock()
 	j, d, u := t.js, t.dom, t.url
 	t.mu.RUnlock()
@@ -754,7 +774,8 @@ func (t *Tab) ensureJS() (*jsVM, error) {
 	if t.eng.opts.DisableJS {
 		return nil, fmt.Errorf("javascript is disabled (--no-js)")
 	}
-	if !t.scriptsAllowed() {
+	blocked := !t.scriptsAllowed()
+	if blocked && !remote {
 		return nil, fmt.Errorf("scripts are blocked by the frame's sandbox")
 	}
 	if d == nil {
@@ -769,6 +790,9 @@ func (t *Tab) ensureJS() (*jsVM, error) {
 		return nil, fmt.Errorf("javascript engine unavailable")
 	}
 	_, _ = j.call("__swSetDocument", docURL, "complete")
+	if blocked {
+		_, _ = j.call("__swBlockScripts")
+	}
 	t.mu.Lock()
 	if t.js == nil && t.dom == d {
 		t.js = j
@@ -777,7 +801,7 @@ func (t *Tab) ensureJS() (*jsVM, error) {
 		t.mu.Unlock()
 		j.close()
 		if other == nil {
-			return nil, fmt.Errorf("document changed")
+			return nil, errDocChanged
 		}
 		return other, nil
 	}

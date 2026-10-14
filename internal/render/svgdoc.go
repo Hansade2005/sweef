@@ -371,12 +371,23 @@ func (sc *svgCascade) node(n *html.Node, doc *SVGDoc) *SVGNode {
 	}
 	sn := &SVGNode{Tag: tag, A: map[string]string{}, dom: n}
 	doc.dom[n] = sn
+	var cased map[string]bool // keys that came from a mixed-case attribute (viewBox, preserveAspectRatio, ...)
 	for _, a := range n.Attr {
 		k := strings.ToLower(a.Key)
 		if a.Namespace == "xlink" || k == "xlink:href" {
 			k = "href"
 		}
 		if k == "href" && sn.A["href"] != "" && a.Namespace == "xlink" {
+			continue
+		}
+		// SVG attribute names are case-sensitive: a script that also calls setAttribute("viewbox", ...) leaves a second,
+		// meaningless attribute next to the real viewBox, and the lowercase one must not override it.
+		if a.Key != k {
+			if cased == nil {
+				cased = map[string]bool{}
+			}
+			cased[k] = true
+		} else if cased[k] {
 			continue
 		}
 		sn.A[k] = a.Val

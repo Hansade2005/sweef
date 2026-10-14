@@ -46,7 +46,7 @@ type Options struct {
 	ViewportHeight   int    // default viewport height (px)
 	SettleMs         int    // event-loop budget after load and after actions (default 1500)
 	JSMemoryMiB      int    // QuickJS heap cap per tab (default 256: YouTube's player and its BotGuard script need more than 64)
-	JSTimeoutMs      int    // single-eval timeout; a looping script is interrupted (default 5000)
+	JSTimeoutMs      int    // single-eval timeout; a looping script is interrupted (default 30000: a real page's longest tasks, YouTube's first render among them, run past 5 s on a loaded machine, and an interrupted task leaves the page half-built)
 	WarmVMs          int    // JS VMs kept pre-built so navigations skip prelude setup (default 1)
 	DownloadsDir     string // where downloads are saved (default $TMPDIR/sweef-downloads)
 	CacheDir         string // on-disk bytecode cache ("" = $SWEEF_CACHE_DIR or user cache dir; "off" disables)
@@ -69,7 +69,7 @@ func DefaultOptions() Options {
 		ViewportHeight:   720,
 		SettleMs:         1500,
 		JSMemoryMiB:      256,
-		JSTimeoutMs:      5000,
+		JSTimeoutMs:      30000,
 		WarmVMs:          1,
 	}
 }
