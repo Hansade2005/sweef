@@ -4,7 +4,9 @@ var LIKELY = {
   en: 'Latn-US', fr: 'Latn-FR', de: 'Latn-DE', es: 'Latn-ES', it: 'Latn-IT', pt: 'Latn-BR', nl: 'Latn-NL', sv: 'Latn-SE', da: 'Latn-DK', nb: 'Latn-NO', no: 'Latn-NO', fi: 'Latn-FI',
   pl: 'Latn-PL', cs: 'Latn-CZ', sk: 'Latn-SK', hu: 'Latn-HU', ro: 'Latn-RO', tr: 'Latn-TR', id: 'Latn-ID', vi: 'Latn-VN', ms: 'Latn-MY', ca: 'Latn-ES', hr: 'Latn-HR',
   ru: 'Cyrl-RU', uk: 'Cyrl-UA', bg: 'Cyrl-BG', sr: 'Cyrl-RS', el: 'Grek-GR', he: 'Hebr-IL', ar: 'Arab-EG', fa: 'Arab-IR', ur: 'Arab-PK', hi: 'Deva-IN', bn: 'Beng-BD',
-  th: 'Thai-TH', ja: 'Jpan-JP', ko: 'Kore-KR', zh: 'Hans-CN', ta: 'Taml-IN', te: 'Telu-IN'
+  th: 'Thai-TH', ja: 'Jpan-JP', ko: 'Kore-KR', zh: 'Hans-CN', ta: 'Taml-IN', te: 'Telu-IN',
+  mr: 'Deva-IN', fil: 'Latn-PH', sw: 'Latn-TZ', lt: 'Latn-LT', lv: 'Latn-LV', et: 'Latn-EE', sl: 'Latn-SI', af: 'Latn-ZA', gu: 'Gujr-IN', kn: 'Knda-IN', ml: 'Mlym-IN', pa: 'Guru-IN',
+  ne: 'Deva-NP', si: 'Sinh-LK', km: 'Khmr-KH', my: 'Mymr-MM', az: 'Latn-AZ', kk: 'Cyrl-KZ', uz: 'Latn-UZ'
 };
 var ZH = { TW: 'Hant', HK: 'Hant', MO: 'Hant' };
 var $ = Symbol('locale');

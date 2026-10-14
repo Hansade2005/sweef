@@ -40,7 +40,6 @@ const UNIT_COMPOUND = { 'kilometer-per-hour': 'speed-kilometer-per-hour', 'mile-
   'liter-per-kilometer': 'consumption-liter-per-kilometer', 'mile-per-gallon': 'consumption-mile-per-gallon' };
 const CURRENCIES = 'USD EUR GBP JPY CNY INR KRW BRL MXN CAD AUD CHF RUB TRY SEK NOK DKK PLN CZK HUF ILS AED SAR EGP ZAR NGN KES IDR MYR THB VND PHP SGD HKD TWD NZD ARS CLP COP PEN UAH RON BGN ISK RSD PKR BDT LKR QAR KWD BHD OMR JOD MAD DZD TND IRR IQD KZT UZS GEL AZN XAF XOF GHS ETB TZS UGX'.split(' ');
 const SCRIPTS = 'Latn Cyrl Arab Hans Hant Deva Hebr Grek Jpan Kore Thai Beng Taml Telu Knda Mlym Gujr Guru Armn Geor Khmr Laoo Mymr Sinh Tibt Ethi Hira Kana Hang Zyyy Zzzz Orya'.split(' ');
-const MZ_LOCALES = new Set(['en', 'en-001', 'en-GB', 'en-AU', 'en-IN', 'en-CA', 'de', 'de-AT', 'de-CH', 'fr', 'fr-CA', 'es', 'es-419', 'es-MX', 'es-US', 'it', 'pt', 'pt-PT', 'ru', 'ja', 'zh', 'zh-Hant', 'zh-Hant-HK', 'ko', 'nl', 'pl', 'tr', 'ar', 'ar-AE', 'sv']); // metazone names (Pacific Standard Time): the rest use GMT offsets
 
 const clean = (o) => { for (const k of Object.keys(o)) { const v = o[k]; if (v && typeof v === 'object' && !Array.isArray(v)) { clean(v); if (!Object.keys(v).length) delete o[k]; } else if (v === undefined) delete o[k]; } return o; };
 const PLURALS = ['zero', 'one', 'two', 'few', 'many', 'other'];
@@ -52,10 +51,16 @@ function counts(obj, prefix) { // {"prefix-count-one": "..", ...} -> {one:..,oth
   }
   return out;
 }
-function altAscii(obj) { // CLDR 44+ keeps U+202F in some time patterns and offers an ASCII alternative; Chromium ships the ASCII one
+// a pattern CLDR gives a numbering system for ({_value, _numbers}) is written as "pattern@numbers=hebr" ("@numbers=d=hanidays" for one field)
+const withNumbers = (v) => v && typeof v === 'object' && v._value !== undefined ? v._value + '@numbers=' + v._numbers : v;
+function altAscii(obj0) { // CLDR 44+ keeps U+202F in some time patterns and offers an ASCII alternative; Chromium ships the ASCII one
+  const obj = {};
+  for (const k of Object.keys(obj0)) obj[k] = withNumbers(obj0[k]);
   const out = {};
   for (const k of Object.keys(obj)) if (!k.includes('-alt-')) out[k] = obj[k];
-  for (const k of Object.keys(obj)) if (k.endsWith('-alt-ascii')) out[k.slice(0, -10)] = obj[k];
+  // the alternative is taken only where it is the same pattern with plain spaces: regional locales inherit the "-alt-ascii"
+  // keys of "en" (en-GB: "HH:mm" next to an inherited "h:mm a"), which must not replace their own pattern
+  for (const k of Object.keys(obj)) if (k.endsWith('-alt-ascii')) { const b = k.slice(0, -10); if (out[b] === undefined || out[b].replace(/\u202f/g, ' ') === obj[k]) out[b] = obj[k]; }
   return out;
 }
 
@@ -72,34 +77,54 @@ function numbers(tag) {
     if (s.currencyGroup) rec.cg = s.currencyGroup;
     out.sym[m[1]] = rec;
   }
-  const df = n['decimalFormats-numberSystem-' + nu] || n['decimalFormats-numberSystem-latn'];
-  const cf = n['currencyFormats-numberSystem-' + nu] || n['currencyFormats-numberSystem-latn'];
-  const pf = n['percentFormats-numberSystem-' + nu] || n['percentFormats-numberSystem-latn'];
-  const sf = n['scientificFormats-numberSystem-' + nu] || n['scientificFormats-numberSystem-latn'];
-  out.dec = df.standard; out.pct = pf.standard; out.sci = sf.standard;
-  out.cur = cf.standard; out.acc = cf.accounting;
-  if (cf['standard-alphaNextToNumber']) out.curA = cf['standard-alphaNextToNumber'];
-  if (cf['accounting-alphaNextToNumber']) out.accA = cf['accounting-alphaNextToNumber'];
-  const compact = (src) => {
+  // the patterns of a numbering system (a locale has its own for each system it knows: Arabic's accounting format differs between 0-9 and ٠-٩)
+  const formatSet = (sys) => {
     const o = {};
-    for (const k of Object.keys(src)) {
-      const m = /^(\d+)-count-(\w+)$/.exec(k);
-      if (!m) continue;
-      (o[m[1]] = o[m[1]] || {})[m[2]] = src[k];
+    const df = n['decimalFormats-numberSystem-' + sys] || n['decimalFormats-numberSystem-latn'];
+    const cf = n['currencyFormats-numberSystem-' + sys] || n['currencyFormats-numberSystem-latn'];
+    const pf = n['percentFormats-numberSystem-' + sys] || n['percentFormats-numberSystem-latn'];
+    const sf = n['scientificFormats-numberSystem-' + sys] || n['scientificFormats-numberSystem-latn'];
+    o.dec = df.standard; o.pct = pf.standard; o.sci = sf.standard;
+    o.cur = cf.standard; o.acc = cf.accounting;
+    if (cf['standard-alphaNextToNumber']) o.curA = cf['standard-alphaNextToNumber'];
+    if (cf['accounting-alphaNextToNumber']) o.accA = cf['accounting-alphaNextToNumber'];
+    const compact = (src) => {
+      const c = {};
+      for (const k of Object.keys(src)) {
+        const m = /^(\d+)-count-(\w+)$/.exec(k);
+        if (!m) continue;
+        (c[m[1]] = c[m[1]] || {})[m[2]] = src[k];
+      }
+      return c;
+    };
+    o.cpd = { s: compact(df.short.decimalFormat), l: compact(df.long.decimalFormat) };
+    const cs = cf.short && cf.short.standard ? cf.short.standard : null;
+    if (cs) {
+      o.cpc = compact(cs);
+      const alt = {};
+      for (const k of Object.keys(cs)) { const m = /^(\d+)-count-(\w+)-alt-alphaNextToNumber$/.exec(k); if (m) (alt[m[1]] = alt[m[1]] || {})[m[2]] = cs[k]; }
+      if (Object.keys(alt).length) o.cpcA = alt;
     }
+    o.cup = counts(cf, 'unitPattern'); // currencyDisplay: "name" -> "{0} {1}"
+    const mp = n['miscPatterns-numberSystem-' + sys] || n['miscPatterns-numberSystem-latn'];
+    if (mp) o.mp = { ap: mp.approximately, al: mp.atLeast, am: mp.atMost, r: mp.range };
     return o;
   };
-  out.cpd = { s: compact(df.short.decimalFormat), l: compact(df.long.decimalFormat) };
-  const cs = cf.short && cf.short.standard ? cf.short.standard : null;
-  if (cs) {
-    out.cpc = compact(cs);
-    const alt = {};
-    for (const k of Object.keys(cs)) { const m = /^(\d+)-count-(\w+)-alt-alphaNextToNumber$/.exec(k); if (m) (alt[m[1]] = alt[m[1]] || {})[m[2]] = cs[k]; }
-    if (Object.keys(alt).length) out.cpcA = alt;
+  const cf = n['currencyFormats-numberSystem-' + nu] || n['currencyFormats-numberSystem-latn'];
+  const base = formatSet(nu);
+  Object.assign(out, base);
+  for (const k of Object.keys(n)) { // other numbering systems of the locale, as the difference from the default
+    const m = /^decimalFormats-numberSystem-(.+)$/.exec(k);
+    if (!m || m[1] === nu) continue;
+    const d = diff(base, formatSet(m[1]));
+    if (d) (out.fm = out.fm || {})[m[1]] = d;
   }
-  out.cup = counts(cf, 'unitPattern'); // currencyDisplay: "name" -> "{0} {1}"
-  const mp = n['miscPatterns-numberSystem-' + nu] || n['miscPatterns-numberSystem-latn'];
-  if (mp) out.mp = { ap: mp.approximately, al: mp.atLeast, am: mp.atMost, r: mp.range };
+  if (nu !== 'arab' && !n['decimalFormats-numberSystem-arab']) { // ICU's root has Arabic-Indic patterns of its own (number then currency, no grouping by lakh)
+    const root = Object.assign({}, base, { dec: '#,##0.###', pct: '#,##0%', sci: '#E0', cur: '#,##0.00\u00a0¤', acc: '#,##0.00\u00a0¤', });
+    delete root.curA; delete root.accA;
+    const d = diff(base, root);
+    if (d) (out.fm = out.fm || {}).arab = d;
+  }
   const sp = cf.currencySpacing;
   if (sp) {
     out.cs = { b: sp.beforeCurrency.insertBetween, a: sp.afterCurrency.insertBetween };
@@ -145,6 +170,7 @@ function dateFields(tag) {
   const out = {};
   const units = ['year', 'quarter', 'month', 'week', 'day', 'hour', 'minute', 'second'];
   const names = ['era', 'year', 'quarter', 'month', 'weekOfYear', 'weekday', 'day', 'dayPeriod', 'hour', 'minute', 'second', 'timeZoneName'];
+  const fkey = { weekOfYear: 'week', timeZoneName: 'zone', dayPeriod: 'dayperiod' };
   for (const [suffix, w] of [['', 'l'], ['-short', 's'], ['-narrow', 'n']]) {
     for (const u of units) {
       const d = f[u + suffix] || f[u];
@@ -160,16 +186,51 @@ function dateFields(tag) {
       (out[u] = out[u] || {})[w] = rec;
     }
     for (const nm of names) {
-      const d = f[(nm === 'weekOfYear' ? 'week' : nm === 'timeZoneName' ? 'zone' : nm) + suffix];
+      const d = f[(fkey[nm] || nm) + suffix];
       if (d && d.displayName) (out.dn = out.dn || {})[nm + ':' + w] = d.displayName;
     }
   }
   return out;
 }
 
+// ICU's DateTimePatternGenerator meets availableFormats in the order of the resource bundles: the locale's own keys (sorted),
+// then its parent's, up to root. Ties between equally distant patterns go to the first one, so the order is part of the data.
+const PARENT = rd('cldr-core/supplemental/parentLocales.json').supplemental.parentLocales.parentLocale;
+const cldrParent = (id) => id === 'und' ? null : PARENT[id] ? (PARENT[id] === 'root' ? 'und' : PARENT[id]) : id.includes('-') ? id.slice(0, id.lastIndexOf('-')) : 'und';
+const calFile = (id, cal) => cal === 'gregory' ? `cldr-dates-full/main/${id}/ca-gregorian.json` : `cldr-cal-${cal.split('-')[0]}-full/main/${id}/ca-${cal}.json`;
+const afCache = {};
+function resolvedAf(id, cal) { // availableFormats of a locale as CLDR resolves them
+  const k = id + '|' + cal;
+  if (afCache[k] !== undefined) return afCache[k];
+  const f = calFile(id, cal);
+  let out = null;
+  if (has(f)) {
+    const j = rd(f).main[id].dates.calendars[cal === 'gregory' ? 'gregorian' : cal];
+    const af = altAscii((j.dateTimeFormats || {}).availableFormats || {});
+    out = {};
+    for (const key of Object.keys(af)) if (!/-count-/.test(key)) out[key] = af[key];
+  }
+  return (afCache[k] = out);
+}
+function orderedAf(tag, cal, af) {
+  const out = {};
+  let id = cldrId(tag), cur = af;
+  while (id) {
+    const parent = cldrParent(id);
+    const pa = parent ? (resolvedAf(parent, cal) || {}) : {};
+    const own = Object.keys(cur).filter((k) => !(k in out) && (!parent || pa[k] !== cur[k])).sort();
+    for (const k of own) out[k] = cur[k];
+    if (!parent) break;
+    id = parent; cur = resolvedAf(parent, cal) || {};
+    if (id === 'und' && !Object.keys(cur).length) break;
+  }
+  for (const k of Object.keys(af)) if (!(k in out)) out[k] = af[k]; // (never happens: root is the last link)
+  return out;
+}
+
 function calendar(tag, cal) {
   const id = cldrId(tag);
-  const file = cal === 'gregory' ? `cldr-dates-full/main/${id}/ca-gregorian.json` : `cldr-cal-${cal}-full/main/${id}/ca-${cal}.json`;
+  const file = calFile(id, cal);
   if (!has(file)) return null;
   const j = rd(file).main[id].dates.calendars[cal === 'gregory' ? 'gregorian' : cal];
   const arr = (o, n, start) => { const a = []; for (let i = start; i < start + n; i++) a.push(o[i]); return a; };
@@ -179,7 +240,11 @@ function calendar(tag, cal) {
   out.mo = {}; out.da = {}; out.qu = {}; out.dp = {};
   for (const c of Object.keys(ctx)) {
     for (const w of ['w', 'a', 'n']) {
-      const m = j.months && j.months[ctx[c]] && j.months[ctx[c]][wd[w]]; if (m) out.mo[c + w] = arr(m, 12, 1);
+      const m = j.months && j.months[ctx[c]] && j.months[ctx[c]][wd[w]];
+      if (m) {
+        out.mo[c + w] = arr(m, m['13'] !== undefined ? 13 : 12, 1); // (Hebrew, Coptic and Ethiopic have thirteen)
+        if (m['7-yeartype-leap'] !== undefined) (out.ml = out.ml || {})[c + w] = m['7-yeartype-leap']; // Hebrew: the seventh month in a leap year is Adar II
+      }
       const q = j.quarters && j.quarters[ctx[c]] && j.quarters[ctx[c]][wd[w]]; if (q) out.qu[c + w] = arr(q, 4, 1);
       const p = j.dayPeriods && j.dayPeriods[ctx[c]] && j.dayPeriods[ctx[c]][wd[w]]; if (p) out.dp[c + w] = Object.fromEntries(Object.entries(p).filter(([k]) => !k.includes('-alt-')));
     }
@@ -187,16 +252,18 @@ function calendar(tag, cal) {
       const d = j.days && j.days[ctx[c]] && j.days[ctx[c]][wd[w]]; if (d) out.da[c + w] = dayKeys.map((k) => d[k]);
     }
   }
-  const era = (o) => o ? Object.fromEntries(Object.entries(o).filter(([k]) => /^\d$/.test(k))) : {};
+  const era = (o) => o ? Object.fromEntries(Object.entries(o).filter(([k]) => /^\d+$/.test(k))) : {};
   if (j.eras) out.er = { w: era(j.eras.eraNames), a: era(j.eras.eraAbbr), n: era(j.eras.eraNarrow) };
   out.df = altAscii(j.dateFormats || {}); out.tf = altAscii(j.timeFormats || {});
   const dtf = j.dateTimeFormats || {};
   out.dtf = { full: dtf.full, long: dtf.long, medium: dtf.medium, short: dtf.short };
   const at = j['dateTimeFormats-atTime'] && j['dateTimeFormats-atTime'].standard;
   if (at) out.dtfAt = { full: at.full, long: at.long, medium: at.medium, short: at.short };
+  if (dtf.appendItems) out.ai = dtf.appendItems; // DateTimePatternGenerator's appendItems ("{0} ({2}: {1})")
   const af = altAscii(dtf.availableFormats || {});
-  out.af = {};
-  for (const k of Object.keys(af)) if (!/-count-/.test(k)) out.af[k] = af[k];
+  const afPlain = {};
+  for (const k of Object.keys(af)) if (!/-count-/.test(k)) afPlain[k] = af[k];
+  out.af = orderedAf(tag, cal, afPlain);
   if (dtf.intervalFormats) {
     const iv = {};
     for (const k of Object.keys(dtf.intervalFormats)) {
@@ -208,24 +275,67 @@ function calendar(tag, cal) {
   return out;
 }
 
+// ---- time zone names ---------------------------------------------------------------------------------------------------------------
+// Names are kept for the metazones of the zones of the most populous countries (everything else shows a GMT offset, as it does for
+// a locale without names): all 150 metazones in 73 locales would cost 200 KB. ZONETAB is the IANA zone.tab (tzdata package).
+const ZONE_COUNTRIES = 100, ZONETAB = process.env.ZONETAB || '/usr/share/zoneinfo/zone.tab';
+let zctx = null;
+function zoneCtx() {
+  if (zctx) return zctx;
+  const tz = rd('cldr-bcp47/bcp47/timezone.json').keyword.u.tz, list = [], alias = {};
+  for (const [k, v] of Object.entries(tz)) {
+    if (k.startsWith('_') || !v._alias) continue;
+    const names = v._alias.split(' ');
+    if (v._deprecated === 'true') continue;
+    list.push(names[0]);
+    for (const a of names.slice(1)) alias[a] = names[0];
+  }
+  if (!fs.existsSync(ZONETAB)) { console.error('zone.tab not found; set ZONETAB to the IANA zone.tab'); process.exit(2); }
+  const iana = {};
+  for (const l of fs.readFileSync(ZONETAB, 'utf8').split('\n')) { if (!l || l[0] === '#') continue; const f = l.split('\t'); iana[f[2]] = f[0]; }
+  const country = {}; // CLDR canonical id -> ISO country
+  for (const c of list) {
+    let cc = iana[c];
+    if (!cc) for (const [a, canon] of Object.entries(alias)) if (canon === c && iana[a]) { cc = iana[a]; break; }
+    if (cc) country[c] = cc;
+  }
+  const ti = rd('cldr-core/supplemental/territoryInfo.json').supplemental.territoryInfo;
+  const top = new Set(Object.entries(ti).sort((a, b) => +b[1]._population - +a[1]._population).slice(0, ZONE_COUNTRIES).map((e) => e[0]));
+  const mzInfo = rd('cldr-core/supplemental/metaZones.json').supplemental.metaZones.metazoneInfo.timezone;
+  const keep = new Set(['GMT']);
+  const walk = (o, prefix) => { for (const [k, v] of Object.entries(o)) { if (Array.isArray(v)) { const z = prefix + k; if (top.has(country[z]) || z === 'Etc/UTC') v.forEach((e) => keep.add(e.usesMetazone._mzone)); } else walk(v, prefix + k + '/'); } };
+  walk(mzInfo, '');
+  return (zctx = { list, alias, country, keep });
+}
+
 function zoneNames(tag) {
   const id = cldrId(tag), z = rd(`cldr-dates-full/main/${id}/timeZoneNames.json`).main[id].dates.timeZoneNames;
   const out = { hf: z.hourFormat, gmt: z.gmtFormat, gz: z.gmtZeroFormat, rf: z.regionFormat, rfd: z['regionFormat-type-daylight'], rfs: z['regionFormat-type-standard'], ff: z.fallbackFormat };
-  if (MZ_LOCALES.has(tag)) {
-    out.mz = {};
-    for (const [k, v] of Object.entries(z.metazone || {})) {
-      const rec = {};
-      for (const w of ['long', 'short']) if (v[w]) rec[w[0]] = [v[w].generic || '', v[w].standard || '', v[w].daylight || ''];
-      out.mz[k] = rec;
-    }
-    if (tag === 'en') {
-      out.zn = {}; // exemplar cities (English only)
-      for (const [region, zones] of Object.entries(z.zone || {})) for (const [name, v] of Object.entries(zones)) {
-        if (v.exemplarCity) out.zn[region + '/' + name] = v.exemplarCity;
-        for (const [sub, v2] of Object.entries(v)) if (v2 && typeof v2 === 'object' && v2.exemplarCity) out.zn[region + '/' + name + '/' + sub] = v2.exemplarCity;
-      }
-    }
+  const ctx = zoneCtx();
+  out.mz = {};
+  for (const [k, v] of Object.entries(z.metazone || {})) {
+    if (!ctx.keep.has(k)) continue;
+    const rec = {};
+    for (const w of ['long', 'short']) if (v[w]) rec[w[0]] = [v[w].generic || '', v[w].standard || '', v[w].daylight || ''];
+    out.mz[k] = rec;
   }
+  // names of single zones (Etc/UTC, Europe/London in summer, ...) and, in English, exemplar cities that are not simply the zone id
+  out.zo = {};
+  const city = (id) => id.split('/').pop().replace(/_/g, ' ');
+  const walkZones = (o, prefix) => {
+    for (const [k, v] of Object.entries(o || {})) {
+      if (!v || typeof v !== 'object') continue;
+      const id = prefix + k;
+      if (v.long || v.short) {
+        const rec = {};
+        for (const w of ['long', 'short']) if (v[w]) rec[w[0]] = [v[w].generic || '', v[w].standard || '', v[w].daylight || ''];
+        out.zo[id] = rec;
+      }
+      if (tag === 'en' && v.exemplarCity && v.exemplarCity !== city(id)) (out.zn = out.zn || {})[id] = v.exemplarCity;
+      walkZones(Object.fromEntries(Object.entries(v).filter(([kk, vv]) => vv && typeof vv === 'object' && !['long', 'short'].includes(kk))), id + '/');
+    }
+  };
+  walkZones(z.zone, '');
   return out;
 }
 
@@ -266,12 +376,61 @@ function names(tag) {
   return out;
 }
 
+// Calendars other than the Gregorian one are shipped for the locales that use them and for English (everything else shows English
+// names for them): the data is kept as the difference from the same locale's Gregorian calendar, which most of it equals.
+const CAL_LOCALES = {
+  buddhist: ['en', 'th'], japanese: ['en', 'ja'], roc: ['en', 'zh', 'zh-Hant'], persian: ['en', 'fa'],
+  islamic: ['en', 'ar', 'fa', 'tr', 'id', 'ms', 'ur'], hebrew: ['en', 'he'], indian: ['en', 'hi'], coptic: ['en', 'ar'],
+  ethiopic: ['en'], 'ethiopic-amete-alem': ['en'],
+};
+const midOf = (pat) => { // the text between {1} and {0} of a date-time pattern, quotes removed; null when the time comes first
+  if (!pat) return null;
+  const m = /^(.*)\{1\}(.*)\{0\}(.*)$/.exec(pat);
+  if (!m) return null;
+  return m[2].replace(/'([^']*)'/g, '$1').replace(/''/g, "'");
+};
+function glueFor(tag, cal, style, own, greg) { // 'c' when ICU glues date and time with the calendar's pattern, otherwise 'g'
+  if (!own || own === greg) return 'g';
+  const nodeCal = cal === 'ethiopic-amete-alem' ? 'ethioaa' : cal;
+  try {
+    const t = tag === 'zh' ? 'zh-Hans' : tag, base = { timeZone: 'UTC' }, v = Date.UTC(2025, 9, 14, 15, 4, 5);
+    const loc = t + '-u-ca-' + nodeCal;
+    const strip = (x) => x.replace(/ /g, ' ');
+    const d = strip(new Intl.DateTimeFormat(loc, Object.assign({ dateStyle: style }, base)).format(v));
+    const tm = strip(new Intl.DateTimeFormat(loc, Object.assign({ timeStyle: 'short' }, base)).format(v));
+    const both = strip(new Intl.DateTimeFormat(loc, Object.assign({ dateStyle: style, timeStyle: 'short' }, base)).format(v));
+    if (!both.startsWith(d) || !both.endsWith(tm)) return 'g';
+    const mid = both.slice(d.length, both.length - tm.length);
+    if (midOf(own) === mid && midOf(greg) !== mid) return 'c';
+    return 'g';
+  } catch (e) { return 'g'; }
+}
 function perLocale(tag) {
   const d = { n: numbers(tag), u: units(tag), r: dateFields(tag), l: lists(tag), z: zoneNames(tag), dn: names(tag), c: {} };
-  for (const cal of ['gregory', 'buddhist', 'persian']) {
-    if (cal === 'buddhist' && !['th'].includes(tag)) continue;
-    if (cal === 'persian' && !['fa'].includes(tag)) continue;
-    const c = calendar(tag, cal); if (c) d.c[cal] = c;
+  const g0 = calendar(tag, 'gregory');
+  d.c.gregory = g0;
+  for (const [cal, tags] of Object.entries(CAL_LOCALES)) {
+    // regional locales (en-GB, ar-AE, zh-Hant-HK) carry what their language does; they differ in their own patterns
+    if (!tags.includes(tag) && !tags.includes(LOCALES[tag]) && !(LOCALES[tag] && tags.includes(LOCALES[LOCALES[tag]])) ) continue;
+    const c = calendar(tag, cal);
+    if (!c) continue;
+    // the date-time glue ("{1} 'at' {0}"): the calendar's own pattern or the Gregorian one, whichever ICU uses (CLDR makes non-Gregorian
+    // calendars borrow the Gregorian glue unless a locale writes its own, which its resolved JSON cannot tell). Decided by what the Node
+    // running this generator formats: the text between the date and the time.
+    const gl = { dtfAt: {}, dtf: {} };
+    for (const k of ['full', 'long', 'medium', 'short']) {
+      const pick = glueFor(tag, cal, k, (c.dtfAt || {})[k], (g0.dtfAt || {})[k]);
+      gl.dtfAt[k] = pick === 'c' ? c.dtfAt[k] : g0.dtfAt[k];
+      gl.dtf[k] = pick === 'c' ? c.dtf[k] : g0.dtf[k];
+    }
+    c.dtfAt = gl.dtfAt; c.dtf = gl.dtf;
+    c.ai = g0.ai;
+    const df = diff(g0, c) || {};
+    // the patterns DateTimePatternGenerator knows are the calendar's own table, not a mix with the Gregorian one (the Buddhist calendar
+    // lists yyyyMMMd where the Gregorian one has yMMMd), so they are kept whole
+    df.af = c.af;
+    if (c.iv) df.iv = c.iv;
+    d.c[cal] = df;
   }
   return d;
 }
@@ -283,6 +442,7 @@ function diff(parent, child) {
   if (child && typeof child === 'object' && !Array.isArray(child) && parent && typeof parent === 'object' && !Array.isArray(parent)) {
     const out = {};
     for (const k of Object.keys(child)) { const d = diff(parent[k], child[k]); if (d !== undefined) out[k] = d; }
+    for (const k of Object.keys(parent)) if (!(k in child) && parent[k] !== undefined) out[k] = null; // the child lacks what its parent has
     return Object.keys(out).length ? out : undefined;
   }
   return child;
@@ -311,6 +471,14 @@ function globalData() {
   }
   const wd = rd('cldr-core/supplemental/weekData.json').supplemental.weekData;
   g.week = { md: wd.minDays, fd: wd.firstDay, ws: wd.weekendStart, we: wd.weekendEnd };
+  // regional locales whose default numbering system differs from their language's (ar-EG counts in Arabic-Indic digits)
+  g.nu = {};
+  for (const d of fs.readdirSync(path.join(CLDR, 'cldr-numbers-full/main'))) {
+    if (!d.includes('-') || !Object.keys(LOCALES).some((t) => t.split('-')[0] === d.split('-')[0])) continue;
+    const nuOf = (id) => { while (id && !has(`cldr-numbers-full/main/${id}/numbers.json`)) id = cldrParent(id); return id ? rd(`cldr-numbers-full/main/${id}/numbers.json`).main[id].numbers.defaultNumberingSystem : 'latn'; };
+    const own = nuOf(d), up = nuOf(cldrParent(d));
+    if (own !== up) g.nu[d] = own;
+  }
   g.parents = rd('cldr-core/supplemental/parentLocales.json').supplemental.parentLocales.parentLocale;
   g.locales = Object.keys(LOCALES);
   // symbols of every numbering system: CLDR root keeps them only for latn, so the first locale that defines a system
@@ -328,6 +496,9 @@ function globalData() {
       if (m[1] === 'arab' || m[1] === 'arabext') g.rootSym[m[1]] = { d: s.decimal, g: s.group, p: s.percentSign, pm: s.perMille, mi: s.minusSign, pl: s.plusSign, e: s.exponential, inf: s.infinity, ap: s.approximatelySign };
     }
   }
+  // what ICU's root itself says for these two systems where the borrowed locale's symbols differ (found by formatting with a locale that has none)
+  Object.assign(g.rootSym.arab, { e: '\u0627\u0633' });
+  Object.assign(g.rootSym.arabext, { mi: '\u200e-\u200e', pl: '\u200e+\u200e', p: '\u066a' });
   // time zones: canonical ids, aliases (first name is canonical), metazone history
   const tz = rd('cldr-bcp47/bcp47/timezone.json').keyword.u.tz;
   g.tz = [];
@@ -349,9 +520,44 @@ function globalData() {
     }
   };
   walk(mz, '');
+  // country of each canonical zone (two letters per zone, in the order of "tz"), the primary zone of countries with several, and the
+  // zone each metazone's generic name stands for
+  const ctx = zoneCtx();
+  g.tzc = g.tz.map((z) => ctx.country[z] || '--').join('');
+  g.pz = rd('cldr-core/supplemental/primaryZones.json').supplemental.primaryZones;
+  g.mzg = {};
+  for (const e of rd('cldr-core/supplemental/metaZones.json').supplemental.metaZones.metazones) {
+    const m = e.mapZone;
+    if (ctx.keep.has(m._other)) (g.mzg[m._other] = g.mzg[m._other] || {})[m._territory] = m._type;
+  }
+  // calendars: start dates of the Japanese eras, and month lengths of the Islamic calendars that are not arithmetic (Umm al-Qura and
+  // the astronomical one, which also serves islamic-rgsa) for 1300..1600 AH. CLDR has no such tables: they are read off the ICU of
+  // the Node that runs this generator (ICU 77 with CLDR 47 for Node 22), because that is what the golden tests compare with.
+  const eras = rd('cldr-core/supplemental/calendarData.json').supplemental.calendarData.japanese.eras;
+  g.jpe = Object.keys(eras).sort((a, b) => a - b).map((k) => eras[k]._start.split('-').map(Number));
+  g.cal = { um: islamicTable('islamic-umalqura'), is: islamicTable('islamic') };
   // calendar names Intl.supportedValuesOf knows about, and collations
   g.currencies = Object.keys(rd('cldr-numbers-full/main/en/currencies.json').main.en.numbers.currencies);
   return g;
+}
+
+function islamicTable(cal) { // {s: day number of 1 Muharram 1300, m: 3 hex digits per year, bit 11 = month 1, set for a month of 30 days}
+  const f = new Intl.DateTimeFormat('en-u-ca-' + cal, { timeZone: 'UTC', year: 'numeric', month: 'numeric', day: 'numeric' });
+  const get = (day) => { const p = {}; for (const x of f.formatToParts(day * 86400000)) p[x.type] = +x.value; return [p.year, p.month, p.day]; };
+  let day = Math.floor(Date.UTC(1882, 10, 1) / 86400000);
+  for (;; day++) { const g = get(day); if (g[0] === 1300 && g[1] === 1 && g[2] === 1) break; if (day > 0) throw new Error('islamic table: no start'); }
+  const s = day, months = [];
+  let len = 0;
+  for (;;) {
+    const g = get(day);
+    if (g[0] === 1601) break;
+    if (g[2] === 1 && len) { months.push(len); len = 0; }
+    len++; day++;
+  }
+  months.push(len);
+  let m = '';
+  for (let y = 0; y < 301; y++) { let v = 0; for (let i = 0; i < 12; i++) v = v * 2 + (months[y * 12 + i] === 30 ? 1 : 0); m += v.toString(16).padStart(3, '0'); }
+  return { s, m };
 }
 
 function pluralData() {
@@ -397,3 +603,8 @@ for (const tag of Object.keys(LOCALES)) {
 const [gr, gg] = write('global', globalData());
 const [pr, pg] = write('plurals', pluralData());
 console.log(`locales: ${Object.keys(LOCALES).length}, raw ${totalRaw} B, gzip ${totalGz} B; global ${gr}/${gg}; plurals ${pr}/${pg}`);
+// the collation tables (ICU's root order, taken from the Node running this generator): coll.json.gz
+{
+  const [cr, cg] = require('./collgen')(OUT, { han: true });
+  console.log(`coll ${cr}/${cg}`);
+}

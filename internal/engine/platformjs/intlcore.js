@@ -16,13 +16,20 @@ function G() {
 }
 I.G = G;
 function isPlain(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
-function merge(a, b) {
+function merge(a, b, childFirst) {
   if (!isPlain(a) || !isPlain(b)) return b;
   var out = {}, k;
-  for (k in a) out[k] = a[k];
-  for (k in b) out[k] = k in a ? merge(a[k], b[k]) : b[k];
+  // null in the child removes what the parent has
+  if (childFirst) { // availableFormats: the order is ICU's (the locale's own patterns before its parent's), see tools/intlgen
+    for (k in b) if (b[k] !== null) out[k] = b[k];
+    for (k in a) if (!(k in b)) out[k] = a[k];
+    return out;
+  }
+  for (k in a) if (!(k in b) || b[k] !== null) out[k] = a[k];
+  for (k in b) if (b[k] !== null) out[k] = k in a ? merge(a[k], b[k], k === 'af') : b[k];
   return out;
 }
+I.merge = function (a, b) { return merge(a, b); };
 var dataCache = Object.create(null);
 function dataFor(tag) {
   if (dataCache[tag]) return dataCache[tag];
@@ -60,6 +67,18 @@ I.dataTag = function (tag) {
   return 'en';
 };
 I.localeData = function (tag) { return dataFor(I.dataTag(tag)); };
+// the default numbering system of a locale: its data's, unless CLDR gives the region another (ar-EG and ar-SA count in Arabic-Indic digits)
+I.defaultNu = function (tag, data) {
+  var t = G().nu;
+  if (t) {
+    var l = new Locale(tag), lang = l.language, cands = [];
+    if (l.script && l.region) cands.push(lang + '-' + l.script + '-' + l.region);
+    if (l.script) cands.push(lang + '-' + l.script);
+    if (l.region) cands.push(lang + '-' + l.region);
+    for (var i = 0; i < cands.length; i++) if (t[cands[i]]) return t[cands[i]];
+  }
+  return data.n.nu;
+};
 
 // ---- locale lists -------------------------------------------------------------------------------------------------------------
 function badLocale() { return new RangeError('Incorrect locale information provided'); }
@@ -107,7 +126,7 @@ I.supportedLocalesOf = function (locales, options) {
 // the options gave for them. Returns {locale, base, ext: {key: value}}.
 var EXT_VALID = {
   nu: function (v) { return !!G().digits[v]; },
-  ca: function (v) { return ['gregory', 'buddhist', 'persian', 'iso8601'].indexOf(v) >= 0; },
+  ca: function (v) { return ['gregory', 'gregorian', 'iso8601', 'buddhist', 'japanese', 'roc', 'persian', 'islamic', 'islamic-civil', 'islamicc', 'islamic-tbla', 'islamic-umalqura', 'islamic-rgsa', 'hebrew', 'indian', 'coptic', 'ethiopic', 'ethiopic-amete-alem', 'ethioaa'].indexOf(v) >= 0; },
   hc: function (v) { return ['h11', 'h12', 'h23', 'h24'].indexOf(v) >= 0; },
   co: function (v) { return ['default', 'phonebk', 'pinyin', 'stroke', 'trad', 'emoji', 'eor', 'search', 'standard', 'unihan', 'zhuyin'].indexOf(v) >= 0; },
   kn: function (v) { return v === '' || v === 'true' || v === 'false'; },
@@ -141,7 +160,9 @@ I.resolveLocale = function (requested, keys, optionValues) {
     kept.sort();
     locale += '-u' + kept.map(function (k) { return '-' + k + (ext[k] === '' || ext[k] === 'true' ? '' : '-' + ext[k]); }).join('');
   }
-  return { locale: locale, base: base, ext: ext };
+  var keptSet = {};
+  kept.forEach(function (k) { keptSet[k] = true; });
+  return { locale: locale, base: base, ext: ext, kept: keptSet }; // kept: the extension keys that came from the locale itself, not from an option
 };
 
 // ---- options -------------------------------------------------------------------------------------------------------------------------
@@ -362,8 +383,8 @@ I.plural = function (type, tag, ops) {
 };
 I.pluralRange = function (tag, a, b) {
   var l = new Locale(tag), r = PD().r, t = r[l.language + (l.region ? '-' + l.region : '')] || r[l.language];
-  if (!t) return b;
-  return t[a + ':' + b] || b;
+  if (!t) return 'other';
+  return t[a + ':' + b] || 'other';
 };
 I.supportedValues = function (key) {
   G();

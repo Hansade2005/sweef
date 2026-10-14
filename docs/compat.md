@@ -94,7 +94,7 @@ the API exists, behaves as specified in those tests and (for the media paths) wa
 | Autoplay policy, `getVideoPlaybackQuality`, Picture-in-Picture | YouTube | Implemented (autoplay needs user activation or muted playback; PiP is a stub window API). |
 | Notification, Push, Permissions, Clipboard (async, with a permission prompt) | WhatsApp Web | Implemented; no push service, so no push message ever arrives. |
 | `BroadcastChannel`, Web Locks, IndexedDB (cursor read-ahead), `CompressionStream`, `crypto.subtle`, `WebSocket` binary and large frames | WhatsApp Web | Implemented and tested. WhatsApp's own end-to-end crypto and noise-protocol handshake run in the site's JavaScript or WebAssembly and were not tried. |
-| `Intl` (NumberFormat, DateTimeFormat, PluralRules, RelativeTimeFormat, ListFormat, DisplayNames, Collator, Segmenter) | all three | Implemented for 73 locales on CLDR 47 data, compared with Node 22 in `internal/engine/intl_test.go`; limits in [web-platform.md](web-platform.md). |
+| `Intl` (NumberFormat, DateTimeFormat, PluralRules, RelativeTimeFormat, ListFormat, DisplayNames, Collator, Segmenter) | all three | Implemented for 73 locales on CLDR 47 data. Against Node 22 (ICU 77) on seeded matrices: NumberFormat 99.6%, DateTimeFormat 98.3% (ranges 98.1%, calendars 98.1%), Collator 99.85%; Thai, Lao, Khmer, Burmese, Chinese and Japanese word breaking, `chinese`/`dangi` calendars and non-English time zone city names are the gaps ([web-platform.md](web-platform.md)). |
 | Widevine / PlayReady DRM | YouTube (some titles), Meet (none) | Not available. Clear Key only. Sweef does not bypass DRM. |
 
 Not claims: that YouTube plays, that a Meet call connects, or that WhatsApp Web links a phone. Each site also runs

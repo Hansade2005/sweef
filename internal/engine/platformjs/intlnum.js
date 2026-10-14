@@ -35,7 +35,8 @@ function initialize(nf, locales, options) {
   var r = I.resolveLocale(requested, ['nu'], { nu: nu });
   var data = I.localeData(r.base);
   var s = { locale: r.locale, data: data, dataTag: I.dataTag(r.base) };
-  s.nu = r.ext.nu && I.digitsOf(r.ext.nu) ? r.ext.nu : data.n.nu;
+  s.nu = r.ext.nu && I.digitsOf(r.ext.nu) ? r.ext.nu : I.defaultNu(r.base, data);
+  if (data.n.fm && data.n.fm[s.nu]) { var nn = I.merge(data.n, data.n.fm[s.nu]); s.data = Object.assign({}, data, { n: nn }); } // the patterns of another numbering system
   s.style = I.getOption(options, 'style', 'string', ['decimal', 'percent', 'currency', 'unit'], 'decimal');
   var currency = options.currency;
   if (currency !== undefined) {
@@ -54,7 +55,7 @@ function initialize(nf, locales, options) {
   if (s.style === 'unit') { s.unit = unit; s.unitDisplay = ud; }
   s.notation = I.getOption(options, 'notation', 'string', ['standard', 'scientific', 'engineering', 'compact'], 'standard');
   var mnfdDefault, mxfdDefault;
-  if (s.style === 'currency' && s.notation === 'standard') { var cdg = currencyDigits(currency); mnfdDefault = mxfdDefault = cdg; }
+  if (s.style === 'currency') { var cdg = currencyDigits(currency); mnfdDefault = mxfdDefault = cdg; } // (V8 rounds scientific and engineering currencies to the currency's digits too)
   else { mnfdDefault = 0; mxfdDefault = s.style === 'percent' ? 0 : 3; }
   setDigitOptions(s, options, mnfdDefault, mxfdDefault, s.notation);
   var compactDisplay = I.getOption(options, 'compactDisplay', 'string', ['short', 'long'], 'short');
@@ -246,12 +247,40 @@ function currencyName(s, plural) {
   return cn[plural] || cn.other || rec[2];
 }
 // CLDR currencySpacing: between a currency symbol that does not end in a symbol or separator and a digit
+// where a sign goes: inside the unit / currency name text that surrounds the number, so after a leading one
+function frontIndex(s, out) {
+  var last = -1, i;
+  for (i = 0; i < out.length; i++) {
+    var p = out[i];
+    if (p.type === 'unit' || (p.type === 'currency' && s.currencyDisplay === 'name')) last = i;
+    else if (p.type !== 'literal') break;
+  }
+  i = last + 1;
+  while (last >= 0 && i < out.length && out[i].type === 'literal') i++;
+  return i;
+}
+// white space and bidi marks at the edge of a sign, symbol, unit or compact text are literals of their own
+var KEEP = { integer: 1, group: 1, decimal: 1, fraction: 1, nan: 1, infinity: 1, exponentInteger: 1 };
+var EDGE = /^([\s\u200e\u200f\u061c]*)([\s\S]*?)([\s\u200e\u200f\u061c]*)$/;
+function splitEdges(parts) {
+  var out = [];
+  parts.forEach(function (p) {
+    if (p.type === 'literal' || KEEP[p.type]) { out.push(p); return; }
+    var m = EDGE.exec(p.value);
+    if (!m[2]) { out.push({ type: 'literal', value: p.value }); return; }
+    if (m[1]) out.push({ type: 'literal', value: m[1] });
+    out.push({ type: p.type, value: m[2] });
+    if (m[3]) out.push({ type: 'literal', value: m[3] });
+  });
+  for (var i = out.length - 1; i > 0; i--) if (out[i].type === 'literal' && out[i - 1].type === 'literal') { out[i - 1].value += out[i].value; out.splice(i, 1); }
+  return out;
+}
 function spaceCurrency(s, out) {
   var cs = s.data.n.cs; if (!cs) return out;
   for (var i = 0; i < out.length; i++) {
     if (out[i].type !== 'currency' || s.currencyDisplay === 'name') continue;
     var v = out[i].value, nx = out[i + 1], pv = out[i - 1];
-    var isNum = function (p) { return p && (p.type === 'integer' || p.type === 'fraction'); };
+    var isNum = function (p) { return p && (p.type === 'integer' || p.type === 'fraction' || p.type === 'exponentInteger'); };
     if (isNum(nx) && /[^\p{S}\p{Z}]/u.test(v.slice(-1)) && /[\p{Nd}]/u.test(nx.value.charAt(0))) { out.splice(i + 1, 0, { type: 'literal', value: cs.b || '\u00a0' }); i++; }
     else if (isNum(pv) && /[^\p{S}\p{Z}]/u.test(v.charAt(0)) && /[\p{Nd}]/u.test(pv.value.slice(-1))) { out.splice(i, 0, { type: 'literal', value: cs.a || '\u00a0' }); i++; }
   }
@@ -260,12 +289,16 @@ function spaceCurrency(s, out) {
 function isAlpha(ch) { return !!ch && /[\p{L}\p{N}]/u.test(ch); }
 
 // the layout tokens of a format: prefix tokens, the number, suffix tokens (each token already resolved to parts)
+// true: the negative subpattern; 'soft' (a plus sign or an approximately sign): only when that subpattern has a minus sign to replace
+function wantNeg(neg, pat) { return !!(pat.neg && (neg === true || (neg === 'soft' && pat.neg.toks.some(function (t) { return t.t === 'mi'; })))); }
+function negMode(sign, approx) { return sign === 'minus' ? true : (sign === 'plus' || approx) ? 'soft' : false; }
+function approxSymbol(s) { return symbolsOf(s).ap || '~'; }
 function layout(s, neg, plural, symbols, compactPattern) {
   var d = s.data, n = d.n, signStr = null;
   var sign = neg ? 'minus' : 'plus';
   var tokens;
   if (s.style === 'unit' && s.unit === 'percent' && s.unitDisplay !== 'long') {
-    var pp = parsePattern(n.pct), uh = neg && pp.neg && s.signDisplay !== 'never' ? pp.neg : pp.pos;
+    var pp = parsePattern(n.pct), uh = wantNeg(neg, pp) && s.signDisplay !== 'never' ? pp.neg : pp.pos;
     return { toks: uh.toks, info: uh.info, signAt: 'pattern', usedNeg: false };
   }
   if (s.style === 'unit') {
@@ -284,7 +317,7 @@ function layout(s, neg, plural, symbols, compactPattern) {
     var acc = s.currencySign === 'accounting', txt = currencyText(s);
     src = acc ? n.acc : n.cur;
     if (s.currencyDisplay === 'name') src = n.dec;
-    var pat = parsePattern(src), useNeg = neg && s.signDisplay !== 'never' && pat.neg && !(s.currencySign !== 'accounting' && false);
+    var pat = parsePattern(src), useNeg = wantNeg(neg, pat) && s.signDisplay !== 'never';
     var half = useNeg ? pat.neg : pat.pos;
     var out = [];
     half.toks.forEach(function (t) {
@@ -293,20 +326,19 @@ function layout(s, neg, plural, symbols, compactPattern) {
     });
     if (s.currencyDisplay === 'name') {
       var nm = currencyName(s, plural), cup = (n.cup && (n.cup[plural] || n.cup.other)) || '{0} {1}';
-      var ps = cup.split('{0}'), rest = ps[1] || '', toks2 = [];
-      if (ps[0]) toks2.push({ t: 'l', v: ps[0] });
-      toks2.push({ t: 'n' });
-      var rp = rest.split('{1}');
-      if (rp[0]) toks2.push({ t: 'l', v: rp[0] });
-      toks2.push({ t: 'curname', v: nm });
-      if (rp[1]) toks2.push({ t: 'l', v: rp[1] });
+      var toks2 = [];
+      cup.split(/(\{0\}|\{1\})/).forEach(function (piece) {
+        if (piece === '{0}') toks2.push({ t: 'n' });
+        else if (piece === '{1}') toks2.push({ t: 'curname', v: nm });
+        else if (piece) toks2.push({ t: 'l', v: piece });
+      });
       return { toks: toks2, info: half.info, signAt: 'front', usedNeg: false };
     }
     return { toks: out, info: half.info, signAt: useNeg ? 'pattern' : 'front', usedNeg: useNeg };
   }
   else src = n.dec;
   if (compactPattern) src = compactPattern;
-  var pat2 = parsePattern(src), useNeg2 = neg && pat2.neg && s.signDisplay !== 'never';
+  var pat2 = parsePattern(src), useNeg2 = wantNeg(neg, pat2) && s.signDisplay !== 'never';
   var half2 = useNeg2 ? pat2.neg : pat2.pos;
   return { toks: half2.toks, info: half2.info, signAt: useNeg2 ? 'pattern' : 'front', usedNeg: useNeg2 };
 }
@@ -338,7 +370,7 @@ function resolveSign(s, neg, zero) {
     default: return neg ? 'minus' : null;
   }
 }
-function numberParts(s, x) {
+function numberParts(s, x, approx) {
   var symbols = symbolsOf(s), d = s.data, n = d.n;
   var neg = !!x.neg, parts = [];
   var special = x.nan ? 'nan' : x.inf ? 'inf' : null;
@@ -346,7 +378,7 @@ function numberParts(s, x) {
   var y = x;
   if (special) { if (x.nan) neg = false; }
   else {
-    if (s.style === 'percent') y = DEC.scale(y, 2);
+    if (s.style === 'percent') y = DEC.scale(y, 2 + (s.rangeScale || 0));
     if (s.notation === 'scientific' || s.notation === 'engineering') {
       var e0 = DEC.isZero(y) ? 0 : DEC.mag(y);
       if (s.notation === 'engineering') e0 = Math.floor(e0 / 3) * 3;
@@ -357,10 +389,17 @@ function numberParts(s, x) {
       var rd = roundDigits(s, y);
       dg = digitStrings(s, rd); zero = DEC.isZero(rd.x);
     }
-    plural = I.plural('cardinal', s.dataTag, I.operands(dg.i, dg.f, 0));
+    if (exp !== undefined) { // scientific: the digits shown, moved back by the exponent, with the exponent as the compact exponent
+      var si = dg.i, sf = dg.f;
+      if (exp > 0) { sf = sf + new Array(Math.max(0, exp - sf.length) + 1).join('0'); si = si + sf.slice(0, exp); sf = sf.slice(exp); }
+      else if (exp < 0) { si = new Array(Math.max(0, -exp - si.length) + 1).join('0') + si; sf = si.slice(si.length + exp) + sf; si = si.slice(0, si.length + exp) || '0'; }
+      plural = I.plural('cardinal', s.dataTag, I.operands(si.replace(/^0+(?=\d)/, ''), sf, exp));
+    }
+    else plural = I.plural('cardinal', s.dataTag, I.operands(dg.i, dg.f, 0));
   }
+  s.lastPlural = plural; if (s.forcePlural) plural = s.forcePlural;
   var sign = resolveSign(s, neg, zero && !special || (special === 'nan' && s.signDisplay === 'exceptZero'));
-  var lay = layout(s, neg && sign === 'minus', plural, symbols, null);
+  var lay = layout(s, negMode(sign, approx), plural, symbols, null);
   if (lay.noNumber) return [{ type: 'unit', value: lay.toks[0].v }];
   var pat = { info: lay.info || {}, forceGroup: false };
   // sign: pattern-provided negative forms carry their own minus; otherwise a sign goes in front of the first token
@@ -369,15 +408,16 @@ function numberParts(s, x) {
   var signPart = null;
   if (sign === 'minus') signPart = { type: 'minusSign', value: symbols.mi };
   else if (sign === 'plus') signPart = { type: 'plusSign', value: symbols.pl };
+  var apPart = approx ? { type: 'approximatelySign', value: approxSymbol(s) } : null;
   var signDone = false;
   var out = [];
   var numberAt = toks.findIndex(function (t) { return t.t === 'n'; });
   toks.forEach(function (t, idx) {
     switch (t.t) {
       case 'l': out.push({ type: 'literal', value: t.v }); break;
-      case 'mi': if (sign === 'minus') { out.push({ type: 'minusSign', value: symbols.mi }); signDone = true; } break;
+      case 'mi': if (lay.usedNeg && (signPart || apPart)) { if (apPart) out.push(apPart); if (signPart) out.push(signPart); signDone = true; } else if (sign === 'minus') { out.push({ type: 'minusSign', value: symbols.mi }); signDone = true; } break;
       case 'pl': if (sign === 'plus') { out.push({ type: 'plusSign', value: symbols.pl }); signDone = true; } break;
-      case 'p': out.push({ type: 'percentSign', value: symbols.p }); break;
+      case 'p': out.push({ type: s.style === 'unit' ? 'unit' : 'percentSign', value: symbols.p }); break;
       case 'm': out.push({ type: 'literal', value: symbols.pm }); break;
       case 'cur': out.push({ type: 'currency', value: currencyText(s) }); break;
       case 'curname': out.push({ type: 'currency', value: t.v }); break;
@@ -389,20 +429,21 @@ function numberParts(s, x) {
         break;
     }
   });
-  if (!signDone && signPart && !(sign === 'minus' && lay.usedNeg)) out.splice(0, 0, signPart);
-  return spaceCurrency(s, out);
+  if (!signDone) { var fi = frontIndex(s, out); if (signPart && !(sign === 'minus' && lay.usedNeg)) out.splice(fi, 0, signPart); if (apPart) out.splice(fi, 0, apPart); }
+  return splitEdges(spaceCurrency(s, out));
 }
 // For compact notation the whole layout is built from the compact pattern; handle it in one place.
-function formatToPartsInternal(s, v) {
+function formatToPartsInternal(s, v, approx) {
   var x = DEC.from(v);
-  if (s.notation === 'compact') return numberPartsCompact(s, x, symbolsOf(s), s.data.n);
-  return numberParts(s, x);
+  if (s.notation === 'compact') return numberPartsCompact(s, x, symbolsOf(s), s.data.n, approx);
+  return numberParts(s, x, approx);
 }
-function numberPartsCompact(s, x, symbols, n) {
+function numberPartsCompact(s, x, symbols, n, approx) {
   var special = x.nan ? 'nan' : x.inf ? 'inf' : null;
   var y = s.style === 'percent' ? DEC.scale(x, 2) : x;
   var neg = x.nan ? false : !!x.neg;
-  var table = s.compactDisplay === 'long' ? n.cpd.l : (s.style === 'currency' && n.cpc ? n.cpc : n.cpd.s);
+  var curShort = s.style === 'currency' && s.currencyDisplay !== 'name' && n.cpc;
+  var table = curShort ? n.cpc : s.compactDisplay === 'long' ? n.cpd.l : n.cpd.s;
   var res = null, dg = null, pat = null, zero = false, exp = 0;
   if (!special) {
     var keys = Object.keys(table).map(Number).sort(function (a, b) { return a - b; });
@@ -411,11 +452,12 @@ function numberPartsCompact(s, x, symbols, n) {
       for (var k = 0; k < keys.length; k++) if (Math.round(Math.log10(keys[k])) <= m) best = keys[k];
       if (best === null) { var r0 = roundDigits(s, y); return { pat: null, r: r0, shift: 0, keyExp: 0 }; }
       var ent = table[best], keyExp = Math.round(Math.log10(best));
-      var zeros = (ent.other.match(/0/g) || []).length, shift = keyExp - (zeros - 1);
-      if (/^¤?\s*0+$/.test(ent.other) && /^0+$/.test(ent.other.replace(/[¤\s]/g, ''))) { var r1 = roundDigits(s, y); return { pat: null, r: r1, shift: 0, keyExp: 0 }; }
+      var posOf = function (t) { return t.split(';')[0]; };
+      var zeros = (posOf(ent.other).match(/0/g) || []).length, shift = keyExp - (zeros - 1);
+      if (/^¤?\s*0+$/.test(posOf(ent.other)) && /^0+$/.test(posOf(ent.other).replace(/[¤\s]/g, ''))) { var r1 = roundDigits(s, y); return { pat: null, r: r1, shift: 0, keyExp: 0 }; }
       var r = roundDigits(s, DEC.scale(y, -shift)), shown = digitStrings(s, r);
       var cat = I.plural('cardinal', s.dataTag, I.operands(shown.i, shown.f, keyExp));
-      var p = ent[cat] || ent.other, z2 = (p.match(/0/g) || []).length;
+      var p = ent[cat] || ent.other, z2 = (posOf(p).match(/0/g) || []).length;
       if (z2 !== zeros) { shift = keyExp - (z2 - 1); r = roundDigits(s, DEC.scale(y, -shift)); shown = digitStrings(s, r); cat = I.plural('cardinal', s.dataTag, I.operands(shown.i, shown.f, keyExp)); p = ent[cat] || ent.other; }
       return { pat: p, r: r, shift: shift, keyExp: keyExp };
     };
@@ -427,38 +469,53 @@ function numberPartsCompact(s, x, symbols, n) {
   }
   var sign = resolveSign(s, neg, zero && !special || (special === 'nan' && s.signDisplay === 'exceptZero'));
   var plural = special ? 'other' : I.plural('cardinal', s.dataTag, I.operands(dg.i, dg.f, exp));
-  var whole = pat && s.style === 'currency' && s.currencyDisplay !== 'name' && s.compactDisplay === 'short' && n.cpc;
-  var lay = whole ? { toks: parsePattern(pat).pos.toks, info: parsePattern(n.dec).pos.info, usedNeg: false } : layout(s, neg && sign === 'minus', plural, symbols, null);
-  var out = [], signDone = false;
+  s.lastPlural = plural; if (s.forcePlural) plural = s.forcePlural;
+  var whole = pat && s.style === 'currency' && s.currencyDisplay !== 'name' && n.cpc;
+  var pctUnit = null;
+  if (s.style === 'percent') { // compact percent is written with the unit "percent" pattern ("{0} %", "{0} pct."), not the percent format
+    var ut = unitTemplate({ data: s.data, unit: 'percent', unitDisplay: 'short' }, plural).split('{0}');
+    var ptoks = [];
+    if (ut[0]) ptoks.push({ t: 'unit', v: ut[0] });
+    ptoks.push({ t: 'n' });
+    if (ut[1]) ptoks.push({ t: 'unit', v: ut[1] });
+    pctUnit = { toks: ptoks, info: parsePattern(n.dec).pos.info, usedNeg: false };
+  }
+  var lay = pctUnit ? pctUnit : whole ? { toks: parsePattern(pat).pos.toks, info: parsePattern(n.dec).pos.info, usedNeg: false } : layout(s, negMode(sign, approx), plural, symbols, null);
+  var out = [], signDone = false, numSeen = false;
   var signPart = sign === 'minus' ? { type: 'minusSign', value: symbols.mi } : sign === 'plus' ? { type: 'plusSign', value: symbols.pl } : null;
-  var hasPatternSign = lay.toks.some(function (t) { return t.t === 'mi'; });
+  var apPart = approx ? { type: 'approximatelySign', value: approxSymbol(s) } : null;
+  // a compact pattern may carry its own negative form ("elfu -0"), which then places the sign
+  var cpat = pat && !whole ? parsePattern(pat) : null, chalf = cpat ? (wantNeg(negMode(sign, approx), cpat) ? cpat.neg : cpat.pos) : null;
+  var cSign = !!(chalf && chalf.toks.some(function (t) { return t.t === 'mi'; }));
   lay.toks.forEach(function (t) {
     switch (t.t) {
-      case 'l': out.push({ type: 'literal', value: t.v }); break;
-      case 'mi': if (sign === 'minus') { out.push({ type: 'minusSign', value: symbols.mi }); signDone = true; } break;
+      case 'l': out.push({ type: whole && /[^\s\u200e\u200f\u061c]/.test(t.v) ? 'compact' : 'literal', value: t.v }); break;
+      case 'mi': if (cSign) break; if (lay.usedNeg && (signPart || apPart)) { if (apPart) out.push(apPart); if (signPart) out.push(signPart); signDone = true; } else if (sign === 'minus') { out.push({ type: 'minusSign', value: symbols.mi }); signDone = true; } break;
       case 'pl': if (sign === 'plus') { out.push({ type: 'plusSign', value: symbols.pl }); signDone = true; } break;
-      case 'p': out.push({ type: 'percentSign', value: symbols.p }); break;
+      case 'p': out.push({ type: s.style === 'unit' ? 'unit' : 'percentSign', value: symbols.p }); break;
       case 'cur': case 'c': out.push({ type: 'currency', value: currencyText(s) }); break;
       case 'curname': out.push({ type: 'currency', value: t.v }); break;
       case 'unit': out.push({ type: 'unit', value: t.v }); break;
       case 'n':
+        numSeen = true;
         if (special === 'nan') out.push({ type: 'nan', value: symbols.nan });
         else if (special === 'inf') out.push({ type: 'infinity', value: symbols.inf });
         else if (pat && !whole) {
           // currency compact patterns carry the symbol: "¤0K"; the symbol is already placed by the layout, so only the
           // number and the text after it are used here
-          var cp = parsePattern(pat).pos, seen = false;
+          var cp = chalf, seen = false;
           cp.toks.forEach(function (ct) {
+            if (ct.t === 'mi') { if (apPart) out.push(apPart); if (signPart) out.push(signPart); signDone = true; return; }
             if (ct.t === 'n') { pushNumber(s, out, dg, { info: parsePattern(n.dec).pos.info, forceGroup: true }, symbols); seen = true; }
-            else if (ct.t === 'l') out.push({ type: !seen || /^[\s\u200e\u200f\u061c]+$/.test(ct.v) ? 'literal' : 'compact', value: ct.v });
+            else if (ct.t === 'l') out.push({ type: /^[\s\u200e\u200f\u061c]+$/.test(ct.v) ? 'literal' : 'compact', value: ct.v });
           });
         }
         else pushNumber(s, out, dg, { info: lay.info && lay.info.group1 ? lay.info : parsePattern(n.dec).pos.info, forceGroup: true }, symbols);
         break;
     }
   });
-  if (!signDone && signPart && !(sign === 'minus' && lay.usedNeg)) out.unshift(signPart);
-  return spaceCurrency(s, out);
+  if (!signDone) { var fi2 = frontIndex(s, out); if (signPart && !(sign === 'minus' && lay.usedNeg)) out.splice(fi2, 0, signPart); if (apPart) out.splice(fi2, 0, apPart); }
+  return splitEdges(spaceCurrency(s, out));
 }
 
 // ---- the public class --------------------------------------------------------------------------------------------------------------
@@ -481,23 +538,71 @@ H.attrs(NumberFormat.prototype, {
 });
 H.define(NumberFormat.prototype, 'formatToParts', function formatToParts(v) { return formatToPartsInternal(slot(this, 'formatToParts'), v); });
 function rangeParts(s, a, b) {
-  var x = DEC.from(a), y = DEC.from(b);
+  var a0 = a, x = DEC.from(a), y = DEC.from(b);
   if (x.nan || y.nan) throw new RangeError('Invalid number');
-  var pa = formatToPartsInternal(s, a), pb = formatToPartsInternal(s, b);
+  var pa = formatToPartsInternal(s, a), la = s.lastPlural, pb = formatToPartsInternal(s, b), lb = s.lastPlural;
+  if (!(x.inf || y.inf)) { // both ends are written with the plural form of the range
+    s.forcePlural = I.pluralRange(s.dataTag, la, lb);
+    try { pa = formatToPartsInternal(s, a); pb = formatToPartsInternal(s, b); } finally { s.forcePlural = null; s.rangeScale = 0; }
+  }
   var sa = joined(pa), sb = joined(pb), mp = s.data.n.mp || { ap: '~{0}', r: '{0}–{1}' };
   var out = [];
   function tag(parts, src) { return parts.map(function (p) { return { type: p.type, value: p.value, source: src }; }); }
   if (sa === sb) {
-    var tpl = mp.ap || '~{0}', i = tpl.indexOf('{0}');
-    if (i > 0) out.push({ type: 'approximatelySign', value: tpl.slice(0, i), source: 'shared' });
-    out = out.concat(tag(pa, 'shared'));
-    if (i === 0 && tpl.length > 3) out.push({ type: 'literal', value: tpl.slice(3), source: 'shared' });
-    return out;
+    // V8 scales a percent twice when an equal-looking range in scientific notation is shown with an approximately sign
+    if (s.style === 'percent' && (s.notation === 'scientific' || s.notation === 'engineering')) s.rangeScale = 2;
+    try { return tag(formatToPartsInternal(s, a0, true), 'shared'); } finally { s.rangeScale = 0; }
   }
   var rt = mp.r || '{0}–{1}', i0 = rt.indexOf('{0}'), i1 = rt.indexOf('{1}'), mid = rt.slice(i0 + 3, i1);
-  // collapse a shared currency symbol / unit the way ICU does: "$3 – $5" keeps both unless the style repeats nothing
-  return tag(pa, 'startRange').concat([{ type: 'literal', value: mid, source: 'shared' }], tag(pb, 'endRange'));
+  // ICU's range collapsing: each formatted number is split into the outer modifier (unit / currency name), the middle one (sign, currency
+  // symbol, percent, compact text) and the number itself; modifiers both ends share are written once around the range. The middle one is
+  // only collapsed when it is longer than one code point, and the number's own exponent never is.
+  var A = splitMods(pa, s), B = splitMods(pb, s);
+  var cO = sameMod(A.op, B.op) && sameMod(A.os, B.os), cM = false;
+  if (cO) cM = sameMod(A.mp, B.mp) && sameMod(A.ms, B.ms) && modLen(A.mp) + modLen(A.ms) > 1;
+  var repeat = A.exp || B.exp || (!cO && (A.op.length + A.os.length) > 0) || (!cM && (modLen(A.mp) + modLen(A.ms)) > 0);
+  var sepText = mid;
+  if (repeat) {
+    var last = A.core.length ? A.core[A.core.length - 1].value : '';
+    if (!/\s$/.test(last) && !/^\s/.test(sepText)) sepText = ' ' + sepText;
+    if (!/^\s/.test(B.core.length ? B.core[0].value : '') && !/\s$/.test(sepText)) sepText += ' ';
+  }
+  var res = [];
+  function shared(ps) { ps.forEach(function (p) { res.push({ type: p.type, value: p.value, source: 'shared' }); }); }
+  if (cO) shared(A.op);
+  if (cM) shared(A.mp);
+  if (!cO) res = res.concat(tag(A.op, 'startRange'));
+  if (!cM) res = res.concat(tag(A.mp, 'startRange'));
+  res = res.concat(tag(A.core, 'startRange'));
+  if (!cM) res = res.concat(tag(A.ms, 'startRange'));
+  if (!cO) res = res.concat(tag(A.os, 'startRange'));
+  res.push({ type: 'literal', value: sepText, source: 'shared' });
+  if (!cO) res = res.concat(tag(B.op, 'endRange'));
+  if (!cM) res = res.concat(tag(B.mp, 'endRange'));
+  res = res.concat(tag(B.core, 'endRange'));
+  if (!cM) res = res.concat(tag(B.ms, 'endRange'));
+  if (!cO) res = res.concat(tag(B.os, 'endRange'));
+  if (cM) shared(A.ms);
+  if (cO) shared(A.os);
+  return res;
 }
+var CORE = { integer: 1, group: 1, decimal: 1, fraction: 1, nan: 1, infinity: 1, exponentSeparator: 1, exponentMinusSign: 1, exponentInteger: 1 };
+function splitMods(parts, s) { // {op, mp, core, exp, ms, os}: outer/middle prefix, the number, outer/middle suffix
+  var f = -1, l = -1, i;
+  for (i = 0; i < parts.length; i++) if (CORE[parts[i].type]) { if (f < 0) f = i; l = i; }
+  if (f < 0) return { op: [], mp: parts.slice(), core: [], exp: false, ms: [], os: [] };
+  var pre = parts.slice(0, f), suf = parts.slice(l + 1), exp = false;
+  for (i = f; i <= l; i++) if (parts[i].type === 'exponentSeparator') exp = true;
+  var isOuter = function (p) { return (p.type === 'unit' && !(s.style === 'unit' && s.unit === 'percent')) || (p.type === 'currency' && s.style === 'currency' && s.currencyDisplay === 'name'); };
+  var op = [], mp = pre, os = [], ms = suf, u;
+  for (u = pre.length - 1; u >= 0 && !isOuter(pre[u]); u--);
+  if (u >= 0) { u++; while (u < pre.length && pre[u].type === 'literal') u++; op = pre.slice(0, u); mp = pre.slice(u); }
+  for (u = 0; u < suf.length && !isOuter(suf[u]); u++);
+  if (u < suf.length) { while (u > 0 && suf[u - 1].type === 'literal') u--; ms = suf.slice(0, u); os = suf.slice(u); }
+  return { op: op, mp: mp, core: parts.slice(f, l + 1), exp: exp, ms: ms, os: os };
+}
+function sameMod(x, y) { return x.length === y.length && x.every(function (p, i) { return p.type === y[i].type && p.value === y[i].value; }); }
+function modLen(m) { var n = 0; m.forEach(function (p) { n += Array.from(p.value).length; }); return n; }
 H.define(NumberFormat.prototype, 'formatRange', function formatRange(a, b) {
   var s = slot(this, 'formatRange');
   if (arguments.length < 2 || a === undefined || b === undefined) throw new TypeError('start or end is undefined');
@@ -511,7 +616,7 @@ H.define(NumberFormat.prototype, 'formatRangeToParts', function formatRangeToPar
 H.define(NumberFormat.prototype, 'resolvedOptions', function resolvedOptions() {
   var s = slot(this, 'resolvedOptions'), o = {};
   o.locale = s.locale; o.numberingSystem = s.nu; o.style = s.style;
-  if (s.style === 'currency') { o.currency = s.currency; o.currencyDisplay = s.currencyDisplay; o.currencySign = s.currencySign; }
+  if (s.style === 'currency') { o.currency = s.currency; o.currencyDisplay = s.currencyDisplay; o.currencySign = s.signDisplay === 'never' ? 'standard' : s.currencySign; }
   if (s.style === 'unit') { o.unit = s.unit; o.unitDisplay = s.unitDisplay; }
   o.minimumIntegerDigits = s.minInt;
   if (s.minFD !== undefined) { o.minimumFractionDigits = s.minFD; o.maximumFractionDigits = s.maxFD; }
@@ -519,7 +624,7 @@ H.define(NumberFormat.prototype, 'resolvedOptions', function resolvedOptions() {
   o.useGrouping = s.useGrouping; o.notation = s.notation;
   if (s.notation === 'compact') o.compactDisplay = s.compactDisplay;
   o.signDisplay = s.signDisplay; o.roundingIncrement = s.roundingIncrement; o.roundingMode = s.roundingMode;
-  o.roundingPriority = s.roundingPriority; o.trailingZeroDisplay = s.trailingZeroDisplay;
+  o.roundingPriority = s.trailingZeroDisplay === 'stripIfInteger' ? 'auto' : s.roundingPriority; /* V8 reports auto whenever trailing zeros are stripped */ o.trailingZeroDisplay = s.trailingZeroDisplay;
   return o;
 });
 Object.defineProperty(NumberFormat.prototype, Symbol.toStringTag, { value: 'Intl.NumberFormat', configurable: true });

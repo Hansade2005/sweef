@@ -1,51 +1,15 @@
-// Intl.DateTimeFormat on CLDR data: options become a skeleton, the skeleton is matched against the locale's
-// available formats (the algorithm of ICU's DateTimePatternGenerator, simplified), and the chosen pattern is
-// rendered field by field. Time zones come from the embedded IANA database (host intlZoneOffset); calendars:
-// gregory, buddhist (th) and persian (fa).
+// Intl.DateTimeFormat on CLDR data: the options become a skeleton, platformjs/intlpat.js (a port of ICU's
+// DateTimePatternGenerator) turns it into a pattern, and the pattern is rendered field by field. Time zones come from the
+// embedded IANA database (host intlZoneOffset), calendar arithmetic from platformjs/intlcal.js.
 H.load('intlcore');
-var I = H.intl, Locale = g.Intl.Locale, sw = g.__sw;
+H.load('intlcal');
+H.load('intlpat');
+var P = H.pat;
+var I = H.intl, C = H.cal, Locale = g.Intl.Locale, sw = g.__sw;
 var SLOT = Symbol('DateTimeFormat');
-
-// ---- calendar arithmetic ---------------------------------------------------------------------------------------------------------------
 function div(a, b) { return Math.floor(a / b); }
 function mod(a, b) { return a - div(a, b) * b; }
-function civilFromDays(z) {
-  z += 719468;
-  var era = div(z, 146097), doe = z - era * 146097, yoe = div(doe - div(doe, 1460) + div(doe, 36524) - div(doe, 146096), 365),
-    y = yoe + era * 400, doy = doe - (365 * yoe + div(yoe, 4) - div(yoe, 100)), mp = div(5 * doy + 2, 153), d = doy - div(153 * mp + 2, 5) + 1, m = mp < 10 ? mp + 3 : mp - 9;
-  return [m <= 2 ? y + 1 : y, m, d];
-}
-function daysFromCivil(y, m, d) {
-  y -= m <= 2 ? 1 : 0;
-  var era = div(y, 400), yoe = y - era * 400, doy = div(153 * (m + (m > 2 ? -3 : 9)) + 2, 5) + d - 1, doe = yoe * 365 + div(yoe, 4) - div(yoe, 100) + doy;
-  return era * 146097 + doe - 719468;
-}
-// Jalali (persian) calendar, after jalaali-js
-var JBREAKS = [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178];
-function jalCal(jy) {
-  var bl = JBREAKS.length, gy = jy + 621, leapJ = -14, jp = JBREAKS[0], jm, jump = 0, leap, leapG, march, n, i;
-  for (i = 1; i < bl; i++) { jm = JBREAKS[i]; jump = jm - jp; if (jy < jm) break; leapJ += div(jump, 33) * 8 + div(mod(jump, 33), 4); jp = jm; }
-  n = jy - jp;
-  leapJ += div(n, 33) * 8 + div(mod(n, 33) + 3, 4);
-  if (mod(jump, 33) === 4 && jump - n === 4) leapJ += 1;
-  leapG = div(gy, 4) - div((div(gy, 100) + 1) * 3, 4) - 150;
-  march = 20 + leapJ - leapG;
-  if (jump - n < 6) n = n - jump + div(jump + 4, 33) * 33;
-  leap = mod(mod(n + 1, 33) - 1, 4);
-  if (leap === -1) leap = 4;
-  return { leap: leap, gy: gy, march: march };
-}
-function g2d(gy, gm, gd) {
-  var d = div((gy + div(gm - 8, 6) + 100100) * 1461, 4) + div(153 * mod(gm + 9, 12) + 2, 5) + gd - 34840408;
-  return d - div(div(gy + 100100 + div(gm - 8, 6), 100) * 3, 4) + 752;
-}
-function persianFromDays(days, gy) {
-  var jdn = days + 2440588, jy = gy - 621, r = jalCal(jy), jdn1f = g2d(r.gy, 3, r.march), k = jdn - jdn1f, jm, jd;
-  if (k >= 0) { if (k <= 185) return [jy, 1 + div(k, 31), mod(k, 31) + 1]; k -= 186; }
-  else { jy -= 1; k += 179; if (r.leap === 1) k += 1; }
-  jm = 7 + div(k, 30); jd = mod(k, 30) + 1;
-  return [jy, jm, jd];
-}
+var civilFromDays = C.civil, daysFromCivil = C.daysFromCivil;
 
 // ---- time zones -----------------------------------------------------------------------------------------------------------------------------
 var tzLower = null, localZone = null;
@@ -78,114 +42,46 @@ function zoneOffset(zone, ms) { // seconds east of UTC, and whether daylight sav
 // ---- fields of an instant -------------------------------------------------------------------------------------------------------------
 function fieldsOf(ms, zone, cal) {
   var off = zoneOffset(zone, ms), local = ms + off[0] * 1000, days = div(local, 86400000), rest = local - days * 86400000;
-  var c = civilFromDays(days), f = { y: c[0], m: c[1], d: c[2], wd: mod(days + 4, 7), h: div(rest, 3600000), mi: div(rest % 3600000, 60000), s: div(rest % 60000, 1000), ms: rest % 1000, off: off[0], dst: off[1], days: days, ms0: ms };
-  f.gy = c[0]; f.era = c[0] > 0 ? 1 : 0; f.ey = c[0] > 0 ? c[0] : 1 - c[0];
-  if (cal === 'buddhist') { f.era = 0; f.ey = c[0] + 543; f.y = f.ey; }
-  else if (cal === 'persian') { var p = persianFromDays(days, c[0]); f.era = 0; f.ey = p[0]; f.y = p[0]; f.m = p[1]; f.d = p[2]; }
+  var f = C.fields(days, cal);
+  f.wd = mod(days + 4, 7); f.h = div(rest, 3600000); f.mi = div(rest % 3600000, 60000); f.s = div(rest % 60000, 1000); f.ms = rest % 1000;
+  f.off = off[0]; f.dst = off[1]; f.days = days; f.ms0 = ms;
+  if (f.gy === undefined) f.gy = civilFromDays(days)[0];
   return f;
 }
 
 // ---- patterns ------------------------------------------------------------------------------------------------------------------------------------
-var patCache = Object.create(null);
-function parsePattern(p) { // [{lit: text} | {l: letter, n: count}]
-  if (patCache[p]) return patCache[p];
-  var out = [], i = 0, lit = '';
-  // Chromium shows an ordinary space where CLDR has U+202F (narrow no-break space) in date and time patterns
-  function flush() { if (lit) { out.push({ lit: lit.replace(/\u202f/g, ' ') }); lit = ''; } }
-  while (i < p.length) {
-    var ch = p[i];
-    if (ch === "'") {
-      if (p[i + 1] === "'") { lit += "'"; i += 2; continue; }
-      var j = i + 1, q = '';
-      while (j < p.length) { if (p[j] === "'") { if (p[j + 1] === "'") { q += "'"; j += 2; continue; } break; } q += p[j]; j++; }
-      lit += q; i = j + 1; continue;
-    }
-    if (/[A-Za-z]/.test(ch)) {
-      flush();
-      var k = i; while (p[k] === ch) k++;
-      out.push({ l: ch, n: k - i }); i = k; continue;
-    }
-    lit += ch; i++;
-  }
-  flush();
-  return (patCache[p] = out);
-}
-function patternString(toks) {
-  return toks.map(function (t) {
-    if (t.lit !== undefined) return /[A-Za-z]/.test(t.lit) ? "'" + t.lit.replace(/'/g, "''") + "'" : t.lit.replace(/'/g, "''");
-    return new Array(t.n + 1).join(t.l);
-  }).join('');
-}
-// skeleton field classes
+var parsePattern = P.parse, patternString = P.str;
+// the class of each pattern letter
 var CLASS = { G: 'G', y: 'y', Y: 'y', u: 'y', U: 'y', r: 'y', Q: 'Q', q: 'Q', M: 'M', L: 'M', w: 'w', W: 'W', E: 'E', e: 'E', c: 'E', d: 'd', D: 'D', F: 'F', a: 'a', b: 'a', B: 'B', h: 'h', H: 'h', K: 'h', k: 'h', j: 'h', J: 'h', m: 'm', s: 's', S: 'S', A: 'A', z: 'z', Z: 'z', O: 'z', v: 'z', V: 'z', x: 'z', X: 'z' };
-var DATE_CLASSES = 'GyQMwWEdDF', TIME_CLASSES = 'aBhmsSA';
-function skelOf(key) { // parse an availableFormats key: {class: [letter, count]}
-  var out = {}, i = 0;
-  while (i < key.length) {
-    var ch = key[i], k = i; while (key[k] === ch) k++;
-    var c = CLASS[ch];
-    if (c && !(c === 'a' && out[c])) out[c] = [ch, k - i];
-    i = k;
-  }
-  return out;
-}
-var skelCache = Object.create(null);
-function skelCached(key) { return skelCache[key] || (skelCache[key] = skelOf(key)); }
-function fieldDistance(c, a, b) { // a: requested [letter,count], b: candidate [letter,count]
-  var d = 0, ta = a[1] >= 3 || c === 'E' && false, tb = b[1] >= 3;
-  if (c === 'M' || c === 'Q') { var ta2 = a[1] >= 3, tb2 = b[1] >= 3; if (ta2 !== tb2) d += 0x100; d += Math.abs(a[1] - b[1]); }
-  else if (c === 'E' || c === 'G') { d += Math.abs((a[1] >= 4 ? a[1] : 3) - (b[1] >= 4 ? b[1] : 3)); }
-  else d += Math.abs(a[1] - b[1]);
-  if (c === 'h' && a[0] !== b[0]) d += 0x10;
-  return d;
-}
-function distance(req, cand) {
-  var d = 0, c;
-  for (c in req) { if (!cand[c]) d += 0x1000; else d += fieldDistance(c, req[c], cand[c]); }
-  for (c in cand) if (!req[c]) d += 0x10000;
-  return d;
-}
-// ICU's adjustFieldTypes: the matched pattern's field widths follow the request, except that a width the matched
-// skeleton already had stays as the pattern wrote it, and numeric/text mismatches between pattern and skeleton are kept.
-function isNumericField(letter, n) {
-  switch (CLASS[letter]) {
-    case 'y': case 'd': case 'D': case 'F': case 'w': case 'W': case 'h': case 'm': case 's': case 'S': case 'A': return true;
-    case 'M': case 'Q': return n <= 2;
-    case 'E': return (letter === 'e' || letter === 'c') && n <= 2;
-  }
-  return false;
-}
-function adjustPattern(toks, req, cand) {
-  return toks.map(function (t) {
-    if (t.lit !== undefined) return t;
-    var c = CLASS[t.l], r = req[c];
-    if (!r) return t;
-    var n = t.n, l = t.l;
-    if (c === 'h') { l = r[0] === 'j' ? l : r[0]; if (r[1] === 1 && req.m && req.m[1] === 2 && !req.s) return { l: l, n: 1 }; } // numeric hour next to a 2-digit minute stays short (ICU/V8 quirk)
-    if (c === 'S') return { l: 'S', n: r[1] };
-    if (c === 'a' || c === 'z') return t;
-    var sk = cand && cand[c];
-    var skLen = sk ? sk[1] : r[1];
-    var patNum = isNumericField(t.l, t.n), skNum = sk ? isNumericField(sk[0], sk[1]) : patNum;
-    if (!(skLen === r[1] || patNum !== skNum)) n = r[1];
-    return { l: l, n: n };
-  });
-}
-function tokenFor(letter, count) { return { l: letter, n: count }; }
 
 // ---- locale data accessors ----------------------------------------------------------------------------------------------------------------
-var FALLBACK_ERAS = { buddhist: { w: { 0: 'BE' }, a: { 0: 'BE' }, n: { 0: 'BE' } }, persian: { w: { 0: 'AP' }, a: { 0: 'AP' }, n: { 0: 'AP' } } };
+// The data of a calendar: the locale's Gregorian data with what the calendar changes. Calendars are shipped for the locales that
+// use them (and English); a locale without data for one shows the era names and patterns of English next to its own month names.
+var CAL_KEY = { 'islamic-civil': 'islamic', 'islamic-tbla': 'islamic', 'islamic-umalqura': 'islamic', 'islamic-rgsa': 'islamic', ethioaa: 'ethiopic-amete-alem' };
+var GREGORIAN_BASED = { buddhist: 1, japanese: 1, roc: 1 };
 function calData(s) {
-  var cd = s.data.c[s.calendar];
-  if (cd) return cd;
   if (s.calData2) return s.calData2;
-  var g0 = s.data.c.gregory, c = Object.assign({}, g0);
-  if (FALLBACK_ERAS[s.calendar]) c.er = FALLBACK_ERAS[s.calendar];
-  // other calendars show their era next to the year
-  var addEra = function (p) { return /y/.test(p) && !/G/.test(p) ? p + ' G' : p; };
-  c.df = {}; Object.keys(g0.df).forEach(function (k) { c.df[k] = addEra(g0.df[k]); });
-  c.af = {}; Object.keys(g0.af).forEach(function (k) { c.af[k] = /y/.test(k) && !/G/.test(k) && /^[yMdEQ]+$/.test(k) ? addEra(g0.af[k]) : g0.af[k]; });
-  return (s.calData2 = c);
+  var key = CAL_KEY[s.calendar] || s.calendar, g0 = s.data.c.gregory;
+  if (key === 'gregory' || key === 'iso8601') return (s.calData2 = g0);
+  var own = s.data.c[key], cached = own && own.$m;
+  if (own && g0 === s.data.c.gregory) {
+    var m = own.$merged;
+    if (!m) { m = I.merge(g0, own); if (own.af) m.af = own.af; if (own.iv) m.iv = own.iv; Object.defineProperty(own, '$merged', { value: m }); }
+    return (s.calData2 = m);
+  }
+  var en = I.localeData('en'), eg = en.c.gregory, eo = en.c[key];
+  if (!eo) return (s.calData2 = g0);
+  if (GREGORIAN_BASED[key]) { // the locale's own month and day names, English eras, and an era next to the year
+    var c = Object.assign({}, g0);
+    c.er = eo.er || (eo.er = {});
+    var addEra = function (p) { return /y/.test(p) && !/G/.test(p) ? p + ' G' : p; };
+    c.df = {}; Object.keys(g0.df).forEach(function (k) { c.df[k] = addEra(g0.df[k]); });
+    c.af = {}; Object.keys(g0.af).forEach(function (k) { c.af[k] = /y/.test(k) && !/G/.test(k) && /^[yMdEQ]+$/.test(k) ? addEra(g0.af[k]) : g0.af[k]; });
+    return (s.calData2 = c);
+  }
+  var m2 = eo.$merged;
+  if (!m2) { m2 = I.merge(eg, eo); if (eo.af) m2.af = eo.af; if (eo.iv) m2.iv = eo.iv; Object.defineProperty(eo, '$merged', { value: m2 }); }
+  return (s.calData2 = m2);
 }
 function hourCycleDefault(tag, dataTag) {
   var G = I.G(), l = new Locale(tag), reg = l.region || new Locale(tag).maximize().region, lang = l.language, h = G.hc;
@@ -214,10 +110,13 @@ function initialize(dtf, locales, options, required, defaults) {
   var s = { locale: r.locale, base: r.base, data: data, dataTag: dataTag };
   // calendar
   var cal = r.ext.ca;
-  if (cal === 'iso8601') cal = 'gregory';
-  if (!cal || ['gregory', 'buddhist', 'persian'].indexOf(cal) < 0) cal = defaultCalendar(r.base);
+  if (cal === 'gregorian') cal = 'gregory';
+  if (cal === 'islamicc') cal = 'islamic-civil';
+  if (cal === 'ethiopic-amete-alem') cal = 'ethioaa';
+  if (!cal || CALENDARS.indexOf(cal) < 0) cal = defaultCalendar(r.base);
   s.calendar = cal;
-  s.nu = r.ext.nu && I.digitsOf(r.ext.nu) ? r.ext.nu : data.n.nu;
+  s.jpan = cal === 'japanese' && new Locale(r.base).language === 'ja';
+  s.nu = r.ext.nu && I.digitsOf(r.ext.nu) ? r.ext.nu : I.defaultNu(r.base, data);
   var tz = options.timeZone;
   s.timeZone = tz === undefined ? defaultZone() : canonicalZone(tz);
   var hcExt = r.ext.hc;
@@ -256,15 +155,17 @@ function initialize(dtf, locales, options, required, defaults) {
     else hc = hourCycle || hcExt || dflt;
     s.hourCycle = hc;
     s.hour12Opt = hour12;
+    if (hour12 !== undefined || hourCycle !== undefined || hcExt !== undefined) s.hcExplicit = hc; // otherwise the skeleton says 'j' and the locale decides
   }
   var kept = [];
-  if (r.ext.ca && s.calendar === r.ext.ca) kept.push('ca-' + s.calendar);
-  if (hcExt && hcExt === s.hourCycle && hourCycle === undefined && hour12 === undefined) kept.push('hc-' + hcExt);
-  if (r.ext.nu && s.nu === r.ext.nu) kept.push('nu-' + s.nu);
+  if (r.kept.ca && r.ext.ca && (s.calendar === r.ext.ca || (r.ext.ca === 'gregorian' && s.calendar === 'gregory') || (r.ext.ca === 'islamicc' && s.calendar === 'islamic-civil') || (r.ext.ca === 'ethiopic-amete-alem' && s.calendar === 'ethioaa'))) kept.push('ca-' + r.ext.ca);
+  if (r.kept.hc && hcExt && hcExt === s.hourCycle && hourCycle === undefined && hour12 === undefined) kept.push('hc-' + hcExt);
+  if (r.kept.nu && r.ext.nu && s.nu === r.ext.nu) kept.push('nu-' + s.nu);
   s.locale = r.base + (kept.length ? '-u-' + kept.join('-') : '');
   resolvePattern(s);
   dtf[SLOT] = s;
 }
+var CALENDARS = ['gregory', 'iso8601', 'buddhist', 'japanese', 'roc', 'persian', 'islamic', 'islamic-civil', 'islamic-tbla', 'islamic-umalqura', 'islamic-rgsa', 'hebrew', 'indian', 'coptic', 'ethiopic', 'ethioaa'];
 function defaultCalendar(tag) {
   var l = new Locale(tag);
   if (l.language === 'th') return 'buddhist';
@@ -273,253 +174,213 @@ function defaultCalendar(tag) {
 }
 
 // ---- choosing the pattern ----------------------------------------------------------------------------------------------------------------
-function skeletonOfFields(s) { // the requested skeleton: class -> [letter, count]
-  var f = s.fields, req = {};
-  if (f.weekday) req.E = ['E', f.weekday === 'long' ? 4 : f.weekday === 'narrow' ? 5 : 3];
-  if (f.era) req.G = ['G', f.era === 'long' ? 4 : f.era === 'narrow' ? 5 : 1];
-  if (f.year) req.y = ['y', f.year === '2-digit' ? 2 : 1];
-  if (f.month) req.M = ['M', { numeric: 1, '2-digit': 2, short: 3, long: 4, narrow: 5 }[f.month]];
-  if (f.day) req.d = ['d', f.day === '2-digit' ? 2 : 1];
-  if (f.dayPeriod) req.B = ['B', f.dayPeriod === 'long' ? 4 : f.dayPeriod === 'narrow' ? 5 : 1];
-  if (f.hour) req.h = [{ h12: 'h', h23: 'H', h11: 'K', h24: 'k' }[s.hourCycle] || 'h', f.hour === '2-digit' ? 2 : 1];
-  if (f.minute) req.m = ['m', f.minute === '2-digit' ? 2 : 1];
-  if (f.second) req.s = ['s', f.second === '2-digit' ? 2 : 1];
-  return req;
+var HC_LETTER = { h12: 'h', h23: 'H', h11: 'K', h24: 'k' }, LETTER_HC = { h: 'h12', H: 'h23', K: 'h11', k: 'h24' };
+// the date-time glue: ICU takes the "at time" patterns of the Gregorian calendar for every calendar
+function glueOf(s) { var cd = calData(s); return cd.dtfAt || cd.dtf || s.data.c.gregory.dtf; }
+function generator(s) {
+  var cd = calData(s), sym = s.data.n.sym, rs = I.G().rootSym[s.nu];
+  return P.gen(cd, s.data.r.dn, (sym[s.nu] || rs || sym[s.data.n.nu] || sym.latn).d, HC_LETTER[hourCycleDefault(s.base, s.dataTag)] || 'h', glueOf(s));
 }
-function zoneToken(f) {
-  switch (f.timeZoneName) {
-    case 'short': return tokenFor('z', 1);
-    case 'long': return tokenFor('z', 4);
-    case 'shortOffset': return tokenFor('O', 1);
-    case 'longOffset': return tokenFor('O', 4);
-    case 'shortGeneric': return tokenFor('v', 1);
-    case 'longGeneric': return tokenFor('v', 4);
-  }
-  return null;
-}
-function bestMatch(cd, req, only) { // best availableFormats pattern for req among candidates whose classes are in `only` (a string of classes)
-  var best = null, bestD = Infinity, key;
-  for (key in cd.af) {
-    var cand = skelCached(key);
-    if (only) {
-      var ok = true;
-      for (var c in cand) if (only.indexOf(c) < 0) { ok = false; break; }
-      if (!ok) continue;
-    }
-    var d = distance(req, cand);
-    if (d < bestD) { bestD = d; best = key; }
-  }
-  return best === null ? null : { key: best, dist: bestD };
-}
-function pickGlue(cd, req) {
-  var m = req.M ? req.M[1] : 0, k = m >= 4 ? (req.E ? 'full' : 'long') : m === 3 ? 'medium' : 'short';
-  return cd.dtf[k];
+// V8's skeleton for the requested fields: weekday, era, year, month, day, day period, hour, minute, second, fraction, zone
+function v8Skeleton(s) {
+  var f = s.fields, sk = '', ch;
+  if (f.weekday) sk += { long: 'EEEE', short: 'EEE', narrow: 'EEEEE' }[f.weekday];
+  if (f.era) sk += { long: 'GGGG', short: 'GGG', narrow: 'GGGGG' }[f.era];
+  if (f.year) sk += f.year === '2-digit' ? 'yy' : 'y';
+  if (f.month) sk += { '2-digit': 'MM', numeric: 'M', narrow: 'MMMMM', short: 'MMM', long: 'MMMM' }[f.month];
+  if (f.day) sk += f.day === '2-digit' ? 'dd' : 'd';
+  var h24 = s.hcExplicit ? s.hcExplicit === 'h23' || s.hcExplicit === 'h24' : (generator(s).hourChar === 'H' || generator(s).hourChar === 'k');
+  if (f.dayPeriod && !(f.hour && h24)) sk += { narrow: 'BBBBB', short: 'B', long: 'BBBB' }[f.dayPeriod]; // a 24-hour clock shows no day period
+  if (f.hour) { ch = s.hcExplicit ? HC_LETTER[s.hcExplicit] : 'j'; sk += ch + (f.hour === '2-digit' ? ch : ''); }
+  if (f.minute) sk += f.minute === '2-digit' ? 'mm' : 'm';
+  if (f.second) sk += f.second === '2-digit' ? 'ss' : 's';
+  if (f.fractionalSecondDigits) sk += 'SSS'.slice(0, f.fractionalSecondDigits);
+  if (f.timeZoneName) sk += { short: 'z', long: 'zzzz', shortOffset: 'O', longOffset: 'OOOO', shortGeneric: 'v', longGeneric: 'vvvv' }[f.timeZoneName];
+  return sk;
 }
 function neededPattern(s) {
-  var cd = calData(s), f = s.fields, req = skeletonOfFields(s), toks;
-  var zt = zoneToken(f);
-  var dateReq = {}, timeReq = {}, any = false, c;
-  for (c in req) { if (DATE_CLASSES.indexOf(c) >= 0) dateReq[c] = req[c]; else timeReq[c] = req[c]; any = true; }
-  var hasDate = Object.keys(dateReq).length > 0, hasTime = Object.keys(timeReq).length > 0;
-  if (!any) toks = f.fractionalSecondDigits ? [] : [];
-  else {
-    var exact = bestMatch(cd, req, null);
-    if (exact && exact.dist >= 0x10000 && Object.keys(req).length === 1) toks = [tokenFor(req[Object.keys(req)[0]][0], req[Object.keys(req)[0]][1])];
-    else if (exact && exact.dist < 0x1000) toks = adjustPattern(parsePattern(cd.af[exact.key]), req, skelCached(exact.key));
-    else if (hasDate && hasTime) {
-      var dm = bestMatch(cd, dateReq, DATE_CLASSES), tm = bestMatch(cd, timeReq, TIME_CLASSES);
-      var dp = dm ? appendMissing(adjustPattern(parsePattern(cd.af[dm.key]), dateReq, skelCached(dm.key)), dateReq, skelCached(dm.key)) : [];
-      var tp = tm ? appendMissing(adjustPattern(parsePattern(cd.af[tm.key]), timeReq, skelCached(tm.key)), timeReq, skelCached(tm.key)) : [];
-      var glue = parsePattern(pickGlue(cd, req)), out = [];
-      glue.forEach(function (t) {
-        if (t.lit !== undefined) out.push(t);
-        else if (t.n === 1 && t.l === '{') out.push(t);
-      });
-      var glueSrc = pickGlue(cd, req), parts = glueSrc.split(/(\{0\}|\{1\})/);
-      toks = [];
-      parts.forEach(function (p) {
-        if (p === '{0}') toks = toks.concat(tp); else if (p === '{1}') toks = toks.concat(dp);
-        else if (p) toks = toks.concat(parsePattern(p));
-      });
-    } else {
-      var bm = exact || bestMatch(cd, req, null);
-      toks = bm ? appendMissing(adjustPattern(parsePattern(cd.af[bm.key]), req, skelCached(bm.key)), req, skelCached(bm.key)) : [];
-    }
-  }
-  if (f.fractionalSecondDigits) toks = addFraction(s, toks, f.fractionalSecondDigits);
-  if (zt) { if (toks.length) toks = toks.concat([{ lit: ' ' }, zt]); else toks = [zt]; }
-  return toks;
+  var sk = v8Skeleton(s);
+  if (!sk) return [];
+  var pat = generator(s).best(sk);
+  if (s.hcExplicit && /[hHKk]/.test(pat)) pat = P.replaceHourPattern(pat, s.hcExplicit);
+  return P.parse(flexibleToAmPm(s, pat));
 }
-function addFraction(s, toks, n) {
-  var out = [], done = false, sym = s.data.n.sym, d = (sym[s.nu] || sym.latn).d;
-  toks.forEach(function (t) {
-    if (t.l === 'S') return; // a fraction the matched pattern carried is replaced
-    out.push(t);
-    if (t.l === 's' && !done) { out.push({ lit: d }); out.push({ l: 'S', n: n }); done = true; }
-  });
-  if (!done) out.push({ l: 'S', n: n });
-  return out;
+// flexible day periods (B) appear only when the dayPeriod option asks for them; otherwise the plain AM/PM marker stands in
+function flexibleToAmPm(s, pat) {
+  if (s.fields.dayPeriod || !/B/.test(pat)) return pat;
+  return P.str(P.parse(pat).map(function (t) { return t.l === 'B' ? { l: 'a', n: t.n } : t; }));
 }
-function appendMissing(toks, req, cand) { // fields the matched pattern lacks are appended with a space (ICU's appendItems)
-  for (var c in req) {
-    if (cand[c]) continue;
-    toks = toks.concat([{ lit: ' ' }, tokenFor(req[c][0] === 'j' ? 'h' : req[c][0], req[c][1])]);
-  }
-  return toks;
-}
-function stylePattern(s) { // dateStyle / timeStyle
-  var cd = calData(s), dt = null, tt = null;
-  if (s.dateStyle) dt = parsePattern(cd.df[s.dateStyle]);
-  if (s.timeStyle) {
-    var src = cd.tf[s.timeStyle];
-    tt = parsePattern(src);
-    var want = s.hourCycle, have = null;
-    tt.forEach(function (t) { if (t.l && CLASS[t.l] === 'h') have = { h: 'h12', H: 'h23', K: 'h11', k: 'h24' }[t.l]; });
-    if (have && want && have !== want) tt = switchByRequest(cd, tt, want) || switchHourCycle(tt, want, have);
-  }
+function hourCycleOf(toks) { var hc = null; toks.forEach(function (t) { if (t.l && LETTER_HC[t.l]) hc = LETTER_HC[t.l]; }); return hc; }
+function stylePattern(s) { // dateStyle / timeStyle: the locale's own patterns, glued with the "at time" date-time pattern
+  var cd = calData(s), dt = s.dateStyle && cd.df[s.dateStyle], tt = s.timeStyle && cd.tf[s.timeStyle], pat;
   if (dt && tt) {
-    var k = s.dateStyle, glueSrc = (k === 'full' || k === 'long') && cd.dtfAt ? cd.dtfAt[k] : cd.dtf[k], toks = [];
-    glueSrc.split(/(\{0\}|\{1\})/).forEach(function (p) {
-      if (p === '{0}') toks = toks.concat(tt); else if (p === '{1}') toks = toks.concat(dt); else if (p) toks = toks.concat(parsePattern(p));
-    });
-    return toks;
+    var glue = glueOf(s)[s.dateStyle];
+    pat = glue.replace(/\{([01])\}/g, function (m, d) { return d === '0' ? tt : dt; });
+  } else pat = dt || tt || '';
+  // another hour cycle than the pattern's: the way V8 does it, a skeleton of the pattern with the new hour letter is matched again
+  if (tt && s.hcExplicit && hourCycleOf(P.parse(pat)) !== s.hcExplicit) {
+    pat = generator(s).best(P.replaceHourSkeleton(P.skeletonOf(pat), s.hcExplicit));
+    pat = flexibleToAmPm(s, P.replaceHourPattern(pat, s.hcExplicit));
   }
-  return dt || tt || [];
-}
-// a time pattern in another hour cycle: the hour letter changes (the count stays), a day period is dropped when going to
-// 24 hours and appended when going to 12 (what ICU does to a style pattern for hour12 / hourCycle)
-// the time style in another hour cycle, the way V8 does it: a skeleton of the style's fields with the new hour letter is matched
-// against the locale's available formats (so the pattern may reorder, e.g. a leading day period), and the zone keeps its place
-function switchByRequest(cd, tt, want) {
-  var zi = -1, i;
-  for (i = 0; i < tt.length; i++) if (tt[i].l && CLASS[tt[i].l] === 'z') zi = i;
-  var rest = tt, zone = null, zlead = false, glue = null;
-  if (zi >= 0) {
-    zone = tt[zi]; zlead = zi === 0;
-    if (zlead) { rest = tt.slice(1); if (rest[0] && rest[0].lit !== undefined) { glue = rest[0]; rest = rest.slice(1); } }
-    else { rest = tt.slice(0, zi); if (rest.length && rest[rest.length - 1].lit !== undefined) { glue = rest[rest.length - 1]; rest = rest.slice(0, -1); } }
-  }
-  var req = {}, letter = { h12: 'h', h23: 'H', h11: 'K', h24: 'k' }[want];
-  rest.forEach(function (t) {
-    if (t.l === undefined) return;
-    var c = CLASS[t.l];
-    if (c === 'a') return;
-    req[c] = c === 'h' ? [letter, 1] : c === 'm' || c === 's' ? [t.l, 1] : [t.l, t.n];
-  });
-  if (!req.h) return null;
-  var bm = bestMatch(cd, req, TIME_CLASSES);
-  if (!bm || bm.dist >= 0x1000) return null;
-  var out = adjustPattern(parsePattern(cd.af[bm.key]), req, skelCached(bm.key));
-  // a 24-hour style keeps its own hour width in the other cycle
-  var oh = rest.filter(function (t) { return t.l === 'H' || t.l === 'k'; })[0];
-  if (oh) out = out.map(function (t) { return t.l && CLASS[t.l] === 'h' ? { l: t.l, n: oh.n } : t; });
-  if (zone) out = zlead ? [zone].concat(glue ? [glue] : [], out) : out.concat(glue ? [glue] : [], [zone]);
-  return out;
-}
-function switchHourCycle(tt, want, have) {
-  var letter = { h12: 'h', h23: 'H', h11: 'K', h24: 'k' }[want], to12 = want === 'h12' || want === 'h11', from12 = have === 'h12' || have === 'h11';
-  var out = tt.map(function (t) { return t.l && CLASS[t.l] === 'h' ? { l: letter, n: t.n } : t; });
-  if (from12 && !to12) {
-    var i = out.findIndex(function (t) { return t.l && CLASS[t.l] === 'a'; });
-    if (i >= 0) {
-      out.splice(i, 1);
-      if (out[i] && out[i].lit !== undefined) { out[i] = { lit: out[i].lit.replace(/^[\s\u00a0\u202f]+/, '') }; if (!out[i].lit) out.splice(i, 1); }
-      else if (out[i - 1] && out[i - 1].lit !== undefined) { out[i - 1] = { lit: out[i - 1].lit.replace(/[\s\u00a0\u202f]+$/, '') }; if (!out[i - 1].lit) out.splice(i - 1, 1); }
-    }
-  } else if (!from12 && to12) {
-    var z = out.findIndex(function (t) { return t.l && CLASS[t.l] === 'z'; });
-    var ins = [{ lit: ' ' }, { l: 'a', n: 1 }];
-    if (z >= 0) { var before = z; if (out[z - 1] && out[z - 1].lit !== undefined) before = z - 1; out.splice.apply(out, [before, 0].concat(ins)); }
-    else out = out.concat(ins);
-  }
-  return out;
+  return P.parse(pat);
 }
 function resolvePattern(s) {
   s.tokens = s.dateStyle || s.timeStyle ? stylePattern(s) : neededPattern(s);
-  // the options as the resolved pattern shows them (resolvedOptions)
-  var r = {};
-  s.tokens.forEach(function (t) {
-    if (t.l === undefined) return;
-    var c = CLASS[t.l], n = t.n;
-    switch (c) {
-      case 'E': r.weekday = n >= 5 ? 'narrow' : n === 4 ? 'long' : 'short'; break;
-      case 'G': r.era = n >= 5 ? 'narrow' : n === 4 ? 'long' : 'short'; break;
-      case 'y': r.year = n === 2 ? '2-digit' : 'numeric'; break;
-      case 'M': r.month = n >= 5 ? 'narrow' : n === 4 ? 'long' : n === 3 ? 'short' : n === 2 ? '2-digit' : 'numeric'; break;
-      case 'd': r.day = n === 2 ? '2-digit' : 'numeric'; break;
-      case 'B': r.dayPeriod = n >= 5 ? 'narrow' : n === 4 ? 'long' : 'short'; break;
-      case 'h': r.hour = n === 2 ? '2-digit' : 'numeric'; break;
-      case 'm': r.minute = n === 2 ? '2-digit' : 'numeric'; break;
-      case 's': r.second = n === 2 ? '2-digit' : 'numeric'; break;
-      case 'S': r.fractionalSecondDigits = n; break;
-      case 'z': r.timeZoneName = t.l === 'z' ? (n >= 4 ? 'long' : 'short') : t.l === 'O' ? (n >= 4 ? 'longOffset' : 'shortOffset') : (n >= 4 ? 'longGeneric' : 'shortGeneric'); break;
-    }
+  // the options as the resolved pattern shows them (resolvedOptions): V8 looks for the letters of each option in the text of the pattern
+  // (quoted text included, so a literal "de" counts as a day), the widest first
+  var r = {}, text = P.str(s.tokens.filter(function (t) { return t.num === undefined; }));
+  var real = s.tokens.filter(function (t) { return t.l && CLASS[t.l] === 'h'; })[0], hc = real ? { h: 'h12', H: 'h23', K: 'h11', k: 'h24' }[real.l] : null;
+  var hourPairs = { h11: [['KK', '2-digit'], ['K', 'numeric']], h12: [['hh', '2-digit'], ['h', 'numeric']], h23: [['HH', '2-digit'], ['H', 'numeric']], h24: [['kk', '2-digit'], ['k', 'numeric']] }[hc || 'h12'];
+  [['weekday', [['EEEEE', 'narrow'], ['EEEE', 'long'], ['EEE', 'short'], ['ccccc', 'narrow'], ['cccc', 'long'], ['ccc', 'short']]],
+    ['era', [['GGGGG', 'narrow'], ['GGGG', 'long'], ['GGG', 'short']]],
+    ['year', [['yy', '2-digit'], ['y', 'numeric']]],
+    ['month', [['MMMMM', 'narrow'], ['MMMM', 'long'], ['MMM', 'short'], ['MM', '2-digit'], ['M', 'numeric'], ['LLLLL', 'narrow'], ['LLLL', 'long'], ['LLL', 'short'], ['LL', '2-digit'], ['L', 'numeric']]],
+    ['day', [['dd', '2-digit'], ['d', 'numeric']]],
+    ['dayPeriod', [['BBBBB', 'narrow'], ['bbbbb', 'narrow'], ['BBBB', 'long'], ['bbbb', 'long'], ['B', 'short'], ['b', 'short']]],
+    ['hour', hourPairs],
+    ['minute', [['mm', '2-digit'], ['m', 'numeric']]],
+    ['second', [['ss', '2-digit'], ['s', 'numeric']]],
+    ['fractionalSecondDigits', [['SSS', 3], ['SS', 2], ['S', 1]]],
+    ['timeZoneName', [['zzzz', 'long'], ['z', 'short'], ['OOOO', 'longOffset'], ['O', 'shortOffset'], ['vvvv', 'longGeneric'], ['v', 'shortGeneric']]]].forEach(function (item) {
+    for (var i = 0; i < item[1].length; i++) if (text.indexOf(item[1][i][0]) >= 0) { r[item[0]] = item[1][i][1]; break; }
   });
   s.resolved = r;
+  s.hasMinute = s.tokens.some(function (t) { return t.l === 'm'; }); s.hasSecond = s.tokens.some(function (t) { return t.l === 's'; });
   // a numeric minute next to an hour is always two digits in the pattern; with no hour it follows the pattern too
-  if (r.hour) { var hh = s.tokens.filter(function (t) { return t.l && CLASS[t.l] === 'h'; })[0]; if (hh) s.hourCycle = { h: 'h12', H: 'h23', K: 'h11', k: 'h24' }[hh.l] || s.hourCycle; }
+  s.realHour = !!real;
+  if (real) s.hourCycle = hc || s.hourCycle;
 }
 
 // ---- rendering --------------------------------------------------------------------------------------------------------------------------------------
 function pad(n, w) { var s = String(Math.abs(n)); while (s.length < w) s = '0' + s; return s; }
+// ICU's TimeZoneFormat localized GMT format: the locale's hourFormat gives the "hours and minutes" pattern, the "hours, minutes
+// and seconds" and the "hours only" patterns are derived from it; the short form uses a one-digit hour and drops zero minutes
+var offPat = Object.create(null);
+function offsetPatterns(hf) { // [positive HM, HMS, H, negative HM, HMS, H] as token lists
+  if (offPat[hf]) return offPat[hf];
+  var sides = hf.split(';'), out = [];
+  [sides[0], sides[1] || '-' + sides[0].slice(1)].forEach(function (hm) {
+    var mm = hm.indexOf('mm'), hIdx = hm.slice(0, mm).lastIndexOf('H'), sep = hm.slice(hIdx + 1, mm);
+    var hms = hm.slice(0, mm + 2) + sep + 'ss' + hm.slice(mm + 2), h = hm.slice(0, hIdx + 1);
+    [hm, hms, h].forEach(function (p) {
+      var toks = [], lit = '', i = 0;
+      while (i < p.length) {
+        var c = p[i];
+        if (c === 'H' || (c === 'm' && p[i + 1] === 'm') || (c === 's' && p[i + 1] === 's')) {
+          if (lit) { toks.push({ lit: lit }); lit = ''; }
+          var k = i; while (p[k] === c) k++;
+          toks.push({ f: c }); i = k;
+        } else { lit += c; i++; }
+      }
+      if (lit) toks.push({ lit: lit });
+      out.push(toks);
+    });
+  });
+  return (offPat[hf] = out);
+}
 function gmtOffsetText(s, offSec, long) {
   var z = s.data.z;
   if (offSec === 0) return z.gz || 'GMT';
   var neg = offSec < 0, a = Math.abs(offSec), h = div(a, 3600), m = div(a % 3600, 60), sec = a % 60;
-  var hf = (z.hf || '+HH:mm;-HH:mm').split(';'), pat = neg ? (hf[1] || '-' + hf[0].slice(1)) : hf[0];
-  var text;
-  if (long) text = pat.replace('HH', pad(h, 2)).replace('mm', pad(m, 2)).replace('ss', pad(sec, 2));
-  else {
-    // short form: hours without padding, minutes only when not zero
-    text = (neg ? pat.charAt(0) : pat.charAt(0));
-    text = pat.replace(/H+/, String(h)).replace(/[^\d٠-٩]*m+/, m ? pat.match(/[^Hm]*(?=m)/)[0] + pad(m, 2) : '').replace(/[^\d]*s+/, '');
-    if (!m) text = pat.charAt(0) + String(h);
-  }
-  return (z.gmt || 'GMT{0}').replace('{0}', I.localDigits(text, s.nu));
+  var pats = offsetPatterns(z.hf || '+HH:mm;-HH:mm'), base = neg ? 3 : 0;
+  var toks = pats[base + (sec ? 1 : (m || long) ? 0 : 2)], text = '';
+  toks.forEach(function (t) {
+    if (t.lit !== undefined) text += t.lit;
+    else if (t.f === 'H') text += pad(h, long ? 2 : 1);
+    else if (t.f === 'm') text += pad(m, 2);
+    else text += pad(sec, 2);
+  });
+  return (z.gmt || 'GMT{0}').replace('{0}', function () { return text; }).replace(/[0-9]/g, function (d) { return I.localDigits(d, s.nu); });
 }
 function metazoneAt(zone, ms) {
   var list = I.G().mz[zone];
   if (!list) return null;
-  for (var i = 0; i < list.length; i++) { var e = list[i]; if ((e[1] === null || ms >= e[1]) && (e[2] === null || ms < e[2])) return e[0]; }
+  // (ICU's metazone mapping starts at 1970-01-01 where CLDR gives no start: earlier instants have no metazone names)
+  for (var i = 0; i < list.length; i++) { var e = list[i]; if (ms >= (e[1] === null ? 0 : e[1]) && (e[2] === null || ms < e[2])) return e[0]; }
   return null;
 }
+// ICU's time zone names: specific ("Pacific Daylight Time", "PDT"), generic non-location ("Pacific Time"), generic location
+// ("France Time"), and the localized GMT format when a locale has no name
+var zoneIndex = null;
+function zoneCountry(zone) { // the country of a canonical zone, and whether it is the one the country's name stands for
+  var G = I.G();
+  if (!zoneIndex) {
+    zoneIndex = { cc: Object.create(null), n: Object.create(null) };
+    G.tz.forEach(function (z, i) { var c = G.tzc.substr(i * 2, 2); if (c !== '--') { zoneIndex.cc[z] = c; zoneIndex.n[c] = (zoneIndex.n[c] || 0) + 1; } });
+  }
+  var c = zoneIndex.cc[zone];
+  return c ? { cc: c, primary: G.pz[c] === zone || zoneIndex.n[c] === 1 } : null;
+}
+function namesOf(z, mz, zone, long) { // [generic, standard, daylight] of a zone (its own names first) or of its metazone
+  var own = z.zo && z.zo[zone] && z.zo[zone][long ? 'l' : 's'], m = z.mz && mz && z.mz[mz] && z.mz[mz][long ? 'l' : 's'];
+  return [own && own[0] || m && m[0] || '', own && own[1] || m && m[1] || '', own && own[2] || m && m[2] || ''];
+}
+function exemplarCity(z, zone) { return (z.zn && z.zn[zone]) || zone.split('/').pop().replace(/_/g, ' '); }
+function locationName(s, zone) {
+  var z = s.data.z, c = zoneCountry(zone);
+  if (!c) return '';
+  var where = c.primary ? (s.data.dn.rg[c.cc] || c.cc) : exemplarCity(z, zone);
+  return (z.rf || '{0} Time').replace('{0}', function () { return where; });
+}
+function observesDst(zone, ms) { // daylight saving time within 184 days before or after (ICU looks for the next and previous transitions)
+  for (var d = 15; d <= 184; d += 15) if (zoneOffset(zone, ms + d * 86400000)[1] || zoneOffset(zone, ms - d * 86400000)[1]) return true;
+  return false;
+}
+function genericName(s, f, long) {
+  var z = s.data.z, zone = s.timeZone, ms = f.ms0, mz = metazoneAt(zone, ms), n = namesOf(z, mz, zone, long), name = '';
+  if (z.zo && z.zo[zone] && z.zo[zone][long ? 'l' : 's'] && z.zo[zone][long ? 'l' : 's'][0]) return z.zo[zone][long ? 'l' : 's'][0];
+  if (mz) {
+    if (!f.dst && !observesDst(zone, ms) && n[1] && n[1].toLowerCase() !== n[0].toLowerCase()) name = n[1]; // a zone without daylight saving time shows its standard name
+    if (!name && n[0]) {
+      var G = I.G(), c = zoneCountry(zone), golden = G.mzg[mz] && (G.mzg[mz][c && c.cc] || G.mzg[mz]['001']);
+      if (golden && golden !== zone) {
+        var go = zoneOffset(golden, ms);
+        if (go[0] === f.off && go[1] === f.dst) name = n[0];
+        else { // another zone with the same metazone: "Pacific Time (Canada)"
+          var where = c && c.primary ? (s.data.dn.rg[c.cc] || c.cc) : exemplarCity(z, zone);
+          name = (z.ff || '{1} ({0})').replace('{0}', function () { return where; }).replace('{1}', function () { return n[0]; });
+        }
+      } else name = n[0];
+    }
+  }
+  return name || locationName(s, zone);
+}
+function specificName(s, f, long) {
+  var z = s.data.z, n = namesOf(z, metazoneAt(s.timeZone, f.ms0), s.timeZone === 'UTC' ? 'Etc/UTC' : s.timeZone, long);
+  return f.dst ? n[2] : n[1];
+}
 function zoneText(s, f, letter, count) {
-  var z = s.data.z, ms = f.ms0, zone = s.timeZone;
+  var zone = s.timeZone;
   var isOffsetZone = zone.charAt(0) === '+' || zone.charAt(0) === '-';
   if (letter === 'O') return gmtOffsetText(s, f.off, count >= 4);
-  if (letter === 'V') {
-    if (count === 2) return zone;
-    return zone;
-  }
+  if (letter === 'V') return zone;
   if (letter === 'Z' || letter === 'x' || letter === 'X') {
     var a = Math.abs(f.off), sg = f.off < 0 ? '-' : '+', hh = pad(div(a, 3600), 2), mm = pad(div(a % 3600, 60), 2);
     if (letter === 'X' && f.off === 0) return 'Z';
     return count >= 4 && letter !== 'x' && letter !== 'X' ? gmtOffsetText(s, f.off, true) : sg + hh + (count === 1 && letter !== 'Z' ? '' : (count === 3 || letter === 'Z' && count === 5 ? ':' : '') + mm);
   }
   var generic = letter === 'v', long = count >= 4;
-  if (zone === 'UTC') return generic ? 'GMT' : (long ? (s.data.z.mz ? 'Coordinated Universal Time' : 'UTC') : 'UTC');
   if (isOffsetZone) return gmtOffsetText(s, f.off, long);
-  if (z.mz) {
-    var mz = metazoneAt(zone, ms), rec = mz && z.mz[mz], names = rec && rec[long ? 'l' : 's'];
-    if (names) {
-      var nm = generic ? names[0] : (f.dst ? names[2] : names[1]);
-      if (nm) return nm;
-    }
-    if (generic && rec && rec.l && rec.l[0]) return rec.l[0]; // no short generic name: the long one
-    if (generic && !long) { var ex = z.zn && z.zn[zone]; if (ex) return (z.rf || '{0} Time').replace('{0}', ex); }
-    if (generic && long) { var ex2 = z.zn && z.zn[zone]; if (ex2) return (z.rf || '{0} Time').replace('{0}', ex2); }
-  }
-  return gmtOffsetText(s, f.off, long);
+  if (zone === 'UTC') { var un = generic ? '' : specificName(s, f, long); return un || (generic ? gmtOffsetText(s, 0, long) : 'UTC'); }
+  return (generic ? genericName(s, f, long) : specificName(s, f, long)) || gmtOffsetText(s, f.off, long);
 }
 function dayPeriodName(s, f, letter, count) {
   // ICU formats the plain AM/PM marker (pattern letter a, up to four letters) with the wide names: Korean shows "오전", not "AM"
   var cd = calData(s), w = count >= 5 ? 'n' : (count === 4 || letter === 'a') ? 'w' : 'a', dp = cd.dp['f' + w] || cd.dp.fa || {};
   var h = f.h, m = f.mi;
   if (letter === 'B') {
-    var G = I.G(), lang = new Locale(s.base).language, rules = G.dpr[lang] || G.dpr[lang.split('-')[0]], t = h * 60 + m;
+    // ICU: noon only on the full hour (minutes and seconds count only when the pattern shows them), midnight is not used
+    var G = I.G(), lang = new Locale(s.base).language, rules = G.dpr[lang] || G.dpr[lang.split('-')[0]];
+    var mm = s.hasMinute ? m : 0, ss = s.hasSecond ? f.s : 0, t = h * 60;
     if (rules) {
-      for (var name in rules) { var r = rules[name]; if (r.length === 1 && r[0] === t && m === 0 && f.s === 0 && dp[name.replace(/\d+$/, '')] !== undefined) return dp[name]; }
-      for (var nm in rules) { var rr = rules[nm]; if (rr.length === 2) { var inRange = rr[0] <= rr[1] ? t >= rr[0] && t < rr[1] : (t >= rr[0] || t < rr[1]); if (rr[1] === 1440 && t >= rr[0]) inRange = true; if (inRange && dp[nm]) return dp[nm]; } }
+      if (h === 12 && mm === 0 && ss === 0 && rules.noon && dp.noon) return dp.noon;
+      for (var nm in rules) {
+        var rr = rules[nm];
+        if (rr.length !== 2) continue;
+        var inRange = rr[0] <= rr[1] ? t >= rr[0] && t < rr[1] : (t >= rr[0] || t < rr[1]);
+        if (rr[1] === 1440 && t >= rr[0]) inRange = true;
+        if (inRange && dp[nm]) return dp[nm];
+      }
     }
   } else if (letter === 'b') {
     if (h === 12 && m === 0 && f.s === 0 && dp.noon) return dp.noon;
@@ -527,29 +388,69 @@ function dayPeriodName(s, f, letter, count) {
   }
   return h < 12 ? dp.am : dp.pm;
 }
+var HEB_ONES = ['', '\u05d0', '\u05d1', '\u05d2', '\u05d3', '\u05d4', '\u05d5', '\u05d6', '\u05d7', '\u05d8'], HEB_TENS = ['', '\u05d9', '\u05db', '\u05dc', '\u05de', '\u05e0', '\u05e1', '\u05e2', '\u05e4', '\u05e6'], HEB_HUNDREDS = ['', '\u05e7', '\u05e8', '\u05e9', '\u05ea'];
+function hebrewNumeral(n) { // Hebrew alphabetic numerals; the thousands of a year are left out (5785 is \u05ea\u05e9\u05e4\u05f4\u05d4)
+  n %= 1000;
+  if (n === 698) return '\u05ea\u05e8\u05d7\u05f4\u05e6'; // (two years ICU spells differently)
+  if (n === 744) return '\u05ea\u05e9\u05d3\u05f4\u05de';
+  var out = '';
+  while (n >= 400) { out += HEB_HUNDREDS[4]; n -= 400; }
+  if (n >= 100) { out += HEB_HUNDREDS[div(n, 100)]; n %= 100; }
+  if (n === 15) out += '\u05d8\u05d5'; else if (n === 16) out += '\u05d8\u05d6'; else out += HEB_TENS[div(n, 10)] + HEB_ONES[n % 10];
+  if (out.length === 1) return out + '\u05f3';
+  var last = out.slice(-1);
+  return out.slice(0, -1) + '\u05f4' + (last === '\u05e4' ? '\u05e3' : last); // (a closing pe takes its final form)
+}
+var HANIDAYS = '\u521d\u4e00 \u521d\u4e8c \u521d\u4e09 \u521d\u56db \u521d\u4e94 \u521d\u516d \u521d\u4e03 \u521d\u516b \u521d\u4e5d \u521d\u5341 \u5341\u4e00 \u5341\u4e8c \u5341\u4e09 \u5341\u56db \u5341\u4e94 \u5341\u516d \u5341\u4e03 \u5341\u516b \u5341\u4e5d \u4e8c\u5341 \u5eff\u4e00 \u5eff\u4e8c \u5eff\u4e09 \u5eff\u56db \u5eff\u4e94 \u5eff\u516d \u5eff\u4e03 \u5eff\u516b \u5eff\u4e5d \u4e09\u5341'.split(' ');
+var DATE_NUMERIC = 'yuYrdMLQqDFwWec';
+// the numbering system a pattern asks for a field in ("pattern@numbers=hebr"): only date fields are affected, not the time
+function numberingOverride(s, tokens, letter) {
+  var t = tokens[tokens.length - 1];
+  if (s.jpan && letter === 'y' && !(t && t.num !== undefined)) return 'jpanyear'; // Japanese counts years of an era without padding, and the first is 元
+  if (!t || t.num === undefined || DATE_NUMERIC.indexOf(letter) < 0) return null;
+  if (t.num.indexOf('=') < 0) return t.num;
+  var found = null;
+  t.num.split(';').forEach(function (p) { var kv = p.split('='); if (kv[0] === letter) found = kv[1]; });
+  return found;
+}
+function overridden(s, nu, value, width) { // a number in a numbering system a pattern chose
+  switch (nu) {
+    case 'hebr': return hebrewNumeral(value);
+    case 'jpanyear': return value === 1 ? '\u5143' : I.localDigits(String(value), s.nu);
+    case 'hanidays': return HANIDAYS[value - 1] || String(value);
+  }
+  return I.localDigits(pad(value, width), nu);
+}
 function renderTokens(s, tokens, f) {
   var cd = calData(s), parts = [], ds = function (str) { return I.localDigits(str, s.nu); };
   function push(type, value) { parts.push({ type: type, value: value }); }
-  tokens.forEach(function (t) {
+  tokens.forEach(function (t, ti) {
+    if (t.num !== undefined) return;
     if (t.lit !== undefined) { if (parts.length && parts[parts.length - 1].type === 'literal') parts[parts.length - 1].value += t.lit; else push('literal', t.lit); return; }
-    var n = t.n, v;
+    var n = t.n, v, ov = numberingOverride(s, tokens, t.l);
     switch (t.l) {
       case 'G': {
-        var er = cd.er && cd.er[n >= 5 ? 'n' : n === 4 ? 'w' : 'a'];
-        push('era', er ? er[f.era] || er[1] || '' : ''); break;
+        var ew = n >= 5 ? 'n' : n === 4 ? 'w' : 'a', er = cd.er && cd.er[ew], en = er && er[f.era];
+        if (!en && s.calendar === 'japanese') { var ec = I.localeData('en').c.japanese; en = ec && ec.er && ec.er[ew] && ec.er[ew][f.era]; } // (the eras before Meiji are shipped for English and Japanese)
+        push('era', en || ''); break;
       }
       case 'y': case 'u': case 'Y': case 'r':
-        v = f.y; if (s.calendar === 'gregory' && t.l !== 'u' && f.gy <= 0) v = f.ey;
+        v = t.l === 'u' || t.l === 'r' ? (f.gy !== undefined && (s.calendar === 'gregory' || t.l === 'r') ? f.gy : f.y) : f.y;
+        if (ov) { push('year', overridden(s, ov, n === 2 ? mod(v, 100) : v, n)); break; }
         if (n === 2) push('year', ds(pad(mod(v, 100), 2))); else push('year', ds(pad(v, n))); break;
       case 'Q': case 'q':
         v = div(f.m - 1, 3) + 1;
         if (n <= 2) push('literal', ds(pad(v, n))); else { var qn = (cd.qu[(t.l === 'q' ? 's' : 'f') + (n === 3 ? 'a' : n === 4 ? 'w' : 'n')] || cd.qu.fa || []); push('literal', qn[v - 1] || String(v)); }
         break;
       case 'M': case 'L':
-        if (n <= 2) push('month', ds(pad(f.m, n)));
-        else { var arr = cd.mo[(t.l === 'L' ? 's' : 'f') + (n === 3 ? 'a' : n === 4 ? 'w' : 'n')] || cd.mo['f' + (n === 3 ? 'a' : n === 4 ? 'w' : 'n')] || cd.mo.fw; push('month', arr[f.m - 1]); }
+        if (n <= 2 && ov) push('month', overridden(s, ov, f.m, n));
+        else if (n <= 2) push('month', ds(pad(s.calendar === 'hebrew' && !f.ly && f.m >= 7 ? f.m - 1 : f.m, n))); // (ICU counts a Hebrew year without Adar I as having 12 months)
+        else {
+          var mk = (t.l === 'L' ? 's' : 'f') + (n === 3 ? 'a' : n === 4 ? 'w' : 'n'), arr = cd.mo[mk] || cd.mo['f' + (n === 3 ? 'a' : n === 4 ? 'w' : 'n')] || cd.mo.fw;
+          push('month', f.ly && f.m === 7 && cd.ml && (cd.ml[mk] || cd.ml.fw) || arr[f.m - 1]); // (Hebrew: the seventh month of a leap year is Adar II)
+        }
         break;
-      case 'd': push('day', ds(pad(f.d, n))); break;
+      case 'd': push('day', ov ? overridden(s, ov, f.d, n) : ds(pad(f.d, n))); break;
       case 'D': push('literal', ds(pad(div(f.days - daysFromCivil(f.gy, 1, 1), 1) + 1, n))); break;
       case 'E': case 'e': case 'c':
         if ((t.l === 'e' || t.l === 'c') && n <= 2) push('weekday', ds(pad(f.wd + 1, n)));
@@ -596,60 +497,8 @@ function slot(o, m) {
 function joined(parts) { var out = ''; for (var i = 0; i < parts.length; i++) out += parts[i].value; return out; }
 
 // ---- ranges --------------------------------------------------------------------------------------------------------------------------------------------
-function rangeParts(s, a, b) {
-  var ta = timeValue(a), tb = timeValue(b);
-  var fa = fieldsOf(ta, s.timeZone, s.calendar), fb = fieldsOf(tb, s.timeZone, s.calendar);
-  var cd = calData(s), pa = renderTokens(s, s.tokens, fa), pb = renderTokens(s, s.tokens, fb);
-  function tag(parts, src) { return parts.map(function (p) { return { type: p.type, value: p.value, source: src }; }); }
-  if (joined(pa) === joined(pb)) return tag(pa, 'shared');
-  var fallback = (cd.iv && cd.iv._) || '{0} – {1}';
-  var useFallback = function () {
-    var out = [], pieces = fallback.split(/(\{0\}|\{1\})/);
-    pieces.forEach(function (p) { if (p === '{0}') out = out.concat(tag(pa, 'startRange')); else if (p === '{1}') out = out.concat(tag(pb, 'endRange')); else if (p) out.push({ type: 'literal', value: p, source: 'shared' }); });
-    return out;
-  };
-  if (!cd.iv || s.dateStyle || s.timeStyle && false) return useFallback();
-  // greatest difference: era, year, month, day, am/pm, hour, minute, second
-  var diff = fa.era !== fb.era ? 'G' : fa.y !== fb.y ? 'y' : fa.m !== fb.m ? 'M' : fa.d !== fb.d ? 'd' : (fa.h >= 12) !== (fb.h >= 12) ? 'a' : fa.h !== fb.h ? 'h' : fa.mi !== fb.mi ? 'm' : fa.s !== fb.s ? 's' : 'S';
-  var req = skeletonOfFields(s), best = null, bestD = Infinity, key;
-  if (s.dateStyle || s.timeStyle) req = styleSkeleton(s);
-  for (key in cd.iv) {
-    if (key === '_') continue;
-    var d = distance(req, skelCached(key));
-    if (d < bestD) { bestD = d; best = key; }
-  }
-  if (best === null || bestD >= 0x1000) return useFallback();
-  var rec = cd.iv[best], dl = diff === 'h' && rec.h === undefined ? 'H' : diff;
-  var pat = rec[diff] || (diff === 'h' ? rec.H : undefined);
-  if (!pat) return useFallback();
-  // adjust field widths of the interval pattern to the request, then split it into the two halves at the first repeated letter
-  var toks = adjustPattern(parsePattern(pat), req, skelCached(best)), seen = {}, split = -1;
-  for (var i = 0; i < toks.length; i++) {
-    var t = toks[i]; if (t.l === undefined) continue;
-    var c = CLASS[t.l];
-    if (seen[c]) { split = i; break; }
-    seen[c] = 1;
-  }
-  if (split < 0) return useFallback();
-  var first = toks.slice(0, split), second = toks.slice(split);
-  // the first half keeps its trailing literal ("MMM d – "), as ICU does
-  var zt = zoneToken(s.fields);
-  var out = tag(renderTokens(s, first, fa), 'startRange').map(function (p, idx, arr) { return p; });
-  // literals between the halves are shared
-  var left = renderTokens(s, first, fa), right = renderTokens(s, second, fb);
-  var res = [];
-  left.forEach(function (p) { res.push({ type: p.type, value: p.value, source: p.type === 'literal' ? 'shared' : 'startRange' }); });
-  right.forEach(function (p) { res.push({ type: p.type, value: p.value, source: p.type === 'literal' ? 'shared' : 'endRange' }); });
-  return res;
-}
-function styleSkeleton(s) {
-  var req = {}, cd = calData(s);
-  [s.dateStyle && cd.df[s.dateStyle], s.timeStyle && cd.tf[s.timeStyle]].forEach(function (p) {
-    if (!p) return;
-    parsePattern(p).forEach(function (t) { if (t.l && CLASS[t.l] && !req[CLASS[t.l]]) req[CLASS[t.l]] = [t.l, t.n]; });
-  });
-  return req;
-}
+H.dt = { single: function (s, f) { return renderTokens(s, s.tokens, f).map(function (p) { return { type: p.type, value: p.value, source: 'shared' }; }); }, calData: calData, generator: generator, renderTokens: renderTokens, timeValue: timeValue, fieldsOf: fieldsOf };
+function rangeParts(s, a, b) { H.load('intlrange'); return H.range.parts(s, a, b); }
 
 // ---- the class ------------------------------------------------------------------------------------------------------------------------------------------
 function DateTimeFormat(locales, options) {
@@ -667,17 +516,17 @@ H.attrs(DateTimeFormat.prototype, {
 H.define(DateTimeFormat.prototype, 'formatToParts', function formatToParts(d) { return formatParts(slot(this, 'formatToParts'), d); });
 H.define(DateTimeFormat.prototype, 'formatRange', function formatRange(a, b) {
   var s = slot(this, 'formatRange');
-  if (arguments.length < 2 || a === undefined || b === undefined) throw new TypeError('startDate or endDate is undefined');
+  if (arguments.length < 2 || a === undefined || b === undefined) throw new TypeError('Invalid time value');
   return joined(rangeParts(s, a, b));
 });
 H.define(DateTimeFormat.prototype, 'formatRangeToParts', function formatRangeToParts(a, b) {
   var s = slot(this, 'formatRangeToParts');
-  if (arguments.length < 2 || a === undefined || b === undefined) throw new TypeError('startDate or endDate is undefined');
+  if (arguments.length < 2 || a === undefined || b === undefined) throw new TypeError('Invalid time value');
   return rangeParts(s, a, b);
 });
 H.define(DateTimeFormat.prototype, 'resolvedOptions', function resolvedOptions() {
   var s = slot(this, 'resolvedOptions'), o = { locale: s.locale, calendar: s.calendar, numberingSystem: s.nu, timeZone: s.timeZone };
-  if (s.hourCycle && (s.resolved.hour || s.timeStyle)) { o.hourCycle = s.hourCycle; o.hour12 = s.hourCycle === 'h11' || s.hourCycle === 'h12'; }
+  if (s.hourCycle && (s.realHour || s.timeStyle)) { o.hourCycle = s.hourCycle; o.hour12 = s.hourCycle === 'h11' || s.hourCycle === 'h12'; }
   var r = s.resolved;
   if (!s.dateStyle && !s.timeStyle) FIELD_ORDER.forEach(function (k) { if (r[k] !== undefined) o[k] = r[k]; });
   if (s.dateStyle) o.dateStyle = s.dateStyle;

@@ -13,7 +13,7 @@ Sweef is not a fork of Chromium. It has its own CSS layout engine, rasterizer, s
 
 | | Playwright + Chromium | Sweef |
 |---|---|---|
-| Install | ~250 MB browser download | **35.3 MiB static binary** (37.0 MB stripped, linux/amd64, measured 2026-10-14; 4.7 MiB of the 40 MiB release budget left) |
+| Install | ~250 MB browser download | **35.5 MiB static binary** (37.2 MB stripped, linux/amd64, measured 2026-10-14; 4.5 MiB of the 40 MiB release budget left) |
 | Memory | ~90 to 150 MB idle, 1.1 GB process tree under agent-browser | **13 MB idle, 22 MB typical page, 52 MB peak on a script-heavy Wikipedia article** (measured 2026-10-11, before the WebRTC and WebAssembly work; an empty daemon is 3.4 MB resident today; not yet re-measured per page) |
 | CPU | 2 to 4 cores wanted | **1 core** |
 | Agent interface | CDP + language bindings | **MCP native**, plus a framed JSON-RPC socket and a Node SDK |
@@ -117,7 +117,7 @@ meaningful, not the absolute milliseconds.
 | New tab (p50) | 7.5 ms | 49.8 ms |
 | Start to first UI frame, cold cache | 492 ms | 770 ms |
 | Memory, 1 tab / 10 tabs (PSS, whole process tree) | 101 / 260 MiB | 370 / 506 MiB |
-| Installed size | 35.3 MiB (binary; was 25 MiB when measured, before WebRTC, WebAssembly, the web platform layer and Intl data, and 39.3 MiB before the embedded data was compressed) | 596 MiB |
+| Installed size | 35.5 MiB (binary; was 25 MiB when measured, before WebRTC, WebAssembly, the web platform layer and Intl data, and 39.3 MiB before the embedded data was compressed) | 596 MiB |
 | Idle CPU, static page | 0.00% | 0.45% |
 
 Where Chromium is ahead, and we say so:
@@ -317,7 +317,7 @@ Three states: **works** (covered by tests), **partial** (works for the common ca
 | Audio output (pure-Go PulseAudio on Linux; oto on Windows and macOS) | works on Linux; Windows and macOS compile-checked only |
 | H.264 and VP9 playback: 1080p30 in real time on 4 cores, 1080p60 when the machine is not busy ([docs/media-streaming.md](docs/media-streaming.md)) | works (measured on synthetic clips) |
 | Encrypted media: EME with Clear Key; Widevine through a user-installed CDM in the `sweef-cdm` helper; PlayReady and FairPlay stubs ([docs/drm.md](docs/drm.md)) | Clear Key works; **Widevine, PlayReady and FairPlay untested against real services**; no bundled CDM |
-| `Intl`: `NumberFormat`, `DateTimeFormat`, `PluralRules`, `RelativeTimeFormat`, `ListFormat`, `DisplayNames`, `DurationFormat`, `Collator`, `Segmenter` on CLDR 47 data for 73 locales, with the IANA time zone database embedded | partial (golden tests against Node 22: numbers 32 of 47,000 cases differ, dates about 89% on an adversarial matrix, collation about 0.3% of pairs; no East Asian collation or dictionary word breaking; non-Gregorian calendars other than buddhist and persian fall back) |
+| `Intl`: `NumberFormat`, `DateTimeFormat`, `PluralRules`, `RelativeTimeFormat`, `ListFormat`, `DisplayNames`, `DurationFormat`, `Collator`, `Segmenter` on CLDR 47 data for 73 locales, with the IANA time zone database embedded | partial (against Node 22 on seeded matrices: numbers 99.6%, dates 98.3%, collation 99.85%; eleven calendars, pinyin and stroke order; no dictionary word breaking for Thai, Lao, Khmer, Burmese, Chinese and Japanese, no `chinese`/`dangi` calendar) |
 | Echo cancellation, noise suppression and automatic gain on the WebRTC send path | works (reported in `getSettings`); not compared with Chromium's processing |
 | Fullscreen API, Media Session (now-playing control in the browser), Async Clipboard with a per-site permission | works |
 | Browser extensions | not planned |
@@ -406,7 +406,7 @@ Requires Go 1.26 (the `go` toolchain downloads it automatically when `GOTOOLCHAI
 - Verify on real hardware and sites: YouTube, Google Meet, Zoom, WhatsApp Web, real sign-in popups, Windows and macOS audio, capture and notifications
 - Netflix-class DRM: a Widevine signing arrangement, and PlayReady and FairPlay verified on real machines
 - Zoom web: an H.264 encoder (it may expect one) and an Emscripten pthreads run
-- Binary size: 4.7 MiB of the 40 MiB budget is left (it was 0.7 MiB before the embedded data was compressed). New data must be embedded deflated and measured (`docs/development.md`, "Binary size budget"); four fifths of the file is code and its metadata, so the next big step has to come from code
+- Binary size: 4.5 MiB of the 40 MiB budget is left (it was 0.7 MiB before the embedded data was compressed). New data must be embedded deflated and measured (`docs/development.md`, "Binary size budget"); four fifths of the file is code and its metadata, so the next big step has to come from code
 - Iframes: scrollbars, cross-window DOM access, popups that inherit a sandbox
 - `sweef watch` live event stream
 - Playwright trace format subset for the trace viewer
