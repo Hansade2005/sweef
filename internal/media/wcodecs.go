@@ -155,6 +155,16 @@ func (d *WCVideoDecoder) decodeOne(data []byte) (*WCPicture, error) {
 	var err error
 	if d.pd != nil {
 		p, err = d.pd.DecodePic(data)
+		// The player keeps plain 8-bit 4:2:0 pictures lazy (converted to RGBA straight from the decoder's planes
+		// when shown). WebCodecs hands out the sample planes themselves, so wait for the picture and narrow it.
+		if p.lazy && p.frm != nil {
+			p.frm.Wait()
+			if img, ok := p.frm.ToYCbCr(); ok {
+				p = vpic{ycc: img}
+			} else {
+				p.lazy = false
+			}
+		}
 	} else {
 		var ycc *image.YCbCr
 		ycc, err = d.dec.Decode(data)
