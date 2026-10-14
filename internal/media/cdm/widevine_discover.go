@@ -48,6 +48,17 @@ type DiscoverOptions struct {
 	GOOS   string
 	GOARCH string
 	Home   string
+	// SystemRoot prefixes the fixed system install paths (/opt, /Applications). Empty means the real
+	// filesystem root; tests point it at an empty directory so a machine's own Chrome is never found.
+	SystemRoot string
+}
+
+// sysPath is a fixed system path under SystemRoot.
+func (o *DiscoverOptions) sysPath(p string) string {
+	if o.SystemRoot == "" {
+		return p
+	}
+	return filepath.Join(o.SystemRoot, filepath.FromSlash(p))
 }
 
 func (o *DiscoverOptions) fill() {
@@ -178,9 +189,9 @@ func chromeRoots(o DiscoverOptions) []namedRoot {
 			add("Chromium", filepath.Join(cfg, "chromium", "WidevineCdm"))
 			add("Microsoft Edge", filepath.Join(cfg, "microsoft-edge", "WidevineCdm"))
 		}
-		add("Google Chrome (system)", "/opt/google/chrome/WidevineCdm")
-		add("Google Chrome Beta (system)", "/opt/google/chrome-beta/WidevineCdm")
-		add("Microsoft Edge (system)", "/opt/microsoft/msedge/WidevineCdm")
+		add("Google Chrome (system)", o.sysPath("/opt/google/chrome/WidevineCdm"))
+		add("Google Chrome Beta (system)", o.sysPath("/opt/google/chrome-beta/WidevineCdm"))
+		add("Microsoft Edge (system)", o.sysPath("/opt/microsoft/msedge/WidevineCdm"))
 	case "darwin":
 		if o.Home != "" {
 			app := filepath.Join(o.Home, "Library", "Application Support")
@@ -188,7 +199,7 @@ func chromeRoots(o DiscoverOptions) []namedRoot {
 			add("Chromium", filepath.Join(app, "Chromium", "WidevineCdm"))
 			add("Microsoft Edge", filepath.Join(app, "Microsoft Edge", "WidevineCdm"))
 		}
-		glob("Google Chrome (app bundle)", "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/*/Libraries/WidevineCdm")
+		glob("Google Chrome (app bundle)", o.sysPath("/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/*/Libraries/WidevineCdm"))
 	case "windows":
 		local := o.Getenv("LOCALAPPDATA")
 		if local == "" && o.Home != "" {

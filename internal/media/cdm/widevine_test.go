@@ -72,7 +72,7 @@ func TestDiscoverChromeInstallationsPerPlatform(t *testing.T) {
 			for k, v := range c.env {
 				env[k] = strings.ReplaceAll(v, "@HOME", home)
 			}
-			in, err := DiscoverWidevine(DiscoverOptions{GOOS: c.goos, GOARCH: c.goarch, Home: home, Getenv: func(k string) string { return env[k] }})
+			in, err := DiscoverWidevine(DiscoverOptions{SystemRoot: noSystem(t), GOOS: c.goos, GOARCH: c.goarch, Home: home, Getenv: func(k string) string { return env[k] }})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,18 +88,18 @@ func TestDiscoverChromeInstallationsPerPlatform(t *testing.T) {
 
 func TestDiscoverNothingFound(t *testing.T) {
 	home := t.TempDir()
-	_, err := DiscoverWidevine(DiscoverOptions{GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: func(string) string { return "" }})
+	_, err := DiscoverWidevine(DiscoverOptions{SystemRoot: noSystem(t), GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: func(string) string { return "" }})
 	if !errors.Is(err, ErrWidevineNotFound) || !strings.Contains(err.Error(), WidevineEnv) {
 		t.Fatalf("%v", err)
 	}
-	_, err = DiscoverWidevine(DiscoverOptions{GOOS: "freebsd", GOARCH: "amd64", Home: home, Getenv: func(string) string { return "" }})
+	_, err = DiscoverWidevine(DiscoverOptions{SystemRoot: noSystem(t), GOOS: "freebsd", GOARCH: "amd64", Home: home, Getenv: func(string) string { return "" }})
 	if !errors.Is(err, ErrWidevineNotFound) {
 		t.Fatalf("%v", err)
 	}
 	// the wrong platform directory is not picked up
 	root := filepath.Join(home, ".config", "google-chrome", "WidevineCdm")
 	writeVersion(t, root, "4.10.1.0", "linux", "arm64")
-	if _, err := DiscoverWidevine(DiscoverOptions{GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: func(string) string { return "" }}); !errors.Is(err, ErrWidevineNotFound) {
+	if _, err := DiscoverWidevine(DiscoverOptions{SystemRoot: noSystem(t), GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: func(string) string { return "" }}); !errors.Is(err, ErrWidevineNotFound) {
 		t.Fatalf("an arm64 CDM must not be used on amd64: %v", err)
 	}
 }
@@ -112,7 +112,7 @@ func TestDiscoverExplicitPathAndEnv(t *testing.T) {
 	noEnv := func(string) string { return "" }
 
 	// settings: a library file
-	in, err := DiscoverWidevine(DiscoverOptions{GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: noEnv, Path: lib})
+	in, err := DiscoverWidevine(DiscoverOptions{SystemRoot: noSystem(t), GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: noEnv, Path: lib})
 	if err != nil || in.Library != lib || in.Version != "5.0.0.1" || in.Source != "settings" || in.Manifest.Name != "WidevineCdm" {
 		t.Fatalf("%+v %v", in, err)
 	}
@@ -123,13 +123,13 @@ func TestDiscoverExplicitPathAndEnv(t *testing.T) {
 		}
 		return ""
 	}
-	in, err = DiscoverWidevine(DiscoverOptions{GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: env})
+	in, err = DiscoverWidevine(DiscoverOptions{SystemRoot: noSystem(t), GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: env})
 	if err != nil || in.Library != lib || in.Source != WidevineEnv {
 		t.Fatalf("%+v %v", in, err)
 	}
 	// settings beat the environment
 	other := writeVersion(t, filepath.Join(home, "other"), "6.0.0.0", "linux", "amd64")
-	in, err = DiscoverWidevine(DiscoverOptions{GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: env, Path: other})
+	in, err = DiscoverWidevine(DiscoverOptions{SystemRoot: noSystem(t), GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: env, Path: other})
 	if err != nil || in.Library != other {
 		t.Fatalf("%+v %v", in, err)
 	}
@@ -137,13 +137,13 @@ func TestDiscoverExplicitPathAndEnv(t *testing.T) {
 	bare := filepath.Join(home, "bare", "libwidevinecdm.so")
 	_ = os.MkdirAll(filepath.Dir(bare), 0o755)
 	_ = os.WriteFile(bare, []byte("x"), 0o755)
-	in, err = DiscoverWidevine(DiscoverOptions{GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: noEnv, Path: bare})
+	in, err = DiscoverWidevine(DiscoverOptions{SystemRoot: noSystem(t), GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: noEnv, Path: bare})
 	if err != nil || in.Library != bare || in.Version != "" || len(in.Manifest.Codecs) != 0 {
 		t.Fatalf("%+v %v", in, err)
 	}
 	// a wrong explicit path is an error, not a silent fallback to Chrome's copy
 	for _, p := range []string{filepath.Join(home, "missing"), t.TempDir()} {
-		if _, err := DiscoverWidevine(DiscoverOptions{GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: noEnv, Path: p}); err == nil {
+		if _, err := DiscoverWidevine(DiscoverOptions{SystemRoot: noSystem(t), GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: noEnv, Path: p}); err == nil {
 			t.Errorf("path %q accepted", p)
 		}
 	}
@@ -170,7 +170,7 @@ func TestParseWidevineManifest(t *testing.T) {
 func TestWidevineProviderAvailabilityAndCapabilities(t *testing.T) {
 	home := t.TempDir()
 	noEnv := func(string) string { return "" }
-	disc := DiscoverOptions{GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: noEnv}
+	disc := DiscoverOptions{SystemRoot: noSystem(t), GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: noEnv}
 
 	// nothing installed: unsupported, with an actionable reason, and nothing is started
 	p := NewWidevineProvider(WidevineOptions{Discover: disc, Connect: func(context.Context, *WidevineInstall, InitParams) (*Remote, error) {
@@ -236,7 +236,7 @@ func TestWidevineNewPassesStorageAndOrigin(t *testing.T) {
 	var gotIn *WidevineInstall
 	p := NewWidevineProvider(WidevineOptions{
 		Path:     lib,
-		Discover: DiscoverOptions{GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: func(string) string { return "" }},
+		Discover: DiscoverOptions{SystemRoot: noSystem(t), GOOS: "linux", GOARCH: "amd64", Home: home, Getenv: func(string) string { return "" }},
 		Connect: func(ctx context.Context, in *WidevineInstall, init InitParams) (*Remote, error) {
 			got, gotIn = init, in
 			c, s := net.Pipe()
@@ -290,4 +290,11 @@ func TestHelperLookup(t *testing.T) {
 	if _, err := FindHelper(); err == nil {
 		t.Fatal("missing helper accepted")
 	}
+}
+
+// noSystem returns an empty directory used as the system root, so tests never see a CDM installed on the machine
+// running them (CI runners ship Google Chrome).
+func noSystem(t *testing.T) string {
+	t.Helper()
+	return t.TempDir()
 }
