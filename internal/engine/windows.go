@@ -361,7 +361,7 @@ func (t *Tab) navigateTarget(s navSpec) *Tab {
 	abs := strings.TrimSpace(s.rawURL)
 	if abs == "" || strings.EqualFold(abs, "about:blank") {
 		abs = "about:blank"
-	} else if strings.HasPrefix(strings.ToLower(abs), "javascript:") {
+	} else if isScriptURL(abs) { // javascript: and vbscript:; data: is judged by navSchemeAllowed below
 		abs = "about:blank"
 	} else if u, err := resolveURL(base, abs); err == nil {
 		abs = u

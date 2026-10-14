@@ -31,6 +31,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"sync"
@@ -163,6 +164,9 @@ func (m *wasmSharedMem) wait(off uint32, size int, exp int64, timeoutNs int64) i
 	if size == 8 {
 		out = m.wait64.Call([]reflect.Value{reflect.ValueOf(off), reflect.ValueOf(uint64(exp)), reflect.ValueOf(timeoutNs), m.rd64})
 	} else {
+		if exp < math.MinInt32 || exp > math.MaxInt32 {
+			return 1 // "not-equal": no 32-bit cell can hold the expected value
+		}
 		out = m.wait32.Call([]reflect.Value{reflect.ValueOf(off), reflect.ValueOf(uint32(int32(exp))), reflect.ValueOf(timeoutNs), m.rd32})
 	}
 	return int(out[0].Uint())
