@@ -104,7 +104,7 @@ function RelativeTimeFormat(locales, options) {
   var r = I.resolveLocale(requested, ['nu'], { nu: nu });
   var style = I.getOption(options, 'style', 'string', ['long', 'short', 'narrow'], 'long');
   var numeric = I.getOption(options, 'numeric', 'string', ['always', 'auto'], 'always');
-  var data = I.localeData(r.base), nus = r.ext.nu && I.digitsOf(r.ext.nu) ? r.ext.nu : data.n.nu;
+  var data = I.localeData(r.base), nus = r.ext.nu && I.digitsOf(r.ext.nu) ? r.ext.nu : I.defaultNu(r.base, data);
   this[RT] = { locale: r.locale, base: r.base, style: style, numeric: numeric, nu: nus, data: data, nf: new Intl.NumberFormat(r.base, { numberingSystem: nus }), pr: new PluralRules(r.base) };
 }
 function rtRecord(s, unit) {
@@ -311,7 +311,7 @@ function DurationFormat(locales, options) {
   var nu = options.numberingSystem;
   if (nu !== undefined) { nu = String(nu); if (!/^[a-z0-9]{3,8}(-[a-z0-9]{3,8})*$/i.test(nu)) throw new RangeError('Invalid numberingSystem : ' + nu); nu = nu.toLowerCase(); }
   var r = I.resolveLocale(requested, ['nu'], { nu: nu });
-  var data = I.localeData(r.base), nus = r.ext.nu && I.digitsOf(r.ext.nu) ? r.ext.nu : data.n.nu;
+  var data = I.localeData(r.base), nus = r.ext.nu && I.digitsOf(r.ext.nu) ? r.ext.nu : I.defaultNu(r.base, data);
   var style = I.getOption(options, 'style', 'string', ['long', 'short', 'narrow', 'digital'], 'short');
   var s = { locale: r.locale, base: r.base, nu: nus, style: style, units: {} }, prev = '';
   DUR.forEach(function (u, i) {
@@ -451,7 +451,7 @@ defineClass(DurationFormat, 'DurationFormat', 0);
 var CO = Symbol('Collator');
 var TAILOR = {
   sv: [['z', ['å', ['ä', 'æ'], ['ö', 'ø']]]], fi: [['z', ['å', ['ä', 'æ'], ['ö', 'ø']]]],
-  da: [['z', [['æ', 'ä'], ['ø', 'ö'], 'å']]], nb: [['z', [['æ', 'ä'], ['ø', 'ö'], 'å']]], nn: [['z', [['æ', 'ä'], ['ø', 'ö'], 'å']]], no: [['z', [['æ', 'ä'], ['ø', 'ö'], 'å']]],
+  da: [['z', [['æ', 'ä'], ['ø', 'ö'], ['å', 'aa']]]], nb: [['z', [['æ', 'ä'], ['ø', 'ö'], ['å', 'aa']]]], nn: [['z', [['æ', 'ä'], ['ø', 'ö'], ['å', 'aa']]]], no: [['z', [['æ', 'ä'], ['ø', 'ö'], ['å', 'aa']]]],
   es: [['n', ['ñ']]], gl: [['n', ['ñ']]], ast: [['n', ['ñ']]],
   pl: [['a', ['ą']], ['c', ['ć']], ['e', ['ę']], ['l', ['ł']], ['n', ['ń']], ['o', ['ó']], ['s', ['ś']], ['z', ['ź', 'ż']]],
   cs: [['c', ['č']], ['h', ['ch']], ['r', ['ř']], ['s', ['š']], ['z', ['ž']]], sk: [['a', ['ä']], ['c', ['č']], ['h', ['ch']], ['o', ['ô']], ['r', ['ř']], ['s', ['š']], ['z', ['ž']]],
@@ -468,10 +468,32 @@ var PUNCT_ORDER = '_-,;:!?.\'"()[]{}@*/\\&#%`^+<=>|~$';
 var ND_RE = /\p{Nd}/u, P_RE = /\p{P}/u, S_RE = /\p{S}/u, Z_RE = /[\s\p{Z}]/u, M_RE = /\p{M}/u, C_RE = /[\p{Cc}\p{Cf}]/u, L_RE = /\p{L}/u;
 // secondary weights of combining marks (CLDR root order of U+0300..036F)
 var MARK_ORDER = '34f 332 313 343 314 301 341 300 340 306 302 30c 30a 342 308 344 30b 303 307 338 327 328 304 30d 30e 312 315 31a 33d 33e 33f 346 34a 34b 34c 350 351 352 357 35b 35d 35e 316 317 318 319 31c 31d 31e 31f 320 329 32a 32b 32c 32f 333 33a 33b 33c 347 348 349 34d 34e 353 354 355 356 359 35a 35c 35f 362 336 337 335 305 309 30f 310 311 31b 321 322 323 324 325 326 32d 32e 330 331 334 339 345 358 360 361 363 368 369 364 36a 365 36b 366 36c 36d 367 36e 36f'.split(' ');
+// the root collation order of the scripts whose order code point order does not give (tools/intlgen/collgen.js, data coll.json.gz)
+var collData = null, collMaps = Object.create(null);
+function CD() { // the parsed data file
+  if (collData) return collData;
+  var raw = g.__sw.intlLocale('coll'), d = raw ? JSON.parse(raw) : {};
+  d.avail = new Set((d.a || '').split(' '));
+  return (collData = d);
+}
+// one table as a Map from character to [primary weight, secondary step, tertiary step]; built when first needed.
+// In the data "\n" starts a primary weight, U+0001 a secondary step and U+0002 a tertiary one. 'm' is the marks without a primary weight.
+function tab(name) {
+  var m = collMaps[name];
+  if (m) return m;
+  m = collMaps[name] = new Map();
+  var str = name.charAt(0) === '~' ? (CD().ta || {})[name.slice(1)] : CD()[name], p = 0, sc = 0, tr = 0;
+  if (!str) return m;
+  if (name === 'm') { Array.from(str).forEach(function (c, i) { m.set(c.codePointAt(0), 400 + i); }); return m; }
+  Array.from(str).forEach(function (c) {
+    if (c === '\n') { p++; sc = 0; tr = 0; } else if (c === '\u0001') { sc++; tr = 0; } else if (c === '\u0002') tr++; else m.set(c, [p, sc, tr]);
+  });
+  return m;
+}
 var markRankMap = null;
 function markRank(cp) {
   if (!markRankMap) { markRankMap = Object.create(null); MARK_ORDER.forEach(function (h, i) { markRankMap[parseInt(h, 16)] = i + 1; }); }
-  return markRankMap[cp] || 200 + (cp & 1023);
+  return markRankMap[cp] || (cp > 0x36f && tab('m').get(cp)) || 200 + (cp & 1023);
 }
 var tailorCache = Object.create(null);
 function tailorFor(lang, script) {
@@ -507,14 +529,20 @@ function Collator(locales, options) {
   var l = new Locale(r.base);
   var sens = I.getOption(options, 'sensitivity', 'string', ['base', 'accent', 'case', 'variant'], 'variant');
   var ip = options.ignorePunctuation;
-  ip = ip === undefined ? l.language === 'th' : !!ip;
+  ip = ip === undefined ? l.language === 'th' && usage !== 'search' : !!ip;
   var kn = numeric !== undefined ? numeric : r.ext.kn !== undefined ? r.ext.kn !== 'false' : false;
-  var kf = caseFirst !== undefined ? caseFirst : r.ext.kf || 'false';
+  var kf = caseFirst !== undefined ? caseFirst : r.ext.kf || (l.language === 'da' && usage !== 'search' ? 'upper' : 'false'); // (Danish CLDR data puts capitals first)
   var co = r.ext.co && r.ext.co !== 'default' && r.ext.co !== 'standard' && r.ext.co !== 'search' ? r.ext.co : 'default';
-  var locale = r.locale;
+  var plain = usage === 'search'; // (Chinese: pinyin order for simplified, stroke order for traditional) // the search collation is the root one: a locale's tailoring and reordering do not apply
+  var locale = collationLocale(r.base) + r.locale.slice(r.base.length); // (ICU names the locale its collation data came from)
   // the extension keys the collator resolved appear in the tag only when they came from it
-  self[CO] = { locale: locale, usage: usage, sensitivity: sens, ignorePunctuation: ip, collation: co, numeric: kn, caseFirst: kf, lang: l.language, script: l.script, tailor: tailorFor(l.language, l.script), keys: new Map(), bound: null, backwards: l.language === 'fr' && l.region === 'CA' };
+  self[CO] = { locale: locale, usage: usage, sensitivity: sens, ignorePunctuation: ip, collation: co, numeric: kn, caseFirst: kf, lang: l.language, script: l.script, tailor: tailorFor(plain ? 'und' : l.language, l.script), reorder: plain ? [] : reorderOf(l.language), arabic: !plain && /^(ar|fa|ur)$/.test(l.language) ? '~' + l.language : null, han: plain || l.language !== 'zh' ? null : l.script === 'Hant' || /^(TW|HK|MO)$/.test(l.region || '') && l.script !== 'Hans' ? 'zt' : 'zh', keys: new Map(), bound: null, backwards: !plain && l.language === 'fr' && l.region === 'CA' };
   return self;
+}
+function collationLocale(tag) { // the longest prefix of the tag that has collation data
+  var avail = CD().avail, parts = tag.split('-');
+  while (parts.length > 1 && !avail.has(parts.join('-'))) parts.pop();
+  return parts.join('-');
 }
 function digitValue(ch) {
   var cp = ch.codePointAt(0);
@@ -530,6 +558,12 @@ function buildKey(s, str) {
     var n = c.normalize('NFKC');
     if (n === c) { chars.push(c); comp.push(0); } else Array.from(n).forEach(function (x) { chars.push(x); comp.push(1); });
   });
+  for (var q = 0; q + 1 < chars.length; q++) { // Thai and Lao write a leading vowel before its consonant, and sort it after
+    var c0 = chars[q].codePointAt(0), c1 = chars[q + 1].codePointAt(0);
+    if ((c0 >= 0xe40 && c0 <= 0xe44 && c1 >= 0xe01 && c1 <= 0xe2e) || (c0 >= 0xec0 && c0 <= 0xec4 && c1 >= 0xe81 && c1 <= 0xeae)) {
+      var swapped = chars[q]; chars[q] = chars[q + 1]; chars[q + 1] = swapped; q++;
+    }
+  }
   var upperFirst = s.caseFirst === 'upper';
   var push = function (w, secv, terv) { p.push(w); sec.push(secv); ter.push(terv); };
   for (var i = 0; i < chars.length; i++) {
@@ -546,8 +580,10 @@ function buildKey(s, str) {
       if (matched) continue;
     }
     if (tl.map[lower]) { push(tl.map[lower].w, tl.map[lower].v, tv); continue; }
+    var zc = ch.codePointAt(0);
+    if (zc === 32) { if (!s.ignorePunctuation) push(1e6, 0, 0); continue; }
+    if ((zc >= 9 && zc <= 13) || zc === 0x85 || Z_RE.test(ch)) { var ze = tab('z').get(ch); if (!s.ignorePunctuation) push(1e6 + (ze ? ze[0] : zc), ze ? ze[1] : 0, ze ? ze[2] : 0); continue; }
     if (C_RE.test(ch)) continue;
-    if (Z_RE.test(ch)) { if (!s.ignorePunctuation) push(1e6 + (ch === ' ' ? 0 : ch.codePointAt(0)), 0, 0); continue; }
     if (ND_RE.test(ch)) {
       if (s.numeric) {
         var digs = '';
@@ -560,14 +596,16 @@ function buildKey(s, str) {
       continue;
     }
     var cp = ch.codePointAt(0);
-    if (cp < 128 && !L_RE.test(ch)) {
-      var idx = PUNCT_ORDER.indexOf(ch);
-      if (idx < 0) idx = 100 + cp;
-      if (idx <= PUNCT_ORDER.indexOf('}')) { if (!s.ignorePunctuation) push(2e6 + idx, 0, 0); } else push(3e6 + idx, 0, 0);
-      continue;
-    }
-    if (!L_RE.test(ch) && !M_RE.test(ch)) {
-      if (P_RE.test(ch)) { if (!s.ignorePunctuation) push(2e6 + 1000 + cp, 0, 0); } else push(3e6 + 1000 + cp, 0, 0);
+    if (!L_RE.test(ch) && !M_RE.test(ch) || (cp >= 0x3000 && cp <= 0x30ff && tab('s').has(ch))) { // punctuation and symbols (and the modifier letters of kana), in the order of the root collation
+      var e0 = tab('p').get(ch);
+      if (e0) { if (!s.ignorePunctuation) push(2e6 + e0[0], e0[1], e0[2]); continue; }
+      e0 = tab('s').get(ch);
+      if (e0) { push(3e6 + e0[0], e0[1], e0[2]); continue; }
+      if (cp < 128) {
+        var idx = PUNCT_ORDER.indexOf(ch);
+        if (idx < 0) idx = 100 + cp;
+        if (idx <= PUNCT_ORDER.indexOf('}')) { if (!s.ignorePunctuation) push(2e6 + idx, 0, 0); } else push(3e6 + idx, 0, 0);
+      } else if (P_RE.test(ch)) { if (!s.ignorePunctuation) push(2e6 + 1000 + cp, 0, 0); } else push(3e6 + 1000 + cp, 0, 0);
       continue;
     }
     if (SPECIAL[lower]) {
@@ -577,28 +615,60 @@ function buildKey(s, str) {
       continue;
     }
     if (STROKE[lower]) { push(5e6 + (STROKE[lower].charCodeAt(0) - 97) * 1000 + 500, 0, tv); continue; }
-    var dec = lower.normalize('NFD'), base = dec.codePointAt(0), marks = 0, k, c;
+    if (cp >= 0xac00 && cp <= 0xd7a3) { // a Hangul syllable sorts as its jamo: leading consonant, vowel and, when there is one, trailing consonant
+      var si = cp - 0xac00, jam = [0x1100 + Math.floor(si / 588), 0x1161 + Math.floor((si % 588) / 28)];
+      if (si % 28) jam.push(0x11a7 + si % 28);
+      var hb = band(s, 'Hangul', 6e6);
+      jam.forEach(function (j) { var je = tab('g').get(String.fromCodePoint(j)); push(hb + (je ? je[0] : j), 0, tv); });
+      continue;
+    }
+    if (cp >= 0x4e00 && cp <= 0x9fff || cp >= 0x3400 && cp <= 0x4dbf) { // Han: the pinyin order of the common characters for Chinese, code point order otherwise
+      var hbase = band(s, 'Han', 6e6 + 5e4), he = s.han ? tab(s.han).get(ch) : null;
+      push(hbase + (he ? he[0] : 7000 + (cp >= 0x4e00 ? cp - 0x4e00 + 6000 : cp - 0x3400)), 0, he ? he[2] : 0);
+      continue;
+    }
+    var pre = cp >= 0x370 && tab('g').has(lower); // (letters ICU gives weights of their own: й, the Arabic hamza forms, Indic vowel signs)
+    var dec = pre ? lower : lower.normalize('NFD'), base = dec.codePointAt(0), marks = 0, k, c;
     for (k = String.fromCodePoint(base).length; k < dec.length; k++) { c = dec.charCodeAt(k); if (M_RE.test(dec[k])) marks = marks * 1024 + markRank(dec.codePointAt(k)); }
     // combining marks that follow a base character belong to it
-    while (i + 1 < chars.length && M_RE.test(chars[i + 1]) && !tl.map[chars[i + 1]]) { marks = marks * 1024 + markRank(chars[i + 1].normalize('NFD').codePointAt(0)); i++; }
-    if (M_RE.test(String.fromCodePoint(base))) { if (sec.length) sec[sec.length - 1] = sec[sec.length - 1] * 1024 + marks; continue; }
-    var w;
+    while (i + 1 < chars.length && M_RE.test(chars[i + 1]) && !tl.map[chars[i + 1]] && !(chars[i + 1].codePointAt(0) >= 0x370 && tab('g').has(chars[i + 1]))) { marks = marks * 1024 + markRank(chars[i + 1].normalize('NFD').codePointAt(0)); i++; }
+    if (M_RE.test(String.fromCodePoint(base)) && !pre) { if (sec.length) sec[sec.length - 1] = sec[sec.length - 1] * 1024 + marks; continue; }
+    // (Japanese ignores the difference between hiragana and katakana, and between half and full width kana, until the last level)
+    var kana = s.lang === 'ja' && base >= 0x30a1 && base <= 0x30f6;
+    if (kana) { base -= 0x60; comp[i] = 0; }
+    var w, bch = String.fromCodePoint(base), ent = base >= 0x370 ? tab('g').get(bch) : null;
     if (base >= 97 && base <= 122) w = 5e6 + (base - 97) * 1000;
-    else if (base >= 0x30a1 && base <= 0x30f6) { w = 6e6 + base - 0x60; tv = tv || 2; } // katakana sorts with hiragana, after it
     else if (base < 0x250) w = 5e6 + 26000 + base;
-    else w = 6e6 + scriptFirst(s.lang, base);
+    else if (ent) {
+      var te = s.arabic && tab(s.arabic).get(bch); // (the Arabic-script locales' own order of the Arabic letters, inside the span the root gives them)
+      if (te) { ent = te; w = band(s, bch, 6e6) + tab('g').get('\u0621')[0] + te[0] / 4096; } else w = band(s, bch, 6e6) + ent[0];
+      marks = marks * 64 + ent[1];
+      if (ch.toLowerCase() === ch.toUpperCase()) tv = ent[2] + (comp[i] ? 4 : 0); // (cased letters keep the case flag so caseFirst can turn it round)
+    } else w = band(s, bch, 6e6) + 7e4 + base;
     push(w, marks, tv);
   }
   return { p: p, s: sec, t: ter };
 }
-// locales that sort their own script ahead of Latin (CLDR reorder codes)
-function scriptFirst(lang, cp) {
-  var cyr = cp >= 0x400 && cp <= 0x52f, grk = cp >= 0x370 && cp <= 0x3ff, han = cp >= 0x4e00 && cp <= 0x9fff, hang = cp >= 0xac00 && cp <= 0xd7af;
-  if (cyr && (lang === 'ru' || lang === 'uk' || lang === 'bg' || lang === 'be' || lang === 'mk' || lang === 'kk')) return cp - 0x400 - 14e5;
-  if (grk && lang === 'el') return cp - 0x370 - 14e5;
-  if (lang === 'ko' && hang) return cp - 0xac00 - 14e5;
-  if (lang === 'ko' && han) return cp - 0x4e00 - 13e5;
-  return cp;
+// locales that sort their own script ahead of Latin (CLDR's reorder codes): [script, band] pairs; a band is the weight where the
+// script's letters start (Latin is 5e6, other scripts 6e6, Han after them)
+var FIRST = { ru: 'Cyrillic', uk: 'Cyrillic', bg: 'Cyrillic', be: 'Cyrillic', mk: 'Cyrillic', kk: 'Cyrillic', el: 'Greek', ar: 'Arabic', fa: 'Arabic', ur: 'Arabic', ps: 'Arabic', he: 'Hebrew', hi: 'Devanagari', mr: 'Devanagari', ne: 'Devanagari',
+  bn: 'Bengali', gu: 'Gujarati', pa: 'Gurmukhi', ta: 'Tamil', te: 'Telugu', kn: 'Kannada', ml: 'Malayalam', si: 'Sinhala', th: 'Thai', lo: 'Lao', km: 'Khmer', my: 'Myanmar', ka: 'Georgian', hy: 'Armenian' };
+var scriptRe = Object.create(null);
+function scriptTest(name) {
+  return scriptRe[name] || (scriptRe[name] = new RegExp(name === 'Kana' ? '[\\p{Script=Hiragana}\\p{Script=Katakana}]' : '\\p{Script=' + name + '}', 'u'));
+}
+function reorderOf(lang) { // [{ re, base }] in the order the scripts are tried
+  if (lang === 'ko') return [{ re: scriptTest('Hangul'), base: 4.5e6 }, { re: scriptTest('Han'), base: 4.6e6 }];
+  if (lang === 'zh') return [{ re: scriptTest('Han'), base: 4.5e6 }];
+  if (lang === 'ja') return [{ re: scriptTest('Kana'), base: 5.5e6 }, { re: scriptTest('Han'), base: 5.6e6 }];
+  return FIRST[lang] ? [{ re: scriptTest(FIRST[lang]), base: 4.5e6 }] : [];
+}
+// where the letters of a script start: its reorder band when the language sorts it first, otherwise the default
+function band(s, ch, dflt) {
+  var r = s.reorder, i;
+  if (ch === 'Hangul' || ch === 'Han') { for (i = 0; i < r.length; i++) if (r[i].re.test(ch === 'Han' ? '\u4e00' : '\uac00')) return r[i].base; return dflt; }
+  for (i = 0; i < r.length; i++) if (r[i].re.test(ch)) return r[i].base;
+  return dflt;
 }
 function cmpArr(a, b, backwards) {
   var n = Math.min(a.length, b.length), i;

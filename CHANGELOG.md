@@ -23,6 +23,24 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   embedded, instead of an English-only shim; `toLocaleString`, `toLocaleDateString` and `localeCompare` use them. Compared with
   Node 22 case by case (`tools/intlgen`, `internal/engine/intl_test.go`); gaps are listed in
   [docs/web-platform.md](docs/web-platform.md). Adds about 1.2 MB to the binary.
+- **`Intl` parity with Chromium.** Measured against Node 22 (ICU 77, CLDR 47) on seeded random matrices (`node tools/intlgen/matrix.js`,
+  same seeds before and after): `NumberFormat.format` matches in 99.6% of cases (was 93.4%), `formatRange` 99.4% (was 24.8%),
+  `formatToParts` 99.5% (was 75.7%); `DateTimeFormat.format` 98.3% (was 57.4%), `formatRange` / `formatRangeToParts` 98.1% (was 41.2% /
+  36.1%), `formatToParts` 98.6% (was 57.3%), `resolvedOptions` 99.3% (was 79.6%); `Collator` 99.85% of comparisons (was 93.05%) and
+  100% of resolved locales (was 80.5%). What changed: the date and time pattern of every locale now comes from a port of ICU's
+  `DateTimePatternGenerator` (the glue between date and time, `dayPeriod`, hour cycles) and ranges from a port of `DateIntervalFormat`
+  (`platformjs/intlpat.js`, `intlrange.js`); time zone names follow ICU's specific, generic, location and localized-GMT rules with
+  metazones; the `japanese`, `roc`, `islamic` (all variants), `hebrew`, `indian`, `coptic`, `ethiopic` and `ethioaa` calendars join
+  `buddhist` and `persian` (non-Gregorian calendars in the locales that ship their names: 98.1% of 4,000 cases, was 16.5%);
+  numbering systems carry their own patterns and symbols; number ranges collapse shared currency symbols, units and compact text the
+  way ICU does and use plural ranges; compact currency, percent and unit parts are split into the parts Chrome reports; collation
+  follows ICU's root order for the Arabic, Hebrew, Indic, Thai, Lao, Khmer, Myanmar, Georgian, Armenian, Greek, Cyrillic, Hangul and
+  kana scripts, reorders a locale's own script first, orders Chinese by pinyin (GB 2312) or stroke (Big5 level 1), and resolves to the
+  locale ICU has collation data for. `tools/intlgen/golden.js` now writes about 2,900 cases from Node's output
+  (`engine/intl_test.go`), `segcases.js` the segmentation cases of `internal/intl/segment`. The binary grows by 180,224 bytes
+  (41,234,558 to 41,414,782). Still missing: dictionary word breaking for Thai, Lao, Khmer, Burmese, Chinese and Japanese (ICU's
+  dictionaries are 93 KB to 1.6 MB gzipped, `tools/intlgen/icudict.js`), the `chinese` and `dangi` calendars, and non-English time zone
+  city names ([docs/web-platform.md](docs/web-platform.md)).
 - **Video-call and player platform APIs.** Fullscreen API with the app giving the page the window; Media Session wired to
   a now-playing control; `ManagedMediaSource`; Async Clipboard API with a per-site permission, copy/cut/paste events,
   `DataTransfer`, `FileList`; a real `WebSocket` client (binary, fragments, close codes, backpressure); native

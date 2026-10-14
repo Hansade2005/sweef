@@ -3,7 +3,7 @@
 // host functions (CLDR data, time zones) are reimplemented here with Node's help.
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
-const root = path.join(__dirname, '..', '..');
+const root = process.env.INTL_ROOT || path.join(__dirname, '..', '..'); // INTL_ROOT: another checkout, to measure a baseline
 const dataDir = path.join(root, 'internal', 'intl', 'data');
 const pjs = path.join(root, 'internal', 'engine', 'platformjs');
 
@@ -47,6 +47,7 @@ function make(modules) {
   H = (new Function('g', 'load', 'lazyGets', '"use strict";' + fs.readFileSync(path.join(pjs, 'h.js'), 'utf8')))(g, loader, new Set());
   g.Event = class {}; g.EventTarget = class {};
   for (const m of modules) loader(m);
+  module.exports.H = H;
   return g.Intl;
 }
 module.exports = { make, NativeIntl };

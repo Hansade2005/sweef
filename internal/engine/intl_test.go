@@ -22,17 +22,14 @@ func TestIntlGolden(t *testing.T) {
 	if err := json.Unmarshal(raw, &golden); err != nil {
 		t.Fatal(err)
 	}
-	// Known differences from Node, each a documented limit (docs/web-platform.md, Intl).
-	known := map[string]string{
-		// the zh collations order e/é by pinyin tailoring; the engine uses the root order
-		"['z','a','ä','Z','A','é','e','10','9'].sort(new Intl.Collator('zh-CN').compare).join(',')": "zh collation",
-		// pt's date-time glue: ICU 77 puts a comma where the CLDR 47 JSON has none
-		"new Intl.DateTimeFormat('pt-BR', {timeZone:'America/New_York', dateStyle:'medium', timeStyle:'short'}).format(Date.UTC(2025, 9, 14, 15, 4, 5, 678))": "pt glue",
-	}
+	// Known differences from Node, each a documented limit (docs/web-platform.md, Intl): the expressions marked "dictionary" segment Thai,
+	// Chinese, Japanese, Lao, Khmer and Burmese text into words, which needs ICU's break dictionaries (93 KB to 1.6 MB gzipped each,
+	// measured by tools/intlgen/icudict.js) that the engine does not ship; it cuts such text where UAX #29 does.
+	isKnown := func(e string) bool { return strings.Contains(e, "/* dictionary */") }
 	tab := platformTab(t)
 	var cases []jsCase
 	for _, g := range golden {
-		if _, skip := known[g.E]; skip {
+		if isKnown(g.E) {
 			continue
 		}
 		want, _ := json.Marshal(g.V)
