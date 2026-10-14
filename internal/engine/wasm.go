@@ -235,9 +235,9 @@ type wasmHost struct {
 
 	// threads (wasm_threads.go)
 	jsv      *jsVM
-	aborted  atomic.Bool  // the VM is closing: imports end the call
-	inflight atomic.Int32 // outermost calls running on the runner
-	shut     bool         // reallyClose ran
+	aborted  atomic.Bool    // the VM is closing: imports end the call
+	inflight atomic.Int32   // outermost calls running on the runner
+	shut     bool           // reallyClose ran
 	srt      wazero.Runtime // the process-wide runtime for threaded instances, once this host uses it
 	threads  bool           // this host runs threaded instances: its calls have no time budget
 	smems    map[*wasmSharedMem]bool
