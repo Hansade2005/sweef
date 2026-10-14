@@ -77,8 +77,23 @@ jobs:
           go-version-file: go.mod
           cache: true
       - run: go vet -composites=false ./...
-      - name: go test (short, FATE-gated tests excluded)
-        run: go test -short -count=1 -timeout 20m ./...
+      - name: Install the reference fonts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fontconfig fonts-inter fonts-liberation fonts-freefont-ttf fonts-dejavu-core fonts-dejavu-mono fonts-crosextra-carlito fonts-crosextra-caladea fonts-wqy-zenhei fonts-ipafont-gothic fonts-tlwg-loma-otf fonts-unifont fonts-noto-color-emoji ffmpeg
+          sudo apt-get remove -y fonts-dejavu-extra || true
+          fc-cache -f
+      - name: go test (Linux, everything; short, FATE-gated tests excluded)
+        if: runner.os == 'Linux'
+        run: go test -short -count=1 -timeout 25m ./...
+      # Same split as ci.yml: render, raster and font fidelity compare against Chromium references captured
+      # on Linux with the font set above, so macOS and Windows run the platform-relevant packages only.
+      - name: go test (macOS and Windows, platform-relevant packages)
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          go test -short -count=1 -timeout 25m $(go list ./... | grep -v -e '/internal/render' -e '/internal/raster' -e '/internal/font' -e '/internal/pdf' -e '/internal/gl' -e '/internal/media' -e '/internal/engine$' -e '/internal/ui' -e '/internal/app' -e '/internal/agentbridge')
 
   build:
     needs: [meta, test]
