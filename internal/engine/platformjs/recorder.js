@@ -87,7 +87,7 @@ class MediaRecorder extends g.EventTarget {
     r.stream.addEventListener('addtrack', changed);
     r.stream.addEventListener('removetrack', changed);
     r.off = function () { r.stream.removeEventListener('addtrack', changed); r.stream.removeEventListener('removetrack', changed); };
-    g.setTimeout(function () { self.dispatchEvent(new g.Event('start')); }, 0);
+    later(self, 'start');
   }
 
   stop() {
@@ -104,7 +104,7 @@ class MediaRecorder extends g.EventTarget {
     if (r.state === 'paused') return;
     r.state = 'paused';
     sw.recCtl(r.id, 'pause');
-    g.setTimeout(function () { self.dispatchEvent(new g.Event('pause')); }, 0);
+    later(self, 'pause');
   }
 
   resume() {
@@ -113,7 +113,7 @@ class MediaRecorder extends g.EventTarget {
     if (r.state === 'recording') return;
     r.state = 'recording';
     sw.recCtl(r.id, 'resume');
-    g.setTimeout(function () { self.dispatchEvent(new g.Event('resume')); }, 0);
+    later(self, 'resume');
   }
 
   requestData() {
@@ -131,6 +131,20 @@ H.tag(MediaRecorder, 'MediaRecorder');
 H.handlers(MediaRecorder.prototype, ['start', 'stop', 'pause', 'resume', 'error', 'dataavailable']);
 H.glob('MediaRecorder', MediaRecorder);
 
+// start, pause and resume events are tasks of their own; host events (data, stop) must never overtake them
+function later(rec, type) {
+  var r = rec._r;
+  (r.pend || (r.pend = [])).push(type);
+  g.setTimeout(function () { flush(rec); }, 0);
+}
+
+function flush(rec) {
+  var r = rec._r, q = r.pend;
+  if (!q || !q.length) return;
+  r.pend = [];
+  q.forEach(function (type) { rec.dispatchEvent(new g.Event(type)); });
+}
+
 function fail(rec, name, msg) {
   var d = ex(name, msg), ev;
   if (typeof g.ErrorEvent === 'function') ev = new g.ErrorEvent('error', { error: d, message: msg });
@@ -145,6 +159,7 @@ function release(r) {
 }
 
 function stopEvent(rec) {
+  flush(rec);
   var r = rec._r;
   r.state = 'inactive';
   release(r);
@@ -158,6 +173,7 @@ Object.defineProperty(g, '__swRecEvent', {
   value: function (json) {
     var m = JSON.parse(json), rec = live.get(m.r);
     if (!rec) { if (m.b) { try { takeBytes(m.b); } catch (e) { /* ignore */ } } return; }
+    flush(rec);
     if (m.t === 'data') {
       var blob = new g.Blob([takeBytes(m.b)], { type: rec._r.mime });
       var ev = new BlobEvent('dataavailable', { data: blob, timecode: m.tc });
