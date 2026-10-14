@@ -178,7 +178,8 @@ func (a *App) sendTo(e *etab, typ string, payload any) {
 	if e == nil || a.closing.Load() || e.closed.Load() {
 		return
 	}
-	js := "sweef.__recv(" + jsString(typ) + "," + jsJSON(payload) + ")"
+	// a page that left its sweef:// document (an error page, a redirect) has no bridge: skip it quietly
+	js := "(typeof sweef !== 'undefined' && sweef.__recv) ? sweef.__recv(" + jsString(typ) + "," + jsJSON(payload) + ") : undefined"
 	e.w.do(func() {
 		if _, err := e.t.Evaluate(js); err != nil {
 			a.logf("%s <- %s: %v", e.kind, typ, err)
