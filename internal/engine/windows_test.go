@@ -110,6 +110,36 @@ func TestWindowOpenAllowedAfterUserActivation(t *testing.T) {
 	}
 }
 
+func TestWindowCloseOnlyForWindowsScriptOpened(t *testing.T) {
+	s := newSite(t, map[string]string{"/": `<!doctype html>x`})
+	e := newEng(t)
+	tab, _ := e.NewTab(s.URL + "/")
+	jsonOf(t, tab, `window.close(); 1`)
+	time.Sleep(100 * time.Millisecond)
+	if tab.IsClosed() || len(e.ListTabs()) != 1 {
+		t.Fatal("a page closed a tab that script did not open")
+	}
+	warned := false
+	for _, ev := range tab.ConsoleLog(0) {
+		if m, ok := ev.Data.(map[string]string); ok && strings.Contains(m["text"], "Scripts may close only") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatal("no console warning")
+	}
+	// a frame cannot close itself or its page
+	child := newSite(t, map[string]string{"/": `<!doctype html>c`})
+	top := newSite(t, map[string]string{"/": `<!doctype html><iframe src="` + child.URL + `/"></iframe>`})
+	t2, _ := e.NewTab(top.URL + "/")
+	c := firstFrame(t, t2)
+	jsonOf(t, c, `window.close(); window.top.close(); 1`)
+	time.Sleep(100 * time.Millisecond)
+	if t2.IsClosed() || c.IsClosed() {
+		t.Fatal("a frame closed a window")
+	}
+}
+
 func TestWindowOpenActivationExpires(t *testing.T) {
 	s := newSite(t, map[string]string{"/": `<!doctype html>x`})
 	e := newEng(t)
@@ -305,6 +335,37 @@ window.close();
 	}
 	if got := jsonOf(t, tab, `window.popup.closed`); got != "true" {
 		t.Fatalf("popup.closed after window.close(): %s", got)
+	}
+}
+
+// The older popup pattern: the opener polls the popup's location until it is back on the
+// opener's origin, then reads the query. A cross-origin location is a SecurityError.
+func TestPopupLocationReadableOnlyWhenSameOrigin(t *testing.T) {
+	app := newSite(t, nil)
+	idp := newSite(t, nil)
+	app.set("/", `<!doctype html>app`)
+	app.set("/cb", `<!doctype html><title>cb</title>cb`)
+	idp.set("/login", `<!doctype html><title>login</title>login`)
+	e := newEng(t)
+	tab, _ := e.NewTab(app.URL + "/")
+	tab.NoteUserActivation()
+	jsonOf(t, tab, `window.w = window.open('`+idp.URL+`/login', 'p'); 1`)
+	p := popupOf(t, e, tab)
+	waitURL(t, p, "/login")
+	got := jsonOf(t, tab, `(function(){ try { return window.w.location.href; } catch (e) { return e.name; } })()`)
+	if got != `"SecurityError"` {
+		t.Fatalf("cross-origin location read: %s", got)
+	}
+	// the popup goes back to the opener's origin
+	jsonOf(t, tab, `window.w.location.href = '`+app.URL+`/cb?code=42'; 1`)
+	p.Settle(20 * time.Millisecond)
+	waitURL(t, p, "/cb?code=42")
+	got = jsonOf(t, tab, `(function(){ try { var l = window.w.location; return l.pathname + '|' + l.search + '|' + l.origin + '|' + String(l); } catch (e) { return e.name; } })()`)
+	if got != `"/cb|?code=42|`+app.URL+`|`+app.URL+`/cb?code=42"` {
+		t.Fatalf("same-origin location read: %s", got)
+	}
+	if got := jsonOf(t, tab, `window.w.name`); got != `"p"` {
+		t.Fatalf("same-origin window name: %s", got)
 	}
 }
 

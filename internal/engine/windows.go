@@ -79,7 +79,13 @@ type winState struct {
 	paintDSF     atomic.Uint64         // math.Float64bits of the scale of the last paint
 }
 
-type winMsg struct{ src, origin, data string }
+// winMsg is one queued delivery for a window: a postMessage, a BroadcastChannel message or a
+// storage event from another window of the same origin.
+type winMsg struct {
+	src, origin, data string
+	kind              string // "" = message, "bc" = BroadcastChannel, "storage"
+	name              string // channel name
+}
 
 // PopupEvent is one window.open / target=_blank decision, allowed or not.
 type PopupEvent struct {
@@ -427,6 +433,56 @@ func (t *Tab) postMessageTo(id, data, targetOrigin string) {
 	dst.wake()
 }
 
+// sameOriginPeers lists the other windows of the tab's browser context that share its
+// (non-opaque) origin: where BroadcastChannel messages and storage events go.
+func (t *Tab) sameOriginPeers() []*Tab {
+	if t.opaqueOrigin() {
+		return nil
+	}
+	mine := t.origin()
+	t.eng.wm.mu.RLock()
+	defer t.eng.wm.mu.RUnlock()
+	var out []*Tab
+	for _, w := range t.eng.wm.m {
+		if w == t || w.closed.Load() || w.Context() != t.Context() || w.opaqueOrigin() {
+			continue
+		}
+		if sameOriginStr(mine, w.origin()) {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+func (t *Tab) enqueue(m winMsg) {
+	t.win.inMu.Lock()
+	if len(t.win.inbox) < 4096 {
+		t.win.inbox = append(t.win.inbox, m)
+	}
+	t.win.inMu.Unlock()
+	t.wake()
+}
+
+// broadcastChannel delivers a BroadcastChannel message to the same-name channels of the
+// other same-origin windows (channels of the sender's own document are served in JS).
+func (t *Tab) broadcastChannel(name, data string) {
+	for _, w := range t.sameOriginPeers() {
+		w.enqueue(winMsg{kind: "bc", name: name, data: data, origin: t.origin()})
+	}
+}
+
+// broadcastStorage tells the other same-origin windows that localStorage changed
+// (key == nil: cleared), as the "storage" event does in a browser.
+func (t *Tab) broadcastStorage(key, oldV, newV *string) {
+	b, err := json.Marshal([]any{key, oldV, newV, t.URL()})
+	if err != nil {
+		return
+	}
+	for _, w := range t.sameOriginPeers() {
+		w.enqueue(winMsg{kind: "storage", data: string(b)})
+	}
+}
+
 func (t *Tab) takeInbox() []winMsg {
 	t.win.inMu.Lock()
 	m := t.win.inbox
@@ -448,7 +504,16 @@ func (j *jsVM) drainInbox() bool {
 	}
 	msgs := j.tab.takeInbox()
 	for _, m := range msgs {
-		if _, err := j.call("__swDeliverMessage", m.src, m.origin, m.data); err != nil {
+		var err error
+		switch m.kind {
+		case "bc":
+			_, err = j.call("__swDeliverBC", m.name, m.data, m.origin)
+		case "storage":
+			_, err = j.call("__swDeliverStorage", m.data)
+		default:
+			_, err = j.call("__swDeliverMessage", m.src, m.origin, m.data)
+		}
+		if err != nil {
 			j.tab.LogConsole("error", jsErrorText(err, "message"))
 		}
 	}
@@ -749,17 +814,15 @@ func (t *Tab) copyEnvironmentTo(c *Tab) {
 	c.routes2.mu.Unlock()
 }
 
-// CloseWindow is window.close() for a script of this tab: allowed for windows that
-// script opened (and a window with a single history entry), ignored with a console
-// warning otherwise, and never for a frame.
+// closeFromScript is window.close() for a script of this tab: allowed for windows that
+// script opened (window.open, or a link target that created the window), ignored with a
+// console warning otherwise (a page does not get to close the person's own tab), and
+// never for a frame.
 func (t *Tab) closeFromScript() bool {
 	if t.win.parent != nil {
 		return false
 	}
-	t.mu.RLock()
-	single := len(t.history) <= 1
-	t.mu.RUnlock()
-	if !t.win.scriptOpened && !single {
+	if !t.win.scriptOpened {
 		t.LogConsole("warning", "Scripts may close only the windows that were opened by them.")
 		return false
 	}

@@ -98,6 +98,15 @@ func (h *winHost) fns() map[string]hostFn {
 			}
 			return w.origin(), nil
 		},
+		// the location of a same-origin window (null for any other: reading it is a SecurityError)
+		"winHref": func(a []any) (any, error) {
+			t := h.j.tab
+			w := h.reach(argS(a, 0))
+			if w == nil || !sameOriginStr(t.origin(), w.origin()) {
+				return nil, nil
+			}
+			return w.URL(), nil
+		},
 		"winName": func(a []any) (any, error) {
 			w := h.reach(argS(a, 0))
 			if w == nil {
@@ -201,6 +210,10 @@ func (h *winHost) fns() map[string]hostFn {
 			tg := argS(a, 1)
 			t.navigateTarget(navSpec{rawURL: argS(a, 0), target: tg, noOpener: anchorNoOpener(tg, rel), noReferrer: relHas(rel, "noreferrer")})
 			return true, nil
+		},
+		"bcPost": func(a []any) (any, error) {
+			h.j.tab.broadcastChannel(argS(a, 0), argS(a, 1))
+			return nil, nil
 		},
 		"activeNow": func(a []any) (any, error) { return h.j.tab.HasTransientActivation(), nil },
 		"sandboxed": func(a []any) (any, error) { return h.j.tab.Sandboxed(), nil },

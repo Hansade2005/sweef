@@ -133,14 +133,22 @@
   def(WP, 'location', {
     get: function () {
       var id = this.__wid, loc = {};
+      // reading another window's location is for same-origin windows only (the host decides)
+      function url() {
+        var href = sw.winHref(id);
+        if (href === null || href === undefined) throw secErr('Blocked a frame from accessing a cross-origin frame.');
+        return new global.URL(href);
+      }
       Object.defineProperty(loc, 'href', {
-        get: function () {
-          if (!sameOrigin(id)) throw secErr('Blocked a frame from accessing a cross-origin frame.');
-          throw new Error('Sweef does not support reading another window\'s location');
-        },
+        get: function () { return url().href; },
         set: function (v) { sw.winNavigate(id, String(v)); }, enumerable: true
       });
+      ['protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash', 'origin'].forEach(function (k) {
+        Object.defineProperty(loc, k, { get: function () { return url()[k]; }, enumerable: true });
+      });
       loc.assign = loc.replace = function (v) { sw.winNavigate(id, String(v)); };
+      loc.reload = function () { sw.winNavigate(id, url().href); };
+      loc.toString = function () { return url().href; };
       return loc;
     },
     set: function (v) { sw.winNavigate(this.__wid, String(v)); },
@@ -200,6 +208,66 @@
       var data;
       try { data = dec(json); } catch (e) { return; }
       var ev = new global.MessageEvent('message', { data: data, origin: origin, source: srcId ? proxyFor(srcId) : null, lastEventId: '', ports: [] });
+      global.dispatchEvent(ev);
+    },
+    configurable: true, writable: true, enumerable: false
+  });
+
+  // ---- BroadcastChannel: other documents of the same origin, in any window -----------------------------
+  var channels = new Map(); // name -> channels of this document
+  function BroadcastChannel(name) {
+    if (!(this instanceof BroadcastChannel)) throw new TypeError("Constructor BroadcastChannel requires 'new'");
+    global.EventTarget.call(this);
+    Object.defineProperty(this, 'name', { value: String(name), enumerable: true });
+    Object.defineProperty(this, '__closed', { value: false, writable: true });
+    var set = channels.get(this.name); if (!set) channels.set(this.name, set = new Set());
+    set.add(this);
+  }
+  BroadcastChannel.prototype = Object.create(global.EventTarget.prototype);
+  def(BroadcastChannel.prototype, 'constructor', { value: BroadcastChannel, enumerable: false });
+  def(BroadcastChannel.prototype, Symbol.toStringTag, { value: 'BroadcastChannel', writable: false });
+  ['message', 'messageerror'].forEach(function (n) {
+    var key = '__on' + n;
+    def(BroadcastChannel.prototype, 'on' + n, {
+      get: function () { return this[key] || null; },
+      set: function (fn) {
+        if (this[key]) this.removeEventListener(n, this[key]);
+        this[key] = typeof fn === 'function' ? fn : null;
+        if (this[key]) this.addEventListener(n, this[key]);
+      }, enumerable: true
+    });
+  });
+  function deliverBC(set, except, data, origin) {
+    set.forEach(function (ch) {
+      if (ch === except || ch.__closed) return;
+      global.setTimeout(function () {
+        if (ch.__closed) return;
+        ch.dispatchEvent(new global.MessageEvent('message', { data: dec(data), origin: origin, lastEventId: '', ports: [] }));
+      }, 0);
+    });
+  }
+  def(BroadcastChannel.prototype, 'postMessage', {
+    value: function postMessage(message) {
+      if (this.__closed) throw new global.DOMException('BroadcastChannel is closed.', 'InvalidStateError');
+      var data = enc(message), set = channels.get(this.name);
+      if (set) deliverBC(set, this, data, global.location.origin);
+      sw.bcPost(this.name, data);
+    }, enumerable: true
+  });
+  def(BroadcastChannel.prototype, 'close', {
+    value: function close() { this.__closed = true; var set = channels.get(this.name); if (set) set.delete(this); }, enumerable: true
+  });
+  global.BroadcastChannel = BroadcastChannel;
+  Object.defineProperty(global, '__swDeliverBC', {
+    value: function (name, data, origin) { var set = channels.get(name); if (set) deliverBC(set, null, data, origin); },
+    configurable: true, writable: true, enumerable: false
+  });
+
+  // ---- storage events from other windows of the same origin ----------------------------------------
+  Object.defineProperty(global, '__swDeliverStorage', {
+    value: function (json) {
+      var a; try { a = JSON.parse(json); } catch (e) { return; }
+      var ev = new global.StorageEvent('storage', { key: a[0], oldValue: a[1], newValue: a[2], url: a[3], storageArea: global.localStorage });
       global.dispatchEvent(ev);
     },
     configurable: true, writable: true, enumerable: false

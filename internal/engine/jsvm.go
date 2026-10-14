@@ -1226,7 +1226,16 @@ func (j *jsVM) registerHost() error {
 			if kind == "session" {
 				j.session[key] = val
 			} else {
-				j.tab.Context().SetStorageValue(j.tab.storageKey(), key, val)
+				c, sk := j.tab.Context(), j.tab.storageKey()
+				old, had := c.GetStorageValue(sk, key)
+				c.SetStorageValue(sk, key, val)
+				if !had || old != val {
+					var op *string
+					if had {
+						op = &old
+					}
+					j.tab.broadcastStorage(&key, op, &val)
+				}
 			}
 			return nil, nil
 		}},
@@ -1235,7 +1244,12 @@ func (j *jsVM) registerHost() error {
 			if kind == "session" {
 				delete(j.session, key)
 			} else {
-				j.tab.Context().RemoveStorageValue(j.tab.storageKey(), key)
+				c, sk := j.tab.Context(), j.tab.storageKey()
+				old, had := c.GetStorageValue(sk, key)
+				c.RemoveStorageValue(sk, key)
+				if had {
+					j.tab.broadcastStorage(&key, &old, nil)
+				}
 			}
 			return nil, nil
 		}},
@@ -1244,6 +1258,7 @@ func (j *jsVM) registerHost() error {
 				j.session = map[string]string{}
 			} else {
 				j.tab.Context().ClearStorage(j.tab.storageKey())
+				j.tab.broadcastStorage(nil, nil, nil)
 			}
 			return nil, nil
 		}},

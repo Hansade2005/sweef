@@ -10,6 +10,27 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 ## [Unreleased]
 
 ### Added
+- **Iframes render and take input.** Every `<iframe>` is now a child document with its own JavaScript VM, layout and
+  paint, drawn into the parent at the iframe's box (clipped, with the transforms, opacity and radius of its ancestors),
+  scrollable inside its box, repainted when it changes, and loaded lazily for `loading="lazy"`. `srcdoc`, nested frames,
+  `sandbox` (scripts, same-origin, popups, forms, top navigation), `X-Frame-Options` and CSP `frame-ancestors` are
+  supported. Pointer, wheel, keyboard and text input are routed to the frame under the pointer or holding focus, in the
+  desktop browser and through the engine API (`MouseClick`, `Keyboard`, `WheelAt`). Not supported: access to another
+  window's DOM (`contentDocument`), storage partitioning, process isolation, scrollbars inside frames. See
+  [docs/frames-popups.md](docs/frames-popups.md).
+- **`window.open` and popups.** `window.open` returns a `WindowProxy` (`opener`, `name`, `closed`, `close()`, `focus()`,
+  `postMessage`, `location`); links and forms honour `target` (`_blank`, `_top`, `_parent`, frame and window
+  names, `rel=opener` / `noopener`); windows open only during a user gesture (5 s in the engine, 2 s in the app, one
+  popup per gesture) and a blocked popup is recorded (`Page.popups`) and shown as a toast; `window.close()` closes windows
+  that script opened; `postMessage` works across frames, the opener and popups with `targetOrigin` and structured clone
+  of common types; `Cross-Origin-Opener-Policy` can sever the opener. In the desktop browser a popup is a tab next to
+  its opener with an accent bar in the tab strip. An OAuth round trip (popup, cross-origin redirect back, `opener.postMessage`,
+  `window.close`) is covered by tests against local servers; real Google or Facebook sign-in was not tried. `BroadcastChannel` and `storage`
+  events now reach other same-origin windows. Not supported: `win.document` access, calling functions of the opener,
+  small-window features (size, position).
+- Agent: the snapshot includes the content of frames with frame-qualified refs (`f1e5`), and click, fill, type, press and the
+  other ref actions reach elements inside same-origin and cross-origin frames. The Sidekick reads a frame only when the
+  site of the frame is one the person allowed. `Page.frames` and `Page.popups` RPC methods.
 - Apache-2.0 `LICENSE` and `NOTICE`.
 - Contribution and project health files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `SUPPORT.md`,
   `GOVERNANCE.md`, `CODEOWNERS`, issue forms, pull request template, `Makefile`, `.editorconfig`.
@@ -19,6 +40,12 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   writes a CPU profile.
 
 ### Changed
+- A page that embeds a third-party frame now makes real requests for it, unless the Data Saver's click-to-load frames are on.
+  The README's data-saver comparison with Chromium was measured before frames were loaded and still says Sweef fetches no
+  iframe documents.
+- `Tab.Keyboard` types into the focused element (it dispatched to the document before).
+- `window.open` from page script is no longer "open a tab from the chrome, return null": it goes through the engine
+  (popup blocker, opener link, named windows).
 - README shows the real browser UI (first-run setup with the real browser logos, Sidekick, Data Saver, new tab, omnibox), rendered by `uipreview`.
 - The omnibox dropdown uses a lighter shadow (the `--sh-2` token plus a 1 px ring instead of `--sh-3`).
 
