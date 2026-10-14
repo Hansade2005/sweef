@@ -1034,18 +1034,6 @@ func (j *jsVM) withDoc(fn func(d *fnet.Doc) (any, error)) (any, error) {
 }
 
 func (j *jsVM) registerHost() error {
-	reg := func(name string, fn func(a []any) (any, error)) error {
-		if stageTrace {
-			inner := fn
-			fn = func(a []any) (any, error) {
-				t0 := time.Now()
-				r, err := inner(a)
-				hostStat(name, time.Since(t0))
-				return r, err
-			}
-		}
-		return j.vm.RegisterHostFunc("__sw_"+name, fn)
-	}
 	type h struct {
 		name string
 		fn   func(a []any) (any, error)
@@ -1422,29 +1410,49 @@ func (j *jsVM) registerHost() error {
 			hs = append(hs, h{n, fns[n]})
 		}
 	}
-	for _, x := range hs {
-		if err := reg(x.name, x.fn); err != nil {
-			return err
+	// One Go callback per VM, not one per host function: modernc quickjs allows 32767 registered callbacks in
+	// the whole process, and with several hundred host functions a few dozen live VMs (pool, tabs, frames,
+	// workers, UI pages) exhausted it ("too many registered functions"). __sw.name is a JS wrapper that passes
+	// the function's index to the dispatcher.
+	fns := make([]hostFn, len(hs))
+	for i, x := range hs {
+		fns[i] = x.fn
+		if stageTrace {
+			name, inner := x.name, x.fn
+			fns[i] = func(a []any) (any, error) {
+				t0 := time.Now()
+				r, err := inner(a)
+				hostStat(name, time.Since(t0))
+				return r, err
+			}
 		}
 	}
-	// Collect the flat __sw_* functions into one object for the prelude.
+	if err := j.vm.RegisterHostFunc("__sw_call", func(a []any) (any, error) {
+		if len(a) == 0 {
+			return nil, fmt.Errorf("host call without index")
+		}
+		i := int(toInt(a[0]))
+		if i < 0 || i >= len(fns) {
+			return nil, fmt.Errorf("unknown host function %d", i)
+		}
+		return fns[i](a[1:])
+	}); err != nil {
+		return err
+	}
 	var sb strings.Builder
-	sb.WriteString("globalThis.__sw = {")
+	sb.WriteString("globalThis.__sw = (function (c) { var o = {}, n = [")
 	for i, x := range hs {
 		if i > 0 {
 			sb.WriteString(",")
 		}
-		sb.WriteString(x.name + ":__sw_" + x.name)
+		sb.WriteString(strconv.Quote(x.name))
 	}
-	sb.WriteString("};")
+	sb.WriteString("]; n.forEach(function (k, i) { o[k] = function (...a) { return c(i, ...a); }; }); return o; })(__sw_call); delete globalThis.__sw_call;")
 	if j.cv != nil {
 		if err := j.cv.registerBufferFns(); err != nil {
 			return err
 		}
 		sb.WriteString("__sw.cvGetBuf=__swCvGetBuf;__sw.cvPutBuf=__swCvPutBuf;delete globalThis.__swCvGetBuf;delete globalThis.__swCvPutBuf;")
-	}
-	for _, x := range hs {
-		sb.WriteString("delete globalThis.__sw_" + x.name + ";")
 	}
 	_, err := j.vm.Eval(sb.String(), quickjs.EvalGlobal)
 	return err
