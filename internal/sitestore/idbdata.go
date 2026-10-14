@@ -1238,6 +1238,41 @@ func (m *Manager) Cursor(txID int64, storeName string, q CursorReq) ([]any, erro
 	return out, err
 }
 
+// CursorN returns up to n consecutive cursor positions starting after q's current one, in one call: a cursor that
+// is only being stepped (continue()) is served from this read-ahead instead of one storage seek per step. Each
+// row is what Cursor returns for a single step; the result is empty at the end of the range. n is clamped to 256.
+func (m *Manager) CursorN(txID int64, storeName string, q CursorReq, n int) ([][]any, error) {
+	if n < 1 {
+		n = 1
+	}
+	if n > 256 {
+		n = 256
+	}
+	var rows [][]any
+	err := m.withTx(txID, false, func(t *Tx, d *Database) error {
+		st, err := t.store(d, storeName)
+		if err != nil {
+			return err
+		}
+		q.Advance = 1
+		for len(rows) < n {
+			r, err := d.cursorStep(t, st, q)
+			if err != nil {
+				return err
+			}
+			if len(r) < 2 {
+				break
+			}
+			rows = append(rows, r)
+			k, _ := r[0].(string)
+			p, _ := r[1].(string)
+			q.HasCur, q.CurKey, q.CurPK, q.Target, q.TargetPK = true, k, p, "", ""
+		}
+		return nil
+	})
+	return rows, err
+}
+
 func (d *Database) cursorStep(t *Tx, st *store, q CursorReq) ([]any, error) {
 	isIdx := q.Index != ""
 	iid := uint32(iidRecord)

@@ -60,6 +60,10 @@ func (a *App) resize(w, h int, scale float64) {
 // layoutFallback derives a viewport hole from the window size until the
 // chrome page reports its own (or when it never does).
 func (a *App) layoutFallback() {
+	if a.htmlFS {
+		a.applyViewport(a.fullscreenViewport())
+		return
+	}
 	if a.haveLayout {
 		return
 	}
@@ -77,6 +81,10 @@ func (a *App) setViewport(r rect) {
 		return
 	}
 	a.haveLayout = true
+	a.vpChrome = r
+	if a.htmlFS {
+		return // the page keeps the whole window until it leaves fullscreen
+	}
 	a.applyViewport(r)
 }
 

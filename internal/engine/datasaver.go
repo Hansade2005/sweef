@@ -522,6 +522,9 @@ func (t *Tab) AgentLoading() bool { return t.ds.agent.Load() }
 // polling, media) makes no requests until the tab is shown again.
 func (t *Tab) SetBackground(bg bool) {
 	was := t.ds.bg.Swap(bg)
+	if was != bg {
+		t.jsCall("__swSetHidden", bg, false) // document.hidden / visibilitychange follow the tab
+	}
 	if was && !bg {
 		t.lazyReeval() // visible again: images near the viewport may be due
 		if env := t.ds.env.Load(); env != nil {

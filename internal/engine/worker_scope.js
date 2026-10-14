@@ -94,8 +94,25 @@
   Object.defineProperty(global, '__swWkDeliver', { value: function (data, eps) {
     var ports = (eps || []).map(global.__swPorts.adopt), v;
     try { v = global.__swDe(data, ports); } catch (e) { global.dispatchEvent(new global.MessageEvent('messageerror', {})); return; }
+    // an RTCRtpScriptTransform of the owner was attached to a sender or receiver: not a message, an rtctransform event
+    if (v && typeof v === 'object' && v.__swRtcTransform === 1 && ports.length && typeof global.__swMakeTransformEvent === 'function') {
+      global.dispatchEvent(global.__swMakeTransformEvent(ports[0], v));
+      return;
+    }
     global.dispatchEvent(new global.MessageEvent('message', { data: v, origin: '', ports: ports, source: null }));
   } });
+  (function () {
+    var key = '__onrtctransform';
+    Object.defineProperty(global, 'onrtctransform', {
+      configurable: true, enumerable: true,
+      get: function () { return this[key] || null; },
+      set: function (fn) {
+        if (this[key]) global.removeEventListener('rtctransform', this[key]);
+        this[key] = typeof fn === 'function' ? fn : null;
+        if (this[key]) global.addEventListener('rtctransform', this[key]);
+      }
+    });
+  })();
   Object.defineProperty(global, '__swWConnect', { value: function (ep) {
     var port = global.__swPorts.adopt(ep);
     var ev = new global.MessageEvent('connect', { data: '', origin: '', ports: [port], source: port });

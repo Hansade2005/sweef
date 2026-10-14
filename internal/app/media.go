@@ -391,6 +391,11 @@ func (a *App) mediaState(act stateTab, ok bool) map[string]any {
 		ses = append(ses, map[string]any{"id": s.ID, "kind": s.Kind, "label": s.Label, "surface": s.Surface})
 	}
 	out["sessions"] = ses
+	if e := a.page(act.ID); e != nil {
+		if ms := e.t.MediaSession(); ms.Active {
+			out["session"] = ms // the page's Media Session: the "now playing" control
+		}
+	}
 	out["shares"] = m.shares() // every tab that is sharing, for the persistent bar
 	if origin := store.OriginOf(act.URL); origin != "" && strings.HasPrefix(act.URL, "http") {
 		site := map[string]any{"origin": origin}
@@ -457,6 +462,16 @@ func (a *App) onMediaMessage(typ string, raw []byte) bool {
 			Source string `json:"source"`
 		}](raw)
 		a.media.answer(p.ID, p.Action, p.Video, p.Audio, p.Source)
+	case "media.action":
+		p := decode[struct {
+			Action string  `json:"action"`
+			Arg    float64 `json:"arg"`
+		}](raw)
+		if act, ok := a.activeTab(); ok {
+			if e := a.page(act.ID); e != nil {
+				e.w.do(func() { e.t.MediaSessionAction(p.Action, p.Arg); e.afterOp() })
+			}
+		}
 	case "media.stop":
 		id := decode[idArg](raw).ID
 		a.mu.Lock()

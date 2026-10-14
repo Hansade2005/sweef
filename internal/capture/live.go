@@ -46,6 +46,7 @@ func AcquireVideo(id string, c VideoConstraints, timeout time.Duration) (*VideoL
 // AcquireVideoFrom is AcquireVideo for a source that is not in the global registry (the app's screen sources).
 // Leases with the same key share one source.
 func AcquireVideoFrom(key string, open func() (VideoSource, error), c VideoConstraints, timeout time.Duration) (*VideoLease, error) {
+	noWait := timeout < 0 // a source the page feeds itself (a track generator) has no first frame to wait for
 	if timeout <= 0 {
 		timeout = DefaultStartTimeout
 	}
@@ -94,6 +95,9 @@ func AcquireVideoFrom(key string, open func() (VideoSource, error), c VideoConst
 		sh.begin(c)
 	}
 	l := &VideoLease{key: key, sh: sh}
+	if noWait {
+		return l, nil
+	}
 	if err := sh.wait(timeout); err != nil {
 		l.Release()
 		return nil, err
@@ -146,6 +150,7 @@ func AcquireAudio(id string, c AudioConstraints, timeout time.Duration) (*AudioL
 
 // AcquireAudioFrom is AcquireAudio for an unregistered source.
 func AcquireAudioFrom(key string, open func() (AudioSource, error), c AudioConstraints, timeout time.Duration) (*AudioLease, error) {
+	noWait := timeout < 0 // see AcquireVideoFrom
 	if timeout <= 0 {
 		timeout = DefaultStartTimeout
 	}
@@ -185,6 +190,9 @@ func AcquireAudioFrom(key string, open func() (AudioSource, error), c AudioConst
 		sh.begin(c)
 	}
 	l := &AudioLease{sh: sh}
+	if noWait {
+		return l, nil
+	}
 	if err := sh.wait(timeout); err != nil {
 		l.Release()
 		return nil, err

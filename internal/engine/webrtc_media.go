@@ -35,6 +35,10 @@ type RTCTrackDesc struct {
 	FrameRate float64 `json:"frameRate"`
 	Canvas    int64   `json:"canvas"` // node id of the canvas behind canvas.captureStream()
 	Enabled   bool    `json:"enabled"`
+	// voice processing the track asks for (its settings): nil when the page's track says nothing
+	EchoCancellation *bool `json:"echoCancellation"`
+	NoiseSuppression *bool `json:"noiseSuppression"`
+	AutoGainControl  *bool `json:"autoGainControl"`
 }
 
 // RTCTrackSource opens fresh capture sources for one track (a sender needs its own instance, because a
@@ -363,6 +367,17 @@ func (p *rtcPeer) ensurePipeline(x *rtcTR) error {
 			x.vs.SetParams(sp)
 			x.params = sp
 		}
+		if x.simulcast() {
+			p.ensureExtraLayersLocked(x)
+		}
+		if x.sendXform {
+			h := p.xformHook(x, "send")
+			for _, l := range x.videoLayersLocked() {
+				if l.vs != nil {
+					l.vs.SetHook(h)
+				}
+			}
+		}
 		return nil
 	}
 	as, err := rtcmedia.NewAudioSender(x.local)
@@ -370,6 +385,9 @@ func (p *rtcPeer) ensurePipeline(x *rtcTR) error {
 		return err
 	}
 	x.as = as
+	if x.sendXform {
+		as.SetHook(p.xformHook(x, "send"))
+	}
 	if pr := p.audioProcessor(); pr != nil {
 		as.Processor = pr
 	}
@@ -385,14 +403,34 @@ func (p *rtcPeer) bindSource(x *rtcTR, d RTCTrackDesc) {
 	x.desc = d
 	src, known := p.resolveSource(d)
 	if x.vs != nil {
+		vc := capture.VideoConstraints{Width: d.Width, Height: d.Height, FrameRate: d.FrameRate}
+		layers := x.videoLayersLocked()
+		var fan *rtcmedia.FanOut
 		if known && src.OpenVideo != nil {
-			if vsrc, err := src.OpenVideo(capture.VideoConstraints{Width: d.Width, Height: d.Height, FrameRate: d.FrameRate}); err == nil {
-				_ = x.vs.SetSource(vsrc, capture.VideoConstraints{Width: d.Width, Height: d.Height, FrameRate: d.FrameRate})
+			if vsrc, err := src.OpenVideo(vc); err == nil {
+				if len(layers) > 1 {
+					fan = rtcmedia.NewFanOut(vsrc) // one capture, one encoder per layer
+				} else {
+					_ = x.vs.SetSource(vsrc, vc)
+				}
 			}
 		} else {
 			_ = x.vs.SetSource(nil, capture.VideoConstraints{})
 		}
-		x.vs.SetEnabled(d.Enabled)
+		for i, l := range layers {
+			if l.vs == nil {
+				continue
+			}
+			if len(layers) > 1 {
+				if fan != nil {
+					_ = l.vs.SetSource(fan.Branch(), vc)
+				} else {
+					_ = l.vs.SetSource(nil, capture.VideoConstraints{})
+				}
+			}
+			l.vs.SetEnabled(d.Enabled)
+			_ = i
+		}
 		return
 	}
 	if x.as != nil {
@@ -404,6 +442,7 @@ func (p *rtcPeer) bindSource(x *rtcTR, d RTCTrackDesc) {
 		}
 		_ = x.as.SetSource(asrc, capture.AudioConstraints{Rate: 48000, Channels: 1})
 		x.as.SetEnabled(d.Enabled)
+		p.setVoiceProcessing(d)
 	}
 }
 
@@ -411,8 +450,10 @@ func (p *rtcPeer) bindSource(x *rtcTR, d RTCTrackDesc) {
 func (p *rtcPeer) detachSource(x *rtcTR) {
 	x.smu.Lock()
 	defer x.smu.Unlock()
-	if x.vs != nil {
-		_ = x.vs.SetSource(nil, capture.VideoConstraints{})
+	for _, l := range x.videoLayersLocked() {
+		if l.vs != nil {
+			_ = l.vs.SetSource(nil, capture.VideoConstraints{})
+		}
 	}
 	if x.as != nil {
 		_ = x.as.SetSource(nil, capture.AudioConstraints{})
@@ -422,10 +463,11 @@ func (p *rtcPeer) detachSource(x *rtcTR) {
 // closeSender tears down the pipeline of a sender.
 func (x *rtcTR) closeSender() {
 	x.smu.Lock()
-	vs, as := x.vs, x.as
-	x.vs, x.as, x.local = nil, nil, nil
+	vs, as, extras := x.vs, x.as, x.extras
+	x.vs, x.as, x.local, x.extras = nil, nil, nil, nil
 	x.rtcpH.Store(nil)
 	x.smu.Unlock()
+	closeLayerPipelines(extras)
 	if vs != nil {
 		vs.Close()
 	}
@@ -438,6 +480,10 @@ func (x *rtcTR) setLive(live bool) {
 	x.live.Store(live)
 	x.smu.Lock()
 	vs, as := x.vs, x.as
+	if x.simulcast() {
+		x.applyEncodingsLocked()
+		vs = nil
+	}
 	x.smu.Unlock()
 	if vs != nil {
 		sp := vs.Params()
@@ -553,6 +599,15 @@ func (p *rtcPeer) onRemoteTrack(tr *webrtc.TrackRemote, rcv *webrtc.RTPReceiver)
 			OnMute:   func(m bool) { p.emit("trackmute", map[string]any{"tr": x.id, "muted": m}) },
 		})
 		x.vr = vr
+		for _, s := range x.vtaps {
+			vr.AddSink(s)
+		}
+		if x.minDelay > 0 {
+			vr.SetMinDelay(x.minDelay)
+		}
+		if x.recvXform {
+			vr.SetHook(p.xformHook(x, "recv"))
+		}
 		for _, s := range x.nodes {
 			vr.AddSink(s)
 		}
@@ -571,6 +626,15 @@ func (p *rtcPeer) onRemoteTrack(tr *webrtc.TrackRemote, rcv *webrtc.RTPReceiver)
 		ar.SetProcessor(pr)
 	}
 	x.ar = ar
+	for _, t := range x.ataps {
+		ar.AddTap(t.call)
+	}
+	if x.minDelay > 0 {
+		ar.SetMinDelay(x.minDelay)
+	}
+	if x.recvXform {
+		ar.SetHook(p.xformHook(x, "recv"))
+	}
 }
 
 // closeReceiver stops the receive pipelines of a transceiver (after the peer connection closed).
@@ -592,6 +656,7 @@ func (x *rtcTR) closeReceiver() {
 // ---- host functions ------------------------------------------------------------------------------------------
 
 func (h *rtcHost) mediaFns(f map[string]hostFn) {
+	h.xformFns(f)
 	f["rtcSetParams"] = func(a []any) (any, error) {
 		p, err := h.peer(a)
 		if err != nil {
@@ -601,13 +666,20 @@ func (h *rtcHost) mediaFns(f map[string]hostFn) {
 		if x == nil {
 			return nil, nil
 		}
+		encs := parseEncodings(argS(a, 2))
+		if x.simulcast() {
+			p.setEncodings(x, encs)
+			return nil, nil
+		}
 		var e struct {
 			Active       *bool    `json:"active"`
 			MaxBitrate   *float64 `json:"maxBitrate"`
 			MaxFramerate *float64 `json:"maxFramerate"`
 			ScaleDown    *float64 `json:"scaleResolutionDownBy"`
 		}
-		_ = json.Unmarshal([]byte(argS(a, 2)), &e)
+		if len(encs) > 0 {
+			e.Active, e.MaxBitrate, e.MaxFramerate, e.ScaleDown = encs[0].Active, encs[0].MaxBitrate, encs[0].MaxFramerate, encs[0].Scale
+		}
 		x.encActive.Store(e.Active == nil || *e.Active)
 		x.smu.Lock()
 		sp := x.params
@@ -659,11 +731,14 @@ func (h *rtcHost) mediaFns(f map[string]hostFn) {
 		}
 		if x := p.tr(argI(a, 1)); x != nil {
 			x.smu.Lock()
-			vs, as := x.vs, x.as
+			layers := x.videoLayersLocked()
+			as := x.as
 			x.desc.Enabled = argB(a, 2)
 			x.smu.Unlock()
-			if vs != nil {
-				vs.SetEnabled(argB(a, 2))
+			for _, l := range layers {
+				if l.vs != nil {
+					l.vs.SetEnabled(argB(a, 2))
+				}
 			}
 			if as != nil {
 				as.SetEnabled(argB(a, 2))
@@ -915,20 +990,31 @@ func (p *rtcPeer) addMediaStats(m map[string]map[string]any) {
 	}
 	for _, x := range trs {
 		x.smu.Lock()
-		vs, as, local := x.vs, x.as, x.local
+		layers := x.videoLayersLocked()
+		as, local := x.as, x.local
 		desc := x.desc
 		x.smu.Unlock()
-		if local != nil {
-			n := local.Negotiated()
-			if vs != nil && n.Bound {
+		for _, ly := range layers {
+			vs := ly.vs
+			if ly.local == nil || vs == nil {
+				continue
+			}
+			n := ly.local.Negotiated()
+			if n.Bound {
 				st := vs.Stats()
 				srcID := "SA" + itoa64(int64(n.SSRC))
 				if s := ensureOutbound(x, n, "video"); s != nil {
+					if ly.rid != "" {
+						s["rid"] = ly.rid
+					}
+					s["scalabilityMode"] = "L1T1"
+					s["qpSum"] = st.QPSum
 					s["framesEncoded"] = st.FramesEncoded
 					s["keyFramesEncoded"] = st.KeyFramesEncoded
 					s["framesSent"] = st.FramesEncoded
 					s["hugeFramesSent"] = st.HugeFramesSent
 					s["totalEncodeTime"] = st.TotalEncodeTime
+					s["totalEncodedBytesTarget"] = st.TotalEncodedBytes
 					s["frameWidth"] = st.FrameWidth
 					s["frameHeight"] = st.FrameHeight
 					s["framesPerSecond"] = st.FramesPerSecond
@@ -948,6 +1034,9 @@ func (p *rtcPeer) addMediaStats(m map[string]map[string]any) {
 				m[srcID] = map[string]any{"type": "media-source", "id": srcID, "timestamp": now, "kind": "video", "trackIdentifier": desc.ID,
 					"width": st.FrameWidth, "height": st.FrameHeight, "frames": st.FramesCaptured, "framesPerSecond": st.FramesPerSecond}
 			}
+		}
+		if local != nil {
+			n := local.Negotiated()
 			if as != nil && n.Bound {
 				st := as.Stats()
 				srcID := "SA" + itoa64(int64(n.SSRC))
@@ -1032,4 +1121,62 @@ const opusRateF = 48000.0
 func itoa64(v int64) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+// tapVideo makes the received video of a transceiver also go to s (a track processor); the returned function
+// detaches it. It works before the first packet arrives: the tap is attached when the receiver is created.
+func (x *rtcTR) tapVideo(s rtcmedia.FrameSink) func() {
+	x.rmu.Lock()
+	x.vtaps = append(x.vtaps, s)
+	if x.vr != nil {
+		x.vr.AddSink(s)
+	}
+	x.rmu.Unlock()
+	return func() {
+		x.rmu.Lock()
+		for i, t := range x.vtaps {
+			if t == s {
+				x.vtaps = append(x.vtaps[:i], x.vtaps[i+1:]...)
+				break
+			}
+		}
+		if x.vr != nil {
+			x.vr.RemoveSink(s)
+		}
+		x.rmu.Unlock()
+	}
+}
+
+// audioTap is a switchable tap: the receiver keeps its function for its whole life, a detached tap goes quiet.
+type audioTap struct {
+	f   func(pcm []int16, rate, channels int)
+	off atomic.Bool
+}
+
+func (t *audioTap) call(pcm []int16, rate, channels int) {
+	if !t.off.Load() {
+		t.f(pcm, rate, channels)
+	}
+}
+
+// tapAudio is tapVideo for the decoded audio (interleaved 48 kHz stereo, 20 ms at a time).
+func (x *rtcTR) tapAudio(f func(pcm []int16, rate, channels int)) func() {
+	t := &audioTap{f: f}
+	x.rmu.Lock()
+	x.ataps = append(x.ataps, t)
+	if x.ar != nil {
+		x.ar.AddTap(t.call)
+	}
+	x.rmu.Unlock()
+	return func() {
+		t.off.Store(true)
+		x.rmu.Lock()
+		for i, o := range x.ataps {
+			if o == t {
+				x.ataps = append(x.ataps[:i], x.ataps[i+1:]...)
+				break
+			}
+		}
+		x.rmu.Unlock()
+	}
 }

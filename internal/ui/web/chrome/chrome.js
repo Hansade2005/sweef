@@ -2,7 +2,7 @@
 (function () {
   var SW = window.SW, S = window.S, h = SW.h, icon = SW.icon, post = SW.post;
   var $ = function (id) { return document.getElementById(id); };
-  var E = { tabs: $("tabs"), wrap: $("tabs-wrap"), strip: $("strip"), url: $("url"), omni: $("omni"), urlview: $("urlview"), secbtn: $("secbtn"), star: $("star"), reload: $("reload"), back: $("back"), fwd: $("fwd"), sb: $("sbtoggle"), agent: $("agentbtn"), dl: $("dlbtn"), data: $("databtn"), media: $("mediabtn"), sharebar: $("sharebar"), menu: $("menubtn"), progress: $("progress"), compat: $("compat"), layer: $("layer"), viewport: $("viewport"), toasts: $("toasts"), find: $("find"), bm: $("bmbar") };
+  var E = { tabs: $("tabs"), wrap: $("tabs-wrap"), strip: $("strip"), url: $("url"), omni: $("omni"), urlview: $("urlview"), secbtn: $("secbtn"), star: $("star"), reload: $("reload"), back: $("back"), fwd: $("fwd"), sb: $("sbtoggle"), agent: $("agentbtn"), dl: $("dlbtn"), data: $("databtn"), media: $("mediabtn"), np: $("npbtn"), sharebar: $("sharebar"), menu: $("menubtn"), progress: $("progress"), compat: $("compat"), layer: $("layer"), viewport: $("viewport"), toasts: $("toasts"), find: $("find"), bm: $("bmbar") };
   var ui = { sb: null, dismissed: {}, lastVp: "", zoom: 100 };
   /* capture icons live here, not in shared/icons.js: the design-system sheet draws every shared icon and its paint golden is pinned */
   SW.I.camera = '<rect x="3.500" y="6.500" width="12" height="11" rx="2.500"/><path d="M15.500 10.500l5-2.500v8l-5-2.500"/>';
@@ -258,7 +258,20 @@
     function flush(n) { if (SW.mediaPrompt && SW.mediaPop) mq.splice(0).forEach(function (f) { f(); }); else if (n < 100) setTimeout(function () { flush(n + 1); }, 20); else mq = []; }
     SW.lazy(["/chrome/media.css", "/chrome/media.js"], function () { flush(0); });
   }
+  /* the page's Media Session (navigator.mediaSession): a "now playing" button that opens the controls */
+  function renderNowPlaying() {
+    var ses = (st().media || {}).session, el = E.np, on = !!(ses && (ses.title || ses.playbackState !== "none" || (ses.actions || []).length));
+    var k = on ? ses.playbackState : "";
+    el.classList.toggle("hide", !on);
+    if (el._k !== k) {
+      el._k = k; SW.clear(el);
+      if (on) { el.appendChild(icon(ses.playbackState === "playing" ? "pause" : "music", 16)); el.setAttribute("aria-label", S.media.nowPlaying); el.setAttribute("title", S.media.nowPlaying); }
+    }
+    if (SW.nowPlaying) SW.nowPlaying.refresh();
+  }
+  E.np.addEventListener("click", function () { mediaLazy(function () { SW.nowPlaying.open(E.np); }); });
   function renderMedia() {
+    renderNowPlaying();
     var m = st().media || {}, ses = m.sessions || [], shares = m.shares || [], p = m.prompt || null, T = S.media;
     var cam = ses.some(function (s) { return s.kind === "camera"; }), mic = ses.some(function (s) { return s.kind === "microphone"; }), scr = ses.some(function (s) { return s.kind === "screen"; });
     var on = cam || mic || scr, el = E.media, k = (cam ? "c" : "") + (mic ? "m" : "") + (scr ? "s" : "");

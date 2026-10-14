@@ -60,8 +60,8 @@
     ['css', L, 'AbstractRange Highlight HighlightRegistry CSSPropertyRule ContentVisibilityAutoStateChangeEvent'],
     ['css', L, 'CSSRule', 0, 1],
     ['css', g.CSS, 'highlights registerProperty registeredProperty', 1],
-    ['devices', L, 'ScreenOrientation DeviceOrientationEvent DeviceMotionEvent DeviceMotionEventAcceleration DeviceMotionEventRotationRate Gamepad GamepadButton GamepadEvent WakeLockSentinel WakeLock MediaMetadata MediaSession Credential PasswordCredential FederatedCredential PublicKeyCredential CredentialsContainer PaymentRequest PaymentResponse PaymentRequestUpdateEvent TrustedHTML TrustedScript TrustedScriptURL TrustedTypePolicy TrustedTypePolicyFactory trustedTypes PictureInPictureWindow PictureInPictureEvent'],
-    ['devices', N, 'getGamepads wakeLock mediaSession credentials', 1],
+    ['devices', L, 'ScreenOrientation DeviceOrientationEvent DeviceMotionEvent DeviceMotionEventAcceleration DeviceMotionEventRotationRate Gamepad GamepadButton GamepadEvent NavigatorUAData WakeLockSentinel WakeLock MediaMetadata MediaSession Credential PasswordCredential FederatedCredential PublicKeyCredential CredentialsContainer PaymentRequest PaymentResponse PaymentRequestUpdateEvent TrustedHTML TrustedScript TrustedScriptURL TrustedTypePolicy TrustedTypePolicyFactory trustedTypes PictureInPictureWindow PictureInPictureEvent'],
+    ['devices', N, 'getGamepads wakeLock mediaSession credentials userAgentData', 1],
     ['devices', g.Screen.prototype, 'orientation', 1],
     ['devices', D, 'hasStorageAccess requestStorageAccess', 1],
     ['devices', D, 'pictureInPictureEnabled pictureInPictureElement exitPictureInPicture', 1, 1], // the media prelude has the Chromium-matched versions
@@ -72,9 +72,15 @@
     ['es', L, 'DisposableStack AsyncDisposableStack SuppressedError', 0, 1],
     ['es', Error, 'captureStackTrace', 0, 1],
     ['intl', g.Intl, 'Locale', 0, 1],
+    ['intlnum', g.Intl, 'NumberFormat'],
+    ['intldate', g.Intl, 'DateTimeFormat'],
+    ['intlmisc', g.Intl, 'PluralRules RelativeTimeFormat ListFormat DisplayNames DurationFormat Collator Segmenter getCanonicalLocales supportedValuesOf'],
     ['sched', L, 'scheduler Scheduler TaskController TaskSignal TaskPriorityChangeEvent'],
-    ['pwa', L, 'Notification NotificationEvent Permissions PermissionStatus PushManager PushSubscription PushSubscriptionOptions PushEvent PushMessageData PushSubscriptionChangeEvent SyncManager SyncEvent PeriodicSyncManager PeriodicSyncEvent Lock LockManager __pwa __pwaEvent __pwaDispatch'],
-    ['pwa', N, 'permissions locks setAppBadge clearAppBadge', 1]
+    ['pwa', L, 'Notification NotificationEvent Permissions PermissionStatus PushManager PushSubscription PushSubscriptionOptions PushEvent PushMessageData PushSubscriptionChangeEvent Clipboard ClipboardItem SyncManager SyncEvent PeriodicSyncManager PeriodicSyncEvent Lock LockManager __pwa __pwaEvent __pwaDispatch'],
+    ['pwa', N, 'permissions locks setAppBadge clearAppBadge clipboard', 1],
+    ['crypto', L, 'CryptoKey SubtleCrypto'],
+    ['webcodecs', L, 'MediaStreamTrackProcessor MediaStreamTrackGenerator VideoTrackGenerator'],
+    ['crypto', g.Crypto.prototype, 'subtle', 1]
   ];
   if (g.HTMLVideoElement) T.push(['devices', g.HTMLVideoElement.prototype, 'requestPictureInPicture disablePictureInPicture', 1, 1]);
   for (var i = 0; i < T.length; i++) {

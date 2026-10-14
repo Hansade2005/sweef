@@ -767,6 +767,8 @@ func matchPseudo(n *html.Node, ps pseudoSel, scope *html.Node) bool {
 		return (n.Data == "a" || n.Data == "area") && hasAttr(n, "href")
 	case "focus", "focus-visible", "focus-within":
 		return hasAttr(n, "data-sw-focused")
+	case "fullscreen", "-webkit-full-screen":
+		return hasAttr(n, "data-sw-fullscreen")
 	case "hover", "active", "visited", "target", "placeholder-shown", "defined":
 		return ps.name == "defined"
 	case "read-only":

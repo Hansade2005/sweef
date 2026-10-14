@@ -42,7 +42,11 @@ const (
 
 func init() {
 	registerPrelude("canvas", canvasPreludeJS)
-	registerHostExtension("canvas", func(j *jsVM) map[string]hostFn { return newCanvasHost(j).fns() })
+	registerHostExtension("canvas", func(j *jsVM) map[string]hostFn {
+		h := newCanvasHost(j)
+		j.cvh = h
+		return h.fns()
+	})
 }
 
 type cvCanvas struct {
@@ -958,4 +962,11 @@ func decodeSurface(b []byte) *raster.Surface {
 		h = 150
 	}
 	return raster.RenderSVG(doc, int(math.Ceil(w)), int(math.Ceil(h)), render.Color{A: 1})
+}
+
+// putRGBA stores straight-alpha RGBA pixels as an image object (the "img" source of cvDrawImage) and returns its handle.
+func (h *cvHost) putRGBA(rgba []byte, w, hh int) int {
+	s := raster.NewSurface(w, hh)
+	s.SetNRGBA(rgba, w, hh, 0, 0)
+	return h.put(s)
 }

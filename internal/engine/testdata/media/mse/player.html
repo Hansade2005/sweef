@@ -14,7 +14,8 @@ var plan = (q.get('plan') || '0,0,0').split(',').map(Number);
 var T = { log: [], ready: false, error: null, appended: 0 };
 window.T = T;
 var v = document.getElementById('v');
-var ms = new MediaSource();
+var ms = q.get('mms') ? new ManagedMediaSource() : new MediaSource();
+T.bc = []; if (q.get('mms')) ms.addEventListener('startstreaming', function () { T.log.push(['startstreaming', 0, 0]); });
 v.src = URL.createObjectURL(ms);
 ['waiting', 'playing', 'canplay', 'seeking', 'seeked', 'ended', 'pause', 'error', 'ratechange', 'stalled'].forEach(function (n) {
   v.addEventListener(n, function () { T.log.push([n, Math.round(v.currentTime * 1000) / 1000, v.readyState]); });
@@ -45,6 +46,7 @@ ms.addEventListener('sourceopen', function () {
   if (T.sbv) return; // MediaSource reopens (and fires sourceopen again) after endOfStream() when a buffer changes
   var sbv = ms.addSourceBuffer(cfg.vmime), sba = cfg.amime && !q.get('manual') ? ms.addSourceBuffer(cfg.amime) : null;
   T.sbv = sbv; T.sba = sba; T.ms = ms;
+  sbv.addEventListener('bufferedchange', function (e) { T.bc.push([e.constructor.name, e.addedRanges.length ? e.addedRanges.start(0) : -1, e.addedRanges.length ? e.addedRanges.end(0) : -1, e.removedRanges.length]); });
   var d = cfg.dir + '/';
   if (q.get('manual')) { T.ready = true; return; } // the test appends by hand
   var chain = Promise.resolve();

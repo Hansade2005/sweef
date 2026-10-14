@@ -28,3 +28,12 @@
 .mses b { display: block; font-size: var(--fs-md); font-weight: 650; } .mses .s { display: block; font-size: var(--fs-sm); color: var(--text-3); }
 .mperm { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px; font-size: var(--fs-md); }
 .mseg > button { padding: 0 8px; }
+
+/* Now playing (the page's Media Session) */
+.pop.nppop { width: 320px; padding: var(--s-3); }
+.nphead { display: flex; align-items: center; gap: var(--s-3); padding: 4px 4px 8px; }
+.nphead .mic { width: 40px; height: 40px; border-radius: var(--r-1); background: var(--accent-soft); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; flex: none; overflow: hidden; }
+.nphead b { display: block; font-size: var(--fs-md); font-weight: 650; } .nphead span.s { display: block; font-size: var(--fs-sm); color: var(--text-3); }
+.npctl { display: flex; align-items: center; justify-content: center; gap: var(--s-3); padding: 2px 0 6px; }
+.npctl .ibtn[disabled] { opacity: 0.35; }
+.npbar { height: 4px; border-radius: 2px; background: var(--sunken); margin: 2px 6px 4px; overflow: hidden; } .npbar > i { display: block; height: 100%; background: var(--accent); }

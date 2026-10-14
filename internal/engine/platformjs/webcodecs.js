@@ -769,3 +769,135 @@ function readAll(stream) {
 
 [VideoDecoder, VideoEncoder, AudioDecoder, AudioEncoder, ImageDecoder, ImageTrack, ImageTrackList].forEach(function (C) { H.glob(C.name, C); });
 H.glob('VideoColorSpace', VideoColorSpace);
+
+// ---- events from Go: frames and audio of the processors -----------------------------------------------------
+var subs = new Map();
+Object.defineProperty(g, '__swWcsEvent', { value: function (id, type, data) {
+  var s = subs.get(id), d = data ? JSON.parse(data) : null;
+  if (!s) { if (d && d.i && d.i.h) { try { sw.wcRelease(d.i.h); } catch (e) { /* ignore */ } } return; }
+  if (type === 'video') s.onVideo(d);
+  else if (type === 'audio') s.onAudio(d);
+  else if (type === 'end') s.onEnd();
+}, configurable: true });
+
+// ---- MediaStreamTrackProcessor ---------------------------------------------------------------------------------------------
+function sourceSpec(track) {
+  var t = track._t || {};
+  if (t.cap) return { cap: track.id };
+  if (t.rtc) return { rtc: [t.rtc.pc, t.rtc.tr] };
+  if (track.canvas && g.__swIdOf) return { canvas: g.__swIdOf(track.canvas), fps: (t.extra && t.extra.frameRate) || 30 };
+  return null;
+}
+function MediaStreamTrackProcessor(init) {
+  if (!(this instanceof MediaStreamTrackProcessor)) throw new TypeError("Failed to construct 'MediaStreamTrackProcessor': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+  if (!init || typeof init !== 'object' || init.track === undefined) throw new TypeError("Failed to construct 'MediaStreamTrackProcessor': Failed to read the 'track' property from 'MediaStreamTrackProcessorInit': Required member is undefined.");
+  var track = init.track;
+  if (!g.MediaStreamTrack || !(track instanceof g.MediaStreamTrack)) throw new TypeError("Failed to construct 'MediaStreamTrackProcessor': Failed to read the 'track' property from 'MediaStreamTrackProcessorInit': The provided value is not of type 'MediaStreamTrack'.");
+  if (init.maxBufferSize !== undefined && !(init.maxBufferSize >= 0)) throw new TypeError("Failed to construct 'MediaStreamTrackProcessor': maxBufferSize must be a non-negative integer.");
+  if (track.readyState === 'ended') throw ex("Failed to construct 'MediaStreamTrackProcessor': The track has ended.", 'InvalidStateError');
+  var st = { track: track, max: init.maxBufferSize === undefined ? (track.kind === 'video' ? 1 : 100) : Math.max(1, init.maxBufferSize >>> 0), readable: null };
+  Object.defineProperty(this, '__p', { value: st });
+}
+H.attrs(MediaStreamTrackProcessor.prototype, {
+  readable: function () {
+    var st = this.__p;
+    if (st.readable) return st.readable;
+    var track = st.track, video = track.kind === 'video', queue = [], waiter = null, ended = false, sub = 0, ctrlRef = null;
+    function drop(item) { try { item.close(); } catch (e) { /* ignore */ } }
+    function wake() { if (waiter) { var w = waiter; waiter = null; w(); } }
+    function offer(item) {
+      queue.push(item);
+      while (queue.length > st.max) drop(queue.shift());
+      wake();
+    }
+    function start() {
+      var spec = sourceSpec(track);
+      if (!spec) throw ex("Failed to read from the MediaStreamTrackProcessor: this kind of track cannot be read as raw frames.", 'InvalidStateError');
+      sub = sw.wcSubscribe(track.kind, JSON.stringify(spec));
+      var frameCount = 0;
+      subs.set(sub, {
+        onVideo: function (d) {
+          offer(adoptFrame(d.i, d.ts));
+        },
+        onAudio: function (d) { offer(adoptAudio(d.i, d.ts)); },
+        onEnd: function () { ended = true; wake(); }
+      });
+      track.addEventListener('ended', function () { ended = true; wake(); });
+    }
+    var stream = new g.ReadableStream({
+      pull: function (c) {
+        if (!sub) start();
+        return new Promise(function (resolve) {
+          (function check() {
+            if (queue.length) { c.enqueue(queue.shift()); resolve(); return; }
+            if (ended || track.readyState === 'ended') {
+              try { c.close(); } catch (e) { /* closed */ }
+              resolve(); return;
+            }
+            waiter = check;
+          })();
+        });
+      },
+      cancel: function () {
+        if (sub) { subs.delete(sub); try { sw.wcUnsubscribe(sub); } catch (e) { /* ignore */ } }
+        queue.forEach(drop); queue = [];
+      }
+    }, { highWaterMark: 0 });
+    st.readable = stream;
+    return stream;
+  }
+});
+H.tag(MediaStreamTrackProcessor, 'MediaStreamTrackProcessor');
+H.glob('MediaStreamTrackProcessor', MediaStreamTrackProcessor);
+
+// ---- generators --------------------------------------------------------------------------------------------------------------
+function newGenerated(kind) {
+  var info = JSON.parse(sw.wcGenNew(kind, ''));
+  if (typeof g.__swCapTrack !== 'function') throw ex('track generators need media support', 'NotSupportedError');
+  return g.__swCapTrack(info, {});
+}
+function writableFor(track, kind) {
+  return new g.WritableStream({
+    write: function (chunk) {
+      if (track.readyState === 'ended') { if (chunk && typeof chunk.close === 'function') { try { chunk.close(); } catch (e) { /* closed */ } } return; }
+      if (kind === 'video') {
+        if (!(chunk instanceof VideoFrame)) throw new TypeError('The chunk is not a VideoFrame.');
+        if (chunk._closed) throw ex('InvalidStateError', 'The VideoFrame is closed.');
+        try { sw.wcGenVideo(track.id, chunk._h); } finally { chunk.close(); }
+      } else {
+        if (!(chunk instanceof AudioData)) throw new TypeError('The chunk is not an AudioData.');
+        if (chunk._closed) throw ex('InvalidStateError', 'The AudioData is closed.');
+        try { sw.wcGenAudio(track.id, chunk._h); } finally { chunk.close(); }
+      }
+    },
+    close: function () { track.stop(); },
+    abort: function () { track.stop(); }
+  });
+}
+function MediaStreamTrackGenerator(init) {
+  if (!(this instanceof MediaStreamTrackGenerator)) throw new TypeError("Failed to construct 'MediaStreamTrackGenerator': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+  if (!init || typeof init !== 'object' || init.kind === undefined) throw new TypeError("Failed to construct 'MediaStreamTrackGenerator': Failed to read the 'kind' property from 'MediaStreamTrackGeneratorInit': Required member is undefined.");
+  if (init.kind !== 'audio' && init.kind !== 'video') throw new TypeError("Failed to construct 'MediaStreamTrackGenerator': The provided value '" + init.kind + "' is not a valid enum value of type MediaStreamTrackGeneratorKind.");
+  var track = newGenerated(init.kind);
+  Object.setPrototypeOf(track, MediaStreamTrackGenerator.prototype);
+  var w = null;
+  Object.defineProperty(track, 'writable', { get: function () { return w || (w = writableFor(track, init.kind)); }, enumerable: true, configurable: true });
+  return track;
+}
+MediaStreamTrackGenerator.prototype = Object.create(g.MediaStreamTrack.prototype, { constructor: { value: MediaStreamTrackGenerator, writable: true, configurable: true } });
+Object.setPrototypeOf(MediaStreamTrackGenerator, g.MediaStreamTrack);
+H.tag(MediaStreamTrackGenerator, 'MediaStreamTrackGenerator');
+H.glob('MediaStreamTrackGenerator', MediaStreamTrackGenerator);
+
+function VideoTrackGenerator() {
+  if (!(this instanceof VideoTrackGenerator)) throw new TypeError("Failed to construct 'VideoTrackGenerator': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+  var track = newGenerated('video'), w = null, muted = false;
+  Object.defineProperty(this, '__t', { value: track });
+  H.attrs(this, {
+    writable: function () { return w || (w = writableFor(track, 'video')); },
+    track: function () { return track; }
+  });
+  Object.defineProperty(this, 'muted', { get: function () { return muted; }, set: function (v) { muted = !!v; if (track._t) track._t.muted = muted; }, enumerable: true, configurable: true });
+}
+H.tag(VideoTrackGenerator, 'VideoTrackGenerator');
+H.glob('VideoTrackGenerator', VideoTrackGenerator);

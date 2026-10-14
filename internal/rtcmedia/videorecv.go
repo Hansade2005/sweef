@@ -115,7 +115,9 @@ type VideoReceiver struct {
 	lastH     int
 	firing    bool
 
-	dec *vp8.Decoder
+	dec      *vp8.Decoder
+	hook     hookSlot
+	minDelay float64 // RTCRtpReceiver.jitterBufferTarget, seconds (guarded by mu)
 
 	done chan struct{}
 	wg   sync.WaitGroup // decode, playout and monitor loops
@@ -160,6 +162,9 @@ func NewVideoReceiver(track *webrtc.TrackRemote, rcv *webrtc.RTPReceiver, writeR
 	return r
 }
 
+// SetHook installs (nil removes) the encoded-frame transform: it sees each reassembled frame before decoding.
+func (r *VideoReceiver) SetHook(f FrameHook) { r.hook.set(f) }
+
 // AddSink adds a frame consumer; the most recent frame (if any) is delivered at once.
 func (r *VideoReceiver) AddSink(s FrameSink) {
 	r.mu.Lock()
@@ -176,6 +181,20 @@ func (r *VideoReceiver) RemoveSink(s FrameSink) {
 			break
 		}
 	}
+	r.mu.Unlock()
+}
+
+// SetMinDelay sets the least jitter buffer delay in seconds (RTCRtpReceiver.jitterBufferTarget; 0 removes it).
+func (r *VideoReceiver) SetMinDelay(sec float64) {
+	r.mu.Lock()
+	r.minDelay = sec
+	r.mu.Unlock()
+}
+
+// RequestKeyFrame asks the sender for a key frame (a PLI), as RTCRtpScriptTransformer.sendKeyFrameRequest does.
+func (r *VideoReceiver) RequestKeyFrame() {
+	r.mu.Lock()
+	r.requestKeyLocked(time.Now())
 	r.mu.Unlock()
 }
 
@@ -518,8 +537,22 @@ func (r *VideoReceiver) gc() {
 }
 
 func (r *VideoReceiver) decode(f *vframe, now time.Time) {
+	data := f.data
+	if h := r.hook.get(); h != nil {
+		w, hh := r.Size()
+		out, ok := h(&EncodedFrame{Video: true, Key: f.key, Timestamp: f.ts, SSRC: r.ssrc, PayloadType: uint8(r.track.PayloadType()), Width: w, Height: hh, Data: data})
+		if !ok || len(out) == 0 { // not decodable (a transform that could not decrypt): treated like a lost frame
+			r.mu.Lock()
+			r.st.FramesDropped++
+			r.needKey = true
+			r.requestKeyLocked(now)
+			r.mu.Unlock()
+			return
+		}
+		data = out
+	}
 	t0 := time.Now()
-	img, err := r.dec.Decode(f.data)
+	img, err := r.dec.Decode(data)
 	dt := time.Since(t0)
 	r.mu.Lock()
 	if err != nil {
@@ -559,6 +592,9 @@ func (r *VideoReceiver) decode(f *vframe, now time.Time) {
 		r.baseTr += (tr - r.baseTr) * 0.003
 	}
 	want := math.Max(0.02, math.Min(0.4, 3*r.jitter+0.02))
+	if want < r.minDelay {
+		want = r.minDelay
+	}
 	if want > r.delay {
 		r.delay += (want - r.delay) * 0.3
 	} else {
@@ -568,8 +604,8 @@ func (r *VideoReceiver) decode(f *vframe, now time.Time) {
 	if playAt.Before(now) {
 		playAt = now
 	}
-	if playAt.After(now.Add(600 * time.Millisecond)) {
-		playAt = now.Add(600 * time.Millisecond)
+	if limit := 600*time.Millisecond + time.Duration(r.minDelay*float64(time.Second)); playAt.After(now.Add(limit)) {
+		playAt = now.Add(limit)
 	}
 	r.outQ = append(r.outQ, &outFrame{img: img, at: playAt, arr: f.firstArr, size: len(f.data)})
 	r.mu.Unlock()

@@ -3,6 +3,7 @@ package webaudio
 import (
 	"fmt"
 	"math"
+	"sync"
 )
 
 const quantum = 128
@@ -46,6 +47,8 @@ type Node struct {
 	started       bool
 	endedFlag     bool
 	Props         map[string]any
+	// Tap, when set on a MediaStreamAudioDestinationNode, receives each quantum it passes on.
+	Tap func(ch [][]float32)
 }
 
 // Context is a Web Audio graph plus its render clock.
@@ -71,6 +74,8 @@ type Context struct {
 	Listener    *Listener
 	hasExternal bool
 	quantumOut  [][]float32
+	// mu serialises the host's calls with a render goroutine (see Lock)
+	mu sync.Mutex
 	// stepping state
 	stepping bool
 	waves    map[int]*PeriodicWave

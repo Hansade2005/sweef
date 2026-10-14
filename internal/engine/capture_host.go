@@ -285,6 +285,9 @@ func (h *capHost) sessions() []MediaSession {
 	defer h.mu.Unlock()
 	out := make([]MediaSession, 0, len(h.tracks))
 	for _, ct := range h.tracks {
+		if strings.HasPrefix(ct.kind, "generated-") {
+			continue // made by the page itself: no device, nothing to indicate
+		}
 		out = append(out, MediaSession{ID: ct.t.ID, Kind: ct.kind, Label: ct.label, Surface: ct.t.Surface})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -580,7 +583,7 @@ func (h *capHost) hostRequest(a []any) (any, error) {
 }
 
 func (h *capHost) trackJSON(ct *capTrack) map[string]any {
-	return map[string]any{"id": ct.t.ID, "kind": map[string]string{"camera": "video", "screen": "video", "microphone": "audio"}[ct.kind],
+	return map[string]any{"id": ct.t.ID, "kind": map[string]string{"camera": "video", "screen": "video", "microphone": "audio", "generated-video": "video", "generated-audio": "audio"}[ct.kind],
 		"label": ct.label, "settings": ct.settings, "capabilities": ct.caps, "source": ct.kind}
 }
 
@@ -797,7 +800,7 @@ func (h *capHost) getUserMedia(ctx context.Context, payload string) (any, *capEr
 		if err != nil {
 			return fail(deviceErr(err, "audio"))
 		}
-		ct := h.newAudioTrack(lease, apick, origin, salt)
+		ct := h.newAudioTrack(lease, apick, origin, salt, r)
 		tracks = append(tracks, ct)
 	}
 	if ctx.Err() != nil {
@@ -848,16 +851,16 @@ func (h *capHost) newVideoTrack(lease *capture.VideoLease, dev capture.DeviceInf
 	return ct
 }
 
-func (h *capHost) newAudioTrack(lease *capture.AudioLease, dev capture.DeviceInfo, origin, salt string) *capTrack {
+func (h *capHost) newAudioTrack(lease *capture.AudioLease, dev capture.DeviceInfo, origin, salt string, sol constraints.AudioResult) *capTrack {
 	m := lease.Mode()
 	c := capture.AudioCapsOf(dev.ID)
 	id, gid := hashID(salt, origin, "audioinput", dev.ID), hashID(salt, origin, "group", dev.GroupID)
 	ct := &capTrack{kind: "microphone", real: dev.ID, label: dev.Label,
 		settings: map[string]any{"deviceId": id, "groupId": gid, "sampleRate": m.Rate, "sampleSize": 16, "channelCount": m.Channels,
-			"echoCancellation": false, "autoGainControl": false, "noiseSuppression": false, "latency": 0.01},
+			"echoCancellation": sol.EchoCancellation, "autoGainControl": sol.AutoGainControl, "noiseSuppression": sol.NoiseSuppression, "latency": 0.01},
 		caps: map[string]any{"deviceId": id, "groupId": gid, "sampleRate": rangeJSON(float64(m.Rate), float64(m.Rate)), "sampleSize": rangeJSON(16, 16),
-			"channelCount": rangeJSON(float64(max(c.MinChannels, 1)), float64(max(c.MaxChannels, 1))), "echoCancellation": []bool{false},
-			"autoGainControl": []bool{false}, "noiseSuppression": []bool{false}, "latency": rangeJSON(0.01, 0.01)}}
+			"channelCount": rangeJSON(float64(max(c.MinChannels, 1)), float64(max(c.MaxChannels, 1))), "echoCancellation": []bool{true, false},
+			"autoGainControl": []bool{true, false}, "noiseSuppression": []bool{true, false}, "latency": rangeJSON(0.01, 0.01)}}
 	ct.t = capture.NewAudioTrack(lease, dev, origin, nil)
 	return ct
 }
@@ -991,11 +994,13 @@ func (h *capHost) applyConstraints(payload string) (any, *capErr) {
 			return nil, overconstrained(err)
 		}
 	case "microphone":
-		// only the properties we always report can be satisfied
-		if _, err := constraints.SolveAudio(c, []constraints.AudioDevice{{ID: fmt.Sprint(ct.settings["deviceId"]), GroupID: fmt.Sprint(ct.settings["groupId"]),
-			Rates: []int{ct.t.AudioMode().Rate}, MinChannels: 1, MaxChannels: ct.t.AudioMode().Channels, DefaultChans: ct.t.AudioMode().Channels}}); err != nil {
+		r, err := constraints.SolveAudio(c, []constraints.AudioDevice{{ID: fmt.Sprint(ct.settings["deviceId"]), GroupID: fmt.Sprint(ct.settings["groupId"]),
+			Rates: []int{ct.t.AudioMode().Rate}, MinChannels: 1, MaxChannels: ct.t.AudioMode().Channels, DefaultChans: ct.t.AudioMode().Channels}})
+		if err != nil {
 			return nil, overconstrained(err)
 		}
+		// the voice processing of the track follows what the page now asks for
+		ct.settings["echoCancellation"], ct.settings["noiseSuppression"], ct.settings["autoGainControl"] = r.EchoCancellation, r.NoiseSuppression, r.AutoGainControl
 	}
 	return map[string]any{"settings": ct.settings}, nil
 }

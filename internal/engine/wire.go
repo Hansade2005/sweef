@@ -41,7 +41,6 @@ import (
 	"time"
 
 	"github.com/dsnet/compress/brotli"
-	"golang.org/x/net/websocket"
 )
 
 // wireCounters counts bytes read from and written to sockets. Counts also
@@ -387,8 +386,7 @@ func (m *meterRT) CloseIdleConnections() {
 // proxy rules as the HTTP transport, so its bytes land in WireIn/WireOut and a proxy cannot be
 // bypassed. ws and wss go through an HTTP proxy with CONNECT, as browsers do. A socks5 proxy is
 // refused here (net/http supports it for HTTP, this small dialer does not).
-func (e *Engine) dialWebSocket(ctx context.Context, c *BrowserContext, cfg *websocket.Config) (*websocket.Conn, error) {
-	loc := cfg.Location
+func (e *Engine) dialWebSocket(ctx context.Context, c *BrowserContext, loc *url.URL, origin string, protocols []string, header http.Header) (*wsClient, *http.Response, error) {
 	secure := loc.Scheme == "wss"
 	port := loc.Port()
 	if port == "" {
@@ -407,7 +405,7 @@ func (e *Engine) dialWebSocket(ctx context.Context, c *BrowserContext, cfg *webs
 	}
 	pu, perr := proxyFunc(e.proxyFor(c))(probe)
 	if perr != nil {
-		return nil, perr
+		return nil, nil, perr
 	}
 	dctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -416,11 +414,11 @@ func (e *Engine) dialWebSocket(ctx context.Context, c *BrowserContext, cfg *webs
 	if pu == nil {
 		conn, err = dial(dctx, "tcp", target)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	} else {
 		if pu.Scheme != "http" && pu.Scheme != "https" {
-			return nil, fmt.Errorf("websocket through a %s proxy is not supported", pu.Scheme)
+			return nil, nil, fmt.Errorf("websocket through a %s proxy is not supported", pu.Scheme)
 		}
 		paddr := pu.Host
 		if pu.Port() == "" {
@@ -432,13 +430,13 @@ func (e *Engine) dialWebSocket(ctx context.Context, c *BrowserContext, cfg *webs
 		}
 		conn, err = dial(dctx, "tcp", paddr)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if pu.Scheme == "https" {
 			tc := tls.Client(conn, &tls.Config{ServerName: pu.Hostname()})
 			if err = tc.HandshakeContext(dctx); err != nil {
 				conn.Close()
-				return nil, err
+				return nil, nil, err
 			}
 			conn = tc
 		}
@@ -450,37 +448,37 @@ func (e *Engine) dialWebSocket(ctx context.Context, c *BrowserContext, cfg *webs
 		_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
 		if err = req.Write(conn); err != nil {
 			conn.Close()
-			return nil, err
+			return nil, nil, err
 		}
 		br := bufio.NewReader(conn)
 		resp, err := http.ReadResponse(br, req)
 		if err != nil {
 			conn.Close()
-			return nil, err
+			return nil, nil, err
 		}
 		if resp.StatusCode != http.StatusOK {
 			conn.Close()
-			return nil, fmt.Errorf("proxy refused CONNECT: %s", resp.Status)
+			return nil, nil, fmt.Errorf("proxy refused CONNECT: %s", resp.Status)
 		}
 		if br.Buffered() > 0 { // nothing may follow a CONNECT 200 before we speak
 			conn.Close()
-			return nil, errors.New("proxy sent data before the tunnel was used")
+			return nil, nil, errors.New("proxy sent data before the tunnel was used")
 		}
 	}
 	if secure {
 		tc := tls.Client(conn, &tls.Config{ServerName: loc.Hostname(), NextProtos: []string{"http/1.1"}})
 		if err = tc.HandshakeContext(dctx); err != nil {
 			conn.Close()
-			return nil, err
+			return nil, nil, err
 		}
 		conn = tc
 	}
 	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
-	ws, err := websocket.NewClient(cfg, conn)
+	ws, resp, err := wsHandshake(conn, loc, origin, protocols, header)
 	if err != nil {
 		conn.Close()
-		return nil, err
+		return nil, resp, err
 	}
 	_ = conn.SetDeadline(time.Time{})
-	return ws, nil
+	return ws, resp, nil
 }

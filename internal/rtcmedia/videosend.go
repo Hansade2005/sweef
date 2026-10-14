@@ -9,6 +9,7 @@ import (
 	"github.com/pion/interceptor/pkg/cc"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
+	"github.com/pion/webrtc/v4"
 
 	"github.com/sweefbrowser/sweef/internal/capture"
 	"github.com/sweefbrowser/sweef/internal/media/vp8enc"
@@ -58,6 +59,7 @@ type VideoSendStats struct {
 	RTT                                                     float64
 	FractionLost                                            float64
 	Q                                                       int
+	QPSum                                                   uint64
 	Active                                                  bool
 	HugeFramesSent                                          uint64
 	PacerQueueDelay                                         float64
@@ -104,6 +106,8 @@ type VideoSender struct {
 	rttMs   atomic.Int64
 	loss    atomic.Uint64 // fraction lost * 1e6
 
+	hook    hookSlot // RTCRtpScriptTransform / createEncodedStreams
+	paused  bool     // the last encode attempt found the layer paused (run goroutine only)
 	enc     *vp8enc.Encoder
 	scaler  Scaler
 	scratch *capture.Frame
@@ -117,6 +121,10 @@ type VideoSender struct {
 	qBytes  atomic.Int64
 	target  atomic.Int64
 	pacedTo atomic.Int64 // pacing rate
+
+	// share maps the connection's bitrate estimate to this layer's budget when several layers (simulcast) share the
+	// estimate; 0 pauses the layer (see SetShare).
+	share atomic.Pointer[func(total int) int]
 
 	// OnQuality is called (from the sender goroutine) when the quality limitation reason changes.
 	OnQuality func(reason string)
@@ -194,6 +202,28 @@ func (s *VideoSender) SetParams(p SendParams) {
 	s.params = p
 	s.mu.Unlock()
 	s.kick()
+}
+
+// SetShare installs the allocation function of a simulcast layer: it receives the connection's total target bitrate
+// and returns the bits per second this layer may use, or 0 to pause the layer (no frames are encoded or sent). nil
+// restores the single-layer behaviour (the whole estimate).
+func (s *VideoSender) SetShare(f func(total int) int) {
+	if f == nil {
+		s.share.Store(nil)
+	} else {
+		s.share.Store(&f)
+	}
+	s.kick()
+}
+
+// SetHook installs (nil removes) the encoded-frame transform of the sender.
+func (s *VideoSender) SetHook(f FrameHook) { s.hook.set(f) }
+
+// SourceSize is the size of the last captured frame (0, 0 before the first one).
+func (s *VideoSender) SourceSize() (int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.srcW, s.srcH
 }
 
 // Params returns the current parameters.
@@ -359,6 +389,11 @@ func (s *VideoSender) bitrateTarget(p SendParams) int {
 			target = r
 		}
 	}
+	if f := s.share.Load(); f != nil {
+		if target = (*f)(target); target <= 0 {
+			return 0
+		}
+	}
 	ceil := defaultMaxBitrate
 	if p.MaxBitrate > 0 {
 		ceil = p.MaxBitrate
@@ -393,6 +428,14 @@ func (s *VideoSender) encodeSend(f *capture.Frame, now time.Time) {
 		img = s.scratch
 	}
 	target := s.bitrateTarget(p)
+	if target == 0 { // paused by the simulcast allocator: send nothing until the estimate grows
+		s.paused = true
+		return
+	}
+	if s.paused { // a layer that resumes must start from a key frame
+		s.paused = false
+		s.keyReq.Store(true)
+	}
 	s.target.Store(int64(target))
 	s.pacedTo.Store(int64(float64(target) * 2.5))
 	s.track.SetRetransmitBudget(target / 3)
@@ -444,7 +487,20 @@ func (s *VideoSender) encodeSend(f *capture.Frame, now time.Time) {
 		return
 	}
 	ts := s.tsBase + uint32(now.Sub(s.t0).Seconds()*90000)
-	payloads := vp8Packetize(pk.Data, pk.PartStarts, s.picID, false, maxRTPPayload)
+	data, parts := pk.Data, pk.PartStarts
+	if h := s.hook.get(); h != nil {
+		neg := s.track.Negotiated()
+		out, ok := h(&EncodedFrame{Video: true, Key: pk.Key, Timestamp: ts, SSRC: neg.SSRC, PayloadType: neg.PT, Width: img.W, Height: img.H, Data: data})
+		if !ok || len(out) == 0 {
+			s.mu.Lock()
+			s.st.FramesDroppedByEncoder++
+			s.mu.Unlock()
+			s.keyReq.Store(true) // the receiver never saw this frame
+			return
+		}
+		data, parts = out, nil // a transformed payload is opaque: one partition
+	}
+	payloads := vp8Packetize(data, parts, s.picID, false, maxRTPPayload)
 	s.picID = (s.picID + 1) & 0x7fff
 	if len(payloads) == 0 {
 		return
@@ -467,9 +523,10 @@ func (s *VideoSender) encodeSend(f *capture.Frame, now time.Time) {
 		s.st.KeyFramesEncoded++
 	}
 	s.st.TotalEncodeTime += enc.Seconds()
-	s.st.TotalEncodedBytes += uint64(len(pk.Data))
+	s.st.TotalEncodedBytes += uint64(len(data))
 	s.st.FrameWidth, s.st.FrameHeight = img.W, img.H
 	s.st.Q = pk.Q
+	s.st.QPSum += uint64(pk.Q)
 	if len(pk.Data) > 20000 {
 		s.st.HugeFramesSent++
 	}
@@ -583,6 +640,9 @@ func (s *VideoSender) control() {
 	}
 	now := time.Now()
 	target := s.bitrateTarget(p)
+	if target == 0 {
+		target = minVideoBitrate
+	}
 	// bandwidth ladder with hysteresis
 	want := len(videoTiers) - 1
 	for i, t := range videoTiers {
@@ -734,6 +794,53 @@ func (m *fpsMeter) rate() float64 {
 		return 0
 	}
 	return float64(k) / newest.Sub(oldest).Seconds()
+}
+
+// LayerBitrates gives the bitrate a simulcast layer of px pixels wants (what the layer is given when the
+// estimate allows) and the least it needs to be worth sending at all. Chrome's simulcast tables are of the same
+// shape: a 720p layer wants a couple of Mbit/s, a 180p layer a couple of hundred kbit/s.
+func LayerBitrates(px int) (desired, minimum int) {
+	switch {
+	case px >= 1280*720:
+		desired = 2_500_000
+	case px >= 960*540:
+		desired = 1_500_000
+	case px >= 640*360:
+		desired = 700_000
+	case px >= 480*270:
+		desired = 450_000
+	case px >= 320*180:
+		desired = 200_000
+	default:
+		desired = 100_000
+	}
+	minimum = 40_000
+	for _, t := range videoTiers {
+		if px >= t.px {
+			minimum = t.bps * 6 / 10
+			break
+		}
+	}
+	if minimum < 30_000 {
+		minimum = 30_000
+	}
+	if minimum > desired {
+		minimum = desired
+	}
+	return
+}
+
+// RunRTCPRID is RunRTCP for one layer of a simulcast sender.
+func RunRTCPRID(rs *webrtc.RTPSender, rid string, h func([]rtcp.Packet)) {
+	for {
+		pkts, _, err := rs.ReadSimulcastRTCP(rid)
+		if err != nil {
+			return
+		}
+		if h != nil {
+			h(pkts)
+		}
+	}
 }
 
 func ntpMid32(t time.Time) uint32 {

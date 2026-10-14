@@ -139,3 +139,34 @@
   };
   SW.on("render", function () { fillPop(); });
 })();
+
+/* ---- now playing: the controls of the page's Media Session ---- */
+(function () {
+  var SW = window.SW, S = window.S, h = SW.h, icon = SW.icon, post = SW.post, T = S.media;
+  var C = function () { return SW.chrome; };
+  var np = null;
+  T.play = "Play"; T.pause = "Pause"; T.prev = "Previous track"; T.next = "Next track"; T.unknownTitle = "Playing media";
+  function ses() { return (SW.state.media || {}).session || null; }
+  function can(s, a) { return (s.actions || []).indexOf(a) >= 0; }
+  function fill() {
+    if (!np || !np.isConnected) return;
+    var s = ses(); SW.clear(np);
+    if (!s) { np.appendChild(h("div.mnone", { text: "-" })); return; }
+    var sub = [s.artist, s.album].filter(Boolean).join(" - ");
+    np.appendChild(h("div.nphead", h("span.mic", icon("music", 20)), h("div.grow", h("b.trunc", { text: s.title || T.unknownTitle }), sub ? h("span.s.trunc", { text: sub }) : null)));
+    if (s.duration > 0) np.appendChild(h("div.npbar", { role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(Math.round(s.duration)), "aria-valuenow": String(Math.round(s.position || 0)) }, h("i", { style: "width:" + Math.max(0, Math.min(100, 100 * (s.position || 0) / s.duration)).toFixed(1) + "%" })));
+    var playing = s.playbackState === "playing";
+    function btn(ic, label, action, arg, on) {
+      var b = h("button.ibtn", { "aria-label": label, title: label, onclick: function () { post("media.action", { action: action, arg: arg || 0 }); } }, icon(ic, 18));
+      if (!on) b.disabled = true; return b;
+    }
+    np.appendChild(h("div.npctl",
+      btn("skipprev", T.prev, "previoustrack", 0, can(s, "previoustrack")),
+      btn(playing ? "pause" : "play", playing ? T.pause : T.play, playing ? "pause" : "play", 0, true),
+      btn("skipnext", T.next, "nexttrack", 0, can(s, "nexttrack"))));
+  }
+  SW.nowPlaying = {
+    open: function (anchor) { np = h("div.nppop", { tabindex: "-1", "aria-label": T.nowPlaying }); C().openPop(anchor, np, { align: "right", noFocus: true }); np.classList.add("pop"); fill(); },
+    refresh: fill
+  };
+})();
