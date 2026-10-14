@@ -29,7 +29,8 @@
   function add(el, c) {
     if (c == null || c === false) return;
     if (Array.isArray(c)) c.forEach(function (x) { add(el, x); });
-    else el.appendChild(c.nodeType ? c : document.createTextNode(String(c)));
+    else if (c instanceof Node) el.appendChild(c);
+    else el.appendChild(document.createTextNode(String(c))); // strings are always text, never markup
   }
   SW.add = add;
   SW.clear = function (el) { while (el.firstChild) el.removeChild(el.firstChild); return el; };
@@ -88,7 +89,10 @@
   function merge(t, p) {  // RFC 7386
     if (p === null || typeof p !== "object" || Array.isArray(p)) return p;
     if (t === null || typeof t !== "object" || Array.isArray(t)) t = {};
-    for (var k in p) { if (p[k] === null) delete t[k]; else t[k] = merge(t[k], p[k]); }
+    for (var k in p) {
+      if (!Object.prototype.hasOwnProperty.call(p, k) || k === "__proto__" || k === "constructor" || k === "prototype") continue;
+      if (p[k] === null) delete t[k]; else t[k] = merge(t[k], p[k]);
+    }
     return t;
   }
   SW.merge = merge;
@@ -141,5 +145,6 @@
   SW.applyTheme();
   /* a page can force a theme with ?theme=dark (used by previews and error pages) */
   try { var q = /[?&]theme=(\w+)/.exec(location.search); if (q) document.documentElement.setAttribute("data-theme", q[1]); var pf = /[?&]platform=(\w+)/.exec(location.search); if (pf) document.documentElement.setAttribute("data-platform", pf[1]); } catch (e) {}
-  SW.query = function (k) { var m = new RegExp("[?&]" + k + "=([^&#]*)").exec(location.search); return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : ""; };
+  /* untrusted: strip markup and control chars */
+  SW.query = function (k) { var m = new RegExp("[?&]" + k + "=([^&#]*)").exec(location.search), v = ""; if (m) try { v = decodeURIComponent(m[1].replace(/\+/g, " ")); } catch (e) {} return v.replace(/[<>"'`\u0000-\u001f\u007f]/g, ""); };
 })();

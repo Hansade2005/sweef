@@ -16,14 +16,7 @@ func TestFramesCannotShowBrowserPagesOrLocalFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, f := range tab.Frames() {
-		waitFor(t, "frame load attempt", 3*time.Second, func() bool {
-			for _, ev := range f.Tab.ConsoleLog(0) {
-				if m, ok := ev.Data.(map[string]string); ok && strings.Contains(m["text"], "Not allowed to load") {
-					return true
-				}
-			}
-			return false
-		})
+		tab.WaitFrames(3 * time.Second)
 		if u := f.Tab.URL(); u != "about:blank" {
 			t.Fatalf("frame %d shows %q", i, u)
 		}
@@ -69,7 +62,7 @@ func TestFrameReadFilterHidesFramesFromSnapshotAndRefs(t *testing.T) {
 		t.Fatalf("snapshot lacks the allowed frame:\n%s", y)
 	}
 	// guessing the ref of the hidden frame does nothing
-	c := tab.frameList()[0].child // Frames() hides it, as it should
+	c := tab.FrameTabs()[0] // Frames() hides it, as it should
 	if err := tab.Click("f1e1"); err == nil {
 		t.Fatal("a ref into a hidden frame was accepted")
 	}

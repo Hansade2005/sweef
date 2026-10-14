@@ -33,6 +33,9 @@ import (
 type Style struct {
 	Weight int // 100..900; 400 normal, 700 bold
 	Italic bool
+	// OpticalSize is the font size in CSS px for a variable font's opsz axis
+	// (font-optical-sizing: auto). 0 leaves the axis at the font's default.
+	OpticalSize float64
 }
 
 // Face is one loaded font file.
@@ -426,14 +429,14 @@ var (
 
 func embedded() []*entry {
 	return []*entry{
-		{family: "go", style: Style{400, false}, embed: goregular.TTF, idx: -1},
-		{family: "go", style: Style{700, false}, embed: gobold.TTF, idx: -1},
-		{family: "go", style: Style{400, true}, embed: goitalic.TTF, idx: -1},
-		{family: "go", style: Style{700, true}, embed: gobolditalic.TTF, idx: -1},
-		{family: "go mono", style: Style{400, false}, embed: gomono.TTF, mono: true, idx: -1},
-		{family: "go mono", style: Style{700, false}, embed: gomonobold.TTF, mono: true, idx: -1},
-		{family: "go mono", style: Style{400, true}, embed: gomonoitalic.TTF, mono: true, idx: -1},
-		{family: "go mono", style: Style{700, true}, embed: gomonobolditalic.TTF, mono: true, idx: -1},
+		{family: "go", style: Style{Weight: 400, Italic: false}, embed: goregular.TTF, idx: -1},
+		{family: "go", style: Style{Weight: 700, Italic: false}, embed: gobold.TTF, idx: -1},
+		{family: "go", style: Style{Weight: 400, Italic: true}, embed: goitalic.TTF, idx: -1},
+		{family: "go", style: Style{Weight: 700, Italic: true}, embed: gobolditalic.TTF, idx: -1},
+		{family: "go mono", style: Style{Weight: 400, Italic: false}, embed: gomono.TTF, mono: true, idx: -1},
+		{family: "go mono", style: Style{Weight: 700, Italic: false}, embed: gomonobold.TTF, mono: true, idx: -1},
+		{family: "go mono", style: Style{Weight: 400, Italic: true}, embed: gomonoitalic.TTF, mono: true, idx: -1},
+		{family: "go mono", style: Style{Weight: 700, Italic: true}, embed: gomonobolditalic.TTF, mono: true, idx: -1},
 	}
 }
 

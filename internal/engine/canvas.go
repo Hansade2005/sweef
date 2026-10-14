@@ -94,7 +94,51 @@ type cvHost struct {
 }
 
 func newCanvasHost(j *jsVM) *cvHost {
-	return &cvHost{j: j, next: 1, ctxs: map[int]*cvCanvas{}, objs: map[int]any{}, imgs: map[string]*raster.Surface{}}
+	h := &cvHost{j: j, next: 1, ctxs: map[int]*cvCanvas{}, objs: map[int]any{}, imgs: map[string]*raster.Surface{}}
+	j.cv = h
+	return h
+}
+
+// imageData returns the canvas pixels of the rectangle as unpremultiplied RGBA (getImageData), or nil.
+func (h *cvHost) imageData(id, x, y, w, hh int) []byte {
+	c := h.get(id)
+	if c == nil || c.ctx == nil || w < 0 || hh < 0 || w*hh > cvMaxPixels/4 {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	d := c.ctx.GetImageData(x, y, w, hh)
+	if c.opaque {
+		for i := 0; i+3 < len(d); i += 4 {
+			a := uint32(d[i+3])
+			d[i], d[i+1], d[i+2], d[i+3] = uint8(uint32(d[i])*a/255), uint8(uint32(d[i+1])*a/255), uint8(uint32(d[i+2])*a/255), 255
+		}
+	}
+	return d
+}
+
+// registerBufferFns installs getImageData/putImageData paths that move pixels as ArrayBuffers instead of
+// strings: one memcpy instead of a per-pixel decode loop in the VM (a 1280x720 readback went from ~0.4 s to
+// a few ms).
+func (h *cvHost) registerBufferFns() error {
+	j := h.j
+	if wasmQJS() != nil {
+		return nil // the raw QuickJS layout check failed: keep the string paths
+	}
+	// the raw handles are taken on each call, on the goroutine running the VM (libc state is per goroutine)
+	if err := j.vm.RegisterFunc("__swCvGetBuf", func(id, x, y, w, hh int) quickjs.Value {
+		return rawOf(j.vm).newCopyBuffer(j.vm, h.imageData(id, x, y, w, hh))
+	}, false); err != nil {
+		return err
+	}
+	return j.vm.RegisterFunc("__swCvPutBuf", func(id int, buf quickjs.Value, w, hh, dx, dy, x0, y0, w0, h0 int) bool {
+		b, ok := rawOf(j.vm).bufferBytes(&buf)
+		if !ok || len(b) < w*hh*4 {
+			return false
+		}
+		_ = h.with([]any{float64(id)}, func(c *cvCanvas) { c.ctx.PutImageData(b, w, hh, dx, dy, x0, y0, w0, h0) })
+		return true
+	}, false)
 }
 
 func cvF(a []any, i int) float64 {
@@ -426,6 +470,7 @@ func (h *cvHost) fns() map[string]hostFn {
 			return h.put(c.snapshotLocked()), nil
 		},
 		"cvDrawImage": h.drawImage,
+		"cvToFrame":   h.toFrame,
 		"cvGetImageData": func(a []any) (any, error) {
 			c := h.get(cvI(a, 0))
 			if c == nil || c.ctx == nil {
@@ -709,6 +754,8 @@ func (h *cvHost) surfaceOf(kind string, a []any, i int) *raster.Surface {
 	case "img":
 		s, _ := h.objOf(cvI(a, i)).(*raster.Surface)
 		return s
+	case "vf": // a WebCodecs VideoFrame
+		return wcSurface(wcLookup(int64(cvI(a, i))))
 	case "url":
 		return h.loadURL(cvS(a, i))
 	case "node":

@@ -1,90 +1,61 @@
 package engine
 
-// windows.go: browsing contexts that can reference each other. Every Tab is a
-// browsing context: a top-level tab, a popup opened by script (window.open or a
-// link with a target), or a frame document embedded by an <iframe> (frames.go).
-// This file holds what they have in common:
+// windows.go: top-level windows that can reference each other. Frames (frames.go) and these windows share one
+// window model: every Tab has a winID, a script holds only ids, and a Proxy in frame_prelude.js reaches another
+// window through the host functions of frames_host.go. This file adds what frames do not have:
 //
-//   - the registry that turns a window id (the Tab id) into a Tab, so a
-//     WindowProxy in one JavaScript VM can address another VM safely;
+//   - the opener relation and popups: window.open, link and form targets, window.close, window.name;
 //   - transient user activation and the popup blocker;
-//   - window.open, link/form targets, window.close, window.name, opener;
-//   - cross-window postMessage (queued, delivered by the receiver's event loop);
-//   - Cross-Origin-Opener-Policy handling (severing the opener link).
+//   - Cross-Origin-Opener-Policy severing of the opener link;
+//   - navigation requests that another window makes of a top-level tab.
 //
-// What is shared between windows is only what the platform shares: messages and
-// navigation requests. A VM never touches another VM; requests are queued on the
-// target Tab and run by the goroutine that owns it.
+// postMessage, same-origin property access (win.document, opener.fn()), BroadcastChannel and storage events across
+// windows are the frame machinery's: a popup of the same page group is reached exactly like a frame.
 
 import (
-	"encoding/json"
-	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/net/html"
-
-	fnet "github.com/sweefbrowser/sweef/internal/net"
 )
 
 // DefaultActivationWindow is how long a click or key press keeps allowing popups.
 const DefaultActivationWindow = 5 * time.Second
 
-// winState is the per-Tab part of the window model.
-type winState struct {
-	parent *Tab   // embedding document for a frame, nil for a top-level context
-	frameN int    // index of the frame among its parent's frames (ref prefix f<N>)
-	fr     *frame // the parent's record of this frame
+// frameWaitBudget bounds how long a headless navigation waits for the frames it started.
+const frameWaitBudget = 4 * time.Second
 
+// winState is the per-Tab part of the window model that frames.go does not cover.
+type winState struct {
 	opener       atomic.Pointer[Tab]
 	severed      atomic.Bool // COOP cut the opener link: the former opener sees this window as closed
 	scriptOpened bool        // created by window.open / a target link (window.close() is then allowed)
 	winClosed    atomic.Bool // script asked to close it; the tab is going away
-	name         string      // window.name (guarded by Tab.mu)
-	sbx          *sandbox    // nil = not sandboxed
+	name         string      // window.name of a top-level window (guarded by Tab.mu)
 
 	coopMu     sync.Mutex
 	coop       string // COOP value of the current document: unsafe-none | same-origin-allow-popups | same-origin
 	coopOrigin string
-	openees    []*Tab // windows this one opened (for COOP severing)
+	openees    []*Tab // windows this one opened (for COOP severing and window groups)
 
 	activation atomic.Int64 // unix nanos of the last user activation
 	actWindow  atomic.Int64 // activation lifetime in nanos (0 = DefaultActivationWindow)
 
-	inMu  sync.Mutex
-	inbox []winMsg
-
 	taskMu sync.Mutex
 	tasks  []func()
 
-	known sync.Map // window ids this document has been handed (it may address only those)
-
 	popups *Ring // PopupEvent log (allowed and blocked)
 
-	// frames this document embeds (frames.go)
-	fmu          sync.Mutex
-	frames       map[*html.Node]*frame
-	frameSeq     int
-	frameDoc     *fnet.Doc // the document the frames belong to
-	scanGen      uint64
-	scanPending  atomic.Bool
-	mayFrames    atomic.Bool // the document has, or script may have inserted, an <iframe> (otherwise scans are rare)
-	lastScan     time.Time   // guarded by fmu
+	// painting and input of frames (frames_paint.go, frames_input.go)
 	frameGen     atomic.Uint64
 	framesPaused atomic.Bool
-	focusFrame   atomic.Pointer[frame] // frame holding keyboard focus inside this document
-	paintDSF     atomic.Uint64         // math.Float64bits of the scale of the last paint
-}
-
-// winMsg is one queued delivery for a window: a postMessage, a BroadcastChannel message or a
-// storage event from another window of the same origin.
-type winMsg struct {
-	src, origin, data string
-	kind              string // "" = message, "bc" = BroadcastChannel, "storage"
-	name              string // channel name
+	focusFrame   atomic.Pointer[Tab] // frame holding keyboard focus inside this document
+	paintDSF     atomic.Uint64       // math.Float64bits of the scale of the last paint
+	fp           framePaint          // (a frame) its cached pixels and box
+	lazyMu       sync.Mutex
+	lazyOK       map[int64]bool       // lazy frames that were released
+	lazyBox      map[int64][2]float64 // lazy frames waiting: y and height of the box
 }
 
 // PopupEvent is one window.open / target=_blank decision, allowed or not.
@@ -94,7 +65,7 @@ type PopupEvent struct {
 	URL     string    `json:"url"`
 	Name    string    `json:"name,omitempty"`
 	Blocked bool      `json:"blocked"`
-	Reason  string    `json:"reason,omitempty"` // no-user-activation | sandbox | ...
+	Reason  string    `json:"reason,omitempty"` // no user activation | sandbox | scheme
 	At      time.Time `json:"at"`
 }
 
@@ -109,59 +80,41 @@ type PopupRequest struct {
 	Post          func(dest *Tab) error // non-nil for a form submitted with method=post to a new window
 }
 
-// winRegistry maps window ids to tabs and holds the embedder's window hooks.
+// winRegistry holds the embedder's window hooks.
 type winRegistry struct {
 	mu       sync.RWMutex
-	m        map[string]*Tab
 	popup    func(PopupRequest)
 	closeWin func(*Tab)
 	focusWin func(*Tab)
 }
 
-func (e *Engine) regWin(t *Tab) {
-	e.wm.mu.Lock()
-	if e.wm.m == nil {
-		e.wm.m = map[string]*Tab{}
-	}
-	e.wm.m[t.ID] = t
-	e.wm.mu.Unlock()
-}
-
-func (e *Engine) unregWin(t *Tab) {
-	e.wm.mu.Lock()
-	delete(e.wm.m, t.ID)
-	e.wm.mu.Unlock()
-}
-
-func (e *Engine) lookupWin(id string) *Tab {
-	e.wm.mu.RLock()
-	defer e.wm.mu.RUnlock()
-	return e.wm.m[id]
-}
-
-// SetPopupHandler registers the embedder's handler for windows created by page
-// script. The Popup tab already exists (about:blank, opener linked); the handler
-// must show it and start its navigation to req.URL (or call Popup.Navigate). Without
-// a handler the engine navigates the popup itself in the background (headless use).
+// SetPopupHandler registers the embedder's handler for windows created by page script. The Popup tab already
+// exists (about:blank, opener linked); the handler must show it and start its navigation to req.URL (or call
+// Popup.Navigate). Without a handler the engine navigates the popup itself in the background (CLI, tests).
 func (e *Engine) SetPopupHandler(f func(PopupRequest)) {
 	e.wm.mu.Lock()
 	e.wm.popup = f
 	e.wm.mu.Unlock()
 }
 
-// SetWindowCloseHandler registers what happens when script calls window.close() on a
-// tab it may close: the embedder should close the tab. Without a handler the engine
-// closes it.
+// SetWindowCloseHandler registers what happens when script calls window.close() on a tab it may close: the
+// embedder should close the tab. Without a handler the engine closes it.
 func (e *Engine) SetWindowCloseHandler(f func(*Tab)) {
 	e.wm.mu.Lock()
 	e.wm.closeWin = f
 	e.wm.mu.Unlock()
 }
 
-// SetFrameReadFilter sets a predicate that decides, per frame document URL, whether the
-// snapshot may include the frame and refs may act inside it. The desktop app uses it so
-// that an embedded page the person did not allow the agent to read stays unread even
-// when the page that embeds it is allowed. nil allows every frame.
+// SetWindowFocusHandler registers what happens when script calls focus() on a popup.
+func (e *Engine) SetWindowFocusHandler(f func(*Tab)) {
+	e.wm.mu.Lock()
+	e.wm.focusWin = f
+	e.wm.mu.Unlock()
+}
+
+// SetFrameReadFilter sets a predicate that decides, per frame document URL, whether the snapshot may include the
+// frame and refs may act inside it. The desktop app uses it so that an embedded page the person did not allow the
+// agent to read stays unread even when the page that embeds it is allowed. nil allows every frame.
 func (e *Engine) SetFrameReadFilter(f func(frameURL string) bool) {
 	if f == nil {
 		e.frameRead.Store(nil)
@@ -177,8 +130,8 @@ func (e *Engine) frameReadable(frameURL string) bool {
 	return true
 }
 
-// navSchemeAllowed: a web page cannot make a frame or window show the browser's own pages
-// or local files (a document may open its own kind: a sweef:// page another sweef:// page).
+// navSchemeAllowed: a web page cannot make a window show the browser's own pages or local files (a document may
+// open its own kind: a sweef:// page another sweef:// page).
 func navSchemeAllowed(fromURL, target string) bool {
 	l := strings.ToLower(strings.TrimSpace(target))
 	from := strings.ToLower(fromURL)
@@ -193,47 +146,61 @@ func navSchemeAllowed(fromURL, target string) bool {
 	return true
 }
 
-// SetWindowFocusHandler registers what happens when script calls focus() on a popup.
-func (e *Engine) SetWindowFocusHandler(f func(*Tab)) {
-	e.wm.mu.Lock()
-	e.wm.focusWin = f
-	e.wm.mu.Unlock()
-}
-
 // ---- relations ------------------------------------------------------------------
 
 // Parent is the embedding tab for a frame document, nil otherwise.
-func (t *Tab) Parent() *Tab { return t.win.parent }
+func (t *Tab) Parent() *Tab {
+	if t.isFrame() {
+		return t.bc.parent
+	}
+	return nil
+}
 
-// Opener is the window that opened this one with script (nil after noopener, a
-// COOP severing, or when the opener is gone).
+// Top is the top-level tab of a frame tree (the tab itself when it is top-level).
+func (t *Tab) Top() *Tab {
+	if top := t.topTab(); top != nil {
+		return top
+	}
+	return t
+}
+
+// Opener is the window that opened this one with script (nil after noopener, a COOP severing, or when the opener is
+// gone).
 func (t *Tab) Opener() *Tab {
+	t = t.Top()
 	if o := t.win.opener.Load(); o != nil && !o.closed.Load() && !t.win.severed.Load() {
 		return o
 	}
 	return nil
 }
 
-// Top is the top-level browsing context of a frame tree (the tab itself when it is top-level).
-func (t *Tab) Top() *Tab {
-	c := t
-	for c.win.parent != nil {
-		c = c.win.parent
+// groupRoot is the first window of the opener chain this window belongs to: windows with the same root can reach
+// each other (a popup, its opener and the popups of the same opener).
+func (t *Tab) groupRoot() *Tab {
+	c := t.Top()
+	for i := 0; i < 32; i++ {
+		o := c.Opener()
+		if o == nil {
+			return c
+		}
+		c = o.Top()
 	}
 	return c
 }
 
-// IsClosed reports whether the tab has been closed.
-func (t *Tab) IsClosed() bool { return t.closed.Load() }
-
-// WindowName is window.name.
-func (t *Tab) WindowName() string {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return t.win.name
+// windowsRelated reports whether script in a may hold a reference to b: same page tree, or the same opener group.
+func windowsRelated(a, b *Tab) bool {
+	ta, tb := a.Top(), b.Top()
+	return ta == tb || ta.groupRoot() == tb.groupRoot()
 }
 
+// WindowName is window.name.
+func (t *Tab) WindowName() string { return t.windowName() }
+
 func (t *Tab) setWindowName(n string) {
+	if t.bc != nil && t.bc.isFrame {
+		return // a frame's name is its iframe's name
+	}
 	t.mu.Lock()
 	t.win.name = n
 	t.mu.Unlock()
@@ -242,100 +209,54 @@ func (t *Tab) setWindowName(n string) {
 // SetWindowName sets window.name (used by embedders that open tabs for a target).
 func (t *Tab) SetWindowName(n string) { t.setWindowName(n) }
 
+// IsClosed reports whether the tab has been closed.
+func (t *Tab) IsClosed() bool { return t.closed.Load() }
+
 // WindowClosed reports whether the window is gone as far as other windows can tell.
 func (t *Tab) WindowClosed() bool {
 	return t.closed.Load() || t.win.winClosed.Load() || t.win.severed.Load()
 }
 
-// origin is the document's origin for messaging and storage ("null" when opaque).
-func (t *Tab) origin() string {
-	if t.opaqueOrigin() {
-		return "null"
-	}
-	u, err := url.Parse(t.URL())
-	if err == nil && u.Host != "" {
-		return u.Scheme + "://" + u.Host
-	}
-	if err == nil && u.Scheme == "about" {
-		// about:blank and about:srcdoc inherit the origin of whoever created them
-		if p := t.win.parent; p != nil {
-			return p.origin()
-		}
-		if o := t.win.opener.Load(); o != nil {
-			return o.origin()
-		}
-	}
-	return t.URL()
-}
+// Sandboxed reports whether the document is inside a sandboxed frame.
+func (t *Tab) Sandboxed() bool { return t.bc != nil && t.bc.isFrame && t.bc.sandbox&sbSandboxed != 0 }
 
-// storageKey keys the document's Web Storage: an opaque origin gets a private, throw-away area.
-func (t *Tab) storageKey() string {
-	if t.opaqueOrigin() {
-		return "null#" + t.ID
-	}
-	return t.origin()
-}
+// ScriptsAllowed reports whether script (including the embedder's input helper) can run in the document.
+func (t *Tab) ScriptsAllowed() bool { return t.scriptsAllowed() }
 
-// originSerialization normalises an origin string for comparison.
-func originSerialization(s string) string {
-	if s == "" || s == "null" {
-		return s
+// sandboxFlags are the sandbox flags of a frame (0 for a window that is not in a sandbox).
+func (t *Tab) sandboxFlags() uint32 {
+	if t.bc != nil && t.bc.isFrame {
+		return t.bc.sandbox
 	}
-	u, err := url.Parse(s)
-	if err != nil || u.Host == "" {
-		return s
-	}
-	host := strings.ToLower(u.Host)
-	switch {
-	case u.Scheme == "http" && strings.HasSuffix(host, ":80"):
-		host = strings.TrimSuffix(host, ":80")
-	case u.Scheme == "https" && strings.HasSuffix(host, ":443"):
-		host = strings.TrimSuffix(host, ":443")
-	}
-	return strings.ToLower(u.Scheme) + "://" + host
-}
-
-func sameOriginStr(a, b string) bool {
-	return a != "null" && originSerialization(a) == originSerialization(b)
-}
-
-// canReach: a document may address only windows it has been handed (its frames, its
-// parent and top, its opener and popups, senders of messages it received) in its own
-// browser context.
-func (t *Tab) canReach(id string) bool {
-	_, ok := t.win.known.Load(id)
-	return ok
-}
-
-func (t *Tab) knows(o *Tab) {
-	if o != nil {
-		t.win.known.Store(o.ID, true)
-	}
+	return 0
 }
 
 // ---- user activation and the popup blocker ---------------------------------------
 
 // SetActivationWindow sets how long a user gesture keeps allowing popups (default 5 s).
-func (t *Tab) SetActivationWindow(d time.Duration) { t.win.actWindow.Store(int64(d)) }
+func (t *Tab) SetActivationWindow(d time.Duration) { t.Top().win.actWindow.Store(int64(d)) }
 
-// NoteUserActivation records a trusted user gesture (click, key press, tap) in this
-// document and in the documents that embed it. Embedders call it from real input; the
-// engine calls it for agent actions that stand in for a person (Click, Press, Type).
+// NoteUserActivation records a trusted user gesture (click, tap, key press) in this document and in the documents
+// that embed it. Embedders call it from real input; the engine calls it for agent actions that stand in for a person.
 func (t *Tab) NoteUserActivation() {
 	now := time.Now().UnixNano()
-	for c := t; c != nil; c = c.win.parent {
+	for c := t; c != nil; {
 		c.win.activation.Store(now)
+		if !c.isFrame() {
+			break
+		}
+		c = c.bc.parent
 	}
+	t.Top().pw.activate()
 }
 
-// HasTransientActivation reports whether a user gesture happened recently enough to
-// allow a popup.
+// HasTransientActivation reports whether a user gesture happened recently enough to allow a popup.
 func (t *Tab) HasTransientActivation() bool {
 	at := t.win.activation.Load()
 	if at == 0 {
 		return false
 	}
-	w := time.Duration(t.win.actWindow.Load())
+	w := time.Duration(t.Top().win.actWindow.Load())
 	if w <= 0 {
 		w = DefaultActivationWindow
 	}
@@ -343,8 +264,12 @@ func (t *Tab) HasTransientActivation() bool {
 }
 
 func (t *Tab) consumeActivation() {
-	for c := t; c != nil; c = c.win.parent {
+	for c := t; c != nil; {
 		c.win.activation.Store(0)
+		if !c.isFrame() {
+			break
+		}
+		c = c.bc.parent
 	}
 }
 
@@ -371,11 +296,10 @@ func (t *Tab) recordPopup(pe PopupEvent) {
 	}
 }
 
-// ---- tasks run by the tab's own event loop ----------------------------------------
+// ---- tasks run by a top-level tab's own event loop ---------------------------------
 
-// queueTask hands f to the goroutine that owns the tab: it runs at the start of the
-// tab's next event-loop slice (Settle, a window pump). Used for navigations that
-// another window asks for.
+// queueTask hands f to the goroutine that owns the tab: it runs at the start of the tab's next event-loop slice
+// (Settle, a window pump). Used for navigations that another window asks of a top-level tab.
 func (t *Tab) queueTask(f func()) {
 	t.win.taskMu.Lock()
 	t.win.tasks = append(t.win.tasks, f)
@@ -394,146 +318,6 @@ func (t *Tab) runTasks() bool {
 	return len(ts) > 0
 }
 
-func (t *Tab) hasTasks() bool {
-	t.win.taskMu.Lock()
-	defer t.win.taskMu.Unlock()
-	return len(t.win.tasks) > 0
-}
-
-// ---- postMessage -------------------------------------------------------------------
-
-// postMessageTo queues a message from t to window id. Messages to a window the sender
-// cannot address, a closed window, or with a targetOrigin that does not match are
-// dropped without an error, exactly as in a browser.
-func (t *Tab) postMessageTo(id, data, targetOrigin string) {
-	dst := t.eng.lookupWin(id)
-	if dst == nil || dst.closed.Load() {
-		return
-	}
-	if id != t.ID && (!t.canReach(id) || dst.WindowClosed() || dst.Context() != t.Context()) {
-		return
-	}
-	switch targetOrigin {
-	case "*":
-	case "/":
-		if !sameOriginStr(t.origin(), dst.origin()) {
-			return
-		}
-	default:
-		if originSerialization(targetOrigin) != originSerialization(dst.origin()) || dst.origin() == "null" {
-			return
-		}
-	}
-	dst.knows(t)
-	dst.win.inMu.Lock()
-	if len(dst.win.inbox) < 4096 {
-		dst.win.inbox = append(dst.win.inbox, winMsg{src: t.ID, origin: t.origin(), data: data})
-	}
-	dst.win.inMu.Unlock()
-	dst.wake()
-}
-
-// sameOriginPeers lists the other windows of the tab's browser context that share its
-// (non-opaque) origin: where BroadcastChannel messages and storage events go.
-func (t *Tab) sameOriginPeers() []*Tab {
-	if t.opaqueOrigin() {
-		return nil
-	}
-	mine := t.origin()
-	t.eng.wm.mu.RLock()
-	defer t.eng.wm.mu.RUnlock()
-	var out []*Tab
-	for _, w := range t.eng.wm.m {
-		if w == t || w.closed.Load() || w.Context() != t.Context() || w.opaqueOrigin() {
-			continue
-		}
-		if sameOriginStr(mine, w.origin()) {
-			out = append(out, w)
-		}
-	}
-	return out
-}
-
-func (t *Tab) enqueue(m winMsg) {
-	t.win.inMu.Lock()
-	if len(t.win.inbox) < 4096 {
-		t.win.inbox = append(t.win.inbox, m)
-	}
-	t.win.inMu.Unlock()
-	t.wake()
-}
-
-// broadcastChannel delivers a BroadcastChannel message to the same-name channels of the
-// other same-origin windows (channels of the sender's own document are served in JS).
-func (t *Tab) broadcastChannel(name, data string) {
-	for _, w := range t.sameOriginPeers() {
-		w.enqueue(winMsg{kind: "bc", name: name, data: data, origin: t.origin()})
-	}
-}
-
-// broadcastStorage tells the other same-origin windows that localStorage changed
-// (key == nil: cleared), as the "storage" event does in a browser.
-func (t *Tab) broadcastStorage(key, oldV, newV *string) {
-	b, err := json.Marshal([]any{key, oldV, newV, t.URL()})
-	if err != nil {
-		return
-	}
-	for _, w := range t.sameOriginPeers() {
-		w.enqueue(winMsg{kind: "storage", data: string(b)})
-	}
-}
-
-func (t *Tab) takeInbox() []winMsg {
-	t.win.inMu.Lock()
-	m := t.win.inbox
-	t.win.inbox = nil
-	t.win.inMu.Unlock()
-	return m
-}
-
-func (t *Tab) inboxLen() int {
-	t.win.inMu.Lock()
-	defer t.win.inMu.Unlock()
-	return len(t.win.inbox)
-}
-
-// drainInbox hands queued window messages to page JavaScript.
-func (j *jsVM) drainInbox() bool {
-	if j.tab == nil {
-		return false
-	}
-	msgs := j.tab.takeInbox()
-	for _, m := range msgs {
-		var err error
-		switch m.kind {
-		case "bc":
-			_, err = j.call("__swDeliverBC", m.name, m.data, m.origin)
-		case "storage":
-			_, err = j.call("__swDeliverStorage", m.data)
-		default:
-			_, err = j.call("__swDeliverMessage", m.src, m.origin, m.data)
-		}
-		if err != nil {
-			j.tab.LogConsole("error", jsErrorText(err, "message"))
-		}
-	}
-	return len(msgs) > 0
-}
-
-// PostMessage delivers data (JSON) to the tab's window as if a script from the given
-// origin had called postMessage (used by embedders and tests).
-func (t *Tab) PostMessage(data any, origin string) error {
-	b, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	t.win.inMu.Lock()
-	t.win.inbox = append(t.win.inbox, winMsg{src: "", origin: origin, data: string(b)})
-	t.win.inMu.Unlock()
-	t.wake()
-	return nil
-}
-
 // ---- window.open, targets ----------------------------------------------------------
 
 // navSpec describes one navigation request that names a target.
@@ -545,7 +329,6 @@ type navSpec struct {
 	noOpener   bool
 	noReferrer bool
 	post       func(dest *Tab) error // form POST: how to submit into the destination
-	method     string
 }
 
 func parseFeatures(f string) (noopener, noreferrer bool) {
@@ -564,18 +347,15 @@ func parseFeatures(f string) (noopener, noreferrer bool) {
 	return
 }
 
-func isSelfTarget(k string) bool { return k == "_self" }
-
-// openFromScript is window.open(url, target, features). It returns the window the
-// call refers to (a new popup, an existing named window or frame), or nil when the
-// call is blocked or the popup is opened with noopener.
+// openFromScript is window.open(url, target, features). It returns the window the call refers to (a new popup, an
+// existing named window or frame), or nil when the call is blocked or the popup is opened with noopener.
 func (t *Tab) openFromScript(rawURL, target, features string) *Tab {
 	noop, noref := parseFeatures(features)
 	return t.navigateTarget(navSpec{rawURL: rawURL, target: target, features: features, fromScript: true, noOpener: noop, noReferrer: noref})
 }
 
-// navigateTarget resolves a navigation target (_self, _top, _parent, _blank, a frame
-// or window name) and starts the navigation there.
+// navigateTarget resolves a navigation target (_self, _top, _parent, _blank, a frame or window name) and starts the
+// navigation there.
 func (t *Tab) navigateTarget(s navSpec) *Tab {
 	base := t.URL()
 	abs := strings.TrimSpace(s.rawURL)
@@ -598,66 +378,88 @@ func (t *Tab) navigateTarget(s navSpec) *Tab {
 			key = "_self"
 		}
 	}
-	nav := func(dest *Tab) {
-		dest.queueNavigation(abs, s, t)
-	}
 	switch key {
 	case "_self":
-		if t.win.sbx != nil && s.post != nil && !t.win.sbx.forms {
+		if f := t.sandboxFlags(); s.post != nil && f&sbSandboxed != 0 && f&sbForms == 0 {
 			return nil
 		}
-		nav(t)
+		t.queueNavigation(abs, s, t)
 		return t
 	case "_parent", "_top":
 		dest := t.Top()
-		if key == "_parent" && t.win.parent != nil {
-			dest = t.win.parent
+		if key == "_parent" && t.isFrame() {
+			dest = t.bc.parent
 		}
 		if dest != t && !t.mayNavigateAncestor() {
 			t.recordPopup(PopupEvent{URL: abs, Blocked: true, Reason: "sandbox: top-level navigation not allowed"})
 			return nil
 		}
-		nav(dest)
+		t.queueNavigation(abs, s, dest)
 		return dest
 	case "_blank":
 		return t.openNewWindow(abs, "", s)
 	}
 	// a named target: a frame of this page, then an existing window, then a new one
 	if f := t.Top().findFrameByName(s.target); f != nil {
-		f.navigateTo(abs, s, t)
-		return f.child
+		t.queueNavigation(abs, s, f)
+		return f
 	}
 	if w := t.eng.findWindowByName(t, s.target); w != nil {
 		if !t.HasTransientActivation() && s.fromScript && w != t {
 			t.recordPopup(PopupEvent{URL: abs, Name: s.target, Blocked: true, Reason: "no user activation"})
 			return nil
 		}
-		nav(w)
-		t.knows(w)
+		t.queueNavigation(abs, s, w)
 		return w
 	}
 	return t.openNewWindow(abs, s.target, s)
 }
 
+// findFrameByName finds a frame (at any depth) of t's tree whose window name matches.
+func (t *Tab) findFrameByName(name string) *Tab {
+	for _, k := range t.FrameTabs() {
+		if k.windowName() == name {
+			return k
+		}
+		if g := k.findFrameByName(name); g != nil {
+			return g
+		}
+	}
+	return nil
+}
+
+// mayNavigateAncestor: the sandboxes between this frame and the top allow navigating the top-level page.
 func (t *Tab) mayNavigateAncestor() bool {
-	for c := t; c != nil; c = c.win.parent {
-		if c.win.sbx != nil && !(c.win.sbx.topNav || (c.win.sbx.topNavUser && t.HasTransientActivation())) {
+	for c := t; c != nil && c.isFrame(); c = c.bc.parent {
+		f := c.bc.sandbox
+		if f&sbSandboxed != 0 && !(f&sbTopNav != 0 || (f&sbTopNavUser != 0 && t.HasTransientActivation())) {
 			return false
 		}
 	}
 	return true
 }
 
-// queueNavigation runs the navigation on the destination's own goroutine.
-func (dest *Tab) queueNavigation(abs string, s navSpec, from *Tab) {
+// queueNavigation starts the navigation in dest: a frame navigates on its own goroutine, a top-level tab on the
+// goroutine that owns it (its window's worker), by a task.
+func (t *Tab) queueNavigation(abs string, s navSpec, dest *Tab) {
 	hdrs := map[string]string(nil)
-	if !s.noReferrer && from != nil && from != dest {
-		if ref := refererFor(mustParse(from.URL()), mustParse(abs)); ref != "" {
+	if !s.noReferrer && dest != t {
+		if ref := refererFor(mustParse(t.URL()), mustParse(abs)); ref != "" {
 			hdrs = map[string]string{"Referer": ref}
 		}
 	}
-	if dest.win.parent != nil && dest.win.fr != nil {
-		dest.win.fr.navigateTo(abs, s, from)
+	if dest.isFrame() {
+		go func() {
+			if dest.closed.Load() {
+				return
+			}
+			if s.post != nil {
+				_ = s.post(dest)
+			} else {
+				_ = dest.Navigate(abs, hdrs)
+			}
+			dest.bc.parent.contentChanged()
+		}()
 		return
 	}
 	dest.queueTask(func() {
@@ -681,28 +483,27 @@ func mustParse(s string) *url.URL {
 	return u
 }
 
-// findWindowByName finds an open top-level window of the same browser context with the given name.
+// findWindowByName finds an open top-level window of the same browser context and opener group with the given name.
 func (e *Engine) findWindowByName(from *Tab, name string) *Tab {
 	if name == "" {
 		return nil
 	}
-	e.wm.mu.RLock()
-	defer e.wm.mu.RUnlock()
-	for _, w := range e.wm.m {
-		if w.win.parent != nil || w.closed.Load() || w.win.winClosed.Load() || w.win.severed.Load() || w.Context() != from.Context() {
+	root := from.groupRoot()
+	for _, w := range e.ListTabs() {
+		if w.closed.Load() || w.win.winClosed.Load() || w.win.severed.Load() || w.Context() != from.Context() {
 			continue
 		}
-		if w.WindowName() == name {
+		if w.WindowName() == name && (w == from.Top() || w.groupRoot() == root) {
 			return w
 		}
 	}
 	return nil
 }
 
-// openNewWindow creates a popup (subject to the popup blocker) and returns it, or nil
-// when blocked or opened without an opener reference.
+// openNewWindow creates a popup (subject to the popup blocker) and returns it, or nil when blocked or opened
+// without an opener reference.
 func (t *Tab) openNewWindow(abs, name string, s navSpec) *Tab {
-	if t.win.sbx != nil && !t.win.sbx.popups {
+	if f := t.sandboxFlags(); f&sbSandboxed != 0 && f&sbPopups == 0 {
 		t.recordPopup(PopupEvent{URL: abs, Name: name, Blocked: true, Reason: "sandbox: allow-popups is not set"})
 		return nil
 	}
@@ -712,7 +513,8 @@ func (t *Tab) openNewWindow(abs, name string, s navSpec) *Tab {
 	}
 	t.consumeActivation()
 	keep := !s.noOpener
-	p := t.eng.newPopupTab(t, name, keep)
+	top := t.Top()
+	p := t.eng.newPopupTab(top, name, keep)
 	if p == nil {
 		return nil
 	}
@@ -763,23 +565,19 @@ func (e *Engine) newPopupTab(opener *Tab, name string, keepOpener bool) *Tab {
 	opener.copyEnvironmentTo(t)
 	t.win.scriptOpened = true
 	t.win.name = name
-	if os := opener.win.sbx; os != nil && !os.popupsEscape {
-		t.win.sbx = os
-	}
+	t.win.actWindow.Store(opener.win.actWindow.Load())
 	if keepOpener {
 		t.win.opener.Store(opener)
 		opener.win.coopMu.Lock()
 		opener.win.openees = append(opener.win.openees, t)
 		opener.win.coopMu.Unlock()
-		opener.knows(t)
-		t.knows(opener)
 	}
 	t.SetDocument("<html><head><title></title></head><body></body></html>", "about:blank")
 	return t
 }
 
-// copyEnvironmentTo gives a new tab the settings of its creator: emulation, init
-// scripts and request interception (so a tracker blocker also covers popups and frames).
+// copyEnvironmentTo gives a new tab the settings of its creator: emulation, init scripts and request interception
+// (so a tracker blocker also covers popups).
 func (t *Tab) copyEnvironmentTo(c *Tab) {
 	t.mu.RLock()
 	c.vpW, c.vpH, c.dsf = t.vpW, t.vpH, t.dsf
@@ -804,7 +602,7 @@ func (t *Tab) copyEnvironmentTo(c *Tab) {
 	c.bindings = append([]string(nil), t.bindings...)
 	t.mu.RUnlock()
 	t.interceptMu.RLock()
-	c.routes = append([]*fnet.Route(nil), t.routes...)
+	c.routes = append(c.routes[:0:0], t.routes...)
 	t.interceptMu.RUnlock()
 	t.routes2.mu.Lock()
 	rules := append([]*RouteRule(nil), t.routes2.rules...)
@@ -814,12 +612,11 @@ func (t *Tab) copyEnvironmentTo(c *Tab) {
 	c.routes2.mu.Unlock()
 }
 
-// closeFromScript is window.close() for a script of this tab: allowed for windows that
-// script opened (window.open, or a link target that created the window), ignored with a
-// console warning otherwise (a page does not get to close the person's own tab), and
-// never for a frame.
+// closeFromScript is window.close() for a script of this tab: allowed for windows that script opened (window.open,
+// or a link target that created the window), ignored with a console warning otherwise (a page does not get to close
+// the person's own tab), and never for a frame.
 func (t *Tab) closeFromScript() bool {
-	if t.win.parent != nil {
+	if t.isFrame() {
 		return false
 	}
 	if !t.win.scriptOpened {
@@ -842,7 +639,7 @@ func (t *Tab) closeFromScript() bool {
 }
 
 func (t *Tab) focusFromScript() {
-	if t.win.parent != nil {
+	if t.isFrame() {
 		return
 	}
 	t.eng.wm.mu.RLock()
@@ -855,7 +652,7 @@ func (t *Tab) focusFromScript() {
 
 // ---- Cross-Origin-Opener-Policy -----------------------------------------------------
 
-func parseCOOP(v string) string {
+func coopPolicy(v string) string {
 	v = strings.ToLower(strings.TrimSpace(v))
 	if i := strings.IndexByte(v, ';'); i >= 0 {
 		v = strings.TrimSpace(v[:i])
@@ -869,11 +666,14 @@ func parseCOOP(v string) string {
 	return "unsafe-none"
 }
 
-// coopMatch reports whether two documents may stay in one browsing context group
-// (and so keep window.opener references to each other). opener is the document that
-// opened the other. It follows the HTML Standard's rules for the three policy values;
-// the "same-origin-allow-popups opener, unsafe-none popup" pair is the one that lets
-// an OAuth popup keep working.
+func sameOriginStr(a, b string) bool {
+	return a != "" && a != "null" && canonOrigin(a) == canonOrigin(b)
+}
+
+// coopMatch reports whether two documents may stay in one browsing context group (and so keep window.opener
+// references to each other). opener is the document that opened the other. It follows the HTML Standard's rules for
+// the three policy values; the "same-origin-allow-popups opener, unsafe-none popup" pair is the one that lets an
+// OAuth popup keep working.
 func coopMatch(openerPol, openerOrigin, popPol, popOrigin string) bool {
 	switch {
 	case openerPol == "unsafe-none" && popPol == "unsafe-none":
@@ -886,18 +686,25 @@ func coopMatch(openerPol, openerOrigin, popPol, popOrigin string) bool {
 	return false
 }
 
-// commitCOOP records the policy of the document that is about to replace the current
-// one and severs opener links that the policy forbids, in both directions.
+func coopHeader(h map[string][]string) string {
+	for k, v := range h {
+		if strings.EqualFold(k, "Cross-Origin-Opener-Policy") && len(v) > 0 {
+			return v[0]
+		}
+	}
+	return ""
+}
+
+// commitCOOP records the policy of the document that is about to replace the current one and severs opener links
+// that the policy forbids, in both directions.
 func (t *Tab) commitCOOP(header string, finalURL string) {
-	pol := parseCOOP(header)
-	var org string
+	if t.isFrame() || t.bc != nil {
+		return // COOP applies to top-level documents only
+	}
+	pol := coopPolicy(header)
+	org := "null"
 	if u, err := url.Parse(finalURL); err == nil && u.Host != "" {
 		org = u.Scheme + "://" + u.Host
-	} else {
-		org = "null"
-	}
-	if t.win.parent != nil {
-		return // COOP applies to top-level documents only
 	}
 	if op := t.win.opener.Load(); op != nil && !t.win.severed.Load() {
 		op.win.coopMu.Lock()
@@ -941,6 +748,11 @@ func (t *Tab) severOpener() {
 	t.LogConsole("info", "The opener link was severed by Cross-Origin-Opener-Policy")
 }
 
-// ---- header helper ------------------------------------------------------------------
-
-func coopHeader(h http.Header) string { return h.Get("Cross-Origin-Opener-Policy") }
+// origin is scheme://host of the tab's URL (the URL itself for a document without a host).
+func (t *Tab) origin() string {
+	u, err := url.Parse(t.URL())
+	if err != nil || u.Host == "" {
+		return t.URL()
+	}
+	return u.Scheme + "://" + u.Host
+}

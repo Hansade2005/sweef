@@ -56,6 +56,9 @@ type Tab struct {
 	Discarded  bool     `json:"discarded"`
 	Blocked    int      `json:"blocked"`         // trackers blocked on this tab
 	Popup      bool     `json:"popup,omitempty"` // opened by a page's window.open / link target (the tab strip marks it)
+	Cam        bool     `json:"-"`               // the page is using the camera
+	Mic        bool     `json:"-"`               // ...the microphone
+	Share      bool     `json:"-"`               // ...is sharing a tab, window or screen
 
 	// not sent to the chrome page
 	Window  int       `json:"-"`
@@ -485,6 +488,15 @@ func tabMap(t *Tab) map[string]any {
 	}
 	if t.Favicon != "" {
 		m["favicon"] = t.Favicon
+	}
+	if t.Cam {
+		m["camera"] = true
+	}
+	if t.Mic {
+		m["mic"] = true
+	}
+	if t.Share {
+		m["sharing"] = true
 	}
 	return m
 }

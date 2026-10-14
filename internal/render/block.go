@@ -948,6 +948,7 @@ func (c *ctx) registerOOF(b, k *lbox, cx, y float64, st strut, leading bool, cw 
 	k.staticX = b.bor[3] + b.pad[3]
 	k.staticY = b.bor[0] + b.pad[0] + yy
 	k.staticSet = true
+	k.sAlign = false // a flex container sets it again after registering
 	c.addOOF(k)
 }
 
@@ -1112,6 +1113,9 @@ func (c *ctx) layoutAbs(k, cb *lbox) {
 		xpos = cbW - rv - k.mar[1] - bw
 	default:
 		xpos = sx + k.mar[3]
+		if k.sAlign {
+			xpos += k.sAlignX * (k.sAlignW - bw - k.mar[1] - k.mar[3])
+		}
 	}
 	// layout content with the width fixed
 	in := layoutIn{cbw: cbW, cbh: cbH, fixW: bw, fixH: -1, bx: 0, by: 0, bfc: &bfcState{}}
@@ -1154,6 +1158,9 @@ func (c *ctx) layoutAbs(k, cb *lbox) {
 		ypos = cbH - bv - k.mar[2] - bh
 	default:
 		ypos = sy + k.mar[0]
+		if k.sAlign {
+			ypos += k.sAlignY * (k.sAlignH - bh - k.mar[0] - k.mar[2])
+		}
 	}
 	k.x = ox + xpos
 	k.y = oy + ypos
@@ -1199,7 +1206,12 @@ func (b *lbox) floatCount() int {
 func (c *ctx) quirkFillH(b *lbox) float64 {
 	want := c.vh - b.vExtra() - b.sbH
 	if b == c.bodyBox && c.rootBox != nil {
-		want -= b.mar[0] + b.mar[2] + c.rootBox.vExtra() + c.rootBox.mar[0] + c.rootBox.mar[2]
+		// the used top margin: a first child's margin that collapses through body pushes body
+		// down, and the fill shrinks by the same amount (Chromium: margin-top 10 on body's first
+		// child gives body y 10 and height 720-10-8). Subtracting only body's own margin left
+		// a phantom overflow and a 15 px scrollbar on pages that do not scroll.
+		top := math.Max(b.mar[0], b.mtopOut)
+		want -= top + b.mar[2] + c.rootBox.vExtra() + c.rootBox.mar[0] + c.rootBox.mar[2]
 	} else {
 		want -= b.mar[0] + b.mar[2]
 	}

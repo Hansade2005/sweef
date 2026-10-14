@@ -30,6 +30,12 @@ func (t *Tab) withDoc(fn func(*fnet.Doc) error) error {
 // default action may proceed (false when a listener called preventDefault).
 // With JS disabled every event is "not prevented".
 func (t *Tab) fire(bid int64, typ string, init map[string]any) bool {
+	switch typ {
+	case "click", "mousedown", "pointerdown", "keydown", "touchstart", "input":
+		if t.bc == nil { // the person used this top-level page (a page without scripts has no VM to see it)
+			t.Context().noteInteraction(schemefulSite(t.URL()))
+		}
+	}
 	t.mu.RLock()
 	j := t.js
 	t.mu.RUnlock()
@@ -207,7 +213,7 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 		} else {
 			href = info.Href
 		}
-		if dl, isDL, _ := t.GetAttributeByBackend(bid, "download"); isDL && href != "" && !strings.HasPrefix(href, "javascript:") {
+		if dl, isDL, _ := t.GetAttributeByBackend(bid, "download"); isDL && href != "" && !isScriptURL(href) {
 			t.mu.RLock()
 			hasJS := t.js != nil
 			t.mu.RUnlock()
@@ -217,7 +223,8 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 			}
 			return nil // blob: downloads are saved by the page's default action in JS
 		}
-		if href != "" && !strings.HasPrefix(href, "javascript:") {
+		if href != "" && !isScriptURL(href) && !hasScheme(href, "data") {
+			// as in Chromium, a page cannot navigate the top level to a data: URL
 			u, err := resolveURL(t.URL(), href)
 			if err != nil {
 				return err
@@ -763,4 +770,16 @@ func (t *Tab) GetStorageValue(key string) (string, bool) {
 		return c.GetStorageValue(t.URL(), key)
 	}
 	return "", false
+}
+
+// isScriptURL reports whether href runs script instead of loading a document (javascript:, vbscript:),
+// ignoring case and leading whitespace as URL parsing does.
+func isScriptURL(href string) bool {
+	return hasScheme(href, "javascript") || hasScheme(href, "vbscript")
+}
+
+// hasScheme reports whether href starts with scheme ":" ignoring case and leading C0 controls or spaces.
+func hasScheme(href, scheme string) bool {
+	h := strings.TrimLeft(href, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\v\f\r ")
+	return len(h) > len(scheme) && h[len(scheme)] == ':' && strings.EqualFold(h[:len(scheme)], scheme)
 }

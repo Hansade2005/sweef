@@ -263,10 +263,17 @@ func clampW(w, lo, hi int) int {
 func (f *WebFace) Face(weight int) *Face {
 	l := f.lockSet()
 	defer l.unlock()
-	return f.faceLocked(weight)
+	return f.faceLocked(weight, 0)
 }
 
-func (f *WebFace) faceLocked(weight int) *Face {
+// FaceAt is Face with the optical size (CSS px) for a variable font's opsz axis.
+func (f *WebFace) FaceAt(weight int, opsz float64) *Face {
+	l := f.lockSet()
+	defer l.unlock()
+	return f.faceLocked(weight, opsz)
+}
+
+func (f *WebFace) faceLocked(weight int, opsz float64) *Face {
 	if f.state != Loaded || f.base == nil {
 		return nil
 	}
@@ -274,17 +281,22 @@ func (f *WebFace) faceLocked(weight int) *Face {
 	if f.var_ == nil || !f.var_.hasWght() {
 		return f.base
 	}
-	if in := f.insts[w]; in != nil {
+	if !f.var_.hasAxis("opsz") {
+		opsz = 0 // one instance per weight, whatever the size
+	}
+	// opsz is kept to a quarter pixel: sizes that close draw the same outlines
+	key := w<<20 | int(opsz*4+0.5)
+	if in := f.insts[key]; in != nil {
 		return in
 	}
-	in := f.var_.instance(f, w)
+	in := f.var_.instance(f, w, opsz)
 	if f.insts == nil {
 		f.insts = map[int]*Face{}
 	}
-	if len(f.insts) > 24 {
+	if len(f.insts) > 64 {
 		f.insts = map[int]*Face{}
 	}
-	f.insts[w] = in
+	f.insts[key] = in
 	return in
 }
 
@@ -774,7 +786,7 @@ func LookupAll(family string, st Style) []*Face {
 	var out []*Face
 	wmu.Lock()
 	for _, f := range fs {
-		if face := f.faceLocked(st.Weight); face != nil {
+		if face := f.faceLocked(st.Weight, st.OpticalSize); face != nil {
 			out = append(out, face)
 		}
 	}
@@ -821,7 +833,7 @@ func (s *WebSet) demand(base string, st Style, r rune) (settled bool) {
 		}
 		switch f.state {
 		case Loaded:
-			if face := f.faceLocked(st.Weight); face != nil && face.HasGlyph(r) {
+			if face := f.faceLocked(st.Weight, st.OpticalSize); face != nil && face.HasGlyph(r) {
 				wmu.Unlock()
 				return true
 			}

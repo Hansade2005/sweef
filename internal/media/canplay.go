@@ -260,7 +260,7 @@ func nativeCodecSupport(lc, native string) string {
 // IsTypeSupportedMSE is MediaSource.isTypeSupported: only fragmented
 // containers the segment parsers handle.
 func IsTypeSupportedMSE(mime string) bool {
-	typ, _, hasCodecs, ok := ParseMIME(mime)
+	typ, codecs, hasCodecs, ok := ParseMIME(mime)
 	if !ok {
 		return false
 	}
@@ -270,6 +270,19 @@ func IsTypeSupportedMSE(mime string) bool {
 		return false
 	}
 	if !hasCodecs {
+		return false
+	}
+	// a SourceBuffer holds at most one video and one audio track
+	nv, na := 0, 0
+	for _, c := range codecs {
+		switch classifyCodec(c).kind {
+		case "video":
+			nv++
+		case "audio":
+			na++
+		}
+	}
+	if nv > 1 || na > 1 {
 		return false
 	}
 	return CanPlayType(mime) == "probably"

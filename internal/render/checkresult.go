@@ -28,7 +28,7 @@ func DiffResults(a, b *Result) string {
 		if !ok {
 			return fmt.Sprintf("box of <%s> missing", n.Data)
 		}
-		if !reflect.DeepEqual(x, y) {
+		if !boxesEqual(x, y) {
 			return fmt.Sprintf("box of <%s> differs: %+v vs %+v", n.Data, x, y)
 		}
 	}
@@ -86,4 +86,15 @@ func normalizeRefs(op Op) Op {
 		return l
 	}
 	return op
+}
+
+// boxesEqual compares two boxes' geometry and flags. Style (the computed style kept for
+// getComputedStyle) is left out: each layout computes its own, with its own caches.
+func boxesEqual(x, y *Box) bool {
+	if x == nil || y == nil {
+		return x == y
+	}
+	cx, cy := *x, *y
+	cx.Style, cy.Style = nil, nil
+	return reflect.DeepEqual(&cx, &cy)
 }

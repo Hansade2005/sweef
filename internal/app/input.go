@@ -267,6 +267,7 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 				e.t.FocusFrame(tt) // keyboard input follows the click into a frame
 				tt.NoteUserActivation()
 			}
+			e.t.MarkUserActivation() // a real click: sites may now ask for permissions
 			_, _ = tt.Evaluate("__sweefPtr('down'," + itoa(lx) + "," + itoa(ly) + "," + itoa(btn) + "," + itoa(mods) + ")")
 			e.afterOp()
 		})
@@ -278,6 +279,15 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 	clicked := math.Abs(ev.X-a.mouse.downX) < 6 && math.Abs(ev.Y-a.mouse.downY) < 6
 	e.w.do(func() {
 		tt, lx, ly := e.pointerTarget(tgt, px, py)
+		if tt != e.t && !tt.ScriptsAllowed() {
+			// a frame whose sandbox lacks allow-scripts runs no script, not even the input helper: click it natively
+			if clicked {
+				_ = tt.MouseClick(lx, ly)
+			}
+			e.afterOp()
+			a.post(func() { a.afterPageInput(e) })
+			return
+		}
 		_, _ = tt.Evaluate("__sweefPtr('up'," + itoa(lx) + "," + itoa(ly) + "," + itoa(btn) + "," + itoa(mods) + ")")
 		if clicked {
 			var res struct {
@@ -450,6 +460,9 @@ func (a *App) onKeyDown(ev shell.Event) {
 	e.w.do(func() {
 		var ok bool
 		tt := e.inputTab()
+		if key != "Escape" {
+			e.t.MarkUserActivation()
+		}
 		_ = e.evalOn(tt, "__sweefKey("+jsString(key)+","+itoa(mods)+")", &ok)
 		editing := false
 		if isPage {
@@ -538,6 +551,7 @@ func (a *App) onText(text string) {
 		for _, r := range text {
 			if r < 0x10000 {
 				t0 := time.Now()
+				e.t.MarkUserActivation()
 				_, _ = tt.Evaluate("__sweefKey(" + jsString(string(r)) + ",0)")
 				if e.kind == "chrome" {
 					// the chrome page's own JavaScript handler, for the stats breakdown
@@ -635,6 +649,8 @@ func (a *App) shortcut(ev shell.Event) bool {
 		uiCmd = "tab.closeActive"
 	case ctrl && !shift && !alt && key == "d":
 		uiCmd = "bookmark.toggle"
+	case alt && shift && !ctrl && key == "p" && a.hasPrompt(act):
+		uiCmd = "perm.focus" // answer the permission question next to the address bar
 	}
 	if uiCmd != "" {
 		if a.focus == "chrome" {
@@ -699,7 +715,7 @@ func (a *App) shortcut(ev shell.Event) bool {
 // runUICommand asks the chrome page to run one of its commands (ui.command).
 func (a *App) runUICommand(name string) {
 	switch name {
-	case "palette", "focusOmnibox", "find.open", "sidebar.toggle", "sidebar.focus", "agent.chat.new":
+	case "palette", "focusOmnibox", "find.open", "sidebar.toggle", "sidebar.focus", "agent.chat.new", "perm.focus":
 		a.setFocus("chrome") // these put the keyboard focus into the chrome page
 	}
 	a.sendChrome("ui.command", map[string]any{"name": name})

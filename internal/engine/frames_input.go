@@ -1,11 +1,9 @@
 package engine
 
-// frames_input.go: input into frames. A frame is a viewport inside another page, so
-// a pointer position in the parent is routed by the parent's own hit test
-// (render.Result.HitAt, which already honours paint order, clipping, ancestor
-// transforms and pointer-events) and translated into the frame's document space.
-// Keyboard input goes to the document that has focus: the leaf of the focus chain
-// that the last click set up.
+// frames_input.go: input into frames. A frame is a viewport inside another page, so a pointer position in the
+// parent is routed by the parent's own hit test (render.Result.HitAt, which already honours paint order, clipping,
+// ancestor transforms and pointer-events) and translated into the frame's document space. Keyboard input goes to
+// the document that has focus: the leaf of the focus chain that the last click set up.
 
 import (
 	"math"
@@ -14,12 +12,12 @@ import (
 	fnet "github.com/sweefbrowser/sweef/internal/net"
 )
 
-// frameAt reports the frame under the document point (x, y) of this tab and the
-// point translated to that frame's document space, or nil.
-func (t *Tab) frameAt(x, y float64) (*frame, float64, float64) {
-	t.win.fmu.Lock()
-	n := len(t.win.frames)
-	t.win.fmu.Unlock()
+// frameAt reports the frame under the document point (x, y) of this tab and the point translated to that frame's
+// document space, or nil.
+func (t *Tab) frameAt(x, y float64) (*Tab, float64, float64) {
+	t.fr.mu.Lock()
+	n := len(t.fr.kids)
+	t.fr.mu.Unlock()
 	if n == 0 {
 		return nil, 0, 0
 	}
@@ -42,8 +40,8 @@ func (t *Tab) frameAt(x, y float64) (*frame, float64, float64) {
 	if hit == nil || hit.Data != "iframe" {
 		return nil, 0, 0
 	}
-	f := t.frameOf(hit)
-	if f == nil || !f.isStarted() {
+	k := t.frameKid(doc.IDOf(hit))
+	if k == nil || k.closed.Load() {
 		return nil, 0, 0
 	}
 	b := ext.res.Boxes[hit]
@@ -55,35 +53,38 @@ func (t *Tab) frameAt(x, y float64) (*frame, float64, float64) {
 	if lx < 0 || ly < 0 || lx >= c.W || ly >= c.H {
 		return nil, 0, 0 // on the border
 	}
-	return f, lx, ly + float64(f.child.frameScrollY(int(math.Round(c.H))))
+	return k, lx, ly + float64(k.frameScrollY(int(math.Round(c.H))))
 }
 
-// FrameHit finds the document that receives a pointer event at the document point
-// (x, y): the tab itself, or the deepest frame under the point with the point
-// translated into its document space.
+// FrameHit finds the document that receives a pointer event at the document point (x, y): the tab itself, or the
+// deepest frame under the point with the point translated into its document space.
 func (t *Tab) FrameHit(x, y int) (leaf *Tab, lx, ly int) {
 	cur, fx, fy := t, float64(x), float64(y)
 	for depth := 0; depth < maxFrameDepth+1; depth++ {
-		f, ax, ay := cur.frameAt(fx, fy)
-		if f == nil {
+		k, ax, ay := cur.frameAt(fx, fy)
+		if k == nil {
 			break
 		}
-		cur, fx, fy = f.child, ax, ay
+		cur, fx, fy = k, ax, ay
 	}
 	return cur, int(math.Floor(fx)), int(math.Floor(fy))
 }
 
-// FocusFrame makes leaf (this tab or one of its nested frames) the document that
-// receives keyboard input, blurring the element of the document that had it.
+// FocusFrame makes leaf (this tab or one of its nested frames) the document that receives keyboard input, blurring
+// the element of the document that had it.
 func (t *Tab) FocusFrame(leaf *Tab) {
 	prev := t.FocusedTab()
 	var chain []*Tab
-	for c := leaf; c != nil && c != t; c = c.win.parent {
+	for c := leaf; c != nil && c != t; {
 		chain = append([]*Tab{c}, chain...)
+		if !c.isFrame() {
+			break
+		}
+		c = c.bc.parent
 	}
 	cur := t
 	for _, c := range chain {
-		cur.win.focusFrame.Store(c.win.fr)
+		cur.win.focusFrame.Store(c)
 		cur = c
 	}
 	cur.win.focusFrame.Store(nil)
@@ -96,33 +97,38 @@ func (t *Tab) FocusFrame(leaf *Tab) {
 func (t *Tab) FocusedTab() *Tab {
 	cur := t
 	for i := 0; i < maxFrameDepth+1; i++ {
-		f := cur.win.focusFrame.Load()
-		if f == nil || f.child.closed.Load() || f.parent != cur {
+		k := cur.win.focusFrame.Load()
+		if k == nil || k.closed.Load() || !k.isFrame() || k.bc.parent != cur {
 			return cur
 		}
-		cur = f.child
+		cur = k
 	}
 	return cur
 }
 
 // blurDocument blurs the focused element of a document that lost focus.
 func (t *Tab) blurDocument() {
-	if t.jsOrNil() == nil || t.closed.Load() {
+	if t.closed.Load() {
+		return
+	}
+	t.mu.RLock()
+	has := t.js != nil
+	t.mu.RUnlock()
+	if !has {
 		return
 	}
 	_, _ = t.Evaluate(`(function(){var e=document.activeElement;if(e&&e!==document.body&&e.blur)e.blur();})()`)
 }
 
-// ScrollFrameBy scrolls a frame document by dy CSS px inside its box and reports whether
-// it moved (false at either end, so the caller can scroll the page instead).
+// ScrollFrameBy scrolls a frame document by dy CSS px inside its box and reports whether it moved (false at either
+// end, so the caller can scroll the page instead).
 func (t *Tab) ScrollFrameBy(dy int) bool {
-	f := t.win.fr
-	if t.win.parent == nil || f == nil || dy == 0 {
+	if !t.isFrame() || dy == 0 {
 		return false
 	}
-	f.mu.Lock()
-	h := f.h
-	f.mu.Unlock()
+	t.win.fp.mu.Lock()
+	h := t.win.fp.h
+	t.win.fp.mu.Unlock()
 	max := t.docHeight() - h
 	if max <= 0 {
 		return false
@@ -144,44 +150,25 @@ func (t *Tab) ScrollFrameBy(dy int) bool {
 
 func (t *Tab) setFrameScroll(y int) {
 	t.SetScrollY(y)
-	if t.jsOrNil() != nil {
+	t.mu.RLock()
+	has := t.js != nil
+	t.mu.RUnlock()
+	if has {
 		_, _ = t.Evaluate(`typeof __sweefScrollTo==='function'&&__sweefScrollTo(` + itoa(y) + `)`)
 	}
 	t.contentChanged()
 }
 
-// WheelAt routes a wheel gesture at the document point (x, y) to the innermost frame
-// under it that can still scroll; false means no frame took it and the page scrolls.
+// WheelAt routes a wheel gesture at the document point (x, y) to the innermost frame under it that can still
+// scroll; false means no frame took it and the page scrolls.
 func (t *Tab) WheelAt(x, y, dx, dy int) bool {
 	leaf, _, _ := t.FrameHit(x, y)
-	for c := leaf; c != nil && c != t; c = c.win.parent {
+	for c := leaf; c != nil && c != t && c.isFrame(); c = c.bc.parent {
 		if c.ScrollFrameBy(dy) {
 			return true
 		}
 	}
 	return false
-}
-
-// startLazyFramesNear starts loading="lazy" frames that the scroll position brought near the viewport.
-func (t *Tab) startLazyFramesNear() {
-	_, vh, _, _, _ := t.Viewport()
-	sy := float64(t.ScrollY())
-	for _, f := range t.frameList() {
-		if !f.lazy || f.isStarted() {
-			continue
-		}
-		f.mu.Lock()
-		by, bh := f.by, f.bh
-		f.mu.Unlock()
-		if by < sy+float64(vh)+lazyMargin && by+bh > sy-lazyMargin {
-			f.start()
-		}
-	}
-}
-
-// needsOriginOverride: documents whose origin the page cannot derive from its URL.
-func (t *Tab) needsOriginOverride() bool {
-	return t.win.parent != nil || t.win.opener.Load() != nil || t.opaqueOrigin()
 }
 
 func relHas(rel, tok string) bool {
@@ -193,9 +180,8 @@ func relHas(rel, tok string) bool {
 	return false
 }
 
-// anchorNoOpener: links to a new window get no opener reference unless they ask for it
-// with rel=opener (the default of target=_blank in current browsers); rel=noopener and
-// rel=noreferrer always cut it.
+// anchorNoOpener: links to a new window get no opener reference unless they ask for it with rel=opener (the default
+// of target=_blank in current browsers); rel=noopener and rel=noreferrer always cut it.
 func anchorNoOpener(target, rel string) bool {
 	if relHas(rel, "noopener") || relHas(rel, "noreferrer") {
 		return true
@@ -205,7 +191,7 @@ func anchorNoOpener(target, rel string) bool {
 
 // submitFormTargeted submits a form honouring its target attribute and the frame's sandbox.
 func (t *Tab) submitFormTargeted(d *fnet.Doc, bid int64, method, action string, values map[string]string) error {
-	if sb := t.win.sbx; sb != nil && !sb.forms {
+	if f := t.sandboxFlags(); f&sbSandboxed != 0 && f&sbForms == 0 {
 		t.LogConsole("warning", "Blocked form submission in a sandboxed frame (allow-forms is not set)")
 		return nil
 	}

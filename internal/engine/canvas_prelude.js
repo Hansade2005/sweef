@@ -519,6 +519,10 @@ Object.defineProperty(globalThis, '__swCanvasFactories', { enumerable: false });
   function idOfEl(el) { return global.__swIdOf(el); }
   // returns [kind, ref] or null when the source has nothing to draw
   function srcOf(x, fn) {
+    if (x && x._isVF) { // WebCodecs VideoFrame
+      if (x._closed) throw dex("Failed to execute '" + fn + "' on 'CanvasRenderingContext2D': The image source is detached.", 'InvalidStateError');
+      return ['vf', x._h];
+    }
     if (x && x._isBitmap) {
       if (x._closed) throw dex("Failed to execute '" + fn + "' on 'CanvasRenderingContext2D': The image source is detached.", 'InvalidStateError');
       return ['img', x._h];
@@ -541,7 +545,9 @@ Object.defineProperty(globalThis, '__swCanvasFactories', { enumerable: false });
     if (global.HTMLVideoElement && x instanceof global.HTMLVideoElement) return ['node', idOfEl(x)];
     throw new TypeError("Failed to execute '" + fn + "' on 'CanvasRenderingContext2D': The provided value is not of type '(CSSImageValue or HTMLImageElement or SVGImageElement or HTMLVideoElement or HTMLCanvasElement or ImageBitmap or OffscreenCanvas or VideoFrame)'.");
   }
+  Object.defineProperty(global, '__swCvSource', { value: function (x, fn) { return srcOf(x, fn); } });
   function srcSize(x) {
+    if (x && x._isVF) return [x.visibleRect.width, x.visibleRect.height];
     if (x && x._isBitmap) return [x.width, x.height];
     if (x instanceof global.HTMLImageElement) return [x.naturalWidth, x.naturalHeight];
     if (x && x.videoWidth !== undefined) return [x.videoWidth, x.videoHeight];
@@ -776,7 +782,9 @@ Object.defineProperty(globalThis, '__swCanvasFactories', { enumerable: false });
       x = Math.floor(x); y = Math.floor(y); w = Math.max(1, Math.trunc(w)); h = Math.max(1, Math.trunc(h));
       if (w * h * 4 > 536870912) throw new RangeError("Failed to execute 'getImageData' on 'CanvasRenderingContext2D': Out of memory at ImageData creation");
       var data;
-      if (!this._id) data = new Uint8ClampedArray(w * h * 4); else data = fromPacked(sw.cvGetImageData16(this._id, x, y, w, h), w * h * 4);
+      if (!this._id) data = new Uint8ClampedArray(w * h * 4);
+      else if (typeof sw.cvGetBuf === 'function') { var ab = sw.cvGetBuf(this._id, x, y, w, h); data = ab.byteLength === w * h * 4 ? new Uint8ClampedArray(ab) : new Uint8ClampedArray(w * h * 4); }
+      else data = fromPacked(sw.cvGetImageData16(this._id, x, y, w, h), w * h * 4);
       return new ImageData(data, w, h, settings);
     },
     putImageData: function (img, dx, dy, ix, iy, iw, ih) {
@@ -786,6 +794,10 @@ Object.defineProperty(globalThis, '__swCanvasFactories', { enumerable: false });
       var x0 = 0, y0 = 0, w0 = img.width, h0 = img.height;
       if (arguments.length >= 7) { ix = +ix; iy = +iy; iw = +iw; ih = +ih; if (!fin(ix, iy, iw, ih)) throw new TypeError("Failed to execute 'putImageData' on 'CanvasRenderingContext2D': The provided float value is non-finite."); x0 = ix; y0 = iy; w0 = iw; h0 = ih; }
       if (!this._id) return;
+      if (typeof sw.cvPutBuf === 'function') {
+        var src = img.data, buf = src.byteOffset === 0 && src.buffer.byteLength === src.length ? src.buffer : src.slice().buffer;
+        if (sw.cvPutBuf(this._id, buf, img.width, img.height, Math.trunc(dx), Math.trunc(dy), Math.trunc(x0), Math.trunc(y0), Math.trunc(w0), Math.trunc(h0))) return;
+      }
       sw.cvPutImageData(this._id, toB64(new Uint8Array(img.data.buffer, img.data.byteOffset, img.data.length)), img.width, img.height, Math.trunc(dx), Math.trunc(dy), Math.trunc(x0), Math.trunc(y0), Math.trunc(w0), Math.trunc(h0));
     },
     drawFocusIfNeeded: function () { },

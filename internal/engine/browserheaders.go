@@ -111,6 +111,26 @@ func refererFor(page, target *url.URL) string {
 	return page.Scheme + "://" + page.Host + "/"
 }
 
+// setDocumentHeaders is setBrowserHeaders for the request that fetches the tab's document: a navigation of a
+// top-level tab, or the request of a frame, which relates to the page that embeds it.
+func (t *Tab) setDocumentHeaders(h http.Header, target *url.URL) {
+	if t.isFrame() {
+		if pu, err := url.Parse(t.bc.parent.URL()); err == nil && pu.Host != "" {
+			t.setBrowserHeadersFrom(h, target, KindFrame, false, pu)
+			return
+		}
+	}
+	t.setBrowserHeaders(h, target, KindDocument, true)
+}
+
+// documentKind is the Data Saver kind of the tab's document request.
+func (t *Tab) documentKind() DataKind {
+	if t.isFrame() {
+		return KindFrame
+	}
+	return KindDocument
+}
+
 // setBrowserHeaders adds the defaults to h (only the ones not already set). nav marks a top-level navigation
 // started by the person (address bar, link), page is the document making a sub-resource request.
 func (t *Tab) setBrowserHeaders(h http.Header, target *url.URL, kind DataKind, nav bool) {
@@ -120,25 +140,10 @@ func (t *Tab) setBrowserHeaders(h http.Header, target *url.URL, kind DataKind, n
 			page = pu
 		}
 	}
-	t.setBrowserHeadersPage(h, target, kind, nav, page, false)
+	t.setBrowserHeadersFrom(h, target, kind, nav, page)
 }
 
-// setDocHeaders sets the headers of a document request: a top-level navigation, or
-// the navigation of a frame, which is cross-site relative to the embedding page and
-// carries its Referer.
-func (t *Tab) setDocHeaders(h http.Header, target *url.URL) {
-	if p := t.win.parent; p != nil {
-		var page *url.URL
-		if pu, err := url.Parse(p.URL()); err == nil && pu.Host != "" {
-			page = pu
-		}
-		t.setBrowserHeadersPage(h, target, KindFrame, false, page, true)
-		return
-	}
-	t.setBrowserHeaders(h, target, KindDocument, true)
-}
-
-func (t *Tab) setBrowserHeadersPage(h http.Header, target *url.URL, kind DataKind, nav bool, page *url.URL, frameNav bool) {
+func (t *Tab) setBrowserHeadersFrom(h http.Header, target *url.URL, kind DataKind, nav bool, page *url.URL) {
 	set := func(k, v string) {
 		if v != "" && h.Get(k) == "" {
 			h.Set(k, v)
@@ -153,9 +158,6 @@ func (t *Tab) setBrowserHeadersPage(h http.Header, target *url.URL, kind DataKin
 			set("Sec-Fetch-Mode", "navigate")
 			set("Sec-Fetch-Site", "none")
 			set("Sec-Fetch-User", "?1")
-		case frameNav:
-			set("Sec-Fetch-Mode", "navigate")
-			set("Sec-Fetch-Site", secFetchSite(page, target))
 		default:
 			mode := "no-cors"
 			switch kind {
@@ -170,10 +172,9 @@ func (t *Tab) setBrowserHeadersPage(h http.Header, target *url.URL, kind DataKin
 			set("Sec-Fetch-Site", site)
 		}
 	}
-	if nav || frameNav {
+	if nav {
 		set("Upgrade-Insecure-Requests", "1")
-	}
-	if !nav {
+	} else {
 		set("Referer", refererFor(page, target))
 	}
 }

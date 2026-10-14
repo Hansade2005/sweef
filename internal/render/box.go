@@ -106,8 +106,14 @@ type lbox struct {
 	hasLast bool
 
 	// abspos static position (relative to containing block's lp coordinate system)
-	staticX, staticY                 float64
-	staticSet                        bool
+	staticX, staticY float64
+	staticSet        bool
+	// abspos child of a flex container: its static position is aligned as if it were the
+	// sole flex item (CSS Flexbox 4.1). sAlignX/Y is 0 start, 0.5 center, 1 end of the free
+	// space in the container's content box, whose size is sAlignW x sAlignH.
+	sAlign                           bool
+	sAlignX, sAlignY                 float64
+	sAlignW, sAlignH                 float64
 	oofKids                          []*lbox // abs-positioned descendants whose containing block is this box
 	txs                              *tx
 	node                             *Box

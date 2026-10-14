@@ -172,8 +172,8 @@ func (e *tabEnv) Bitmap(n *html.Node) image.Image {
 		return s.Bitmap()
 	}
 	if n != nil && n.Data == "iframe" {
-		if f := e.t.frameOf(n); f != nil && f.isStarted() {
-			if im := f.snapshot(); im != nil {
+		if k := e.t.frameKid(e.doc.IDOf(n)); k != nil {
+			if im := k.framePixels(); im != nil {
 				return im
 			}
 		}

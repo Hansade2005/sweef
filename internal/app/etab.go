@@ -95,6 +95,7 @@ func (a *App) newEtab(kind, id string, t *engine.Tab, incog bool) *etab {
 		e.t.SetUpdateHook(func() { e.requestPaint(false) })
 		e.t.SetWakeHook(e.wakePump)
 		e.t.SetActivationWindow(2 * time.Second) // a click or key press keeps allowing popups for 2 s (the engine default is 5 s)
+		e.t.SetMediaBroker(a.media)
 	}
 	return e
 }
@@ -572,6 +573,10 @@ func (a *App) onEngineEvent(ev engine.Event) {
 			if now-e.popupAt.Swap(now) > int64(500*time.Millisecond) {
 				a.post(func() { a.sendChrome(mToast, map[string]any{"text": "A pop-up was blocked", "kind": "info"}) })
 			}
+		}
+	case engine.EvAudio:
+		if st, ok := ev.Data.(engine.AudioState); ok {
+			a.post(func() { a.onTabAudio(e, st) })
 		}
 	case engine.EvDialog:
 		a.post(func() {

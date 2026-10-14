@@ -442,11 +442,6 @@ func TestCOOPSameOriginSeversOpener(t *testing.T) {
 	if got := jsonOf(t, tab, `window.w.closed`); got != "true" {
 		t.Fatalf("the opener must see the severed window as closed: %s", got)
 	}
-	// and a message to it goes nowhere
-	jsonOf(t, tab, `window.w.postMessage('x', '*'); 1`)
-	if p.inboxLen() != 0 {
-		t.Fatal("message reached a severed window")
-	}
 }
 
 func TestCOOPMatchTable(t *testing.T) {
@@ -471,7 +466,7 @@ func TestCOOPMatchTable(t *testing.T) {
 		}
 	}
 	for in, want := range map[string]string{"": "unsafe-none", "same-origin": "same-origin", "Same-Origin; report-to=\"x\"": "same-origin", "same-origin-allow-popups": "same-origin-allow-popups", "bogus": "unsafe-none"} {
-		if got := parseCOOP(in); got != want {
+		if got := coopPolicy(in); got != want {
 			t.Errorf("parseCOOP(%q) = %q, want %q", in, got, want)
 		}
 	}

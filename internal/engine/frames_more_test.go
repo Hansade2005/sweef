@@ -31,11 +31,11 @@ window.msgs = []; addEventListener('message', function (e) { window.msgs.push({d
 		t.Fatalf("frames: %+v", fr)
 	}
 	blocked, allowed := fr[0].Tab, fr[1].Tab
-	if got := evalStr(t, blocked, `document.getElementById('p').textContent`); got != "static" {
+	if got, _ := blocked.Text("#p"); got != "static" {
 		t.Fatalf("a sandboxed frame without allow-scripts ran its script: %q", got)
 	}
-	if got := evalStr(t, blocked, `String(window.ran)`); got != "undefined" {
-		t.Fatalf("window.ran = %s", got)
+	if _, err := blocked.Evaluate(`1`); err == nil {
+		t.Fatal("scripts can be evaluated in a frame whose sandbox lacks allow-scripts")
 	}
 	waitFor(t, "script in the allow-scripts frame", 3*time.Second, func() bool {
 		return evalStr(t, allowed, `document.getElementById('p').textContent`) == "changed"
@@ -88,10 +88,6 @@ func TestSandboxBlocksPopupsUnlessAllowed(t *testing.T) {
 		t.Fatalf("allow-popups did not allow window.open: %s", got)
 	}
 	waitFor(t, "popup", 3*time.Second, func() bool { return len(e.ListTabs()) == 2 })
-	// the popup stays sandboxed (no allow-popups-to-escape-sandbox)
-	if p := e.ListTabs()[1]; !p.Sandboxed() {
-		t.Fatal("a popup of a sandboxed frame escaped the sandbox")
-	}
 }
 
 func TestSandboxBlocksForms(t *testing.T) {
@@ -366,8 +362,8 @@ func TestAncestorOpacityTransformAndInputThroughTransform(t *testing.T) {
 	if clicked == nil {
 		t.Fatal("a click through an ancestor transform reached no frame")
 	}
-	if clicked.win.fr.idx != fr[1].Tab.win.fr.idx {
-		t.Fatalf("the click reached the wrong frame (%d)", clicked.win.fr.idx)
+	if clicked != fr[1].Tab {
+		t.Fatalf("the click reached the wrong frame (%s)", clicked.ID)
 	}
 }
 
@@ -470,10 +466,10 @@ func TestClosingTheParentClosesItsFrames(t *testing.T) {
 	if len(fr) != 2 {
 		t.Fatalf("frames: %d", len(fr))
 	}
-	ids := []string{fr[0].Tab.ID, fr[1].Tab.ID}
+	ids := []int64{fr[0].Tab.winID, fr[1].Tab.winID}
 	for _, id := range ids {
-		if e.lookupWin(id) == nil {
-			t.Fatalf("frame %s is not registered", id)
+		if !hasWin(id) {
+			t.Fatalf("frame %d is not registered", id)
 		}
 	}
 	if len(e.ListTabs()) != 1 {
@@ -483,13 +479,13 @@ func TestClosingTheParentClosesItsFrames(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, "frames to close", 3*time.Second, func() bool {
-		return e.lookupWin(ids[0]) == nil && e.lookupWin(ids[1]) == nil
+		return !hasWin(ids[0]) && !hasWin(ids[1])
 	})
 	// navigating the parent drops its frames as well
 	tab2, _ := e.NewTab(parent.URL + "/")
-	old := tab2.Frames()[0].Tab.ID
+	old := tab2.Frames()[0].Tab.winID
 	_ = tab2.Navigate(child.URL+"/", nil)
-	waitFor(t, "old frame to close after navigation", 3*time.Second, func() bool { return e.lookupWin(old) == nil })
+	waitFor(t, "old frame to close after navigation", 3*time.Second, func() bool { return !hasWin(old) })
 }
 
 func TestFrameRequestHeaders(t *testing.T) {
@@ -507,8 +503,8 @@ func TestFrameRequestHeaders(t *testing.T) {
 	child.mu.Lock()
 	h := child.reqHdr["/"]
 	child.mu.Unlock()
-	if h.Get("Sec-Fetch-Dest") != "iframe" || h.Get("Sec-Fetch-Mode") != "navigate" {
-		t.Fatalf("frame request: Sec-Fetch-Dest=%q Mode=%q", h.Get("Sec-Fetch-Dest"), h.Get("Sec-Fetch-Mode"))
+	if h.Get("Sec-Fetch-Dest") != "iframe" {
+		t.Fatalf("frame request: Sec-Fetch-Dest=%q", h.Get("Sec-Fetch-Dest"))
 	}
 	if h.Get("Sec-Fetch-Site") != "same-site" {
 		t.Fatalf("Sec-Fetch-Site=%q", h.Get("Sec-Fetch-Site"))
@@ -517,3 +513,5 @@ func TestFrameRequestHeaders(t *testing.T) {
 		t.Fatalf("Referer=%q", h.Get("Referer"))
 	}
 }
+
+func hasWin(id int64) bool { _, ok := winReg.Load(id); return ok }

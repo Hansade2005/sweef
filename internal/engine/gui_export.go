@@ -23,7 +23,7 @@ func (t *Tab) Generation() uint64 {
 		return 0
 	}
 	// frame documents painted into this one count: a frame that changes changes the page's pixels
-	return d.MutationGen() + t.win.frameGen.Load()
+	return d.MutationGen() + d.PaintGen() + t.win.frameGen.Load()
 }
 
 // PaintOptions selects how PaintRGBAOpts rasterises.

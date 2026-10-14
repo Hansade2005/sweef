@@ -46,7 +46,7 @@ function makeHost() {
   function parseFragment(html) {
     var root = { children: [] };
     var stack = [root];
-    var i = 0, re = /<!--([\s\S]*?)-->|<!(doctype)[^>]*>|<\/([a-zA-Z][\w:-]*)\s*>|<([a-zA-Z][\w:-]*)((?:\s+[^\s"'>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*(\/?)>/gi, m;
+    var i = 0, re = /<!--([\s\S]*?)--!?>|<!(doctype)[^>]*>|<\/([a-zA-Z][\w:-]*)\s*>|<([a-zA-Z][\w:-]*)((?:\s+[^\s"'>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*(\/?)>/gi, m;
     function text(t) { if (!t) return; var n = mk(3, { data: unesc(t) }); var p = stack[stack.length - 1]; n.parent = p === root ? null : p; p.children.push(n); }
     while ((m = re.exec(html))) {
       text(html.slice(i, m.index)); i = re.lastIndex;

@@ -1,5 +1,11 @@
 package vp9
 
+import (
+	"runtime"
+	"sync"
+	"sync/atomic"
+)
+
 // Loop filter (spec 8.8).
 
 func (d *Decoder) loopFilterFrameInit() {
@@ -34,17 +40,58 @@ func (d *Decoder) loopFilterFrameInit() {
 	}
 }
 
+// loopFilterFrame filters the whole frame. The result is exactly that of filtering superblock by
+// superblock in raster order, plane by plane: the planes are independent, and inside a plane
+// superblock (r, c) only needs its left neighbour and the superblock above and to the right (whose
+// left edge filtering reaches into the pixels this one's top edge reads) to be finished, so rows run in
+// parallel as a wavefront two superblocks apart.
 func (d *Decoder) loopFilterFrame() {
 	d.loopFilterFrameInit()
-	for row := 0; row < d.miRows; row += 8 {
-		for col := 0; col < d.miCols; col += 8 {
-			for plane := 0; plane < 3; plane++ {
-				for pass := 0; pass < 2; pass++ {
-					d.loopFilterSB(plane, pass, row, col)
+	rows, cols := (d.miRows+7)/8, (d.miCols+7)/8
+	workers := min(runtime.GOMAXPROCS(0), 4)
+	if workers < 2 || rows*cols < 8 {
+		for row := 0; row < d.miRows; row += 8 {
+			for col := 0; col < d.miCols; col += 8 {
+				for plane := 0; plane < 3; plane++ {
+					for pass := 0; pass < 2; pass++ {
+						d.loopFilterSB(plane, pass, row, col)
+					}
 				}
 			}
 		}
+		return
 	}
+	progress := make([]atomic.Int32, 3*rows) // superblocks finished per (plane, row)
+	var next atomic.Int32
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				t := int(next.Add(1)) - 1
+				if t >= 3*rows {
+					return
+				}
+				plane, r := t/rows, t%rows
+				for c := 0; c < cols; c++ {
+					if r > 0 {
+						need := int32(min(c+2, cols))
+						for spin := 0; progress[t-1].Load() < need; spin++ {
+							if spin > 64 {
+								runtime.Gosched()
+							}
+						}
+					}
+					for pass := 0; pass < 2; pass++ {
+						d.loopFilterSB(plane, pass, r*8, c*8)
+					}
+					progress[t].Store(int32(c + 1))
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func (d *Decoder) loopFilterSB(plane, pass, row, col int) {
@@ -253,20 +300,33 @@ func filterSample(pix []uint16, bd uint, pos, across, limit, blimit, thresh, fil
 	}
 }
 
+// wideFilter applies the 8-sample (log2Size 3) or 16-sample (log2Size 4) smoothing filter across an
+// edge: output i is the rounded mean of sample i and the 2n+1 samples around it (edge samples repeated).
+// A sliding window sum makes it linear in n instead of quadratic.
 func wideFilter(pix []uint16, pos, across int, log2Size uint) {
 	n := (1 << (log2Size - 1)) - 1
-	var s [16]int32 // s[k+8] = sample at offset k, k in [-8, 7]
+	var s [16]int32 // s[k+8] = sample at offset k, k in [-(n+1), n]
 	for k := -(n + 1); k <= n; k++ {
 		s[k+8] = int32(pix[pos+k*across])
 	}
-	var f [16]int32
-	for i := -n; i < n; i++ {
-		t := s[i+8]
-		for j := -n; j <= n; j++ {
-			p := clip3(-(n + 1), n, i+j)
-			t += s[p+8]
+	at := func(k int) int32 { // sample at offset k with the window clamped to the filtered range
+		if k < -(n + 1) {
+			k = -(n + 1)
+		} else if k > n {
+			k = n
 		}
-		f[i+8] = (t + (1 << (log2Size - 1))) >> log2Size
+		return s[k+8]
+	}
+	var f [16]int32
+	// window sum for i = -n: samples -n-n .. -n+n
+	var w int32
+	for j := -n; j <= n; j++ {
+		w += at(-n + j)
+	}
+	round := int32(1) << (log2Size - 1)
+	for i := -n; i < n; i++ {
+		f[i+8] = (w + s[i+8] + round) >> log2Size
+		w += at(i+n+1) - at(i-n)
 	}
 	for i := -n; i < n; i++ {
 		pix[pos+i*across] = uint16(f[i+8])

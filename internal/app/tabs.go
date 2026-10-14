@@ -37,6 +37,7 @@ func (a *App) incogContext() *engine.BrowserContext {
 	defer a.mu.Unlock()
 	if a.incogCtx == nil {
 		a.incogCtx = a.eng.NewContext("incognito", engine.ContextOptions{})
+		a.applyCookiePolicy(a.incogCtx)
 		a.dat.eng.SetContextPolicy(a.incogCtx, a.dataLevel()) // private windows save data too
 	}
 	return a.incogCtx
@@ -133,6 +134,9 @@ func (a *App) makeEtab(id string, incog bool) *etab {
 // adoptEtab wraps an existing engine tab (a new tab, or a popup that page script created) in a worker and registers it as page id.
 func (a *App) adoptEtab(id string, t *engine.Tab, incog bool) *etab {
 	e := a.newEtab("page", id, t, incog)
+	if st, ok := a.model.Tab(id); ok && st.Muted {
+		t.SetAudioMuted(true) // a reloaded or restored tab keeps its mute
+	}
 	e.vpW.Store(int32(a.vpLogW()))
 	e.vpH.Store(int32(a.vpLogH()))
 	e.vpApplied.w, e.vpApplied.h, e.vpApplied.dsf = a.pageCSS(a.vpLogW()), a.pageCSS(a.vpLogH()), a.pageDSF()
@@ -163,6 +167,7 @@ func (a *App) closeTab(id string) {
 	if !ok {
 		return
 	}
+	a.dropPromptsOfTab(id)
 	next, _ := a.model.CloseTab(id)
 	a.mu.Lock()
 	e := a.pages[id]
@@ -280,9 +285,28 @@ func (a *App) togglePin(id string) {
 	a.markState()
 }
 
+// toggleMute mutes or unmutes everything the tab plays (the engine keeps the media clocks running, so a
+// muted video stays in sync) and updates the speaker icon of the tab strip.
 func (a *App) toggleMute(id string) {
-	a.model.Update(id, func(t *state.Tab) { t.Muted = !t.Muted })
+	muted := false
+	a.model.Update(id, func(t *state.Tab) { t.Muted = !t.Muted; muted = t.Muted })
+	if e := a.page(id); e != nil {
+		e.t.SetAudioMuted(muted)
+	}
 	a.markState()
+}
+
+// onTabAudio records that a tab started or stopped making sound (the speaker icon of the tab strip).
+func (a *App) onTabAudio(e *etab, st engine.AudioState) {
+	changed := false
+	a.model.Update(e.id, func(t *state.Tab) {
+		if t.Audio != st.Audible {
+			t.Audio, changed = st.Audible, true
+		}
+	})
+	if changed {
+		a.markState()
+	}
 }
 
 func (a *App) reopenClosed() {

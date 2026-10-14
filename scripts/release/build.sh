@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Cross-compile Sweef for every release target with a pure-Go toolchain.
 #
-#   scripts/release/build.sh [--targets "linux/amd64 ..."] [--check-repro] [--skip-launchers]
+#   scripts/release/build.sh [--targets "linux/amd64 ..."] [--check-repro] [--skip-launchers] [--skip-cdm-host]
 #
 # Env: VERSION, COMMIT, SOURCE_DATE_EPOCH, DIST (default ./dist),
-#      SWEEF_MAIN_PKG (default ./cmd/sweef), SWEEF_MAX_BINARY_BYTES (default 33554432),
+#      SWEEF_MAIN_PKG (default ./cmd/sweef), SWEEF_MAX_BINARY_BYTES (default 41943040),
 #      STRICT_VERSION=1 (fail if the built binary does not report $VERSION)
 #
 # Output layout:
 #   dist/bin/<os>_<arch>/sweef[.exe]        the browser/CLI
 #   dist/bin/<os>_<arch>/Sweef[.exe]        GUI launcher (darwin, windows): runs `sweef gui`
+#   dist/bin/<os>_<arch>/sweef-cdm[.exe]    CDM host helper (Widevine); the only binary that may be dynamically linked, docs/drm.md
 #   dist/bin/SHA256SUMS                     checksums of everything above
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
@@ -17,11 +18,13 @@ set -euo pipefail
 TARGETS="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64"
 CHECK_REPRO=0
 LAUNCHERS=1
+CDM_HOST=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --targets) TARGETS="$2"; shift 2 ;;
     --check-repro) CHECK_REPRO=1; shift ;;
     --skip-launchers) LAUNCHERS=0; shift ;;
+    --skip-cdm-host) CDM_HOST=0; shift ;;
     -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
@@ -30,7 +33,9 @@ done
 need go
 resolve_all
 MAIN_PKG="${SWEEF_MAIN_PKG:-./cmd/sweef}"
-MAX_BYTES="${SWEEF_MAX_BINARY_BYTES:-33554432}"
+# 40 MiB: the binary carries WebRTC (pion, about +4.5 MiB), WebAssembly (wazero, about +3.7 MiB), the media codecs and
+# the web platform layer; it was 32 MiB before those. Raise it deliberately, with a line in CHANGELOG.md.
+MAX_BYTES="${SWEEF_MAX_BINARY_BYTES:-41943040}"
 export CGO_ENABLED=0
 export GOFLAGS="${GOFLAGS:-} -mod=readonly"
 export SOURCE_DATE_EPOCH
@@ -80,6 +85,20 @@ build_one() { # os arch outdir
     [ "$os" = windows ] && lf="$lf -H=windowsgui"
     ( cd "$ROOT" && GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags "$lf" -o "$out/Sweef$ext" ./packaging/tools/launcher ) \
       || die "launcher build failed for $os/$arch"
+  fi
+  # Sweef is one static binary: no libc, no dynamic loader (it must run on Alpine/musl and in scratch containers).
+  # A dependency that loads libraries with dlopen (purego's Linux shim) would add NEEDED entries and an INTERP.
+  if [ "$os" = linux ] && command -v readelf >/dev/null 2>&1; then
+    if readelf -lW "$out/sweef$ext" 2>/dev/null | grep -q 'INTERP' || readelf -dW "$out/sweef$ext" 2>/dev/null | grep -q 'NEEDED'; then
+      die "$os/$arch binary is dynamically linked (INTERP/NEEDED present); Linux builds must be static"
+    fi
+  fi
+  if [ "$CDM_HOST" = 1 ]; then
+    # The helper dlopen's the user's Widevine CDM, so unlike sweef it is built to be dynamically linked on Linux
+    # (purego's loader import). It never ships a CDM. The browser binary must stay static: see
+    # cmd/sweef/static_linux_test.go.
+    ( cd "$ROOT" && GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags "-s -w -buildid=" -o "$out/sweef-cdm$ext" ./cmd/sweef-cdm ) \
+      || die "sweef-cdm build failed for $os/$arch"
   fi
   local size; size="$(wc -c < "$out/sweef$ext" | tr -d ' ')"
   printf '    %-14s %10s bytes (%s MiB)\n' "$os/$arch" "$size" "$((size / 1048576))" >&2

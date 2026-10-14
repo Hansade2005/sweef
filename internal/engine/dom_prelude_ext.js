@@ -1,10 +1,9 @@
 /*
- * Sweef prelude extensions: real WebSocket and Web Worker implementations.
+ * Sweef prelude extensions: the real WebSocket implementation (Workers live in workers_prelude.js).
  * Evaluated right after dom_prelude.js (same bytecode unit). Uses only public
  * globals, so it layers cleanly on the base prelude.
  *
- * Go owns the sockets and the worker VMs. Events flow back through
- * __swWsEvent and __swWorkerEvent, which Go calls from the event-loop pump.
+ * Go owns the sockets. Events flow back through __swWsEvent, which Go calls from the event-loop pump.
  */
 (function (global) {
   'use strict';
@@ -99,45 +98,6 @@
         sockets.delete(id);
         ws.dispatchEvent(new global.CloseEvent('close', { wasClean: code === 1000, code: code || 1006, reason: reason || '' }));
       }
-    } catch (e) { if (global.reportError) global.reportError(e); }
-    return true;
-  });
-
-  // ---- Worker ------------------------------------------------------------------
-  var workers = new Map();
-  function Worker(url, opts) {
-    if (!(this instanceof Worker)) throw new TypeError("Constructor Worker requires 'new'");
-    ET.call(this);
-    var u = String(url);
-    var src = '';
-    if (/^blob:/.test(u)) {
-      if (!global.__swBlobText) throw new global.DOMException('Worker: blob URL not readable', 'NotSupportedError');
-      src = global.__swBlobText(u);
-      if (src === null) throw new global.DOMException('Worker: unknown blob URL', 'NotFoundError');
-    } else if (/^data:/.test(u)) {
-      var comma = u.indexOf(',');
-      var meta = u.slice(5, comma), body = u.slice(comma + 1);
-      src = /;base64$/.test(meta) ? global.atob(body) : decodeURIComponent(body);
-    }
-    var abs = src ? global.location.href : absURL(u);
-    var id = sw.workerCreate(abs, src, (opts && opts.type) || 'classic', (opts && opts.name) || '');
-    def(this, '_id', id);
-    workers.set(id, this);
-  }
-  Worker.prototype = Object.create(ET.prototype);
-  Worker.prototype.constructor = Worker;
-  Worker.prototype.postMessage = function (msg) { sw.workerPost(this._id, JSON.stringify(msg === undefined ? null : msg)); };
-  Worker.prototype.terminate = function () { sw.workerTerminate(this._id); workers.delete(this._id); };
-  handlerProps(Worker.prototype, ['message', 'error', 'messageerror']);
-  Object.defineProperty(Worker.prototype, Symbol.toStringTag, { value: 'Worker' });
-  global.Worker = Worker;
-
-  def(global, '__swWorkerEvent', function (id, type, json) {
-    var w = workers.get(id);
-    if (!w) return false;
-    try {
-      if (type === 'message') w.dispatchEvent(new global.MessageEvent('message', { data: JSON.parse(json) }));
-      else if (type === 'error') { var ev = new global.Event('error'); ev.message = json; w.dispatchEvent(ev); }
     } catch (e) { if (global.reportError) global.reportError(e); }
     return true;
   });

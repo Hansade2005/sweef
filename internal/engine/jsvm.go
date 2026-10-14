@@ -151,12 +151,27 @@ type jsVM struct {
 	importMap map[string]string // <script type=importmap> entries
 	mu        sync.Mutex
 	vm        *quickjs.VM
+	cv        *cvHost // the canvas host of this VM, when the canvas extension is installed
 	tab       *Tab
 	start     time.Time
 	closed    bool
 
+	capture *capHost // getUserMedia & co (capture_host.go)
+
 	rtOnce   sync.Once
 	realtime *realtime // WebSockets and Workers (lazily created)
+
+	// closeHooks run after the QuickJS VM is closed: feature files hang their native teardown here (wasm.go).
+	closeHooks []func()
+
+	clMu    sync.Mutex
+	cluster *agentCluster // SharedArrayBuffer agent cluster (sab.go)
+	sabv    *vmSAB
+	wasmh   *wasmHost
+	wch     *wcHost // WebCodecs (webcodecs.go)
+
+	closerMu sync.Mutex
+	closers  []func() // run first when the VM closes (host extensions, media players, audio streams); they must not call into the VM
 
 	pendingNav  string
 	scriptQueue []int64        // script element ids inserted by page code
@@ -176,10 +191,15 @@ func buildVM(o Options) (*jsVM, error) {
 	}
 	mem := o.JSMemoryMiB
 	if mem <= 0 {
-		mem = 64
+		mem = 256
 	}
 	vm.SetMemoryLimit(uintptr(mem) << 20)
 	vm.SetMaxStackSize(1 << 20)
+	// Loading the prelude allocates a few MiB of long-lived objects and almost no garbage, but QuickJS's
+	// cycle collector would still run several times on the way (its threshold starts at 256 KiB), each pass
+	// marking everything allocated so far. Measured: about 1.3 ms of the ~25 ms build, more as the prelude
+	// grows. Turn the collector off for the build and give it a normal pace afterwards.
+	vm.SetGCThreshold(1 << 30)
 	to := time.Duration(o.JSTimeoutMs) * time.Millisecond
 	if to <= 0 {
 		to = 5 * time.Second
@@ -210,6 +230,7 @@ func buildVM(o Options) (*jsVM, error) {
 		vm.Close()
 		return nil, fmt.Errorf("prelude did not initialise")
 	}
+	vm.SetGCThreshold(10 << 20)
 	return j, nil
 }
 
@@ -233,10 +254,11 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 	if _, err := j.call("__swSetDocument", docURL, "loading"); err != nil {
 		t.LogConsole("error", "sweef: __swSetDocument failed: "+err.Error())
 	}
-	if t.needsOriginOverride() {
-		_, _ = j.call("__swSetOrigin", t.origin())
-	}
+	_, _ = j.call("__swCoiBind")
 	j.installBindings()
+	if t.isFrame() {
+		_, _ = j.call("__swFrameInit", t.windowName())
+	}
 	return j
 }
 
@@ -331,17 +353,43 @@ func (j *jsVM) close() {
 	if j == nil {
 		return
 	}
+	// A script that is blocked (Atomics.wait, a wasm thread waiting on a futex) holds j.mu and would hold up this
+	// close for ever: wake it first, without the lock.
+	j.sabInterrupt()
+	j.wasmAbort()
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.closed {
 		return
 	}
 	j.closed = true
+	j.closerMu.Lock()
+	cl := j.closers
+	j.closers = nil
+	j.closerMu.Unlock()
+	for _, f := range cl {
+		f()
+	}
 	if j.realtime != nil {
 		j.realtime.closeAll()
 	}
+	runCloseHooks(j)
+	if j.capture != nil {
+		j.capture.closeAll()
+	}
 	j.vm.SetModuleLoader(nil, nil)
 	j.vm.Close()
+	for _, h := range j.closeHooks {
+		h()
+	}
+	j.closeHooks = nil
+}
+
+// onClose registers f to run when the VM closes.
+func (j *jsVM) onClose(f func()) {
+	j.closerMu.Lock()
+	defer j.closerMu.Unlock()
+	j.closers = append(j.closers, f)
 }
 
 func (j *jsVM) nowMs() float64 { return float64(time.Since(j.start).Microseconds()) / 1000 }
@@ -507,6 +555,12 @@ func (j *jsVM) dispatch(id int64, typ string, init map[string]any) bool {
 	if j == nil {
 		return true
 	}
+	switch typ {
+	case "click", "mousedown", "pointerdown", "keydown", "touchstart", "input":
+		if t := j.tab; t != nil && t.bc == nil { // the person used this top-level page: its site counts as visited
+			t.Context().noteInteraction(schemefulSite(t.URL()))
+		}
+	}
 	if init == nil {
 		init = map[string]any{}
 	}
@@ -558,25 +612,15 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 	}
 	j.wakeMs = 0
 	for {
-		if j.tab != nil {
-			j.tab.syncFrames(false) // <iframe>s that page code inserted
-		}
 		j.drainScripts(soft)
 		j.jobs()
 		delivered := j.drainAsync()
-		if j.drainInbox() { // postMessage from other windows
-			delivered = true
-			j.jobs()
-		}
 		next := float64(-1)
 		if j.tab == nil || !j.tab.suspended() {
 			// A background tab under the Data Saver runs no timers (no polling, no
 			// animation frames) and no workers; promise jobs and results already
 			// delivered still flow, so an explicit evaluate does not hang.
 			next = j.runTimers()
-			if wn := j.pumpWorkers(); wn >= 0 && (next < 0 || wn < next) {
-				next = wn
-			}
 		}
 		if j.drainAsync() {
 			delivered = true
@@ -667,7 +711,6 @@ func (t *Tab) beforeDCL() bool {
 // settle is the short pump used after every action.
 func (t *Tab) settle(d time.Duration) {
 	t.runTasks() // navigations other windows asked this one for
-	t.syncFrames(false)
 	if t.beforeDCL() {
 		return
 	}
@@ -1037,12 +1080,7 @@ func (j *jsVM) registerHost() error {
 		{"lastChild", doc(func(d *fnet.Doc, a []any) (any, error) { return d.LastChildID(argI(a, 0)), nil })},
 		{"nextSibling", doc(func(d *fnet.Doc, a []any) (any, error) { return d.NextSiblingID(argI(a, 0)), nil })},
 		{"prevSibling", doc(func(d *fnet.Doc, a []any) (any, error) { return d.PrevSiblingID(argI(a, 0)), nil })},
-		{"createElement", doc(func(d *fnet.Doc, a []any) (any, error) {
-			if strings.EqualFold(argS(a, 0), "iframe") {
-				j.tab.win.mayFrames.Store(true)
-			}
-			return d.CreateElement(argS(a, 0), argS(a, 1)), nil
-		})},
+		{"createElement", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CreateElement(argS(a, 0), argS(a, 1)), nil })},
 		{"createText", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CreateText(argS(a, 0)), nil })},
 		{"createComment", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CreateComment(argS(a, 0)), nil })},
 		{"createFragment", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CreateFragment(), nil })},
@@ -1052,6 +1090,7 @@ func (j *jsVM) registerHost() error {
 				return nil, err
 			}
 			j.noteInserted(d, c)
+			j.tab.frameInserted(d, c)
 			return c, nil
 		})},
 		{"insertBefore", doc(func(d *fnet.Doc, a []any) (any, error) {
@@ -1060,10 +1099,13 @@ func (j *jsVM) registerHost() error {
 				return nil, err
 			}
 			j.noteInserted(d, c)
+			j.tab.frameInserted(d, c)
 			return c, nil
 		})},
 		{"removeChild", doc(func(d *fnet.Doc, a []any) (any, error) {
-			return argI(a, 1), d.RemoveChild(argI(a, 0), argI(a, 1))
+			err := d.RemoveChild(argI(a, 0), argI(a, 1))
+			go j.tab.pruneFrames()
+			return argI(a, 1), err
 		})},
 		{"cloneNode", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CloneNode(argI(a, 0), argB(a, 1)), nil })},
 		{"attached", doc(func(d *fnet.Doc, a []any) (any, error) { return d.IsConnected(argI(a, 0)), nil })},
@@ -1078,13 +1120,22 @@ func (j *jsVM) registerHost() error {
 			return s, err
 		})},
 		{"setInnerHTML", doc(func(d *fnet.Doc, a []any) (any, error) {
-			j.tab.noteMarkup(argS(a, 1))
-			return nil, d.SetInnerHTMLCtx(argI(a, 0), argS(a, 1))
+			err := d.SetInnerHTMLCtx(argI(a, 0), argS(a, 1))
+			if err == nil {
+				j.tab.frameInserted(d, argI(a, 0))
+			}
+			return nil, err
 		})},
 		{"outerHTML", doc(func(d *fnet.Doc, a []any) (any, error) { return d.SerializeNode(argI(a, 0)), nil })},
 		{"insertAdjacentHTML", doc(func(d *fnet.Doc, a []any) (any, error) {
-			j.tab.noteMarkup(argS(a, 2))
-			return nil, d.InsertAdjacentHTML(argI(a, 0), argS(a, 1), argS(a, 2))
+			err := d.InsertAdjacentHTML(argI(a, 0), argS(a, 1), argS(a, 2))
+			if err == nil {
+				j.tab.frameInserted(d, argI(a, 0))
+				if p := d.ParentID(argI(a, 0)); p != 0 {
+					j.tab.frameInserted(d, p)
+				}
+			}
+			return nil, err
 		})},
 		// attributes
 		{"getAttr", doc(func(d *fnet.Doc, a []any) (any, error) {
@@ -1138,6 +1189,8 @@ func (j *jsVM) registerHost() error {
 			j.queueFormSubmit(argI(a, 0))
 			return nil, nil
 		}},
+		{"quirks", doc(func(d *fnet.Doc, a []any) (any, error) { return docQuirks(d), nil })},
+		{"computedStyle", doc(func(d *fnet.Doc, a []any) (any, error) { return computedStyleOf(d, argI(a, 0)), nil })},
 		{"box", doc(func(d *fnet.Doc, a []any) (any, error) {
 			if g, ok := d.GeometryOf(argI(a, 0)); ok {
 				fr := make([]any, 0, len(g.Frags))
@@ -1197,7 +1250,7 @@ func (j *jsVM) registerHost() error {
 		{"now", func(a []any) (any, error) { return j.nowMs(), nil }},
 		{"http", func(a []any) (any, error) {
 			hdr := map[string]string{}
-			if m, ok := a[2].(map[string]any); ok {
+			if m, ok := normalizeJS(a[2]).(map[string]any); ok {
 				for k, v := range m {
 					hdr[k] = fmt.Sprint(v)
 				}
@@ -1206,70 +1259,97 @@ func (j *jsVM) registerHost() error {
 			if len(a) > 3 && a[3] != nil {
 				body = argS(a, 3)
 			}
+			if len(a) > 4 && argB(a, 4) { // binary body, sent as base64
+				raw, err := base64.StdEncoding.DecodeString(body)
+				if err != nil {
+					return nil, fmt.Errorf("TypeError: bad request body")
+				}
+				body = string(raw)
+			}
 			return j.tab.httpForScript(argS(a, 0), argS(a, 1), hdr, body)
 		}},
 		{"storageGet", func(a []any) (any, error) {
 			kind, key := argS(a, 0), argS(a, 1)
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if kind == "session" {
 				if v, ok := j.session[key]; ok {
 					return v, nil
 				}
 				return nil, nil
 			}
-			if v, ok := j.tab.Context().GetStorageValue(j.tab.storageKey(), key); ok {
+			if v, ok := j.tab.Context().GetStorageValue(lk, key); ok {
 				return v, nil
 			}
 			return nil, nil
 		}},
 		{"storageSet", func(a []any) (any, error) {
 			kind, key, val := argS(a, 0), argS(a, 1), argS(a, 2)
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if kind == "session" {
 				j.session[key] = val
 			} else {
-				c, sk := j.tab.Context(), j.tab.storageKey()
-				old, had := c.GetStorageValue(sk, key)
-				c.SetStorageValue(sk, key, val)
+				c := j.tab.Context()
+				old, had := c.GetStorageValue(lk, key)
+				c.SetStorageValue(lk, key, val)
 				if !had || old != val {
 					var op *string
 					if had {
 						op = &old
 					}
-					j.tab.broadcastStorage(&key, op, &val)
+					j.storageChanged(lk, &key, op, &val)
 				}
 			}
 			return nil, nil
 		}},
 		{"storageRemove", func(a []any) (any, error) {
 			kind, key := argS(a, 0), argS(a, 1)
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if kind == "session" {
 				delete(j.session, key)
 			} else {
-				c, sk := j.tab.Context(), j.tab.storageKey()
-				old, had := c.GetStorageValue(sk, key)
-				c.RemoveStorageValue(sk, key)
+				c := j.tab.Context()
+				old, had := c.GetStorageValue(lk, key)
+				c.RemoveStorageValue(lk, key)
 				if had {
-					j.tab.broadcastStorage(&key, &old, nil)
+					j.storageChanged(lk, &key, &old, nil)
 				}
 			}
 			return nil, nil
 		}},
 		{"storageClear", func(a []any) (any, error) {
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			if argS(a, 0) == "session" {
 				j.session = map[string]string{}
 			} else {
-				j.tab.Context().ClearStorage(j.tab.storageKey())
-				j.tab.broadcastStorage(nil, nil, nil)
+				j.tab.Context().ClearStorage(lk)
+				j.storageChanged(lk, nil, nil, nil)
 			}
 			return nil, nil
 		}},
 		{"storageKeys", func(a []any) (any, error) {
+			lk, err := j.webStorageKey()
+			if err != nil {
+				return nil, err
+			}
 			var keys []string
 			if argS(a, 0) == "session" {
 				for k := range j.session {
 					keys = append(keys, k)
 				}
 			} else {
-				keys = j.tab.Context().StorageKeys(j.tab.storageKey())
+				keys = j.tab.Context().StorageKeys(lk)
 			}
 			out := make([]any, len(keys))
 			for i, k := range keys {
@@ -1277,14 +1357,9 @@ func (j *jsVM) registerHost() error {
 			}
 			return out, nil
 		}},
-		{"cookie", func(a []any) (any, error) { return j.tab.Context().JarRef().ForURL(j.tab.URL()), nil }},
+		{"cookie", func(a []any) (any, error) { return j.tab.DocumentCookie(), nil }},
 		{"setCookie", func(a []any) (any, error) {
-			if c := parseCookie(argS(a, 0), j.tab.eng.now()); c != nil {
-				if c.Domain == "" {
-					c.Domain = hostOf(j.tab.URL())
-				}
-				j.tab.Context().JarRef().Set(c)
-			}
+			j.tab.SetDocumentCookie(argS(a, 0))
 			return nil, nil
 		}},
 		{"dialog", func(a []any) (any, error) {
@@ -1302,15 +1377,21 @@ func (j *jsVM) registerHost() error {
 			return nil, nil
 		}},
 		{"mutation", func(a []any) (any, error) { return nil, nil }},
+		{"docOrigin", func(a []any) (any, error) {
+			if j.tab == nil {
+				return "", nil
+			}
+			if o := j.tab.docOrigin(); o != "" {
+				return o, nil
+			}
+			if j.tab.bc != nil { // opaque: a sandboxed frame, a data: document
+				return "null", nil
+			}
+			return "", nil
+		}},
 		{"wsOpen", func(a []any) (any, error) { return j.wsOpen(argS(a, 0), argS(a, 1)), nil }},
 		{"wsSend", func(a []any) (any, error) { return nil, j.wsSend(argI(a, 0), argS(a, 1), argB(a, 2)) }},
 		{"wsClose", func(a []any) (any, error) { j.wsClose(argI(a, 0)); return nil, nil }},
-		{"workerCreate", func(a []any) (any, error) {
-			id, err := j.workerCreate(argS(a, 0), argS(a, 1), argS(a, 2))
-			return id, err
-		}},
-		{"workerPost", func(a []any) (any, error) { j.workerPost(argI(a, 0), argS(a, 1)); return nil, nil }},
-		{"workerTerminate", func(a []any) (any, error) { j.workerTerminate(argI(a, 0)); return nil, nil }},
 		{"binding", func(a []any) (any, error) {
 			name, args := argS(a, 0), argS(a, 1)
 			if !json.Valid([]byte(args)) {
@@ -1383,6 +1464,12 @@ func (j *jsVM) registerHost() error {
 		sb.WriteString(x.name + ":__sw_" + x.name)
 	}
 	sb.WriteString("};")
+	if j.cv != nil {
+		if err := j.cv.registerBufferFns(); err != nil {
+			return err
+		}
+		sb.WriteString("__sw.cvGetBuf=__swCvGetBuf;__sw.cvPutBuf=__swCvPutBuf;delete globalThis.__swCvGetBuf;delete globalThis.__swCvPutBuf;")
+	}
 	for _, x := range hs {
 		sb.WriteString("delete globalThis.__sw_" + x.name + ";")
 	}

@@ -26,6 +26,7 @@ How the code is organised and which documents are contracts. Start with [CONTRIB
    ├── internal/font      font discovery, shaping, WOFF/WOFF2/TTF/OTF decoding
    ├── internal/gl        software WebGL (GLSL compiler and pipeline)
    ├── internal/media     audio and video decoders and playback (H.264, HEVC, VP8/9, AV1, AAC, Opus, MP3, ...)
+   │   └── cdm            DRM key systems behind EME (Clear Key, Widevine host, PlayReady, FairPlay); docs/drm.md
    ├── internal/pdf       PDF rendering
    └── internal/update    signed auto-update verification library (design: docs/updates.md)
 ```

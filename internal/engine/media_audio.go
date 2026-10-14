@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"time"
 
+	"github.com/sweefbrowser/sweef/internal/audioout"
 	"github.com/sweefbrowser/sweef/internal/media/webaudio"
 )
 
@@ -19,11 +21,13 @@ var mediaAudioPreludeJS string
 func init() { registerPrelude("media_audio", mediaAudioPreludeJS) }
 
 type waState struct {
-	ctxs map[int]*webaudio.Context
-	next int
+	ctxs  map[int]*webaudio.Context
+	sinks map[int]*waSink
+	next  int
 }
 
 func (m *mediaHost) waReset() {
+	m.waShutdown()
 	if m.wa != nil {
 		m.wa.ctxs = map[int]*webaudio.Context{}
 	}
@@ -41,14 +45,28 @@ func anyF(v any) float64 { return argF([]any{v}, 0) }
 
 func (m *mediaHost) waHost(f map[string]hostFn) {
 	m.mseFns(f)
-	m.wa = &waState{ctxs: map[int]*webaudio.Context{}, next: 1}
+	m.wa = &waState{ctxs: map[int]*webaudio.Context{}, sinks: map[int]*waSink{}, next: 1}
 	f["waNew"] = func(a []any) (any, error) {
 		id := m.wa.next
 		m.wa.next++
-		m.wa.ctxs[id] = webaudio.NewContext(argF(a, 0), argB(a, 1), int(argI(a, 2)), int(argI(a, 3)))
-		return map[string]any{"id": id, "dest": m.wa.ctxs[id].Dest.ID}, nil
+		c := webaudio.NewContext(argF(a, 0), argB(a, 1), int(argI(a, 2)), int(argI(a, 3)))
+		m.wa.ctxs[id] = c
+		if !c.Offline { // a real-time context plays through the audio output
+			sk := &waSink{m: m, rate: int(c.SampleRate)}
+			c.Sink = sk.write
+			m.wa.sinks[id] = sk
+		}
+		return map[string]any{"id": id, "dest": c.Dest.ID}, nil
 	}
-	f["waClose"] = func(a []any) (any, error) { delete(m.wa.ctxs, int(argI(a, 0))); return nil, nil }
+	f["waClose"] = func(a []any) (any, error) {
+		id := int(argI(a, 0))
+		delete(m.wa.ctxs, id)
+		if sk := m.wa.sinks[id]; sk != nil {
+			sk.close()
+			delete(m.wa.sinks, id)
+		}
+		return nil, nil
+	}
 	f["waNode"] = func(a []any) (any, error) {
 		c, err := m.waCtx(a)
 		if err != nil {
@@ -404,4 +422,68 @@ func (m *mediaHost) storePCMRaw(ch [][]float32, rate int) map[string]any {
 		cp[i] = append([]float32(nil), ch[i]...)
 	}
 	return m.storePCMData(cp, rate)
+}
+
+// waShutdown releases the audio output of every Web Audio context.
+func (m *mediaHost) waShutdown() {
+	if m.wa == nil {
+		return
+	}
+	for id, sk := range m.wa.sinks {
+		sk.close()
+		delete(m.wa.sinks, id)
+	}
+}
+
+// waSink plays the destination of a real-time AudioContext: the graph renders in wall-clock steps from
+// the page's timer and each quantum is queued on an audioout stream (dropped, not blocked on, when the
+// device falls behind, so the page's JavaScript never waits for the sound card).
+type waSink struct {
+	m       *mediaHost
+	rate    int
+	st      *audioout.Stream
+	started bool
+	buf     []float32
+}
+
+func (k *waSink) write(ch [][]float32) {
+	if len(ch) == 0 || len(ch[0]) == 0 {
+		return
+	}
+	if k.st == nil {
+		var g *audioout.Group
+		if k.m.j.tab != nil {
+			g = k.m.j.tab.audioGroup()
+		}
+		k.st = audioout.Default().Open(k.rate, 2, g)
+	}
+	n := len(ch[0])
+	if cap(k.buf) < n*2 {
+		k.buf = make([]float32, n*2)
+	}
+	b := k.buf[:n*2]
+	l, r := ch[0], ch[0]
+	if len(ch) > 1 {
+		r = ch[1]
+	}
+	for i := 0; i < n; i++ {
+		b[2*i], b[2*i+1] = l[i], r[i]
+	}
+	if k.st.Buffered() > 400*time.Millisecond {
+		return
+	}
+	if _, err := k.st.Write(b); err != nil {
+		return
+	}
+	if !k.started && k.st.Buffered() >= 60*time.Millisecond {
+		k.started = true
+		k.st.Play()
+	}
+}
+
+func (k *waSink) close() {
+	if k.st != nil {
+		k.st.Close()
+		k.st = nil
+	}
 }

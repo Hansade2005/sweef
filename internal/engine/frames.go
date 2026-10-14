@@ -1,28 +1,28 @@
 package engine
 
-// frames.go: <iframe> documents.
+// frames.go: nested browsing contexts (<iframe>).
 //
-// Every <iframe> of a document becomes a frame: a child Tab with its own JavaScript
-// VM, document, styles and layout, created by the parent as soon as the element is
-// seen in the DOM (so a display:none frame still loads, as in a browser). The child
-// is driven by a goroutine of its own (load, event loop, input-driven work), and
-// whenever it has new content it invalidates the parent, which repaints.
+// Every <iframe> of a connected document gets a child Tab of its own: a separate document, origin, script VM and
+// window, hidden from the engine's tab list. The child is a complete Tab (it fetches through the same cookie jar,
+// service worker control and HTTP cache as any navigation, with the Sec-Fetch-* headers of a frame), it runs on
+// its own goroutine like a worker, and its storage is keyed by (origin, top-level site) when it is embedded under
+// another site (partition.go).
 //
-// Painting: layout emits an ordinary render.Bitmap op at the iframe's content box
-// (render.FrameEnv), so everything the display list already does to replaced
-// content applies to frames for free: clipping to the box, border radius,
-// transforms, opacity and filters of ancestors, visibility, z-order. At raster time
-// Env.Bitmap(iframe) asks the frame for its pixels: the child painted at the box
-// size and the parent's device scale, scrolled by the frame's own scroll position,
-// on a transparent canvas (a frame document with no background shows what is behind it).
+// What a frame is not: it is not painted into the parent's page (the embedding box stays empty, as before), and
+// pointer and keyboard input does not reach it. Its DOM can be read (Tab.FrameTabs, Snapshot, Text), it runs
+// scripts, and pages talk to it through window.postMessage and, for same-origin frames, through contentWindow /
+// contentDocument (frame_prelude.js: calls and property access are forwarded to the frame's VM, objects stay
+// there and are referenced through proxies; they are not copies).
 //
-// Input is routed by hit testing through the parent's layout (see frames_input.go).
+// Implemented: src, srcdoc, about:blank (created synchronously, so a script can write into it right after
+// appending the element), data: URLs (opaque origin), sandbox (scripts, same-origin, forms, top-navigation,
+// modals, popups), X-Frame-Options and CSP frame-ancestors, window.parent / top / frames / frameElement /
+// length, postMessage with origin checks and transferred ports, load events, the allow attribute is kept.
 
 import (
 	"fmt"
-	"image"
-	"math"
-	"regexp"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,908 +31,729 @@ import (
 	"golang.org/x/net/html"
 
 	fnet "github.com/sweefbrowser/sweef/internal/net"
-	"github.com/sweefbrowser/sweef/internal/render"
 )
 
 const (
-	defaultFrameW = 300
-	defaultFrameH = 150
-	// lazyMargin: a loading="lazy" frame starts to load when it is within this many CSS px of the viewport.
-	lazyMargin = 1250
-	// frameWaitBudget bounds how long a headless navigation waits for the frames it started.
-	frameWaitBudget = 4 * time.Second
-	maxFrameDepth   = 6
-	maxFramesPerDoc = 64
+	maxFrameDepth   = 6  // nesting limit
+	maxFramesPerDoc = 24 // frames one document may have alive
+	maxFramesPerTop = 64 // frames in one page tree
 )
 
-// frame is the parent's record of one <iframe>.
-type frame struct {
-	parent *Tab
-	node   *html.Node
-	nodeID int64
-	idx    int
-	child  *Tab
-	lazy   bool
+// frameSem bounds the frame documents being fetched and run at once.
+var frameSem = make(chan struct{}, 4)
 
-	mu      sync.Mutex
-	key     string // what the frame was last asked to show (src / srcdoc), to notice attribute changes
-	w, h    int
-	started bool
-	by, bh  float64       // the box of the iframe in the parent's document (set by layout)
-	ready   chan struct{} // closed when the current navigation has loaded (or failed)
-	nav     *frameNav
-	lastGen uint64
-	loadSeq int
+// sandbox flags
+const (
+	sbSandboxed uint32 = 1 << iota
+	sbScripts
+	sbSameOrigin
+	sbForms
+	sbPopups
+	sbTopNav
+	sbTopNavUser
+	sbModals
+	sbDownloads
+	sbStorageAccess
+	sbPopupsEscape
+)
 
-	// cached pixels (guarded by mu)
-	img      *image.RGBA
-	imgGen   uint64
-	imgW     int
-	imgH     int
-	imgDSF   float64
-	imgSY    int
-	imgValid bool
-
-	startCh  chan struct{}
-	stopCh   chan struct{}
-	stopOnce sync.Once
-	wakeCh   chan struct{}
-	exited   chan struct{}
-	stopped  atomic.Bool
-}
-
-type frameNav struct {
-	url  string
-	spec navSpec
-	from *Tab
-}
-
-func (f *frame) poke() {
-	select {
-	case f.wakeCh <- struct{}{}:
-	default:
-	}
-}
-
-func (f *frame) stop() {
-	f.stopOnce.Do(func() {
-		f.stopped.Store(true)
-		close(f.stopCh)
-	})
-}
-
-// sleep waits for d, a poke, or stop; true means "keep running".
-func (f *frame) sleep(d time.Duration) bool {
-	if d <= 0 {
-		d = time.Millisecond
-	}
-	tm := time.NewTimer(d)
-	defer tm.Stop()
-	select {
-	case <-f.stopCh:
-		return false
-	case <-f.wakeCh:
-	case <-tm.C:
-	}
-	return !f.stopped.Load()
-}
-
-// start lets the frame's goroutine begin loading (lazy frames wait for this).
-func (f *frame) start() {
-	f.mu.Lock()
-	if f.started {
-		f.mu.Unlock()
-		return
-	}
-	f.started = true
-	f.mu.Unlock()
-	close(f.startCh)
-}
-
-func (f *frame) isStarted() bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.started
-}
-
-// contentChanged is called when something painted by this document changed (a frame
-// of it repainted, an image arrived): the window must paint again, and so must the
-// document that embeds this one.
-func (t *Tab) contentChanged() {
-	t.win.frameGen.Add(1)
-	if f := t.onUpdate.Load(); f != nil {
-		(*f)()
-	}
-}
-
-// frameOf returns the frame record of an iframe element of the current document.
-func (t *Tab) frameOf(n *html.Node) *frame {
-	t.win.fmu.Lock()
-	defer t.win.fmu.Unlock()
-	return t.win.frames[n]
-}
-
-// HasFrame implements render.FrameEnv: the iframe element has a live frame document.
-func (e *tabEnv) HasFrame(n *html.Node) bool {
-	f := e.t.frameOf(n)
-	return f != nil && f.isStarted()
-}
-
-func (t *Tab) depth() int {
-	d := 0
-	for c := t; c.win.parent != nil; c = c.win.parent {
-		d++
-	}
-	return d
-}
-
-// ---- discovery ------------------------------------------------------------------------
-
-// SyncFrames makes the set of frame children match the <iframe> elements of the
-// current document: new elements get a child tab that starts loading, removed ones
-// are closed, a changed src/srcdoc navigates. It is cheap when the document has not
-// changed since the last call.
-func (t *Tab) SyncFrames() { t.syncFrames(false) }
-
-func (t *Tab) syncFrames(force bool) {
-	if t.closed.Load() {
-		return
-	}
-	t.mu.RLock()
-	d := t.dom
-	t.mu.RUnlock()
-	if d == nil {
-		return
-	}
-	t.win.fmu.Lock()
-	if t.win.frameDoc != d {
-		old := t.win.frames
-		t.win.frames, t.win.frameDoc, t.win.scanGen = nil, d, 0
-		for _, f := range old {
-			t.closeFrameLocked(f)
+func parseSandbox(v string) uint32 {
+	f := sbSandboxed
+	for _, tok := range strings.Fields(strings.ToLower(v)) {
+		switch tok {
+		case "allow-scripts":
+			f |= sbScripts
+		case "allow-same-origin":
+			f |= sbSameOrigin
+		case "allow-forms":
+			f |= sbForms
+		case "allow-popups":
+			f |= sbPopups
+		case "allow-top-navigation":
+			f |= sbTopNav
+		case "allow-top-navigation-by-user-activation":
+			f |= sbTopNavUser
+		case "allow-modals":
+			f |= sbModals
+		case "allow-downloads":
+			f |= sbDownloads
+		case "allow-storage-access-by-user-activation":
+			f |= sbStorageAccess
+		case "allow-popups-to-escape-sandbox":
+			f |= sbPopupsEscape
 		}
 	}
-	gen := d.MutationGen() + 1
-	if !force && gen == t.win.scanGen {
-		t.win.fmu.Unlock()
-		return
-	}
-	// A page that never mentioned an iframe is scanned at most once a second (a safety net for
-	// markup paths that are not watched); one that did is scanned whenever it changed.
-	if !force && !t.win.mayFrames.Load() && len(t.win.frames) == 0 && time.Since(t.win.lastScan) < time.Second {
-		t.win.fmu.Unlock()
-		return
-	}
-	t.win.lastScan = time.Now()
-	t.win.scanGen = gen
-	t.win.fmu.Unlock()
-	// Data Saver: third-party frames become tap-to-load placeholders before anything is fetched for
-	// them. This touches the document, so it runs without the frame lock (layout takes that lock
-	// while it holds the document's).
-	if env := t.ds.env.Load(); env != nil && env.doc == d && t.policy().ClickToLoad3PFrames && env.markFrames() {
-		d.Touch()
-	}
-	t.win.fmu.Lock()
-	var nodes []*html.Node
-	if d.Root != nil {
-		walkNodes(d.Root, func(n *html.Node) {
-			if n.Type == html.ElementNode && n.Data == "iframe" {
-				nodes = append(nodes, n)
-			}
-		})
-	}
-	if len(nodes) == 0 && len(t.win.frames) == 0 {
-		t.win.mayFrames.Store(false)
-	}
-	seen := make(map[*html.Node]bool, len(nodes))
-	created := false
-	for _, n := range nodes {
-		if len(seen) >= maxFramesPerDoc {
-			break
-		}
-		seen[n] = true
-		if attrVal(n, liteMark) != "" { // a Data Saver placeholder: nothing loads until the person asks
-			if f := t.win.frames[n]; f != nil {
-				delete(t.win.frames, n)
-				t.closeFrameLocked(f)
-			}
-			continue
-		}
-		f := t.win.frames[n]
-		key := t.frameKey(d, n)
-		if f != nil {
-			f.mu.Lock()
-			changed := f.key != key
-			f.key = key
-			f.mu.Unlock()
-			if changed {
-				f.navigateTo("", navSpec{}, nil) // reload from the element's current attributes
-			}
-			continue
-		}
-		if t.depth() >= maxFrameDepth || t.closed.Load() {
-			continue
-		}
-		if t.win.frames == nil {
-			t.win.frames = map[*html.Node]*frame{}
-		}
-		t.win.frames[n] = t.newFrameLocked(d, n, key)
-		created = true
-	}
-	for n, f := range t.win.frames {
-		if !seen[n] {
-			delete(t.win.frames, n)
-			t.closeFrameLocked(f)
-		}
-	}
-	t.win.fmu.Unlock()
-	if created {
-		// layout decides whether an iframe paints as a live frame: run it again
-		d.Touch()
-		t.contentChanged()
-	}
-}
-
-// frameKey is what an iframe element asks to show: srcdoc wins over src.
-func (t *Tab) frameKey(d *fnet.Doc, n *html.Node) string {
-	for _, a := range n.Attr {
-		if a.Key == "srcdoc" {
-			return "doc:" + a.Val
-		}
-	}
-	src := strings.TrimSpace(attrVal(n, "src"))
-	if src == "" || strings.HasPrefix(strings.ToLower(src), "javascript:") {
-		return "src:about:blank"
-	}
-	if abs, err := resolveURL(d.BaseURL(), src); err == nil {
-		return "src:" + abs
-	}
-	return "src:" + src
-}
-
-func (t *Tab) newFrameLocked(d *fnet.Doc, n *html.Node, key string) *frame {
-	e := t.eng
-	e.mu.Lock()
-	c := newTab(e, e.newTabID())
-	e.mu.Unlock()
-	c.ctx = t.ctx
-	t.copyEnvironmentTo(c)
-	c.win.parent = t
-	t.win.frameSeq++
-	idx := t.win.frameSeq
-	c.win.frameN = idx
-	c.win.sbx = parseSandbox(attrVal(n, "sandbox"), hasAttrNode(n, "sandbox"), t.win.sbx)
-	c.win.actWindow.Store(t.win.actWindow.Load())
-	c.setWindowName(attrVal(n, "name"))
-	c.netRing = t.netRing // the frame's requests are the page's: the network log, HAR and the app's cookie rules see them
-	c.vpW, c.vpH = defaultFrameW, defaultFrameH
-	if w, ok := cssPx(attrVal(n, "width")); ok {
-		c.vpW = w
-	}
-	if h, ok := cssPx(attrVal(n, "height")); ok {
-		c.vpH = h
-	}
-	c.SetAsyncImages(true)
-	c.SetProgressiveNav(true)
-	f := &frame{
-		parent: t, node: n, nodeID: d.IDOf(n), idx: idx, child: c, key: key,
-		w: c.vpW, h: c.vpH, lazy: strings.EqualFold(attrVal(n, "loading"), "lazy"),
-		ready:   make(chan struct{}),
-		startCh: make(chan struct{}), stopCh: make(chan struct{}),
-		wakeCh: make(chan struct{}, 1), exited: make(chan struct{}),
-	}
-	c.win.fr = f
-	c.SetUpdateHook(t.contentChanged)
-	c.SetWakeHook(f.poke)
-	t.knows(c)
-	c.knows(t)
-	c.knows(t.Top())
-	if !f.lazy {
-		f.started = true
-		close(f.startCh)
-	}
-	go f.run()
 	return f
 }
 
-func hasAttrNode(n *html.Node, k string) bool {
-	for _, a := range n.Attr {
-		if a.Key == k {
+type frameSet struct {
+	mu      sync.Mutex
+	kids    map[int64]*Tab // by <iframe> backend node id
+	pending atomic.Int32   // child documents still loading
+	total   atomic.Int32   // (top-level tab) frames created in this page tree
+	rt      *bgRuntime     // (a frame) its pump
+	blocked atomic.Bool    // (a frame) the document was refused by X-Frame-Options / frame-ancestors
+	opaque  atomic.Bool    // (a frame) the current document has an opaque origin (data: URL, blocked frame)
+}
+
+var winReg sync.Map // window id -> *Tab
+
+func (t *Tab) isFrame() bool { return t.bc != nil && t.bc.isFrame }
+
+// topTab is the top-level tab of the page tree t belongs to (t itself for a top-level tab, nil for a worker).
+func (t *Tab) topTab() *Tab {
+	if t.bc == nil {
+		return t
+	}
+	if t.bc.isFrame {
+		return t.bc.top
+	}
+	return nil
+}
+
+func (t *Tab) framesPending() int {
+	n := int(t.fr.pending.Load())
+	if n == 0 {
+		return 0
+	}
+	return n
+}
+
+// FrameInfo describes one nested browsing context.
+type FrameInfo struct {
+	Name    string
+	URL     string
+	Origin  string // "" = opaque
+	Blocked bool   // refused by X-Frame-Options or CSP frame-ancestors
+	Sandbox bool
+	Ref     string // the prefix of the refs inside the frame in a snapshot: f1, f2, ... (frames_snapshot.go)
+	Tab     *Tab   // the frame's document
+}
+
+// FrameTabs returns the child frames of the tab's document in document order. Each is a Tab that can be
+// evaluated in, read and snapshotted like any other; it is not in the engine's tab list.
+func (t *Tab) FrameTabs() []*Tab {
+	t.fr.mu.Lock()
+	ids := make([]int64, 0, len(t.fr.kids))
+	for id := range t.fr.kids {
+		ids = append(ids, id)
+	}
+	kids := make(map[int64]*Tab, len(ids))
+	for id, k := range t.fr.kids {
+		kids[id] = k
+	}
+	t.fr.mu.Unlock()
+	order := t.frameOrder()
+	var out []*Tab
+	for _, id := range order {
+		if k := kids[id]; k != nil {
+			out = append(out, k)
+			delete(kids, id)
+		}
+	}
+	return out
+}
+
+// Frames describes the child frames in document order.
+func (t *Tab) Frames() []FrameInfo {
+	var out []FrameInfo
+	for i, k := range t.FrameTabs() {
+		if !t.eng.frameReadable(k.URL()) {
+			continue // the embedder does not let this document be read
+		}
+		out = append(out, FrameInfo{Name: k.bc.name, URL: k.URL(), Origin: k.docOrigin(), Blocked: k.fr.blocked.Load(), Sandbox: k.bc.sandbox != 0, Ref: "f" + itoa(i+1), Tab: k})
+	}
+	return out
+}
+
+// WaitFrames waits until the frames of this document (and theirs) have finished loading or the timeout passes.
+func (t *Tab) WaitFrames(d time.Duration) bool {
+	deadline := time.Now().Add(d)
+	for {
+		if !t.framesBusy() {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+func (t *Tab) framesBusy() bool {
+	if t.fr.pending.Load() > 0 {
+		return true
+	}
+	t.fr.mu.Lock()
+	kids := make([]*Tab, 0, len(t.fr.kids))
+	for _, k := range t.fr.kids {
+		kids = append(kids, k)
+	}
+	t.fr.mu.Unlock()
+	for _, k := range kids {
+		if k.framesBusy() {
 			return true
 		}
 	}
 	return false
 }
 
-func cssPx(s string) (int, bool) {
-	s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "px"))
-	if s == "" || strings.ContainsAny(s, "%.") {
-		return 0, false
-	}
-	n := 0
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return 0, false
-		}
-		n = n*10 + int(r-'0')
-		if n > 20000 {
-			return 0, false
-		}
-	}
-	return n, n > 0
+// frameOrder lists the iframe element ids of the document in tree order.
+func (t *Tab) frameOrder() []int64 {
+	var ids []int64
+	_ = t.withDoc(func(d *fnet.Doc) error {
+		ids = d.ElementsBy(0, "tag", "iframe")
+		return nil
+	})
+	return ids
 }
 
-func (t *Tab) closeFrameLocked(f *frame) {
-	f.stop()
-	c := f.child
+// ---- creation -------------------------------------------------------------------------------------
+
+type frameAttrs struct {
+	src, srcdoc, name, allow string
+	hasSrcdoc                bool
+	sandbox                  uint32
+	lite                     bool
+	lazy                     bool // loading="lazy": the frame loads when it comes near the viewport (frames_paint.go)
+}
+
+func (t *Tab) readFrameAttrs(d *fnet.Doc, id int64) (frameAttrs, bool) {
+	n := d.NodeByID(id)
+	if n == nil || n.Type != html.ElementNode || n.Data != "iframe" || !d.IsConnected(id) {
+		return frameAttrs{}, false
+	}
+	var a frameAttrs
+	get := func(k string) (string, bool) { return d.GetAttr(id, k) }
+	a.src, _ = get("src")
+	a.src = strings.TrimSpace(a.src)
+	a.srcdoc, a.hasSrcdoc = get("srcdoc")
+	a.name, _ = get("name")
+	a.allow, _ = get("allow")
+	if sb, ok := get("sandbox"); ok {
+		a.sandbox = parseSandbox(sb)
+	}
+	if v, _ := get(liteMark); v != "" {
+		a.lite = true
+	}
+	if v, _ := get("loading"); strings.EqualFold(strings.TrimSpace(v), "lazy") {
+		a.lazy = true
+	}
+	return a, true
+}
+
+// ensureFrame returns the child tab of the iframe element, creating it (and starting its load) when the element
+// is connected and has none. It returns nil when the element is not a connected iframe, the Data Saver withheld
+// the frame, or a limit was reached.
+func (t *Tab) ensureFrame(elem int64) *Tab {
+	if t.closed.Load() || t.eng.opts.DisableFrames {
+		return nil
+	}
+	t.fr.mu.Lock()
+	if k := t.fr.kids[elem]; k != nil {
+		t.fr.mu.Unlock()
+		var live bool
+		_ = t.withDoc(func(d *fnet.Doc) error { live = d.IsConnected(elem); return nil })
+		if !live { // the element was removed: its frame is going away
+			go t.pruneFrames()
+			return nil
+		}
+		return k
+	}
+	t.fr.mu.Unlock()
+	var attrs frameAttrs
+	var ok bool
+	_ = t.withDoc(func(d *fnet.Doc) error {
+		attrs, ok = t.readFrameAttrs(d, elem)
+		return nil
+	})
+	if !ok || attrs.lite {
+		return nil
+	}
+	if attrs.lazy && t.holdLazy(elem) {
+		return nil
+	}
+	top := t.topTab()
+	if top == nil || t.depth() >= maxFrameDepth || int(top.fr.total.Load()) >= maxFramesPerTop {
+		return nil
+	}
+	t.fr.mu.Lock()
+	if k := t.fr.kids[elem]; k != nil {
+		t.fr.mu.Unlock()
+		return k
+	}
+	if len(t.fr.kids) >= maxFramesPerDoc {
+		t.fr.mu.Unlock()
+		return nil
+	}
+	c := t.newFrameTab(elem, attrs, top)
+	if t.fr.kids == nil {
+		t.fr.kids = map[int64]*Tab{}
+	}
+	t.fr.kids[elem] = c
+	top.fr.total.Add(1)
+	t.fr.mu.Unlock()
+	c.beginFrameLoad(attrs)
+	// layout decides whether an iframe paints as a live frame: run it again now that the frame exists
+	_ = t.withDoc(func(d *fnet.Doc) error { d.Touch(); return nil })
+	t.contentChanged()
+	return c
+}
+
+func (t *Tab) depth() int {
+	n := 0
+	for p := t; p != nil && p.isFrame(); p = p.bc.parent {
+		n++
+	}
+	return n
+}
+
+func (t *Tab) newFrameTab(elem int64, a frameAttrs, top *Tab) *Tab {
+	c := newTab(t.eng, fmt.Sprintf("%s.f%d", t.ID, elem))
+	c.ctx = t.Context()
+	t.copyEnvironmentTo(c) // init scripts (the window's input helper), request interception (tracker blocker), bindings
+	c.consoleRing, c.netRing = t.consoleRing, t.netRing
+	c.SetUpdateHook(t.contentChanged) // images that arrive in the frame repaint the page
+	// emulation settings follow the page the frame is in
+	t.mu.RLock()
+	c.userAgent, c.offline, c.colorScheme, c.extraHdrs = t.userAgent, t.offline, t.colorScheme, t.extraHdrs
+	c.geo, c.permissions, c.mobile, c.dsf = t.geo, t.permissions, t.mobile, t.dsf
+	c.vpW, c.vpH = t.vpW, t.vpH
+	t.mu.RUnlock()
+	c.bc = &browsingCtx{
+		parent: t, top: top, isFrame: true, topSite: top.topLevelSite(),
+		inherit: t.docOrigin(), opaque: a.sandbox != 0 && a.sandbox&sbSameOrigin == 0,
+		elem: elem, name: a.name, sandbox: a.sandbox, allow: a.allow,
+	}
+	if t.bc != nil && t.bc.opaque {
+		c.bc.opaque = true
+	}
+	winReg.Store(c.winID, c)
+	return c
+}
+
+// pickFrameSize applies the iframe's width and height attributes (pixels; the default frame is 300x150) to the
+// child's viewport.
+func (t *Tab) applyFrameSize(d *fnet.Doc, id int64) {
+	px := func(k string, def int) int {
+		v, ok := d.GetAttr(id, k)
+		if !ok {
+			return def
+		}
+		v = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(v), "px"))
+		n := 0
+		for _, ch := range v {
+			if ch < '0' || ch > '9' {
+				return def
+			}
+			n = n*10 + int(ch-'0')
+		}
+		if n <= 0 {
+			return def
+		}
+		return n
+	}
+	t.mu.Lock()
+	t.vpW, t.vpH = px("width", 300), px("height", 150)
+	t.mu.Unlock()
+}
+
+func (c *Tab) beginFrameLoad(a frameAttrs) {
+	p := c.bc.parent
+	_ = p.withDoc(func(d *fnet.Doc) error { c.applyFrameSize(d, c.bc.elem); return nil })
+	blank := !a.hasSrcdoc && (a.src == "" || strings.EqualFold(a.src, "about:blank"))
+	if blank {
+		// created synchronously: the parent's script can use contentWindow / contentDocument at once
+		c.setFrameDocument("<!doctype html><html><head></head><body></body></html>", "about:blank")
+		c.startFramePump()
+		p.frameEvent(c.bc.elem, "load")
+		return
+	}
+	// until the real document is in, the frame has the initial about:blank document of its creator's origin
+	c.setFrameDocument("<!doctype html><html><head></head><body></body></html>", "about:blank")
+	p.fr.pending.Add(1)
 	go func() {
-		<-f.exited
-		c.close()
+		defer p.fr.pending.Add(-1)
+		frameSem <- struct{}{}
+		func() {
+			defer func() { <-frameSem }()
+			if c.closed.Load() {
+				return
+			}
+			switch {
+			case a.hasSrcdoc:
+				c.setFrameDocument(a.srcdoc, "about:srcdoc")
+			default:
+				c.loadFrameURL(a.src)
+			}
+		}()
+		if c.closed.Load() {
+			return
+		}
+		c.startFramePump()
+		p.frameEvent(c.bc.elem, "load")
+		p.contentChanged()
 	}()
 }
 
-// closeFrames stops and closes every frame of the tab (navigation away, tab close).
-func (t *Tab) closeFrames() {
-	t.win.fmu.Lock()
-	old := t.win.frames
-	t.win.frames, t.win.frameDoc, t.win.scanGen = nil, nil, 0
-	t.win.fmu.Unlock()
-	for _, f := range old {
-		t.closeFrameLocked(f)
-	}
-}
-
-func (t *Tab) frameList() []*frame {
-	t.win.fmu.Lock()
-	defer t.win.fmu.Unlock()
-	out := make([]*frame, 0, len(t.win.frames))
-	for _, f := range t.win.frames {
-		out = append(out, f)
-	}
-	// stable order: by creation index
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].idx < out[j-1].idx; j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
-	return out
-}
-
-// findFrameByName finds a frame (at any depth) whose name attribute / window.name matches.
-func (t *Tab) findFrameByName(name string) *frame {
-	for _, f := range t.frameList() {
-		if f.child.WindowName() == name {
-			return f
-		}
-		if g := f.child.findFrameByName(name); g != nil {
-			return g
-		}
-	}
-	return nil
-}
-
-// ---- layout feedback --------------------------------------------------------------------
-
-// updateFrames runs at the end of every layout pass of the parent: it gives each frame
-// the size of its box and starts lazy frames that came near the viewport. It only
-// reads the layout result; frames are created by SyncFrames, never here (the layout
-// lock is held).
-func (e *tabEnv) updateFrames(res *render.Result, vh float64) {
-	t := e.t
-	t.win.fmu.Lock()
-	n := len(t.win.frames)
-	frames := make([]*frame, 0, n)
-	for _, f := range t.win.frames {
-		frames = append(frames, f)
-	}
-	t.win.fmu.Unlock()
-	if n == 0 {
-		return
-	}
-	sy := float64(t.ScrollY())
-	for _, f := range frames {
-		b := res.Boxes[f.node]
-		if b == nil || b.Display == "none" {
-			continue
-		}
-		w, h := int(math.Round(b.Content.W)), int(math.Round(b.Content.H))
-		if w > 0 && h > 0 {
-			f.resize(w, h)
-		}
-		f.mu.Lock()
-		f.by, f.bh = b.Border.Y, b.Border.H
-		f.mu.Unlock()
-		if f.lazy && !f.isStarted() && b.Border.Y < sy+vh+lazyMargin && b.Border.Y+b.Border.H > sy-lazyMargin {
-			f.start()
-		}
-	}
-}
-
-// resize gives the frame document a new viewport.
-func (f *frame) resize(w, h int) {
-	f.mu.Lock()
-	same := f.w == w && f.h == h
-	f.w, f.h = w, h
-	f.mu.Unlock()
-	if same {
-		return
-	}
-	_, _, dsf, mobile, landscape := f.child.Viewport()
-	f.child.SetViewport(w, h, dsf, mobile, landscape)
-	f.child.mu.RLock()
-	d := f.child.dom
-	f.child.mu.RUnlock()
-	if d != nil {
-		d.Touch() // a new viewport size is a new layout
-	}
-	f.poke()
-	f.parent.contentChanged()
-}
-
-// ---- painting --------------------------------------------------------------------------
-
-func (t *Tab) setPaintDSF(d float64) { t.win.paintDSF.Store(math.Float64bits(d)) }
-
-func (t *Tab) lastPaintDSF() float64 {
-	d := math.Float64frombits(t.win.paintDSF.Load())
-	if d <= 0 {
-		return 1
-	}
-	return d
-}
-
-// snapshot returns the frame's current pixels at the parent's scale, repainting the
-// child only when its content, size, scale or scroll position changed.
-func (f *frame) snapshot() image.Image {
-	c := f.child
+func (c *Tab) setFrameDocument(src, finalURL string) {
 	if c.closed.Load() {
-		return nil
+		return
 	}
-	dsf := f.parent.lastPaintDSF()
-	f.mu.Lock()
-	w, h := f.w, f.h
-	f.mu.Unlock()
-	gen := c.Generation()
-	sy := c.frameScrollY(h)
-	f.mu.Lock()
-	if f.imgValid && f.imgGen == gen && f.imgW == w && f.imgH == h && f.imgDSF == dsf && f.imgSY == sy {
-		img := f.img
-		f.mu.Unlock()
-		return img
-	}
-	f.mu.Unlock()
-	img, ok := c.PaintRGBAOpts(PaintOptions{Width: w, Height: h, DSF: dsf, Transparent: true, ScrollY: sy})
-	if !ok || img == nil {
-		return nil
-	}
-	f.mu.Lock()
-	f.img, f.imgGen, f.imgW, f.imgH, f.imgDSF, f.imgSY, f.imgValid = img, gen, w, h, dsf, sy, true
-	f.mu.Unlock()
-	return img
+	c.setIsolation(nil, finalURL)
+	c.setDocument(src, finalURL, false)
 }
 
-// frameScrollY is the frame's scroll offset clamped to its content.
-func (t *Tab) frameScrollY(vh int) int {
-	sy := t.ScrollY()
-	if sy <= 0 {
-		return 0
+// loadFrameURL navigates the frame to src (resolved against the parent's document).
+func (c *Tab) loadFrameURL(src string) {
+	p := c.bc.parent
+	base := p.URL()
+	if d := p.docBase(); d != "" {
+		base = d
 	}
-	if max := t.docHeight() - vh; sy > max {
-		sy = max
+	abs, err := resolveURL(base, src)
+	lower := strings.ToLower(strings.TrimSpace(abs))
+	switch {
+	case err != nil, strings.HasPrefix(lower, "javascript:"), strings.HasPrefix(lower, "vbscript:"), strings.HasPrefix(lower, "blob:"):
+		c.setFrameDocument("<!doctype html><html><head></head><body></body></html>", "about:blank")
+		return
+	case strings.HasPrefix(lower, "data:"):
+		// a data: document has an opaque origin
+		c.fr.opaque.Store(true)
+	case !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "about:"):
+		c.setFrameDocument("<!doctype html><html><head></head><body></body></html>", "about:blank")
+		return
 	}
-	if sy < 0 {
-		sy = 0
+	if err := c.navigate(abs, nil, false); err != nil {
+		c.LogConsole("error", fmt.Sprintf("frame %s failed to load: %v", abs, err))
+		c.setFrameDocument("<!doctype html><html><head></head><body></body></html>", "about:blank")
+		c.fr.opaque.Store(true)
 	}
-	return sy
 }
 
-// docHeight is the height of the laid out document in CSS px.
-func (t *Tab) docHeight() int {
+func (t *Tab) docBase() string {
 	t.mu.RLock()
 	d := t.dom
 	t.mu.RUnlock()
 	if d == nil {
-		return 0
+		return ""
 	}
-	w := d.LayoutWidth()
-	if w <= 0 {
-		w = t.vpW
-	}
-	l := d.Layout(w)
-	if ext, _ := l.Ext.(*renderExt); ext != nil {
-		return int(math.Ceil(ext.res.Height))
-	}
-	return l.Height
+	return d.BaseURL()
 }
 
-// ---- the frame's goroutine -------------------------------------------------------------
-
-func (f *frame) resolveSrc() (src, srcdoc string, hasDoc bool) {
-	f.mu.Lock()
-	key := f.key
-	f.mu.Unlock()
-	switch {
-	case strings.HasPrefix(key, "doc:"):
-		return "", key[4:], true
-	case strings.HasPrefix(key, "src:"):
-		return key[4:], "", false
-	}
-	return "about:blank", "", false
-}
-
-func (f *frame) markReady() {
-	f.mu.Lock()
-	select {
-	case <-f.ready:
-		f.mu.Unlock()
+// startFramePump gives the frame's VM its own goroutine (once the first document is in).
+func (c *Tab) startFramePump() {
+	c.fr.mu.Lock()
+	if c.fr.rt != nil || c.closed.Load() {
+		c.fr.mu.Unlock()
 		return
-	default:
 	}
-	close(f.ready)
-	f.mu.Unlock()
-	// the iframe element's load event
-	if j := f.parent.jsOrNil(); j != nil && !f.stopped.Load() && f.nodeID != 0 {
-		j.dispatch(f.nodeID, "load", map[string]any{"bubbles": false, "cancelable": false})
+	rt := &bgRuntime{tab: c, wakeCh: make(chan struct{}, 1), quit: make(chan struct{}), done: make(chan struct{})}
+	rt.cur = func() *jsVM {
+		if top := c.topTab(); top != nil && top.win.framesPaused.Load() {
+			return nil // a background tab's frames do not run
+		}
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+		return c.js
 	}
-	f.parent.contentChanged()
+	rt.tick = c.frameTick
+	c.fr.rt = rt
+	c.fr.mu.Unlock()
+	wake := func() { rt.nudge() }
+	c.onWake.Store(&wake)
+	rt.start()
 }
 
-// navigateTo asks the frame to load url (empty = what the element's attributes say).
-func (f *frame) navigateTo(abs string, s navSpec, from *Tab) {
-	f.mu.Lock()
-	f.nav = &frameNav{url: abs, spec: s, from: from}
-	f.loadSeq++
-	select {
-	case <-f.ready:
-		f.ready = make(chan struct{})
-	default:
+// ---- teardown ---------------------------------------------------------------------------------------
+
+// closeFrames closes every child frame (the document is going away).
+func (t *Tab) closeFrames() {
+	t.fr.mu.Lock()
+	kids := t.fr.kids
+	t.fr.kids = nil
+	t.fr.mu.Unlock()
+	if len(kids) == 0 {
+		return
 	}
-	f.mu.Unlock()
-	f.poke()
+	if top := t.topTab(); top != nil {
+		top.fr.total.Add(-int32(len(kids)))
+	}
+	for _, k := range kids {
+		k.closeFrameTab()
+	}
 }
 
-// loadInitial / loadNav perform a navigation of the child.
-func (f *frame) doLoad(nv *frameNav) {
-	c := f.child
-	var url string
-	var srcdoc string
-	hasDoc := false
-	if nv != nil && nv.url != "" {
-		url = nv.url
+func (c *Tab) closeFrameTab() {
+	c.fr.mu.Lock()
+	rt := c.fr.rt
+	c.fr.rt = nil
+	c.fr.mu.Unlock()
+	if rt != nil {
+		rt.stopped.Store(true)
+		close(rt.quit)
+		rt.nudge()
+		if rt.started.Load() {
+			<-rt.done
+		}
+	}
+	c.close()
+	winReg.Delete(c.winID)
+}
+
+// pruneFrames closes the children whose element left the document.
+func (t *Tab) pruneFrames() {
+	t.fr.mu.Lock()
+	if len(t.fr.kids) == 0 {
+		t.fr.mu.Unlock()
+		return
+	}
+	ids := make([]int64, 0, len(t.fr.kids))
+	for id := range t.fr.kids {
+		ids = append(ids, id)
+	}
+	t.fr.mu.Unlock()
+	var gone []int64
+	_ = t.withDoc(func(d *fnet.Doc) error {
+		for _, id := range ids {
+			if !d.IsConnected(id) {
+				gone = append(gone, id)
+			}
+		}
+		return nil
+	})
+	for _, id := range gone {
+		t.fr.mu.Lock()
+		k := t.fr.kids[id]
+		delete(t.fr.kids, id)
+		t.fr.mu.Unlock()
+		if k != nil {
+			if top := t.topTab(); top != nil {
+				top.fr.total.Add(-1)
+			}
+			go k.closeFrameTab()
+		}
+	}
+}
+
+// scanFrames creates the frames of every connected iframe element (called when a document has been parsed and
+// after DOM changes that may have inserted some).
+func (t *Tab) scanFrames() {
+	if t.eng.opts.DisableFrames || t.closed.Load() {
+		return
+	}
+	for _, id := range t.frameOrder() {
+		t.ensureFrame(id)
+	}
+}
+
+// frameInserted is called when a subtree was inserted: iframe elements in it get their frame.
+func (t *Tab) frameInserted(d *fnet.Doc, id int64) {
+	if t.eng.opts.DisableFrames {
+		return
+	}
+	var ids []int64
+	if d.TagName(id) == "iframe" {
+		ids = append(ids, id)
 	} else {
-		url, srcdoc, hasDoc = f.resolveSrc()
+		ids = append(ids, d.ElementsBy(id, "tag", "iframe")...)
 	}
-	hdrs := map[string]string(nil)
-	if nv != nil && nv.spec.noReferrer {
-		hdrs = map[string]string{"Referer": ""}
-	}
-	if !hasDoc && url != "" && !navSchemeAllowed(f.parent.URL(), url) {
-		c.LogConsole("error", "Not allowed to load "+url+" in a frame of "+f.parent.URL())
-		url = "about:blank"
-	}
-	switch {
-	case nv != nil && nv.spec.post != nil:
-		_ = nv.spec.post(c)
-	case hasDoc:
-		c.SetDocument(srcdoc, "about:srcdoc")
-	case url == "" || url == "about:blank":
-		c.SetDocument("<!doctype html><html><head></head><body></body></html>", "about:blank")
-	default:
-		_ = c.NavigateProgressive(url, hdrs)
+	for _, f := range ids {
+		if d.IsConnected(f) {
+			// the load is started outside the DOM call that is inserting the element
+			t.ensureFrameDeferred(f)
+		}
 	}
 }
 
-func (f *frame) run() {
-	defer close(f.exited)
-	select {
-	case <-f.startCh:
-	case <-f.stopCh:
+// ensureFrameDeferred creates the frame for an element that was just inserted. A blank frame is created at once
+// (the caller may be about to write into it); one with a source is started in the background.
+func (t *Tab) ensureFrameDeferred(elem int64) {
+	var ok bool
+	_ = t.withDoc(func(d *fnet.Doc) error { _, ok = t.readFrameAttrs(d, elem); return nil })
+	if !ok {
 		return
 	}
-	c := f.child
-	loading := true
-	var nv *frameNav
-	first := true
-	for !f.stopped.Load() {
-		if f.parent.win.framesPaused.Load() && !first {
-			if !f.sleep(100 * time.Millisecond) {
-				return
-			}
-			continue
-		}
-		f.mu.Lock()
-		if f.nav != nil {
-			nv, f.nav = f.nav, nil
-			loading = true
-		}
-		f.mu.Unlock()
-		if first || nv != nil {
-			first = false
-			f.doLoad(nv)
-			nv = nil
-			loading = true
-		}
-		c.runTasks()
-		wait := time.Duration(0)
-		busy := false
-		if loading {
-			more, w := c.LoadStep(6 * time.Millisecond)
-			wait, busy = w, more
-			if !more || c.LoadLoaded() {
-				if !more {
-					loading = false
-				}
-				f.markReady()
-			}
-		}
-		if !busy {
-			if j := c.jsOrNil(); j != nil {
-				now := time.Now()
-				_, fin := j.pumpUntil(now.Add(40*time.Millisecond), now.Add(4*time.Millisecond))
-				if c.LoadPending() {
-					loading = true // page code navigated: the new document is loading
-					f.mu.Lock()
-					select {
-					case <-f.ready:
-						f.ready = make(chan struct{})
-					default:
-					}
-					f.mu.Unlock()
-					wait = 0
-				} else if fin && !j.hasLiveWork() && c.inboxLen() == 0 && !c.hasTasks() {
-					wait = time.Second // idle: only a poke (message, image, scroll, input) wakes it earlier
-				} else {
-					wait = time.Duration(j.wakeMs * float64(time.Millisecond))
-					if wait < 4*time.Millisecond {
-						wait = 4 * time.Millisecond
-					}
-				}
-			} else if !loading {
-				f.markReady()
-				wait = time.Second
-			}
-		}
-		if g := c.Generation(); g != f.lastGen {
-			f.lastGen = g
-			f.parent.contentChanged()
-		}
-		if wait > 0 || !busy {
-			if wait <= 0 {
-				wait = 4 * time.Millisecond
-			}
-			if !f.sleep(wait) {
-				return
-			}
-		}
+	go t.ensureFrame(elem)
+}
+
+// frameMutation reacts to attribute changes of iframe elements: a new src or srcdoc navigates the frame.
+func (t *Tab) frameMutation(m fnet.Mutation) {
+	if m.Op != "set-attr" && m.Op != "remove-attr" {
+		return
 	}
-}
-
-func (t *Tab) jsOrNil() *jsVM {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return t.js
-}
-
-// waitFrames blocks until the frames this tab has started finished their first load
-// (or the budget is spent). Headless navigations use it so a snapshot taken right
-// after Navigate contains the frames' content.
-func (t *Tab) waitFrames(budget time.Duration) {
-	deadline := time.Now().Add(budget)
-	for _, f := range t.frameList() {
-		if !f.isStarted() {
-			continue
-		}
-		f.mu.Lock()
-		ch := f.ready
-		f.mu.Unlock()
-		select {
-		case <-ch:
-		case <-time.After(time.Until(deadline)):
+	key := strings.ToLower(m.Key)
+	if key != "src" && key != "srcdoc" {
+		return
+	}
+	t.fr.mu.Lock()
+	k := t.fr.kids[m.BackendID]
+	t.fr.mu.Unlock()
+	if k == nil {
+		return
+	}
+	go func() {
+		var a frameAttrs
+		var ok bool
+		_ = t.withDoc(func(d *fnet.Doc) error { a, ok = t.readFrameAttrs(d, m.BackendID); return nil })
+		if !ok || k.closed.Load() {
 			return
 		}
-		f.child.waitFrames(time.Until(deadline))
+		t.fr.pending.Add(1)
+		defer t.fr.pending.Add(-1)
+		frameSem <- struct{}{}
+		func() {
+			defer func() { <-frameSem }()
+			if a.hasSrcdoc {
+				k.setFrameDocument(a.srcdoc, "about:srcdoc")
+			} else if a.src == "" || strings.EqualFold(a.src, "about:blank") {
+				k.setFrameDocument("<!doctype html><html><head></head><body></body></html>", "about:blank")
+			} else {
+				k.fr.blocked.Store(false)
+				k.loadFrameURL(a.src)
+			}
+		}()
+		t.frameEvent(m.BackendID, "load")
+		t.contentChanged()
+	}()
+}
+
+// ---- events to the embedding document -----------------------------------------------------------------
+
+func (t *Tab) frameEvent(elem int64, typ string) {
+	t.mu.RLock()
+	j := t.js
+	t.mu.RUnlock()
+	if j == nil {
+		return
 	}
+	pushFrame(j, map[string]any{"t": typ, "elem": elem})
 }
 
-// ---- public frame API ------------------------------------------------------------------
+// ---- response checks ------------------------------------------------------------------------------------
 
-// FrameInfo describes one frame of a document.
-type FrameInfo struct {
-	Ref     string `json:"ref"`  // prefix of the refs inside it in a snapshot: f1, f2, ...
-	Name    string `json:"name"` // the iframe's name
-	URL     string `json:"url"`
-	Origin  string `json:"origin"`
-	Sandbox bool   `json:"sandbox,omitempty"`
-	Tab     *Tab   `json:"-"`
-}
-
-// Frames lists the frames of the current document (direct children only).
-func (t *Tab) Frames() []FrameInfo {
-	var out []FrameInfo
-	for _, f := range t.frameList() {
-		if !t.eng.frameReadable(f.child.URL()) {
-			continue
+// ancestorOrigins lists the origins of the frame's ancestors, nearest first.
+func (c *Tab) ancestorOrigins() []string {
+	var out []string
+	for p := c.bc.parent; p != nil; {
+		o := p.docOrigin()
+		if o == "" {
+			o = "null"
 		}
-		out = append(out, FrameInfo{Ref: "f" + itoa(f.idx), Name: f.child.WindowName(), URL: f.child.URL(),
-			Origin: f.child.origin(), Sandbox: f.child.Sandboxed(), Tab: f.child})
+		out = append(out, o)
+		if p.isFrame() {
+			p = p.bc.parent
+		} else {
+			break
+		}
 	}
 	return out
 }
 
-// FrameByRef resolves "f1" or "f1f2" to the nested frame tab.
-func (t *Tab) FrameByRef(ref string) (*Tab, bool) {
-	cur := t
-	for ref != "" {
-		if ref[0] != 'f' {
-			return nil, false
-		}
-		i := 1
-		n := 0
-		for i < len(ref) && ref[i] >= '0' && ref[i] <= '9' {
-			n = n*10 + int(ref[i]-'0')
-			i++
-		}
-		if i == 1 {
-			return nil, false
-		}
-		var next *Tab
-		for _, f := range cur.frameList() {
-			if f.idx == n {
-				next = f.child
+// frameAncestorsBlocked applies X-Frame-Options and the frame-ancestors directive of Content-Security-Policy
+// to a frame document. docURL is the URL of the response.
+func (c *Tab) frameAncestorsBlocked(h http.Header, docURL string) (bool, string) {
+	anc := c.ancestorOrigins()
+	self := siteOriginOf(docURL)
+	// Content-Security-Policy: frame-ancestors wins over X-Frame-Options when present
+	csp := false
+	for _, v := range h.Values("Content-Security-Policy") {
+		for _, dir := range strings.Split(v, ",") { // several policies may be folded into one header
+			for _, part := range strings.Split(dir, ";") {
+				f := strings.Fields(strings.TrimSpace(part))
+				if len(f) == 0 || !strings.EqualFold(f[0], "frame-ancestors") {
+					continue
+				}
+				csp = true
+				if !frameAncestorsAllow(f[1:], anc, self) {
+					return true, "Content-Security-Policy: frame-ancestors " + strings.Join(f[1:], " ")
+				}
 			}
 		}
-		if next == nil || !t.eng.frameReadable(next.URL()) {
-			return nil, false
-		}
-		cur, ref = next, ref[i:]
 	}
-	return cur, cur != t
-}
-
-// splitFrameRef splits a frame-qualified selector "f1e5" / "f1f2e5" / "ref=f1e5" into
-// the frame path and the selector inside it ("e5").
-func splitFrameRef(sel string) (path, inner string, ok bool) {
-	s := strings.TrimSpace(sel)
-	s = strings.TrimPrefix(s, "ref=")
-	i := 0
-	for i < len(s) && s[i] == 'f' {
-		j := i + 1
-		for j < len(s) && s[j] >= '0' && s[j] <= '9' {
-			j++
-		}
-		if j == i+1 {
-			return "", "", false
-		}
-		i = j
+	if csp {
+		return false, ""
 	}
-	if i == 0 || i >= len(s) || s[i] != 'e' || i+1 >= len(s) || s[i+1] < '0' || s[i+1] > '9' {
-		return "", "", false
-	}
-	for k := i + 1; k < len(s); k++ {
-		if s[k] < '0' || s[k] > '9' {
-			return "", "", false
-		}
-	}
-	return s[:i], s[i:], true
-}
-
-// routeFrameSel resolves a frame-qualified ref to the tab that owns it.
-func (t *Tab) routeFrameSel(sel string) (*Tab, string, bool) {
-	path, inner, ok := splitFrameRef(sel)
-	if !ok {
-		return nil, "", false
-	}
-	c, ok := t.FrameByRef(path)
-	if !ok {
-		return nil, "", false
-	}
-	return c, inner, true
-}
-
-// SetFramesPaused pauses (true) or resumes the frames' event loops: a background tab
-// should not run its embedded players.
-func (t *Tab) SetFramesPaused(p bool) {
-	t.win.framesPaused.Store(p)
-	for _, f := range t.frameList() {
-		f.child.SetFramesPaused(p)
-		if !p {
-			f.poke()
-		}
-	}
-}
-
-// snapshotFrames returns, for the iframe element n, the child's accessibility tree
-// with every ref qualified by the frame's prefix.
-func (t *Tab) snapshotFrame(n *html.Node, o fnet.SnapshotOptions) (string, []string) {
-	f := t.frameOf(n)
-	if f == nil {
-		return "", nil
-	}
-	if f.lazy && !f.isStarted() {
-		f.start()
-	}
-	f.mu.Lock()
-	ch := f.ready
-	f.mu.Unlock()
-	select {
-	case <-ch:
-	case <-time.After(2 * time.Second):
-	}
-	if !t.eng.frameReadable(f.child.URL()) {
-		return "", nil // the embedder does not let this document be read
-	}
-	o.Selector = ""
-	c := f.child
-	c.syncFrames(false)
-	o.Frame = func(m *html.Node) (string, []string) { return c.snapshotFrame(m, o) }
-	c.mu.RLock()
-	d := c.dom
-	c.mu.RUnlock()
-	if d == nil {
-		return "", nil
-	}
-	y, err := d.AriaSnapshotV2(o)
-	if err != nil || strings.HasPrefix(y, "- text: (no interactive elements") || strings.HasPrefix(y, "- text: (page has no visible content") {
-		return "", nil
-	}
-	prefix := "f" + itoa(f.idx)
-	lines := strings.Split(strings.TrimRight(y, "\n"), "\n")
-	for i, ln := range lines {
-		lines[i] = qualifyRefs(ln, prefix)
-	}
-	return prefix, lines
-}
-
-var (
-	refAttrRE   = regexp.MustCompile(`ref=((?:f\d+)*e\d+)\]`)
-	frameAttrRE = regexp.MustCompile(`frame=((?:f\d+)+)\]`)
-)
-
-// qualifyRefs rewrites "[ref=e5]" to "[ref=f1e5]" (and "f2e5" to "f1f2e5", "[frame=f2]" to
-// "[frame=f1f2]") in a snapshot line.
-func qualifyRefs(line, prefix string) string {
-	line = refAttrRE.ReplaceAllString(line, "ref="+prefix+"$1]")
-	return frameAttrRE.ReplaceAllString(line, "frame="+prefix+"$1]")
-}
-
-// noteMarkup remembers that script inserted markup that contains an iframe.
-func (t *Tab) noteMarkup(markup string) {
-	if containsFold(markup, "<iframe") {
-		t.win.mayFrames.Store(true)
-	}
-}
-
-// containsFold reports whether s contains the lower-case ASCII substring sub, ignoring case.
-func containsFold(s, sub string) bool {
-	n := len(sub)
-	for i := 0; i+n <= len(s); i++ {
-		if s[i] != sub[0] && s[i] != sub[0]-32 {
-			continue
-		}
-		ok := true
-		for j := 1; j < n; j++ {
-			c := s[i+j]
-			if c >= 'A' && c <= 'Z' {
-				c += 32
+	if xfo := strings.ToLower(strings.TrimSpace(strings.Split(h.Get("X-Frame-Options"), ",")[0])); xfo != "" {
+		switch xfo {
+		case "deny":
+			return true, "X-Frame-Options: deny"
+		case "sameorigin":
+			for _, o := range anc {
+				if o != self {
+					return true, "X-Frame-Options: sameorigin"
+				}
 			}
-			if c != sub[j] {
-				ok = false
+		}
+	}
+	return false, ""
+}
+
+func frameAncestorsAllow(sources []string, ancestors []string, self string) bool {
+	if len(sources) == 0 {
+		return true
+	}
+	for _, s := range sources {
+		if strings.EqualFold(s, "'none'") {
+			return false
+		}
+	}
+	// every ancestor must match some source
+	for _, a := range ancestors {
+		ok := false
+		for _, s := range sources {
+			if cspSourceMatches(s, a, self) {
+				ok = true
 				break
 			}
 		}
-		if ok {
-			return true
+		if !ok {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
-// frameRefUnresolved is the error for a frame-qualified ref ("f1e5") that names no readable
-// frame: it is never a CSS selector, so the action fails at once instead of waiting for an
-// element that cannot appear.
-func frameRefUnresolved(sel string) error {
-	if _, _, ok := splitFrameRef(sel); ok {
-		return fmt.Errorf("ref %s names a frame that is not on this page (or may not be read); take a new snapshot", strings.TrimSpace(sel))
+func cspSourceMatches(src, origin, self string) bool {
+	src = strings.TrimSpace(src)
+	switch {
+	case src == "*":
+		return strings.HasPrefix(origin, "http://") || strings.HasPrefix(origin, "https://")
+	case strings.EqualFold(src, "'self'"):
+		return origin == self
+	case strings.HasSuffix(src, ":") && !strings.Contains(src, "/"):
+		return strings.HasPrefix(origin, strings.ToLower(src)) // a scheme source: https:
 	}
-	return nil
+	ou, err := url.Parse(origin)
+	if err != nil || ou.Host == "" {
+		return false
+	}
+	spec := src
+	scheme := ""
+	if i := strings.Index(spec, "://"); i >= 0 {
+		scheme, spec = strings.ToLower(spec[:i]), spec[i+3:]
+	}
+	spec = strings.TrimSuffix(spec, "/")
+	if i := strings.Index(spec, "/"); i >= 0 {
+		spec = spec[:i]
+	}
+	host, port := spec, ""
+	if i := strings.LastIndex(spec, ":"); i >= 0 && !strings.Contains(spec[i:], "]") {
+		host, port = spec[:i], spec[i+1:]
+	}
+	if scheme != "" && scheme != ou.Scheme {
+		return false
+	}
+	if port != "" && port != "*" && port != ou.Port() {
+		return false
+	}
+	if scheme == "" && ou.Scheme != "http" && ou.Scheme != "https" {
+		return false
+	}
+	h := strings.ToLower(ou.Hostname())
+	host = strings.ToLower(host)
+	if strings.HasPrefix(host, "*.") {
+		return strings.HasSuffix(h, host[1:])
+	}
+	return h == host
 }

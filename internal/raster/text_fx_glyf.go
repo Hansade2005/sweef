@@ -36,6 +36,12 @@ var (
 func faceBytes(f *font.Face) []byte { return f.Data() }
 
 func glyfFor(f *font.Face) *glyfFont {
+	if f.Varied() {
+		// The raw glyf table holds the default instance only; a variable font drawn at another
+		// weight or optical size must use the font's own outlines, which apply the gvar deltas.
+		// Without this every variable web font painted at its default weight (Fraunces: Black).
+		return nil
+	}
 	gfMu.Lock()
 	defer gfMu.Unlock()
 	if g, ok := gfCache[f]; ok {

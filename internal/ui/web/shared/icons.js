@@ -14,6 +14,8 @@
     menu: P("M4.5 7h15M4.5 12h15M4.5 17h15"),
     download: P("M12 4.5v10M7.5 10.5l4.5 4.5 4.5-4.5M5 19.5h14"),
     search: '<circle cx="11" cy="11" r="6.2"/>' + P("M20 20l-4.4-4.4"),
+    bell: P("M6.500 16.500V11a5.500 5.500 0 0 1 11 0v5.500l1.500 1.500h-14z") + P("M10 20.500a2.200 2.200 0 0 0 4 0"),
+    belloff: P("M6.500 16.500V11a5.500 5.500 0 0 1 11 0v5.500l1.500 1.500h-14z") + P("M10 20.500a2.200 2.200 0 0 0 4 0M4 4l16 16"),
     eye: P("M2.8 12S6 5.8 12 5.8 21.2 12 21.2 12 18 18.2 12 18.2 2.8 12 2.8 12z") + '<circle cx="12" cy="12" r="2.8"/>',
     eyeoff: P("M4 4l16 16M9.9 6a8.700 8.700 0 0 1 2.100-.2c6 0 9.200 6.200 9.200 6.200a15 15 0 0 1-2.900 3.700M6.500 7.800A15 15 0 0 0 2.800 12S6 18.200 12 18.200a8.600 8.600 0 0 0 3.500-.7M10 10.100a2.800 2.800 0 0 0 3.900 3.900"),
     spark: P("M12 3.500l1.900 5.100 5.100 1.900-5.100 1.900L12 17.500l-1.900-5.100L5 10.500l5.100-1.900z") + P("M18.500 16.500l.7 1.800 1.800.7-1.800.7-.7 1.800-.7-1.800-1.800-.7 1.800-.7z"),
@@ -50,16 +52,19 @@
     key: '<circle cx="8" cy="15" r="3.500"/>' + P("M10.500 12.500L19 4M16 7l2.500 2.500M14 9l2 2"), flag: P("M6 20V4.500M6 5h11l-2 4 2 4H6")
   };
   var cache = {};
+  // px returns a finite positive number for markup sizes (never the caller's string).
+  function px(v, d) { v = +v; return isFinite(v) && v > 0 ? Math.min(v, 4096) : d; }
   function icon(name, size, cls) {
     var s = document.createElement("span");
     s.className = "ic" + (cls ? " " + cls : "");
-    var n = size || 18;
-    s.innerHTML = '<svg width="' + n + '" height="' + n + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[name] || "") + "</svg>";
+    var n = px(size, 18); // numbers only: these strings become markup
+    s.innerHTML = '<svg width="' + n + '" height="' + n + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (Object.prototype.hasOwnProperty.call(I, name) ? I[name] : "") + "</svg>";
     return s;
   }
   /* Logo mark: an "S" built from two speed streaks, with motion lines trailing behind it. */
   function logoSVG(size, id) {
-    id = id || "lg";
+    size = px(size, 20);
+    id = String(id || "lg").replace(/[^\w-]/g, "");
     return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 32 32" fill="none" aria-hidden="true"><defs><linearGradient id="' + id + '" x1="3" y1="4" x2="29" y2="29" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5B5BFF"/><stop offset=".55" stop-color="#8F8BFF"/><stop offset="1" stop-color="#3DF5C4"/></linearGradient></defs>' +
       '<path d="M25.500 8H15a5 5 0 0 0 0 10h2a5 5 0 0 1 0 10H6.500" stroke="url(#' + id + ')" stroke-width="3.800" stroke-linecap="round" stroke-linejoin="round"/>' +
       '<path d="M3 8h6.500M5.500 13h2.500" stroke="url(#' + id + ')" stroke-width="2.200" stroke-linecap="round" opacity=".55"/><path d="M29 28h-2.500" stroke="url(#' + id + ')" stroke-width="2.200" stroke-linecap="round" opacity=".55"/></svg>';
@@ -73,7 +78,7 @@
   }
   /* Progress ring: pct 0..100, drawn in currentColor so the wrapper's colour is the tone. */
   function dataRing(pct, size, sw) {
-    var n = size || 18, w = sw || 4, c = 2 * Math.PI * 14, f = Math.max(0, Math.min(100, +pct || 0)) / 100, s = document.createElement("span");
+    var n = px(size, 18), w = px(sw, 4), c = 2 * Math.PI * 14, f = Math.max(0, Math.min(100, +pct || 0)) / 100, s = document.createElement("span");
     s.className = "dring";
     s.innerHTML = '<svg width="' + n + '" height="' + n + '" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-opacity=".2" stroke-width="' + w + '"/>' +
       (f > 0 ? '<circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="' + w + '" stroke-linecap="round" stroke-dasharray="' + (c * f).toFixed(1) + " " + c.toFixed(1) + '" transform="rotate(-90 16 16)"/>' : "") + "</svg>";

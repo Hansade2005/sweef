@@ -9,6 +9,7 @@ import (
 func TestMain(m *testing.M) {
 	dir, _ := os.MkdirTemp("", "sweef-test-cache-")
 	os.Setenv("SWEEF_CACHE_DIR", dir)
+	os.Setenv("SWEEF_AUDIO", "null") // no sound card in tests; media tests install a recording sink
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

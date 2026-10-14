@@ -437,7 +437,7 @@ func (t *Tab) LoadSkipped(nodeID int64) error {
 		env.lz.mu.Unlock()
 		env.doc.RemoveAttrQuiet(n, liteMark)
 		env.doc.Touch()
-		t.syncFrames(true) // the frame loads now
+		go t.ensureFrame(nodeID) // the frame loads now
 		return nil
 	case "img":
 		u := imgURL(env.doc.BaseURL(), n)
