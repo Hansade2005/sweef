@@ -162,6 +162,9 @@ func Render(e *engine.Engine, base string, sc Scenario, scale float64) (*Result,
 	if err != nil {
 		return nil, err
 	}
+	// the result is the screenshot, the errors and the posts: the tab (and its script VM, of which the QuickJS
+	// function table has a fixed number of slots) is not needed after it
+	defer func() { _ = e.CloseTab(s.Tab.ID) }()
 	if sc.Setup != "" {
 		s.Run(sc.Setup)
 		s.Settle()

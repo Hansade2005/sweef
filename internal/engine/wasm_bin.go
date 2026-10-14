@@ -63,6 +63,8 @@ type wInfo struct {
 	nImpGlobal  int
 	customs     []wCustom
 	hasMemory64 bool
+	// definesShared: the module's own memory section declares a shared memory (threads proposal)
+	definesShared bool
 }
 
 type wReader struct {
@@ -117,8 +119,8 @@ func (r *wReader) name() string {
 	return string(r.bytes(n))
 }
 
-// limits reads a limits descriptor and returns its raw bytes (flags included).
-func (r *wReader) limits(info *wInfo) {
+// limits reads a limits descriptor and returns its flag byte (bit 0: has maximum, bit 1: shared, bit 2: memory64).
+func (r *wReader) limits(info *wInfo) byte {
 	flag := r.byte()
 	if flag&4 != 0 {
 		info.hasMemory64 = true
@@ -127,6 +129,7 @@ func (r *wReader) limits(info *wInfo) {
 	if flag&1 != 0 {
 		r.u32()
 	}
+	return flag
 }
 
 func parseWasm(b []byte) (*wInfo, error) {
@@ -224,7 +227,9 @@ func parseWasm(b []byte) (*wInfo, error) {
 		case 5:
 			n := int(s.u32())
 			for i := 0; i < n && s.err == nil; i++ {
-				s.limits(info)
+				if s.limits(info)&2 != 0 {
+					info.definesShared = true
+				}
 			}
 		case 7:
 			n := int(s.u32())
@@ -333,6 +338,16 @@ func wlimits(min uint32, max int64) []byte {
 func asmMemory(min uint32, max int64) []byte {
 	b := append([]byte(nil), wasmHeader...)
 	b = append(b, wsection(5, wvec([][]byte{wlimits(min, max)}))...)
+	b = append(b, wsection(7, wvec([][]byte{append(wname("m"), wkMemory, 0)}))...)
+	return b
+}
+
+// asmSharedMemory is a module exporting one shared memory (threads proposal) as "m".
+func asmSharedMemory(min uint32, max uint32) []byte {
+	b := append([]byte(nil), wasmHeader...)
+	lim := append([]byte{3}, uleb(uint64(min))...)
+	lim = append(lim, uleb(uint64(max))...)
+	b = append(b, wsection(5, wvec([][]byte{lim}))...)
 	b = append(b, wsection(7, wvec([][]byte{append(wname("m"), wkMemory, 0)}))...)
 	return b
 }

@@ -171,6 +171,13 @@ func (e *tabEnv) Bitmap(n *html.Node) image.Image {
 	if s := e.source(n); s != nil {
 		return s.Bitmap()
 	}
+	if n != nil && n.Data == "iframe" {
+		if k := e.t.frameKid(e.doc.IDOf(n)); k != nil {
+			if im := k.framePixels(); im != nil {
+				return im
+			}
+		}
+	}
 	return nil
 }
 
@@ -374,6 +381,7 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 				break
 			}
 		}
+		env.updateFrames(res, float64(vh))
 		return layoutFromRender(res, env)
 	})
 }
@@ -469,6 +477,7 @@ func (t *Tab) paintPage(width, height int, dsf float64, full bool) (*image.RGBA,
 		}
 		list = kept
 	}
+	t.setPaintDSF(dsf)
 	return raster.Paint(list, width, height, dsf, raster.PaintEnv{
 		Bitmap:     ext.env.Bitmap,
 		Background: raster.Color{R: 1, G: 1, B: 1, A: 1},

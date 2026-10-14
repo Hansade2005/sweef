@@ -156,7 +156,7 @@ function sh(o) {
 function viewBytes(buffer, what) {
   if (buffer instanceof ArrayBuffer) return new Uint8Array(buffer);
   if (ArrayBuffer.isView(buffer)) return new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-  if (typeof SharedArrayBuffer === 'function' && buffer instanceof SharedArrayBuffer) return new Uint8Array(buffer);
+  if (g.__swSAB && buffer instanceof g.__swSAB) return new Uint8Array(buffer);
   throw new TypeError("Failed to execute '" + what + "' on 'FileSystemSyncAccessHandle': The provided value is not of type '(ArrayBuffer or ArrayBufferView)'.");
 }
 function atOf(options, what) {

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	neturl "net/url"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -47,7 +48,7 @@ func (e *httpEnv) Image(u string) image.Image {
 				data = []byte(s)
 			}
 		}
-	} else if strings.HasPrefix(u, "http") {
+	} else if loopbackRE.MatchString(u) {
 		if resp, err := http.Get(u); err == nil {
 			data, _ = io.ReadAll(resp.Body)
 			resp.Body.Close()
@@ -82,7 +83,14 @@ func (e *httpEnv) Bitmap(*html.Node) image.Image                    { return nil
 func (e *httpEnv) IntrinsicSize(*html.Node) (w, h float64, ok bool) { return 0, 0, false }
 func (e *httpEnv) Focused() *html.Node                              { return nil }
 
+// loopbackRE accepts only http(s) URLs on the local fixture server: the tool renders local test pages and must
+// not be turned into a fetcher of arbitrary hosts by page content.
+var loopbackRE = regexp.MustCompile(`^https?://(127\.0\.0\.1|localhost|\[::1\])(:[0-9]+)?(/|$)`)
+
 func fetch(u string) (string, error) {
+	if !loopbackRE.MatchString(u) {
+		return "", fmt.Errorf("fidelity: refusing non-loopback URL %q", u)
+	}
 	resp, err := http.Get(u)
 	if err != nil {
 		return "", err

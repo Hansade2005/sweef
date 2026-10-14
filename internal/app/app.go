@@ -260,6 +260,9 @@ func New(cfg Config) (*App, error) {
 		a.eng = engine.New(o)
 		a.ownE = true
 	}
+	a.eng.SetPopupHandler(a.onEnginePopup)
+	a.eng.SetWindowCloseHandler(a.onEngineWindowClose)
+	a.eng.SetWindowFocusHandler(a.onEngineWindowFocus)
 	// navigator.storage.persist(): bookmarked sites and sites the person agrees to; everyone else is refused
 	a.eng.DefaultContext().SiteStorage().SetPersistPolicy(a.storagePersistPolicy)
 	a.initDataSaver()

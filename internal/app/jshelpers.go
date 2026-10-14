@@ -40,7 +40,9 @@ const helperJS = `(function(G){
       var a = closest(el, 'a[href]');
       if (a && !/^\s*javascript:/i.test(a.getAttribute('href')||'')) {
         var bg = init.ctrlKey || init.metaKey || (b|0) === 1;
-        if (bg || a.target === '_blank') return {open: a.href, bg: bg};
+        // target=_blank is a window with no opener (the default of current browsers): open it as a tab here.
+        // Links that keep the opener (rel=opener) and named targets go through the page, which asks the engine.
+        if (bg || (a.target === '_blank' && !/(^|\s)opener(\s|$)/i.test(a.getAttribute('rel') || ''))) return {open: a.href, bg: bg};
       }
       if ((b|0) === 1) return null;
       G.__swMouse('click', x, y, init);
@@ -158,10 +160,6 @@ const helperJS = `(function(G){
     sty.textContent = 'html{overflow-y:hidden !important}';
     (D.head || D.documentElement).appendChild(sty);
   } catch(x){}
-  // popups: window.open becomes "open a tab" (gated in Go by a recent user gesture)
-  if (typeof G.__sweefOpen === 'function') {
-    G.open = function(u){ try { G.__sweefOpen(String(u == null ? 'about:blank' : u)); } catch(x){} return null; };
-  }
   // privileged bridge only for sweef:// documents
   if (G.location && G.location.protocol === 'sweef:' && typeof G.__sweefPost === 'function') {
     var q = [], h = null, s = {sync: true};  // sync: the host settles the page and paints once after every message, and answers omni.input inside the same event turn

@@ -18,12 +18,48 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   longer shared between a private window and the normal one.
 
 ### Added
+- **Iframes render and take input.** Every `<iframe>` is now a child document with its own JavaScript VM, layout and
+  paint, drawn into the parent at the iframe's box (clipped, with the transforms, opacity and radius of its ancestors),
+  scrollable inside its box, repainted when it changes, and loaded lazily for `loading="lazy"`. `srcdoc`, nested frames,
+  `sandbox` (scripts, same-origin, popups, forms, top navigation), `X-Frame-Options` and CSP `frame-ancestors` are
+  supported. Pointer, wheel, keyboard and text input are routed to the frame under the pointer or holding focus, in the
+  desktop browser and through the engine API (`MouseClick`, `Keyboard`, `WheelAt`). Not supported: access to another
+  window's DOM beyond what same-origin proxies forward, process isolation, scrollbars inside frames. See
+  [docs/frames-popups.md](docs/frames-popups.md).
+- **`window.open` and popups.** `window.open` returns a `WindowProxy` (`opener`, `name`, `closed`, `close()`, `focus()`,
+  `postMessage`, `location`, same-origin property access and calls); links and forms honour `target` (`_blank`, `_top`, `_parent`, frame and window
+  names, `rel=opener` / `noopener`); windows open only during a user gesture (5 s in the engine, 2 s in the app, one
+  popup per gesture) and a blocked popup is recorded (`Page.popups`) and shown as a toast; `window.close()` closes windows
+  that script opened; `postMessage` works across frames, the opener and popups with `targetOrigin` and structured clone
+  of common types; `Cross-Origin-Opener-Policy` can sever the opener. In the desktop browser a popup is a tab next to
+  its opener with an accent bar in the tab strip. An OAuth round trip (popup, cross-origin redirect back, `opener.postMessage`,
+  `window.close`) is covered by tests against local servers; real Google or Facebook sign-in was not tried. Not supported:
+  small-window features (size, position).
+- Agent: the snapshot includes the content of frames with frame-qualified refs (`f1e5`), and click, fill, type, press and the
+  other ref actions reach elements inside same-origin and cross-origin frames. The Sidekick reads a frame only when the
+  site of the frame is one the person allowed. `Page.frames` and `Page.popups` RPC methods.
+- Cross-origin isolation, `SharedArrayBuffer` and `Atomics` across the page and its dedicated Workers: `crossOriginIsolated` follows
+  COOP `same-origin` plus COEP `require-corp` / `credentialless`, `SharedArrayBuffer` exists only then, `Atomics.wait` blocks in
+  Workers (and throws on the page), `notify` and `waitAsync` work across VMs. COEP is enforced for cross-origin scripts,
+  stylesheets, images and media, frames and Worker scripts; `credentialless` drops credentials. Not done: shared memory with
+  SharedWorkers or Service Workers, COOP browsing-context-group switching ([docs/web-platform.md](docs/web-platform.md)).
+- WebAssembly threads: shared `WebAssembly.Memory`, atomic instructions and `memory.atomic.wait/notify`, and posting a shared
+  `Memory` or a `Module` to Workers, on cross-origin isolated pages. Verified with hand-assembled modules, not with an
+  emscripten or wasm-bindgen program ([docs/webassembly.md](docs/webassembly.md)).
+- WebCodecs: `VideoDecoder` (VP8, VP9, H.264, HEVC, AV1), `AudioDecoder` (Opus, AAC, MP3, Vorbis, PCM, A-law, mu-law),
+  `VideoEncoder` (VP8 only), `AudioEncoder` (Opus only), `VideoFrame`, `AudioData`, `EncodedVideoChunk`, `EncodedAudioChunk`,
+  `ImageDecoder` and `isConfigSupported`, off the JS thread, with frames drawable to canvas and creatable from canvas,
+  `ImageBitmap` and `<video>`. No H.264/VP9/AV1/AAC encoder and no hardware paths ([docs/webcodecs.md](docs/webcodecs.md)).
+- Encrypted Media Extensions with Clear Key: `requestMediaKeySystemAccess('org.w3.clearkey')`, `MediaKeys`, `MediaKeySession`
+  (temporary sessions), `setMediaKeys`, `encrypted` / `waitingforkey` events, and `cenc`, `cens`, `cbc1` and `cbcs` decryption of
+  fragmented MP4 in the MSE pipeline. Widevine, PlayReady and FairPlay still reject with `NotSupportedError`; no persistent
+  sessions, no encrypted WebM, no encrypted progressive `src` ([docs/media-streaming.md](docs/media-streaming.md)).
 - Dedicated Workers run on a full script VM of their own goroutine: IndexedDB, Cache Storage, `navigator.storage`, the Origin Private
   File System with `FileSystemSyncAccessHandle`, `fetch`, WebAssembly and nested workers work inside them; real
   `SharedWorker`, `BroadcastChannel` and `navigator.locks`; structured clone with transferred `MessagePort`s and `ArrayBuffer`s.
 - `<iframe>` documents are loaded as nested browsing contexts: separate origin, window and VM, `postMessage` with origin checks,
   `parent`/`top`/`frameElement`, same-origin `contentWindow`/`contentDocument`, `sandbox`, `srcdoc`, `X-Frame-Options` and CSP
-  `frame-ancestors`. Frames are not painted or given input yet ([docs/storage-partitioning.md](docs/storage-partitioning.md)).
+  `frame-ancestors` ([docs/storage-partitioning.md](docs/storage-partitioning.md)); painting and input are in the entry above.
 - `BrowserContext.SetPartitionPolicy`, `GrantThirdPartyCookies`, `engine.SetHostMap` (resolver override), `Options.DisableFrames`.
 - Real camera, microphone and tab/window capture for `getUserMedia`, `getDisplayMedia` and `enumerateDevices`: V4L2 cameras and PulseAudio/PipeWire microphones on Linux (pure Go), a permission prompt with per-site choices and in-use indicators, `SWEEF_FAKE_DEVICES=1` test devices and `capdemo`; Windows and macOS backends are included but unverified on hardware (`docs/capture.md`).
 
@@ -61,8 +97,30 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 - Quota management for site storage: a global budget (60% of the profile volume's available space, at most 64 GiB) with at most 20% per origin, exact usage accounting across IndexedDB, Cache Storage, the origin private file system and service worker scripts, `QuotaExceededError` on writes over the cap, eviction of whole least-recently-used best-effort origins under pressure (open connections get `close`), a working `navigator.storage.persist()` decided by the application (bookmarked sites, or a prompt the embedder installs), `estimate()` with real usage and quota, and a per-site storage list with a "Clear" button in Settings > Data. `engine.Options.StorageBudgetMiB`; see docs/storage.md.
 - ADR 0002 (the ordered store, with measurements) and `tools/kvbench`, the harness behind it.
+- `internal/media/cdm`: the key system layer behind Encrypted Media Extensions, one Go interface for every key system
+  (`Registry` with capability negotiation, `Backend`/`Session`, events, `Decrypt`, optional decrypt-and-decode and platform
+  renderer interfaces), with Clear Key implemented in full (cenc, cens, cbc1, cbcs). The JavaScript EME API is not part of
+  this change. Contract and status: [docs/drm.md](docs/drm.md).
+- Widevine host (`com.widevine.alpha`): `cmd/sweef-cdm`, a separate dynamically linked helper process that loads the Widevine
+  CDM the user already has (explicit path or `SWEEF_WIDEVINE_CDM`, else the WidevineCdm directory of an installed Google
+  Chrome, Chromium or Edge) through purego and implements Chromium's CDM host ABI (interface versions 10, 11, 12), and a
+  framed stdin/stdout protocol to the browser, so the Linux browser binary stays static. A VMP signature next to the helper
+  (`sweef-cdm.sig`, as castLabs EVS writes it) is passed to the CDM; no signature is ever fabricated. Sweef does not bundle or
+  download a CDM. **Not tested against a real Widevine library** (none in the build environment): the host is tested against
+  a fake CDM that implements the same binary interface in Go. The desktop CDM is software (L3), typically capped at 720p by
+  services.
+- PlayReady (Windows, Media Foundation) and FairPlay (macOS, AVContentKeySession) backends, **unverified and compile-checked
+  only**, off unless `SWEEF_PLAYREADY=1` / `SWEEF_FAIRPLAY=1`; license exchange only, playback through the platform renderer
+  is not implemented.
+- `scripts/release/build.sh` also builds `sweef-cdm` next to `sweef` (`--skip-cdm-host` to omit); packages do not install it yet.
 
 ### Changed
+- A page that embeds a third-party frame now makes real requests for it, unless the Data Saver's click-to-load frames are on.
+  The README's data-saver comparison with Chromium was measured before frames were loaded and still says Sweef fetches no
+  iframe documents.
+- `Tab.Keyboard` types into the focused element (it dispatched to the document before).
+- `window.open` from page script is no longer "open a tab from the chrome, return null": it goes through the engine
+  (popup blocker, opener link, named windows).
 - The release binary-size budget is 40 MiB (was 32 MiB): WebRTC (pion), WebAssembly (wazero) and the web platform layer add about 12 MiB. The stripped linux/amd64 build is about 34.7 MiB.
 - IndexedDB, Cache Storage and the origin private file system are stored in one disk-resident ordered key-value store per origin (goleveldb) instead of an append-only log replayed into memory: memory no longer depends on database size (a 1 GB database opens in 44 ms and reads at about 30 MB resident), cursors stream, transactions commit as one atomic batch, `clear()` and `deleteDatabase` are O(1), values and cache bodies above 64 KiB are files, and a crash or kill leaves each transaction whole or absent. The origin private file system now persists across restarts and is no longer limited to 256 MiB of memory.
 - `navigator.storage.persist()` no longer always succeeds in a persistent context: it asks the application's policy and answers no without one. `StorageQuotaMiB` is now a cap per origin that overrides the derived one (0 = derived), not a fixed 1 GiB.

@@ -51,7 +51,7 @@ the page URL instead of the module, which answers `404` (a handful of small requ
 
 The `WebAssembly` global exists (`Module`, `Instance`, `Memory`, `Table`, `Global`, `validate`, `compile`, `instantiate`,
 the streaming variants and the three error classes) in pages and Web Workers, running modules as native code through
-wazero. Sites that only need the core API work; sites that need threads/`SharedArrayBuffer`, `WebAssembly.Tag` or
+wazero. Sites that only need the core API work; sites that need `WebAssembly.Tag` or
 `externref` at the JS boundary do not, and a module that crosses into JS tens of thousands of times per frame is slow
-because each crossing costs microseconds. Full list, design and measured costs: [webassembly.md](webassembly.md).
+because each crossing costs microseconds. Threads and `SharedArrayBuffer` work on cross-origin isolated pages (COOP + COEP), see [web-platform.md](web-platform.md). Full list, design and measured costs: [webassembly.md](webassembly.md).
 No real site was run for this entry; the evidence is the hand-assembled modules in `internal/engine/wasm_test.go`.

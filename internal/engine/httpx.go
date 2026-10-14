@@ -129,7 +129,7 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 	start := time.Now()
 	req, mi := withMeter(req, t.Context(), t, kind, t.policy())
 	mi.maxBody = o.maxBody
-	mi.noCreds = o.anonymous
+	mi.noCreds = o.anonymous || t.coepCredentialless(kind, abs) // COEP: credentialless drops credentials of no-CORS cross-origin loads
 	cl := t.eng.clientFor(t.Context())
 	res, err := cl.Do(req)
 	defer func() { t.tspan("http."+string(kind), abs, start) }()
@@ -138,6 +138,10 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 		return nil, fmt.Errorf("TypeError: Failed to fetch (%s)", err.Error())
 	}
 	defer res.Body.Close()
+	if berr := t.coepBlocks(kind, res.Request.URL.String(), res.Header); berr != nil {
+		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": abs, "error": berr.Error()}})
+		return nil, berr
+	}
 	declared := mi.declared.Load()
 	out := &httpResp{status: res.StatusCode, header: res.Header, declared: declared,
 		fromCache: mi.fromCache.Load(), cachedXfer: mi.cachedXfer.Load(), cacheState: mi.cacheState()}

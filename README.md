@@ -161,8 +161,9 @@ reproduce with `scripts/bench/datasaver.sh -runs 3`):
   uses 85% less (83% to 85%).
 * **Repeat visits:** a second visit costs about 13% of the first in Sweef (served from an on-disk HTTP cache) against 22%
   in Chromium.
-* **Read the Chromium column with care.** Sweef does not fetch everything Chromium does (no iframe documents, no
-  prefetch hints), so part of the gap is a simpler page, not a better saver. The honest like-for-like number is the
+* **Read the Chromium column with care.** Sweef did not fetch everything Chromium does when this was measured (no iframe
+  documents, no prefetch hints; iframes load since, see [docs/frames-popups.md](docs/frames-popups.md), and this table
+  was not re-measured), so part of the gap is a simpler page, not a better saver. The honest like-for-like number is the
   saver against our own "off" row. Chromium's Save-Data header saved nothing measurable.
 * **Web fonts were added after this run.** These tables were measured before Sweef could load `@font-face` fonts. A
   separate single-run check on 16 of the sites with fonts on measured about +3% (off), +5% (standard) and +4% (strict)

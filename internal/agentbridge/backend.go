@@ -45,7 +45,11 @@ type Backend struct {
 var _ agent.Backend = (*Backend)(nil)
 
 func newBackend(h *Host, a *app.App) *Backend {
-	return &Backend{h: h, a: a, rpc: agent.NewRPCBackend(a.Engine())}
+	b := &Backend{h: h, a: a, rpc: agent.NewRPCBackend(a.Engine())}
+	// a frame is read (snapshot, refs) only when its own site is one the person allowed, not just the page embedding it;
+	// about:blank / srcdoc / data: frames have no site of their own and follow the page
+	a.Engine().SetFrameReadFilter(func(u string) bool { return !isWeb(u) || b.allowedURL(u) })
+	return b
 }
 
 // ---- tab resolution -------------------------------------------------------------------

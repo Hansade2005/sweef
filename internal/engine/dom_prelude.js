@@ -1191,9 +1191,15 @@
       var href = a.getAttribute('href');
       if (href && !/^\s*javascript:/i.test(href)) {
         if (a.hasAttribute('download')) { startDownload(a.href, a.getAttribute('download') || ''); return; }
-        if (/^#/.test(href.trim())) { global.location.hash = href.trim(); } else sw.navigate(a.href);
+        if (/^#/.test(href.trim())) { global.location.hash = href.trim(); } else navigateLink(a);
       }
     }
+  }
+  // a link with a target other than _self opens in a frame, another window or a new one (host: windows.go)
+  function navigateLink(a) {
+    var tg = a.getAttribute('target');
+    if (tg && !/^\s*_self\s*$/i.test(tg) && typeof sw.frName === 'function') { sw.frName('nav', a.href, tg, a.getAttribute('rel') || ''); return; }
+    sw.navigate(a.href);
   }
   // <a download>: blob: URLs are read here (their bytes live in this VM);
   // everything else is fetched by Go into the downloads directory.
@@ -1965,7 +1971,7 @@
   def(global, 'name', { value: '', writable: true });
   def(global, 'origin', { get: function () { return docOriginStr(); } });
   def(global, 'isSecureContext', { get: function () { var u = currentURL(); return /^(https|sweef):/.test(u) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]|[^/:]*\.localhost)(:|\/|$)/.test(u); } });
-  def(global, 'crossOriginIsolated', { value: false });
+  def(global, 'crossOriginIsolated', { get: function () { return host('coi') ? !!sw.coi() : false; }, enumerable: true });
   function Window() { illegal(); } setTag(Window, 'Window'); global.Window = Window;
   Object.setPrototypeOf(Window.prototype, EventTarget.prototype);
   (function () { // make `window` an EventTarget without changing globalThis's prototype chain surprises
@@ -2543,7 +2549,9 @@
     if (v instanceof Date) return new Date(v.getTime());
     if (v instanceof RegExp) return new RegExp(v.source, v.flags);
     if (v instanceof ArrayBuffer) return v.slice(0);
-    if (ArrayBuffer.isView(v)) return new v.constructor(v);
+    if (v._isVF || v._isAD) return v.clone(); // WebCodecs frames
+    if (global.__swSAB && v instanceof global.__swSAB) return typeof global.__swSabShare === 'function' ? global.__swSabShare(v) : v;
+    if (ArrayBuffer.isView(v)) return v.buffer && global.__swSAB && v.buffer instanceof global.__swSAB ? new v.constructor(clone(v.buffer, seen), v.byteOffset, v instanceof DataView ? v.byteLength : v.length) : new v.constructor(v);
     if (v instanceof Map) { out = new Map(); seen.set(v, out); v.forEach(function (val, k) { out.set(clone(k, seen), clone(val, seen)); }); return out; }
     if (v instanceof Set) { out = new Set(); seen.set(v, out); v.forEach(function (val) { out.add(clone(val, seen)); }); return out; }
     if (v instanceof Error) { out = new (global[v.name] || Error)(v.message); out.stack = v.stack; return out; }
@@ -3174,7 +3182,8 @@
   // keyboard: keydown -> (keypress + beforeinput + value update + input for printable) -> keyup
   var PRINTABLE_INPUT = /^(text|password|email|number|tel|url|search|date|time|datetime-local|month|week|color|hidden)$/;
   function dispatchKey(id, key, mods) {
-    var el = targetOf(id);
+    // no target: the focused element, as for a real key press (the page body when nothing has focus)
+    var el = (id === 0 || id === null || id === undefined) && activeElement && activeElement.isConnected ? activeElement : targetOf(id);
     if (!el) return true;
     key = String(key); mods = mods || {};
     var init = Object.assign({ key: key, code: codeFor(key), bubbles: true, cancelable: true }, mods);

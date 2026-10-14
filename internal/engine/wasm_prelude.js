@@ -3,14 +3,15 @@
  * wasm.go registers the host functions it talks to as globals __swWasm_<name> just before this runs.
  *
  * Everything observable here follows the WebAssembly JS API spec as far as the engine allows. What is
- * deliberately missing (Tag/Exception, shared memory and threads, externref/v128 values, ref-typed tables) is
- * listed in docs/webassembly.md.
+ * deliberately missing (Tag/Exception, externref/v128 values, ref-typed tables, memory64) is listed in
+ * docs/webassembly.md. Threads (shared memories, atomics, posting Modules and Memories to workers) are
+ * wasm_threads.go.
  */
 (function (global) {
   'use strict';
   var NAMES = ['instantiate', 'call', 'errInfo', 'customCount', 'memNew', 'memGrow', 'memPages',
     'tabNew', 'tabLen', 'tabGrow', 'tabSet', 'tabGet', 'globNew', 'globGet', 'globSet', 'compile', 'validate',
-    'memBuf', 'custom', 'setDispatch'];
+    'memBuf', 'custom', 'setDispatch', 'memShare', 'memOpen', 'modShare', 'modOpen'];
   var H = {};
   NAMES.forEach(function (n) {
     H[n] = global['__swWasm_' + n];
@@ -40,7 +41,8 @@
   // Go reports argument-level failures as "<ErrorClass>:<message>".
   function host(fn) {
     try { return fn(); } catch (e) {
-      var m = e && /^(RangeError|TypeError):([\s\S]*)$/.exec(String(e.message));
+      var m = e && /^(RangeError|TypeError|DataCloneError):([\s\S]*)$/.exec(String(e.message));
+      if (m && m[1] === 'DataCloneError') throw new global.DOMException(m[2], 'DataCloneError');
       if (m) throw new (m[1] === 'RangeError' ? RangeError : TypeError)(m[2]);
       throw e;
     }
@@ -265,11 +267,12 @@
       var who = 'WebAssembly.Memory()';
       if (desc === null || typeof desc !== 'object') throw new TypeError(who + ': Argument 0 must be a memory descriptor');
       if (desc.initial === undefined) throw new TypeError(who + ": Property 'initial' is required");
-      if (desc.shared) throw new TypeError(who + ': shared memory is not supported (no threads)');
+      var shared = !!desc.shared;
+      if (shared && desc.maximum === undefined) throw new TypeError(who + ": Property 'maximum': If shared is true, maximum property should be defined.");
       var initial = toU32(desc.initial, 'initial', who, 65536);
       var maximum = desc.maximum === undefined ? -1 : toU32(desc.maximum, 'maximum', who, 65536);
       if (maximum >= 0 && maximum < initial) throw new RangeError(who + ": Property 'maximum': value " + maximum + ' is below the lower bound ' + initial);
-      var key = H.memNew(initial, maximum);
+      var key = H.memNew(initial, maximum, shared);
       if (typeof key !== 'string') throw new RangeError(key.m);
       memKeys.set(this, key); memObjs.set(key, this);
     }
@@ -445,6 +448,31 @@
       return { module: m, instance: inst };
     });
   }
+
+  // ---- postMessage of Modules and shared Memories (idb_prelude.js ser/de call these) ---------------------
+  function cloneErr(msg) { return new global.DOMException(msg, 'DataCloneError'); }
+  Object.defineProperty(global, '__swWasmSer', { value: function (v, share) {
+    if (v instanceof Module) {
+      if (!share) throw cloneErr('#<Module> could not be cloned.');
+      return { k: 'mod', s: host(function () { return H.modShare(infoOf(v, 'postMessage').id); }) };
+    }
+    if (v instanceof Memory) {
+      if (!share) throw cloneErr('#<Memory> could not be cloned.');
+      if (!global.crossOriginIsolated) throw cloneErr('SharedArrayBuffer transfer requires self.crossOriginIsolated.');
+      return { k: 'mem', s: host(function () { return H.memShare(memKeys.get(v)); }) };
+    }
+    return undefined;
+  } });
+  Object.defineProperty(global, '__swWasmDe', { value: function (d) {
+    if (d.k === 'mod') {
+      var r = host(function () { return H.modOpen(d.s); });
+      if (r.e) throw cloneErr('#<Module> could not be cloned.');
+      var m = Object.create(Module.prototype);
+      modInfo.set(m, r);
+      return m;
+    }
+    return memOf(host(function () { return H.memOpen(d.s); }));
+  } });
 
   var WA = {};
   def(WA, 'Module', Module); def(WA, 'Instance', Instance); def(WA, 'Memory', Memory);

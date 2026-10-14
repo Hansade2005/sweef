@@ -82,9 +82,16 @@ mouse down/up, key, touch (mouse movement does not count). Muted `<audio>` is re
 * `ManagedMediaSource` and `MediaSource` in dedicated workers (`MediaSource.canConstructInDedicatedWorker` is
   false, `MediaSourceHandle` does not exist). Skipped on purpose; players fall back to window MSE.
 * `SourceBuffer.audioTracks/videoTracks/textTracks`, `appendBufferAsync`/`removeAsync`, `stalled` events for MSE.
-* **EME / DRM (`requestMediaKeySystemAccess` always rejects, `setMediaKeys` rejects).** Netflix, Disney+, Prime
-  Video, YouTube Premium music/movies and every other DRM-protected stream **cannot be played**. The EME interface
-  objects (`MediaKeys`, `MediaKeySession`, ...) exist so that player libraries do not crash before being refused.
+* **EME / DRM: Clear Key only.** `requestMediaKeySystemAccess('org.w3.clearkey', ...)` works and `MediaKeys`,
+  `MediaKeySession`, `setMediaKeys`, the `encrypted` and `waitingforkey` events and key status reporting are real; MSE
+  playback decrypts `cenc`, `cens`, `cbc1` and `cbcs` fragmented MP4 (`internal/media/cenc.go`, `internal/engine/eme.go`).
+  Widevine, PlayReady and FairPlay need licensed content decryption modules and reject with `NotSupportedError`, so
+  Netflix, Disney+, Prime Video, YouTube Premium music/movies and every other DRM-protected stream **cannot be played**.
+  Not done: persistent sessions and licenses (`temporary` only), `load()`/`remove()`, server certificates, a robustness
+  level above the empty string (there is no secure path), encrypted WebM (the `webm` init data type is accepted but the
+  WebM demuxer does not decrypt), encrypted audio-only tracks were not tested end to end (the code path is shared),
+  and a plain `src=` mp4 that is encrypted (only MSE is wired). Key IDs of a track whose license never arrives stall
+  playback and fire `waitingforkey`; there is no `keystatuseschange` expiry because Clear Key licenses do not expire.
 * Pitch-preserving time stretch: `playbackRate` resamples (the pitch changes). `preservesPitch` is accepted and
   ignored. Audio is muted for rates outside 0.25 to 4; video follows the rate.
 * Picture-in-picture, Remote Playback, captions rendering from MSE text tracks, HLS (hls.js uses MSE and works in
@@ -164,7 +171,7 @@ element's state every second, console errors and failed requests). Dates are whe
 | MDN `<video>` page | **loads, nothing to play in the page itself** | The examples are in an iframe (`interactive-examples.mdn.mozilla.net`) whose HTML is a template filled in by the editor script. A `<video>` pointed at the same `flower.webm` from MDN's server plays (960x540, 150 frames in 5.06 s, 0 dropped, ends). |
 | YouTube embed (`/embed/aqz-KE-bpKQ`, Big Buck Bunny 60fps 4K) | **does not play** | See below. |
 | YouTube watch page (`/watch?v=aqz-KE-bpKQ`) | **blocked** | Google answers with HTTP 429 "unusual traffic" (`google.com/sorry`) for this network's address, to `curl` as well as to the engine. Not an engine problem; it could not be tested from here. |
-| Netflix, Disney+, Prime Video, YouTube Premium music/movies | **cannot work** | They need EME/DRM, which is not implemented. |
+| Netflix, Disney+, Prime Video, YouTube Premium music/movies | **cannot work** | They need Widevine/PlayReady, which are not available; only Clear Key EME is implemented. |
 
 YouTube embed in detail. Without a `Referer` the embedded player refuses to start ("Video player configuration
 error", a YouTube policy for embeds); with one (`-referer https://example.com/`) it initialises, the BotGuard

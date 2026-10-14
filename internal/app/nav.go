@@ -126,9 +126,9 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 		case fullOnce:
 			err = a.dat.eng.LoadFully(e.t) // reloads this page with everything on, once
 		case progressive:
-			err = e.t.NavigateProgressive(target, nil)
+			err = e.t.NavigateProgressive(target, e.takeNavHeaders())
 		default:
-			err = e.t.Navigate(target, nil)
+			err = e.t.Navigate(target, e.takeNavHeaders())
 		}
 		fellBack := false
 		if err != nil && upgraded && e.navSeq.Load() == seq {
@@ -616,24 +616,85 @@ func (a *App) viewSource(e *etab, raw string) {
 
 // ---- popups, downloads -----------------------------------------------------------------------------
 
-func (a *App) onPopup(e *etab, raw string) {
-	now := time.Now().UnixNano()
-	if now-e.lastInput.Load() > int64(2*time.Second) || now-e.popupAt.Load() < int64(500*time.Millisecond) {
-		a.sendChrome(mToast, map[string]any{"text": "A pop-up was blocked", "kind": "info"})
+// onEnginePopup is the engine's window.open: page script made a window, the tab exists already
+// (linked to its opener), and it is shown as a tab next to the opener, marked as a popup in the strip.
+// Any goroutine; the work happens on the UI loop.
+func (a *App) onEnginePopup(req engine.PopupRequest) {
+	a.post(func() { a.adoptPopup(req) })
+}
+
+// popupURLAllowed: a page may open web pages, not the browser's own pages or local files.
+func popupURLAllowed(raw string) bool {
+	l := strings.ToLower(raw)
+	return l == "about:blank" || strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://")
+}
+
+func (a *App) adoptPopup(req engine.PopupRequest) {
+	opener := a.etabByEngineID(req.Opener.Top().ID)
+	if opener == nil || opener.closed.Load() || !popupURLAllowed(req.URL) {
+		go func() { _ = a.eng.CloseTab(req.Popup.ID) }()
 		return
 	}
-	e.popupAt.Store(now)
-	if st, ok := a.model.Tab(e.id); ok {
-		if base, err := url.Parse(st.URL); err == nil {
-			if ref, err := url.Parse(raw); err == nil {
-				raw = base.ResolveReference(ref).String()
-			}
+	id := a.newTabID()
+	e := a.adoptEtab(id, req.Popup, opener.incog)
+	idx := -1
+	for i, x := range a.model.Order(a.winID) {
+		if x == opener.id {
+			idx = i + 1
 		}
 	}
-	if raw == "" || raw == "about:blank" {
-		return
+	// popups opened in a row stay in order: after the opener and its earlier popups
+	for idx >= 0 && idx < len(a.model.Order(a.winID)) {
+		if t, ok := a.model.Tab(a.model.Order(a.winID)[idx]); ok && t.Popup && t.Opener == opener.id {
+			idx++
+			continue
+		}
+		break
 	}
-	a.openTab(openOpts{URL: raw, Incognito: e.incog, Activate: true, After: e.id})
+	st := state.Tab{ID: id, URL: req.URL, Title: "New Tab", Incognito: opener.incog, Popup: true, Opener: opener.id}
+	if req.URL == "about:blank" {
+		st.URL = "about:blank"
+	}
+	st.Security = securityFor(st.URL, false)
+	a.model.AddTab(a.winID, st, idx, true)
+	if req.Referer != "" {
+		e.setNavHeaders(map[string]string{"Referer": req.Referer})
+	}
+	a.activateTab(id)
+	switch {
+	case req.Post != nil:
+		e.w.do(func() {
+			_ = req.Post(req.Popup)
+			e.drainBindings()
+			e.paint(true)
+			a.post(func() { a.afterPageInput(e) })
+		})
+	case req.URL == "about:blank":
+		e.w.do(func() { e.paint(true) })
+	default:
+		a.loadURL(id, req.URL, modePush, false)
+	}
+	a.markState()
+}
+
+// onEngineWindowClose: page script called window.close() on a window it may close.
+func (a *App) onEngineWindowClose(t *engine.Tab) {
+	a.post(func() {
+		if e := a.etabByEngineID(t.ID); e != nil {
+			a.closeTab(e.id)
+			return
+		}
+		go func() { _ = a.eng.CloseTab(t.ID) }()
+	})
+}
+
+// onEngineWindowFocus: page script called focus() on a popup it holds.
+func (a *App) onEngineWindowFocus(t *engine.Tab) {
+	a.post(func() {
+		if e := a.etabByEngineID(t.ID); e != nil && !e.closed.Load() {
+			a.activateTab(e.id)
+		}
+	})
 }
 
 func (a *App) onEngineDownload(e *etab, d engine.Download) {

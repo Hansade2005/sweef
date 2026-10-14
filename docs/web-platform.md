@@ -113,6 +113,35 @@ downgrade is noticed). The `v` flag therefore needs no polyfill: it is native.
 | PictureInPictureWindow, PictureInPictureEvent | stub | Classes only; no window is ever created. |
 | Sanitizer API | absent | Skipped on purpose. |
 
+## Shared memory and cross-origin isolation
+
+| API | Status | Notes |
+|---|---|---|
+| `crossOriginIsolated`, `SharedArrayBuffer`, `Atomics` on shared memory | implemented | A document is cross-origin isolated when its response has `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` or `credentialless`. Only then do `crossOriginIsolated` read `true` and `SharedArrayBuffer` exist (it is absent otherwise, as in Chromium); dedicated Workers inherit the state of their creator. A buffer posted to a Worker (or back, or between two Workers of one page) is the same memory: the page and its dedicated workers form one agent cluster, the bytes are real Go memory shared by the VMs, and `Atomics.add/load/store/compareExchange/...` are real atomic operations. |
+| `Atomics.wait`, `notify`, `waitAsync` | implemented | `wait` blocks the calling goroutine and is allowed in Workers only (it throws `TypeError` on the page, like browsers); `notify` and `waitAsync` work across VMs and wake in FIFO order, with timeouts; the QuickJS built-in wait queue is replaced by one over Go queues because the native one is per-VM and has no `waitAsync`. `worker.terminate()` and page teardown interrupt a worker that is blocked in `Atomics.wait`. |
+| COEP enforcement | implemented | With `require-corp`, a cross-origin script, stylesheet, image or media response is blocked unless it is CORS-enabled (`Access-Control-Allow-Origin` of `*` or the document origin) or sent `Cross-Origin-Resource-Policy: cross-origin` (`same-site` and `same-origin` are honoured by site/origin). `fetch()` and XHR already need CORS. A `fetch(..., {mode: 'no-cors'})` is not checked. With `credentialless` such requests are sent without cookies or credentials and are not blocked. A frame inside a COEP document must carry a COEP header itself (and, under `require-corp`, a cross-origin frame also needs CORP: `cross-origin`), and a Worker script must carry one as well, otherwise it is blocked. |
+| Shared memory in SharedWorkers, Service Workers, `BroadcastChannel`, `postMessage` to other windows or frames | partial | Not part of the agent cluster: posting a `SharedArrayBuffer` to those throws `DataCloneError`. A frame has its own VM and is not in the page's cluster either. |
+| `Cross-Origin-Opener-Policy`: severing `window.opener`, `same-origin-allow-popups` | implemented | At every top-level navigation of a popup (and of its opener) the policies of the two documents decide whether they may keep their references (`coopMatch` in `windows.go`): a cut link makes `window.opener` `null`, `closed` `true` for the other side, and clears the popup's name. An OAuth popup of a `same-origin-allow-popups` page keeps its opener. See [frames-popups.md](frames-popups.md). |
+| `Cross-Origin-Opener-Policy`: moving popups to a new browsing context group (agent cluster, `SharedArrayBuffer`), reporting endpoints | not implemented | The group is only the opener link; a popup does not get a separate agent cluster and no COOP report is sent. |
+
+Frames, `window.open`, popups, painting and input of frames: [frames-popups.md](frames-popups.md).
+
+Tests: `go test ./internal/engine -run 'TestCrossOrigin|TestCOEP|TestSharedArrayBuffer|TestAtomics|TestTerminatingAWorker'` use
+`httptest` servers that send the headers and real Workers; the counter test increments one `Int32Array` from two workers
+and checks the sum, the wait/notify tests ping-pong between the page and a worker and between two workers.
+
+## WebCodecs
+
+`VideoDecoder`, `VideoEncoder`, `AudioDecoder`, `AudioEncoder`, `VideoFrame`, `AudioData`, `EncodedVideoChunk`,
+`EncodedAudioChunk`, `ImageDecoder` (with `ImageTrack`/`ImageTrackList`) and every `isConfigSupported()` exist in pages
+and Workers, backed by the pure-Go codecs of `internal/media`, running off the JavaScript thread. What is supported and
+what is not, per codec, is in [webcodecs.md](webcodecs.md).
+
+## Encrypted Media Extensions
+
+Clear Key only (`org.w3.clearkey`), temporary sessions, in the MSE pipeline. Widevine, PlayReady and FairPlay reject
+with `NotSupportedError`. See [media-streaming.md](media-streaming.md).
+
 ## File system
 
 | API | Status | Notes |

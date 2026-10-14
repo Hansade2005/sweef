@@ -131,6 +131,8 @@ type wmodule struct {
 	bytes    []byte
 	info     *wInfo
 	compiled wazero.CompiledModule
+	shared   bool                  // compiled in the shared (threads) runtime
+	other    wazero.CompiledModule // the same bytes compiled for the other runtime, when an instantiation needed it
 }
 
 type winst struct {
@@ -150,6 +152,8 @@ type wref struct {
 	mod  api.Module
 	name string
 	mem  api.Memory
+	// shared: a shared memory (threads); shRT: the object lives in the shared runtime (wasm_threads.go)
+	shared, shRT bool
 	// ArrayBuffer aliasing the memory
 	hasJS bool
 	js    quickjs.Value
@@ -229,6 +233,17 @@ type wasmHost struct {
 	dead      bool       // poisoned: a call overran its budget, nothing may use this host any more
 	wantClose bool
 
+	// threads (wasm_threads.go)
+	jsv      *jsVM
+	aborted  atomic.Bool    // the VM is closing: imports end the call
+	inflight atomic.Int32   // outermost calls running on the runner
+	shut     bool           // reallyClose ran
+	srt      wazero.Runtime // the process-wide runtime for threaded instances, once this host uses it
+	threads  bool           // this host runs threaded instances: its calls have no time budget
+	smems    map[*wasmSharedMem]bool
+	sOwned   []api.Module
+	sCompile []wazero.CompiledModule
+
 	errKind byte // set with wasmErrSentinel results: 'R' RuntimeError, 'S' stack overflow, 'T' JS exception, 'C' closed/timeout
 	errMsg  string
 }
@@ -281,18 +296,38 @@ func (h *wasmHost) close() {
 	h.closed = true
 	h.live = nil
 	h.haveDisp = false
-	if h.zomb {
-		return // finishCall completes the close when the runaway call ends
+	h.aborted.Store(true)
+	h.releaseSharedMems() // retires memories nobody else uses, which stops their running threads
+	if h.zomb || h.inflight.Load() > 0 {
+		return // finishCall completes the close when the runaway call (or a thread) ends
 	}
 	h.reallyClose()
 }
 
+// abort is called, without any lock of the VM, as soon as the VM starts closing (a terminated worker, a page that
+// is navigating away). A call that is still inside wasm may be blocked for good, and the VM's own close waits for
+// it, so the host drops its shared memories and refuses to call JS right now.
+func (h *wasmHost) abort() {
+	if h == nil {
+		return
+	}
+	h.aborted.Store(true)
+	h.life.Lock()
+	h.releaseSharedMems()
+	h.life.Unlock()
+}
+
 func (h *wasmHost) reallyClose() {
+	if h.shut {
+		return
+	}
+	h.shut = true
 	if h.run != nil {
 		h.run.shutdown()
 	}
 	_ = h.rt.Close(context.Background())
 	h.gen.release()
+	h.closeSharedUse()
 	h.mods, h.insts, h.refs, h.fnTab, h.fnRef = nil, nil, nil, nil, nil
 	wasmLive.Add(-1)
 }
@@ -302,6 +337,9 @@ func (h *wasmHost) id() int { h.nextID++; return h.nextID }
 // tmo is how long one outermost call into wasm may run: six times the page's script budget (30 s by default).
 // Compiled wasm cannot be interrupted, so this is a watchdog, not a kill switch; see guard.
 func (h *wasmHost) tmo() time.Duration {
+	if h.threads {
+		return 1000 * time.Hour // a thread's start routine is one call that ends when the thread does
+	}
 	d := 5 * time.Second
 	if h.timeout != nil {
 		if t := h.timeout(); t > 0 {
@@ -487,7 +525,11 @@ func (h *wasmHost) nCompile(buf quickjs.Value, off, n int) any {
 	if !ok || off < 0 || n < 0 || off+n > len(b) {
 		return map[string]any{"e": "BufferSource argument is empty"}
 	}
-	src := append([]byte(nil), b[off:off+n]...)
+	return h.compileSource(append([]byte(nil), b[off:off+n]...))
+}
+
+// compileSource compiles a module for this host: {id, imports, exports} or {e: message}.
+func (h *wasmHost) compileSource(src []byte) any {
 	if len(src) > wasmMaxModuleBytes {
 		return map[string]any{"e": fmt.Sprintf("module is larger than the %d MiB limit", wasmMaxModuleBytes>>20)}
 	}
@@ -498,13 +540,16 @@ func (h *wasmHost) nCompile(buf quickjs.Value, off, n int) any {
 	if info.hasMemory64 {
 		return map[string]any{"e": "memory64 is not supported"}
 	}
-	cm, err := h.rt.CompileModule(h.ctx, src)
+	cm, shared, err := h.compileModule(src, info)
 	if err != nil {
 		return map[string]any{"e": err.Error()}
 	}
+	if shared {
+		h.sCompile = append(h.sCompile, cm)
+	}
 	h.gen.noteBytes(len(src))
 	id := h.id()
-	h.mods[id] = &wmodule{id: id, bytes: src, info: info, compiled: cm}
+	h.mods[id] = &wmodule{id: id, bytes: src, info: info, compiled: cm, shared: shared}
 	for _, t := range info.types {
 		h.types[t.sig()] = t
 	}
@@ -520,10 +565,11 @@ func (h *wasmHost) nValidate(buf quickjs.Value, off, n int) any {
 		return false
 	}
 	src := b[off : off+n]
-	if info, err := parseWasm(src); err != nil || info.hasMemory64 {
+	info, err := parseWasm(src)
+	if err != nil || info.hasMemory64 {
 		return false
 	}
-	cm, err := h.rt.CompileModule(h.ctx, src)
+	cm, _, err := h.compileModule(src, info)
 	if err != nil {
 		return false
 	}
@@ -584,7 +630,26 @@ func (h *wasmHost) instantiate(a []any) (any, error) {
 		return h.errObj("L", "import descriptor mismatch"), nil
 	}
 	info := wm.info
+	// Instances that use threads live in the shared runtime (wasm_threads.go): a module that needs it, defines a
+	// shared memory, or imports something that lives there.
+	useShared := wm.shared || info.definesShared
+	for i, im := range info.imports {
+		if im.kind != wkFunc && im.kind != wkTag {
+			if r := h.refs[descs[i].Key]; r != nil && r.shRT {
+				useShared = true
+			}
+		}
+	}
+	rt := h.rt
 	seq := h.id()
+	if useShared {
+		rt = h.sharedRuntime()
+		seq = int(wasmGlobalSeq.Add(1)) // names are unique across every VM that uses the shared runtime
+	}
+	compiled, cerr := h.compiledFor(wm, useShared)
+	if cerr != nil {
+		return h.errObj("L", cerr.Error()), nil
+	}
 	inst := &winst{tok: tok, name: fmt.Sprintf("swi%d", seq), info: info, fns: map[string]api.Function{}}
 	cleanup := func() {
 		for _, m := range inst.aggs {
@@ -600,7 +665,7 @@ func (h *wasmHost) instantiate(a []any) (any, error) {
 
 	// host module for the JS functions the guest imports
 	hostName := fmt.Sprintf("swh%d", seq)
-	hb := h.rt.NewHostModuleBuilder(hostName)
+	hb := rt.NewHostModuleBuilder(hostName)
 	nHost := 0
 	for i, im := range info.imports {
 		if im.kind != wkFunc {
@@ -647,6 +712,10 @@ func (h *wasmHost) instantiate(a []any) (any, error) {
 				cleanup()
 				return h.errObj("L", fmt.Sprintf("import %d (%s %q): not a compatible %s object", i, im.module, im.name, kindName(im.kind))), nil
 			}
+			if r.shRT != useShared {
+				cleanup()
+				return h.errObj("L", fmt.Sprintf("import %d (%s %q): a %s created outside the threads runtime cannot be shared with a threaded instance; create it after the shared WebAssembly.Memory", i, im.module, im.name, kindName(im.kind))), nil
+			}
 			it.from, it.field = r.mod.Name(), r.name
 			impKeys[im.kind] = append(impKeys[im.kind], r.key)
 		}
@@ -655,12 +724,12 @@ func (h *wasmHost) instantiate(a []any) (any, error) {
 	aggMods := map[string]api.Module{}
 	for _, g := range groups {
 		bin := asmAggregator(g.items)
-		cm, err := h.rt.CompileModule(h.ctx, bin)
+		cm, err := rt.CompileModule(h.ctx, bin)
 		if err != nil {
 			cleanup()
 			return h.errObj("L", "internal aggregator: "+err.Error()), nil
 		}
-		am, err := h.rt.InstantiateModule(h.ctx, cm, wazero.NewModuleConfig().WithName(fmt.Sprintf("swa%d_%d", seq, len(inst.aggs))).WithStartFunctions())
+		am, err := rt.InstantiateModule(h.ctx, cm, wazero.NewModuleConfig().WithName(fmt.Sprintf("swa%d_%d", seq, len(inst.aggs))).WithStartFunctions())
 		_ = cm.Close(h.ctx)
 		if err != nil {
 			cleanup()
@@ -673,7 +742,7 @@ func (h *wasmHost) instantiate(a []any) (any, error) {
 	ictx := experimental.WithImportResolver(h.ctx, func(name string) api.Module { return aggMods[name] })
 	var mod api.Module
 	err := h.guard(func() (e error) {
-		mod, e = h.rt.InstantiateModule(ictx, wm.compiled, wazero.NewModuleConfig().WithName(inst.name).WithStartFunctions())
+		mod, e = rt.InstantiateModule(ictx, compiled, wazero.NewModuleConfig().WithName(inst.name).WithStartFunctions())
 		return
 	})
 	h.syncMems()
@@ -686,6 +755,13 @@ func (h *wasmHost) instantiate(a []any) (any, error) {
 		return h.errObj(string(kind), msg), nil
 	}
 	inst.mod = mod
+	if useShared {
+		for _, m := range inst.aggs {
+			h.ownShared(m)
+		}
+		h.ownShared(inst.host)
+		h.ownShared(mod)
+	}
 	h.insts[tok] = inst
 	for i, im := range info.imports {
 		if im.kind != wkFunc {
@@ -720,7 +796,14 @@ func (h *wasmHost) instantiate(a []any) (any, error) {
 			} else {
 				key = inst.name + "/" + ex.name
 				canon[[2]int{int(ex.kind), ex.idx}] = key
-				h.refs[key] = &wref{key: key, kind: ex.kind, mod: mod, name: ex.name}
+				wr := &wref{key: key, kind: ex.kind, mod: mod, name: ex.name, shRT: useShared}
+				if ex.kind == wkMemory && info.definesShared {
+					wr.shared = true
+					if sm := sharedMemOf(wr.memory()); sm != nil {
+						h.holdShared(sm)
+					}
+				}
+				h.refs[key] = wr
 			}
 			e["key"] = key
 			switch ex.kind {
@@ -853,7 +936,9 @@ func (h *wasmHost) dropBuf(r *wref) {
 		return
 	}
 	if !h.closed {
-		h.raw.detach(&r.js)
+		if !r.shared { // a SharedArrayBuffer is never detached: the old one keeps its length when the memory grows
+			h.raw.detach(&r.js)
+		}
 		r.js.Free()
 	}
 	r.hasJS, r.view = false, nil
@@ -897,26 +982,47 @@ func (h *wasmHost) nMemBuf(key string) quickjs.Value {
 	}
 	h.dropBuf(r)
 	r.view = view
-	r.js = h.raw.newExternalBuffer(h.vm, view)
+	if r.shared {
+		sm := sharedMemOf(mem)
+		if sm == nil || h.cluster() == nil {
+			return quickjs.UndefinedValue
+		}
+		if _, ok := h.cluster().adopt(sm.full, sm); !ok {
+			return quickjs.UndefinedValue
+		}
+		r.js = h.raw.newSharedBuffer(h.vm, view, unsafe.Pointer(unsafe.SliceData(sm.full)))
+	} else {
+		r.js = h.raw.newExternalBuffer(h.vm, view)
+	}
 	r.hasJS = true
 	h.live = append(h.live, r)
 	return r.js.Dup()
 }
 
 // provider instantiates a generated module holding one Memory/Table/Global.
-func (h *wasmHost) provider(bin []byte, export string, kind byte) (string, error) {
-	cm, err := h.rt.CompileModule(h.ctx, bin)
+// shared selects the shared (threads) runtime; Tables and Globals follow once this host runs threads, so that a
+// threaded instance can import them.
+func (h *wasmHost) provider(bin []byte, export string, kind byte, shared bool) (string, error) {
+	rt := h.rt
+	name := fmt.Sprintf("swp%d", h.id())
+	if shared {
+		rt = h.sharedRuntime()
+		name = fmt.Sprintf("swp%d", wasmGlobalSeq.Add(1))
+	}
+	cm, err := rt.CompileModule(h.ctx, bin)
 	if err != nil {
 		return "", err
 	}
-	name := fmt.Sprintf("swp%d", h.id())
-	m, err := h.rt.InstantiateModule(h.ctx, cm, wazero.NewModuleConfig().WithName(name).WithStartFunctions())
+	m, err := rt.InstantiateModule(h.ctx, cm, wazero.NewModuleConfig().WithName(name).WithStartFunctions())
 	_ = cm.Close(h.ctx)
 	if err != nil {
 		return "", err
 	}
+	if shared {
+		h.ownShared(m)
+	}
 	key := name + "/" + export
-	h.refs[key] = &wref{key: key, kind: kind, mod: m, name: export}
+	h.refs[key] = &wref{key: key, kind: kind, mod: m, name: export, shRT: shared}
 	return key, nil
 }
 
@@ -933,16 +1039,39 @@ func optMax(a []any, i int) int64 {
 	return -1
 }
 
-// memNew(initial, max|-1) -> key | {e}
+// memNew(initial, max|-1, shared) -> key | {e}
 func (h *wasmHost) memNew(a []any) (any, error) {
 	min, max := argI(a, 0), optMax(a, 1)
+	if argB(a, 2) {
+		if max < 0 {
+			return h.errObj("O", "shared memory requires a maximum"), nil
+		}
+		if min > wasmSharedMemLimitPages {
+			return h.errObj("O", fmt.Sprintf("WebAssembly.Memory(): Property 'initial': value %d is above the upper bound %d", min, wasmSharedMemLimitPages)), nil
+		}
+		if max > wasmSharedMemLimitPages {
+			max = wasmSharedMemLimitPages
+		}
+		key, err := h.provider(asmSharedMemory(uint32(min), uint32(max)), "m", wkMemory, true)
+		if err != nil {
+			return h.errObj("O", err.Error()), nil
+		}
+		r := h.refs[key]
+		r.shared = true
+		if sm := sharedMemOf(r.memory()); sm != nil {
+			h.holdShared(sm)
+		} else {
+			return h.errObj("O", "shared memory is not available (unexpected wazero internals)"), nil
+		}
+		return key, nil
+	}
 	if min > wasmMemLimitPages {
 		return h.errObj("O", fmt.Sprintf("WebAssembly.Memory(): Property 'initial': value %d is above the upper bound %d", min, wasmMemLimitPages)), nil
 	}
 	if max > wasmMemLimitPages {
 		max = wasmMemLimitPages
 	}
-	key, err := h.provider(asmMemory(uint32(min), max), "m", wkMemory)
+	key, err := h.provider(asmMemory(uint32(min), max), "m", wkMemory, false)
 	if err != nil {
 		return h.errObj("O", err.Error()), nil
 	}
@@ -1007,7 +1136,7 @@ func (h *wasmHost) tabRef(key string) (tv reflect.Value, idx int, r *wref, ok bo
 
 // tabNew(initial, max|-1) -> key | {e}
 func (h *wasmHost) tabNew(a []any) (any, error) {
-	key, err := h.provider(asmTable(uint32(argI(a, 0)), optMax(a, 1)), "t", wkTable)
+	key, err := h.provider(asmTable(uint32(argI(a, 0)), optMax(a, 1)), "t", wkTable, h.threads)
 	if err != nil {
 		return h.errObj("O", err.Error()), nil
 	}
@@ -1182,7 +1311,7 @@ func (h *wasmHost) globNew(a []any) (any, error) {
 	default:
 		return h.errObj("O", "unsupported global type"), nil
 	}
-	key, err := h.provider(asmGlobal(t, argB(a, 1), wasmEncode(t, a[2])), "g", wkGlobal)
+	key, err := h.provider(asmGlobal(t, argB(a, 1), wasmEncode(t, a[2])), "g", wkGlobal, h.threads)
 	if err != nil {
 		return h.errObj("O", err.Error()), nil
 	}
@@ -1244,6 +1373,7 @@ func (h *wasmHost) install() (string, error) {
 		"memNew":      h.memNew, "memGrow": h.memGrow, "memPages": h.memPages,
 		"tabNew": h.tabNew, "tabLen": h.tabLen, "tabGrow": h.tabGrow, "tabSet": h.tabSet, "tabGet": h.tabGet,
 		"globNew": h.globNew, "globGet": h.globGet, "globSet": h.globSet,
+		"memShare": h.memShare, "memOpen": h.memOpen, "modShare": h.modShare, "modOpen": h.modOpen,
 	} {
 		if err := reg(name, fn); err != nil {
 			return "", err
@@ -1295,7 +1425,7 @@ func init() {
 				return "", nil
 			}
 			installed = true
-			h, err := wasmHostFor(j.vm, func() time.Duration {
+			h, err := wasmHostFor(j, func() time.Duration {
 				if j.tab != nil && j.tab.eng != nil && j.tab.eng.opts.JSTimeoutMs > 0 {
 					return time.Duration(j.tab.eng.opts.JSTimeoutMs) * time.Millisecond
 				}
@@ -1310,11 +1440,23 @@ func init() {
 }
 
 // wasmHostFor creates the host for one VM and arranges for it to be closed with the VM.
-func wasmHostFor(vm *quickjs.VM, timeout func() time.Duration, hooks *[]func()) (*wasmHost, error) {
-	h, err := newWasmHost(vm, timeout)
+func wasmHostFor(j *jsVM, timeout func() time.Duration, hooks *[]func()) (*wasmHost, error) {
+	h, err := newWasmHost(j.vm, timeout)
 	if err != nil {
 		return nil, err
 	}
+	h.jsv = j
+	j.clMu.Lock()
+	j.wasmh = h
+	j.clMu.Unlock()
 	*hooks = append(*hooks, h.close)
 	return h, nil
+}
+
+// wasmAbort tells the VM's WebAssembly host (if it has one) that the VM is closing (see wasmHost.abort).
+func (j *jsVM) wasmAbort() {
+	j.clMu.Lock()
+	h := j.wasmh
+	j.clMu.Unlock()
+	h.abort()
 }

@@ -27,20 +27,27 @@ and the hand-off to the page thread), `wasm_qjs.go` (ArrayBuffer bridge), `wasm_
 | `Table`: `length`, `get`, `set`, `grow`, importing and exporting funcref tables | yes (not `externref` tables) |
 | `Global`: i32, i64, f32, f64, mutable and immutable, plain numbers as immutable global imports | yes |
 | Workers | yes: a worker has the same `WebAssembly` (`worker_prelude.js`), its own runtime, and `fetch().arrayBuffer()` returns exact bytes |
+| Threads: `new WebAssembly.Memory({shared: true, ...})`, modules with shared memory and atomic instructions, `memory.atomic.wait32/wait64/notify`, posting a shared `Memory` or a `Module` to Workers | yes, on cross-origin isolated pages only (below) |
 | Core features | wasm 2.0 (sign extension, saturating conversions, multi-value, bulk memory, reference types, mutable globals, SIMD) plus tail calls and extended constants; the exception-handling opcodes are enabled in wazero but not covered by the tests |
 
 ## What does not
 
-* **Threads and `SharedArrayBuffer`.** Modules with shared memory or atomics fail with a `CompileError`; `new
-  WebAssembly.Memory({shared: true})` throws. Not required for this work and wazero's support is partial.
+* **Threads without cross-origin isolation.** A page that is not `crossOriginIsolated` has no `SharedArrayBuffer`, so
+  `new WebAssembly.Memory({shared: true})` throws and a module that needs shared memory or atomics fails with a
+  `CompileError`, as in Chromium (see "Threads" below).
+* **Threads, the parts that are not covered.** There is no pthread-style test with a real emscripten or wasm-bindgen
+  program: the evidence is hand-written modules (atomic increments from two workers, wait/notify, a start routine that
+  blocks and is torn down). What `memory.atomic.wait` does when a guest calls it on the page thread (browsers trap) is
+  not specified by a test. Shared memories reserve address space up front (limit 1 GiB, committed as
+  touched).
 * **`WebAssembly.Tag`, `WebAssembly.Exception`, `JSTag`.** A module may use exception-handling instructions that
   throw and catch inside wasm, but it cannot import or export a tag (a tag import is a `LinkError`, tag exports are
   left out of `exports`).
 * **`externref`, `v128` and other reference types at the JS boundary.** A function whose signature mentions them is
   exported, but calling it throws `TypeError`. `Table` with `element: 'externref'` and `Global` of those types throw.
 * **Multi-memory, memory64, the GC proposal, stack switching, JS String builtins.**
-* **Structured clone of `Module`/`Memory`.** `postMessage` to a worker is JSON in this engine, so a module cannot be
-  sent to a worker; the worker compiles its own (the process-wide compilation cache makes that cheap).
+* **Structured clone of a non-shared `Memory`, `Table`, `Global` or `Instance`.** They cannot be posted (a
+  `DataCloneError`). A `Module` and a shared `Memory` can.
 * **Garbage collection of instances.** An instance (native code, linear memory) lives until the page navigates or the
   tab closes. A page that makes thousands of instances holds them all.
 
@@ -48,6 +55,24 @@ Small deviations from browsers: `compile` and `instantiate` do their work synchr
 settled promise; the trap message for a bad or null `call_indirect` is `table index is out of bounds or null
 function` (wazero reports both as one error); `table.get(i)` returns a function object per table-entry value, so
 `t.get(0) === exportedFn` is false even when it is the same function.
+
+## Threads
+
+Shared memory, atomics and threads need cross-origin isolation, like in browsers: the document is served with
+`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`),
+`crossOriginIsolated` is then `true` and `SharedArrayBuffer` exists in the page and in its dedicated Workers. Details,
+the COEP enforcement for subresources, frames and worker scripts, and the rules for `Atomics.wait` are in
+[web-platform.md](web-platform.md#shared-memory-and-cross-origin-isolation).
+
+wazero implements the threads proposal behind a feature flag, but two runtimes cannot see one memory and every Worker has a
+runtime of its own. So threaded instances all live in one process-wide shared runtime (`wasm_threads.go`): a shared
+`WebAssembly.Memory` is a provider module there, an instance in any VM that imports it resolves to the same memory
+instance (one buffer, one wait queue, `grow` seen by everybody), and `memory.buffer` is a `SharedArrayBuffer` over it,
+so JavaScript `Atomics` and `memory.atomic.*` meet in the same queue. A guest is still driven from the VM that created it.
+A thread that blocks in `memory.atomic.wait` cannot be interrupted, so when the last VM using a memory goes away (page
+navigation, tab close, `worker.terminate()` of the last user) the memory is retired: its length becomes zero and all
+waiters are woken, and a thread that touches it traps and ends. A host with threaded instances has no call time budget.
+Modules that do not need threads stay on the per-VM runtime as before.
 
 ## How it works
 
@@ -165,3 +190,8 @@ arrays (factorial on i64, memory with load/store/grow and a data segment, an imp
 through an exported table, globals, traps, multi-value, a start function that traps, a "puts" program in the shape a C
 toolchain emits) built with the section helpers at the top of `wasm_test.go`; `instantiateStreaming` runs against an
 `httptest` server in the style of `featureServer`; Workers, the interpreter fallback and teardown each have tests.
+
+`go test ./internal/engine -run 'TestWasmThreads|TestWasmSharedMemory'` covers threads: two workers doing atomic
+increments on one shared memory (hand-assembled module, final count checked from the page), the same on the
+interpreter, a module that defines its own shared memory, and teardown of a worker that is blocked in
+`memory.atomic.wait`.

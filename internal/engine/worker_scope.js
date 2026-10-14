@@ -22,6 +22,7 @@
   }
   function exportClass(C, name) { Object.defineProperty(C, 'name', { value: name, configurable: true }); Object.defineProperty(global, name, { value: C, writable: true, configurable: true, enumerable: false }); }
   var shared = info.kind === 'shared';
+  Object.defineProperty(global, '__swIsWorker', { value: true });
 
   // ---- a worker has no document ---------------------------------------------------------------------
   ['document', 'localStorage', 'sessionStorage', 'history', 'screen', 'alert', 'confirm', 'prompt', 'open', 'opener', 'frames', 'parent', 'top', 'window',

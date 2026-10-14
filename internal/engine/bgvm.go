@@ -40,6 +40,8 @@ type bgRuntime struct {
 	stopOnce sync.Once
 
 	cur func() *jsVM // (frames) the VM of the tab's current document; nil = j
+
+	tick func() // (frames) called after every slice of the loop: repaint the embedding page when the frame changed
 }
 
 // vm is the VM to pump now.
@@ -65,6 +67,7 @@ func (e *Engine) newBGRuntime(owner *Tab, docURL string) (*bgRuntime, error) {
 	t.url = u
 	t.consoleRing, t.netRing = owner.consoleRing, owner.netRing
 	t.inheritContext(owner)
+	t.inheritIsolation(owner)
 	doc, err := fnet.ParseDocument(emptyWorkerDoc, docURL)
 	if err != nil {
 		return nil, err
@@ -91,6 +94,7 @@ func (e *Engine) newBGRuntime(owner *Tab, docURL string) (*bgRuntime, error) {
 		t.close()
 		return nil, err
 	}
+	_, _ = j.call("__swCoiBind")
 	return rt, nil
 }
 
@@ -145,6 +149,9 @@ func (rt *bgRuntime) loop() {
 		if j != nil {
 			_, finished = j.pumpUntil(now.Add(time.Hour), now.Add(15*time.Millisecond))
 		}
+		if rt.tick != nil {
+			rt.tick()
+		}
 		rt.taskMu.Lock()
 		more := len(rt.tasks) > 0
 		rt.taskMu.Unlock()
@@ -174,6 +181,8 @@ func (rt *bgRuntime) stop() {
 	rt.stopOnce.Do(func() {
 		rt.stopped.Store(true)
 		close(rt.quit)
+		rt.j.sabInterrupt() // a worker blocked in Atomics.wait must come back to notice
+		rt.j.wasmAbort()    // and so must one that is inside a wasm thread: its shared memories are released now
 		rt.nudge()
 		if rt.started.Load() {
 			<-rt.done

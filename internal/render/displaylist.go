@@ -254,6 +254,9 @@ type Result struct {
 	// Hit returns the topmost element at a document point, honoring paint
 	// order, pointer-events and clipping; nil when the point hits only the canvas.
 	Hit func(x, y float64) *html.Node
+	// HitAt is Hit plus the point in the hit element's own pre-transform
+	// document space (what a nested viewport needs to translate input).
+	HitAt func(x, y float64) (n *html.Node, lx, ly float64)
 }
 
 // Sheet is one stylesheet in cascade order.
@@ -276,6 +279,15 @@ type Env interface {
 	IntrinsicSize(n *html.Node) (w, h float64, ok bool)
 	// Focused is the element with focus (for :focus and focus rings), or nil.
 	Focused() *html.Node
+}
+
+// FrameEnv is an optional extension of Env for embedders that render <iframe>
+// documents. When HasFrame reports true for an iframe element, layout emits a
+// Bitmap op at its content box and the frame's pixels come from Env.Bitmap(n)
+// at raster time, so the frame is clipped, transformed, faded and radius-clipped
+// exactly like a canvas.
+type FrameEnv interface {
+	HasFrame(n *html.Node) bool
 }
 
 // Options configure one layout pass.

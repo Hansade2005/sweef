@@ -164,6 +164,12 @@ type jsVM struct {
 	// closeHooks run after the QuickJS VM is closed: feature files hang their native teardown here (wasm.go).
 	closeHooks []func()
 
+	clMu    sync.Mutex
+	cluster *agentCluster // SharedArrayBuffer agent cluster (sab.go)
+	sabv    *vmSAB
+	wasmh   *wasmHost
+	wch     *wcHost // WebCodecs (webcodecs.go)
+
 	closerMu sync.Mutex
 	closers  []func() // run first when the VM closes (host extensions, media players, audio streams); they must not call into the VM
 
@@ -248,6 +254,7 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 	if _, err := j.call("__swSetDocument", docURL, "loading"); err != nil {
 		t.LogConsole("error", "sweef: __swSetDocument failed: "+err.Error())
 	}
+	_, _ = j.call("__swCoiBind")
 	j.installBindings()
 	if t.isFrame() {
 		_, _ = j.call("__swFrameInit", t.windowName())
@@ -346,6 +353,10 @@ func (j *jsVM) close() {
 	if j == nil {
 		return
 	}
+	// A script that is blocked (Atomics.wait, a wasm thread waiting on a futex) holds j.mu and would hold up this
+	// close for ever: wake it first, without the lock.
+	j.sabInterrupt()
+	j.wasmAbort()
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.closed {
@@ -675,6 +686,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 
 // Settle pumps the page's event loop for up to d (exported for RPC waits).
 func (t *Tab) Settle(d time.Duration) {
+	t.runTasks()
 	if t.beforeDCL() {
 		return
 	}
@@ -698,6 +710,7 @@ func (t *Tab) beforeDCL() bool {
 
 // settle is the short pump used after every action.
 func (t *Tab) settle(d time.Duration) {
+	t.runTasks() // navigations other windows asked this one for
 	if t.beforeDCL() {
 		return
 	}
@@ -782,7 +795,17 @@ func (j *jsVM) evaluate(expr string) (json.RawMessage, error) {
 		j.mu.Unlock()
 		return nil, fmt.Errorf("%s", jsErrorText(err, ""))
 	}
-	defer val.Free()
+	// Release the value under the VM lock: a frame's event loop (frames.go) and the
+	// window that drives its tab may use the same VM from different goroutines, and
+	// QuickJS's allocator is not safe against a concurrent free. No return path
+	// below holds j.mu, so locking here cannot deadlock.
+	defer func() {
+		j.mu.Lock()
+		if !j.closed {
+			val.Free()
+		}
+		j.mu.Unlock()
+	}()
 
 	// Await thenables.
 	isPromise, _ := j.vm.Call("__swIsThenable", val)
@@ -1023,18 +1046,6 @@ func (j *jsVM) withDoc(fn func(d *fnet.Doc) (any, error)) (any, error) {
 }
 
 func (j *jsVM) registerHost() error {
-	reg := func(name string, fn func(a []any) (any, error)) error {
-		if stageTrace {
-			inner := fn
-			fn = func(a []any) (any, error) {
-				t0 := time.Now()
-				r, err := inner(a)
-				hostStat(name, time.Since(t0))
-				return r, err
-			}
-		}
-		return j.vm.RegisterHostFunc("__sw_"+name, fn)
-	}
 	type h struct {
 		name string
 		fn   func(a []any) (any, error)
@@ -1271,7 +1282,16 @@ func (j *jsVM) registerHost() error {
 			if kind == "session" {
 				j.session[key] = val
 			} else {
-				j.tab.Context().SetStorageValue(lk, key, val)
+				c := j.tab.Context()
+				old, had := c.GetStorageValue(lk, key)
+				c.SetStorageValue(lk, key, val)
+				if !had || old != val {
+					var op *string
+					if had {
+						op = &old
+					}
+					j.storageChanged(lk, &key, op, &val)
+				}
 			}
 			return nil, nil
 		}},
@@ -1284,7 +1304,12 @@ func (j *jsVM) registerHost() error {
 			if kind == "session" {
 				delete(j.session, key)
 			} else {
-				j.tab.Context().RemoveStorageValue(lk, key)
+				c := j.tab.Context()
+				old, had := c.GetStorageValue(lk, key)
+				c.RemoveStorageValue(lk, key)
+				if had {
+					j.storageChanged(lk, &key, &old, nil)
+				}
 			}
 			return nil, nil
 		}},
@@ -1297,6 +1322,7 @@ func (j *jsVM) registerHost() error {
 				j.session = map[string]string{}
 			} else {
 				j.tab.Context().ClearStorage(lk)
+				j.storageChanged(lk, nil, nil, nil)
 			}
 			return nil, nil
 		}},
@@ -1411,29 +1437,49 @@ func (j *jsVM) registerHost() error {
 			hs = append(hs, h{n, fns[n]})
 		}
 	}
-	for _, x := range hs {
-		if err := reg(x.name, x.fn); err != nil {
-			return err
+	// One Go callback per VM, not one per host function: modernc quickjs allows 32767 registered callbacks in
+	// the whole process, and with several hundred host functions a few dozen live VMs (pool, tabs, frames,
+	// workers, UI pages) exhausted it ("too many registered functions"). __sw.name is a JS wrapper that passes
+	// the function's index to the dispatcher.
+	fns := make([]hostFn, len(hs))
+	for i, x := range hs {
+		fns[i] = x.fn
+		if stageTrace {
+			name, inner := x.name, x.fn
+			fns[i] = func(a []any) (any, error) {
+				t0 := time.Now()
+				r, err := inner(a)
+				hostStat(name, time.Since(t0))
+				return r, err
+			}
 		}
 	}
-	// Collect the flat __sw_* functions into one object for the prelude.
+	if err := j.vm.RegisterHostFunc("__sw_call", func(a []any) (any, error) {
+		if len(a) == 0 {
+			return nil, fmt.Errorf("host call without index")
+		}
+		i := int(toInt(a[0]))
+		if i < 0 || i >= len(fns) {
+			return nil, fmt.Errorf("unknown host function %d", i)
+		}
+		return fns[i](a[1:])
+	}); err != nil {
+		return err
+	}
 	var sb strings.Builder
-	sb.WriteString("globalThis.__sw = {")
+	sb.WriteString("globalThis.__sw = (function (c) { var o = {}, n = [")
 	for i, x := range hs {
 		if i > 0 {
 			sb.WriteString(",")
 		}
-		sb.WriteString(x.name + ":__sw_" + x.name)
+		sb.WriteString(strconv.Quote(x.name))
 	}
-	sb.WriteString("};")
+	sb.WriteString("]; n.forEach(function (k, i) { o[k] = function (...a) { return c(i, ...a); }; }); return o; })(__sw_call); delete globalThis.__sw_call;")
 	if j.cv != nil {
 		if err := j.cv.registerBufferFns(); err != nil {
 			return err
 		}
 		sb.WriteString("__sw.cvGetBuf=__swCvGetBuf;__sw.cvPutBuf=__swCvPutBuf;delete globalThis.__swCvGetBuf;delete globalThis.__swCvPutBuf;")
-	}
-	for _, x := range hs {
-		sb.WriteString("delete globalThis.__sw_" + x.name + ";")
 	}
 	_, err := j.vm.Eval(sb.String(), quickjs.EvalGlobal)
 	return err
@@ -1495,14 +1541,6 @@ func (j *jsVM) queueFormSubmit(formID int64) {
 		return
 	}
 	j.pendingNav = "form://" + strconv.FormatInt(formID, 10)
-}
-
-func (t *Tab) origin() string {
-	u, err := url.Parse(t.URL())
-	if err != nil || u.Host == "" {
-		return t.URL()
-	}
-	return u.Scheme + "://" + u.Host
 }
 
 // setURLOnly updates the tab URL without a navigation (history.pushState).

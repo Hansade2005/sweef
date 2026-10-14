@@ -153,6 +153,7 @@
       var c = null;
       try { c = sw.playerClock(s.pl.node); } catch (e) { c = null; }
       if (c && typeof c.t === 'number') { if (c.t >= s.pos || s.plFirst) s.plT = c.t; s.plFirst = false; }
+      if (c && c.wk !== undefined) { if (c.wk && !s.wkFired) { s.wkFired = true; var wel = s.el; if (wel) task(function () { fire(wel, 'waitingforkey'); }); } else if (!c.wk) s.wkFired = false; }
     }
     return s.plT;
   }
@@ -247,7 +248,7 @@
   } };
   PROPS.played = { get: function () { var s = st(this), l = s.played.slice(); if (!s.paused && s.ready >= 3 && s.playStart !== undefined) l.push([s.playStart, curTime(s)]); return makeRanges(mergeRanges(l)); } };
   PROPS.sinkId = { get: function () { return st(this).sinkId; } };
-  PROPS.mediaKeys = { get: function () { return null; } };
+  PROPS.mediaKeys = { get: function () { return st(this).keys || null; } };
   PROPS.remote = { get: function () { return remoteObj; } };
   PROPS.disablePictureInPicture = boolAttr('disablepictureinpicture');
   PROPS.controlsList = { get: function () { var self = this; return (st(this).cl) || (st(this).cl = (function () { var l = Object.create(global.DOMTokenList ? global.DOMTokenList.prototype : Object.prototype); return l; })()); } };
@@ -850,7 +851,33 @@
     Object.defineProperty(r, 'state', { get: function () { return 'disconnected'; }, enumerable: true });
     return r;
   })();
-  defMethod(MediaP, 'setMediaKeys', function (k) { if (k === null) return Promise.resolve(); return Promise.reject(dex('Unsupported keySystem or supportedConfigurations.', 'NotSupportedError')); });
+  defMethod(MediaP, 'setMediaKeys', function setMediaKeys(k) {
+    var el = this, s = st(el), who = "Failed to execute 'setMediaKeys' on 'HTMLMediaElement'";
+    return new Promise(function (res, rej) {
+      if (k !== null && !(global.MediaKeys && k instanceof global.MediaKeys)) { rej(new TypeError(who + ": The provided value is not of type 'MediaKeys'.")); return; }
+      if ((s.keys || null) === k) { res(); return; }
+      if (k && k._el && k._el !== el) { rej(dex(who + ': The MediaKeys object is already attached to another media element.', 'QuotaExceededError')); return; }
+      if (s.keys) s.keys._el = null;
+      s.keys = k || null;
+      if (k) k._el = el;
+      emeBindAll(el);
+      res();
+    });
+  });
+  // decryption keys follow the MediaKeys of the element to each of its SourceBuffers (eme.go)
+  function emeBindAll(el) {
+    var s = st(el), ms = s.mse && s.mse.ms; if (!ms) return;
+    msr(ms).bufs.forEach(function (b) { try { sw.emeBind(b._r.id, s.keys ? s.keys._id : 0); } catch (e) { /* ignore */ } });
+  }
+  function emeEncrypted(el, list) {
+    if (!list || !list.length) return;
+    var seen = el.__emeSeen || (Object.defineProperty(el, '__emeSeen', { value: {}, configurable: true }), el.__emeSeen);
+    list.forEach(function (d) {
+      var key = d.type + ':' + d.data; if (seen[key]) return; seen[key] = 1;
+      var bin = global.atob(d.data), u = new Uint8Array(bin.length); for (var i = 0; i < u.length; i++) u[i] = bin.charCodeAt(i);
+      task(function () { fire(el, 'encrypted', global.MediaEncryptedEvent, { initDataType: d.type, initData: u }); });
+    });
+  }
   defMethod(MediaP, 'setSinkId', function (id) {
     var s = st(this); id = String(id === undefined ? '' : id);
     if (id === '' || id === 'default') { s.sinkId = ''; return Promise.resolve(); }
@@ -1387,17 +1414,257 @@
   function permRefresh() { if (typeof global.__swPermRefresh === 'function') global.__swPermRefresh(); }
   if (global.Navigator) {
     Object.defineProperty(global.Navigator.prototype, 'mediaDevices', { get: function () { return devices; }, configurable: true, enumerable: true });
-    defMethod(global.Navigator.prototype, 'requestMediaKeySystemAccess', function () { return Promise.reject(dex('Unsupported keySystem or supportedConfigurations.', 'NotSupportedError')); });
-    // EME is not supported (docs/media-streaming.md), but the interfaces exist so that players which patch their
-    // prototypes (Shaka's polyfills) or test instanceof do not fail with a ReferenceError before they can ask
-    // for a key system and be refused.
-    ['MediaKeySystemAccess', 'MediaKeys', 'MediaKeyStatusMap'].forEach(function (name) {
-      var C = { [name]: function () { illegal(); } }[name]; tag(C, name); global[name] = C;
-    });
-    var MKS = function MediaKeySession() { illegal(); };
-    derive(MKS, EventTarget); tag(MKS, 'MediaKeySession'); global.MediaKeySession = MKS;
-    var MKME = function MediaKeyMessageEvent(type, init) { if (!(this instanceof MKME)) throw new TypeError("Failed to construct 'MediaKeyMessageEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."); return Reflect.construct(global.Event, [type, init], MKME); };
-    derive(MKME, global.Event); tag(MKME, 'MediaKeyMessageEvent'); global.MediaKeyMessageEvent = MKME;
+    (function () {
+      // ---- Encrypted Media Extensions: Clear Key only (eme.go, docs/media-streaming.md) -----------------------
+      // Widevine, PlayReady and FairPlay need licensed CDMs: requestMediaKeySystemAccess rejects them.
+      var CLEARKEY = 'org.w3.clearkey', INIT_TYPES = ['cenc', 'keyids', 'webm'];
+      function emeHost(fn) {
+        try { return fn(); } catch (e) {
+          var m = /^(TypeError|InvalidStateError|NotSupportedError): ([\s\S]*)$/.exec(String(e && e.message));
+          if (m) throw m[1] === 'TypeError' ? new TypeError(m[2]) : dex(m[2], m[1]);
+          throw e;
+        }
+      }
+      function emeBytes(d, who) {
+        if (d instanceof ArrayBuffer) return new Uint8Array(d.slice(0));
+        if (ArrayBuffer.isView(d)) return new Uint8Array(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength));
+        throw new TypeError(who + ": The provided value is not of type '(ArrayBuffer or ArrayBufferView)'.");
+      }
+      function b64url(u8) { var b = ''; for (var i = 0; i < u8.length; i++) b += String.fromCharCode(u8[i]); return global.btoa(b).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+      function fromB64url(s) { s = String(s).replace(/=+$/, '').replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var bin = global.atob(s), u = new Uint8Array(bin.length); for (var i = 0; i < u.length; i++) u[i] = bin.charCodeAt(i); return u; }
+      function hex(u8) { var s = ''; for (var i = 0; i < u8.length; i++) s += (u8[i] < 16 ? '0' : '') + u8[i].toString(16); return s; }
+      function tx(s) { return new TextEncoder().encode(s); }
+
+      function MediaKeySystemAccess() { illegal(); }
+      tag(MediaKeySystemAccess, 'MediaKeySystemAccess');
+      defGetter(MediaKeySystemAccess.prototype, 'keySystem', function () { return CLEARKEY; });
+      defMethod(MediaKeySystemAccess.prototype, 'getConfiguration', function () { return JSON.parse(JSON.stringify(this._cfg)); });
+      defMethod(MediaKeySystemAccess.prototype, 'createMediaKeys', function () {
+        var acc = this;
+        return new Promise(function (res) {
+          var k = Object.create(MediaKeys.prototype);
+          Object.defineProperty(k, '_id', { value: emeHost(function () { return sw.emeNew(); }) });
+          Object.defineProperty(k, '_el', { value: null, writable: true });
+          Object.defineProperty(k, '_sessions', { value: new Map() });
+          Object.defineProperty(k, '_cfg', { value: acc._cfg });
+          res(k);
+        });
+      });
+      global.MediaKeySystemAccess = MediaKeySystemAccess;
+
+      // the first of the requested configurations Clear Key can satisfy, as the resolved configuration (or null)
+      function emeConfig(c) {
+        if (c === null || typeof c !== 'object') throw new TypeError("Failed to execute 'requestMediaKeySystemAccess' on 'Navigator': The provided value is not of type 'MediaKeySystemConfiguration'.");
+        var out = { label: c.label === undefined ? '' : String(c.label), initDataTypes: [], audioCapabilities: [], videoCapabilities: [], distinctiveIdentifier: 'not-allowed', persistentState: 'not-allowed', sessionTypes: ['temporary'] };
+        var init = c.initDataTypes === undefined ? [] : Array.from(c.initDataTypes).map(String);
+        if (init.length) {
+          out.initDataTypes = init.filter(function (t) { return INIT_TYPES.indexOf(t) >= 0; });
+          if (!out.initDataTypes.length) return null;
+        }
+        if (c.distinctiveIdentifier === 'required' || c.persistentState === 'required') return null;
+        if (c.sessionTypes !== undefined && Array.from(c.sessionTypes).some(function (t) { return String(t) !== 'temporary'; })) return null;
+        function caps(list) {
+          var r = [];
+          Array.from(list || []).forEach(function (cap) {
+            if (cap === null || typeof cap !== 'object') return;
+            var ct = String(cap.contentType === undefined ? '' : cap.contentType), rob = cap.robustness === undefined ? '' : String(cap.robustness);
+            if (rob !== '' || ct === '') return; // hardware-backed robustness levels need a CDM that has them
+            if (!sw.emeSupportedType(ct) || !sw.mediaIsTypeSupported(ct)) return;
+            r.push({ contentType: ct, robustness: '' });
+          });
+          return r;
+        }
+        var wantA = c.audioCapabilities !== undefined && Array.from(c.audioCapabilities).length > 0, wantV = c.videoCapabilities !== undefined && Array.from(c.videoCapabilities).length > 0;
+        if (!wantA && !wantV) return null;
+        if (wantA) { out.audioCapabilities = caps(c.audioCapabilities); if (!out.audioCapabilities.length) return null; }
+        if (wantV) { out.videoCapabilities = caps(c.videoCapabilities); if (!out.videoCapabilities.length) return null; }
+        return out;
+      }
+      defMethod(global.Navigator.prototype, 'requestMediaKeySystemAccess', function requestMediaKeySystemAccess(keySystem, configs) {
+        var args = arguments;
+        return new Promise(function (res, rej) {
+          try {
+            if (args.length < 2) throw new TypeError("Failed to execute 'requestMediaKeySystemAccess' on 'Navigator': 2 arguments required, but only " + args.length + ' present.');
+            keySystem = String(keySystem);
+            if (keySystem === '') throw new TypeError("Failed to execute 'requestMediaKeySystemAccess' on 'Navigator': The keySystem parameter is empty.");
+            var list = Array.from(configs);
+            if (list.length === 0) throw new TypeError("Failed to execute 'requestMediaKeySystemAccess' on 'Navigator': The supportedConfigurations parameter is empty.");
+            if (keySystem !== CLEARKEY) { rej(dex('Unsupported keySystem or supportedConfigurations.', 'NotSupportedError')); return; }
+            for (var i = 0; i < list.length; i++) {
+              var r = emeConfig(list[i]);
+              if (r) { var a = Object.create(MediaKeySystemAccess.prototype); Object.defineProperty(a, '_cfg', { value: r }); res(a); return; }
+            }
+            rej(dex('Unsupported keySystem or supportedConfigurations.', 'NotSupportedError'));
+          } catch (e) { rej(e); }
+        });
+      });
+
+      function MediaKeys() { illegal(); }
+      tag(MediaKeys, 'MediaKeys');
+      defMethod(MediaKeys.prototype, 'createSession', function createSession(type) {
+        type = type === undefined ? 'temporary' : String(type);
+        if (type !== 'temporary' && type !== 'persistent-license' && type !== 'persistent-usage-record') throw new TypeError("Failed to execute 'createSession' on 'MediaKeys': The provided value '" + type + "' is not a valid enum value of type MediaKeySessionType.");
+        if (type !== 'temporary') throw dex("Failed to execute 'createSession' on 'MediaKeys': The session type '" + type + "' is not supported (Clear Key: temporary sessions only).", 'NotSupportedError');
+        var s = Object.create(MediaKeySession.prototype);
+        EventTarget.call(s);
+        var closeRes;
+        Object.defineProperty(s, '_k', { value: this });
+        Object.defineProperty(s, '_st', { value: { state: 'new', id: '', statuses: new Map(), closeRes: null, closed: null } });
+        s._st.closed = new Promise(function (r) { s._st.closeRes = r; });
+        Object.defineProperty(s, '_ks', { value: Object.create(MediaKeyStatusMap.prototype) });
+        Object.defineProperty(s._ks, '_m', { value: s._st.statuses });
+        return s;
+      });
+      defMethod(MediaKeys.prototype, 'setServerCertificate', function setServerCertificate(cert) {
+        return new Promise(function (res, rej) { try { emeBytes(cert, "Failed to execute 'setServerCertificate' on 'MediaKeys'"); res(false); } catch (e) { rej(e); } });
+      });
+      defMethod(MediaKeys.prototype, 'getStatusForPolicy', function getStatusForPolicy() { return Promise.reject(dex('Policy status checks are not supported by Clear Key.', 'NotSupportedError')); });
+      global.MediaKeys = MediaKeys;
+
+      function MediaKeyStatusMap() { illegal(); }
+      tag(MediaKeyStatusMap, 'MediaKeyStatusMap');
+      defGetter(MediaKeyStatusMap.prototype, 'size', function () { return this._m.size; });
+      function kidKey(k) { return hex(emeBytes(k, 'MediaKeyStatusMap')); }
+      defMethod(MediaKeyStatusMap.prototype, 'has', function has(k) { return this._m.has(kidKey(k)); });
+      defMethod(MediaKeyStatusMap.prototype, 'get', function get(k) { var e = this._m.get(kidKey(k)); return e ? e.status : undefined; });
+      function entriesOf(m) { var o = []; m.forEach(function (e) { o.push([e.kid.buffer.slice(0), e.status]); }); return o; }
+      defMethod(MediaKeyStatusMap.prototype, 'entries', function entries() { return entriesOf(this._m)[Symbol.iterator](); });
+      defMethod(MediaKeyStatusMap.prototype, 'keys', function keys() { return entriesOf(this._m).map(function (e) { return e[0]; })[Symbol.iterator](); });
+      defMethod(MediaKeyStatusMap.prototype, 'values', function values() { return entriesOf(this._m).map(function (e) { return e[1]; })[Symbol.iterator](); });
+      defMethod(MediaKeyStatusMap.prototype, 'forEach', function forEach(cb, thisArg) {
+        if (typeof cb !== 'function') throw new TypeError("Failed to execute 'forEach' on 'MediaKeyStatusMap': The callback provided as parameter 1 is not a function.");
+        var self = this; entriesOf(this._m).forEach(function (e) { cb.call(thisArg, e[1], e[0], self); });
+      });
+      Object.defineProperty(MediaKeyStatusMap.prototype, Symbol.iterator, { value: MediaKeyStatusMap.prototype.entries, writable: true, configurable: true });
+      global.MediaKeyStatusMap = MediaKeyStatusMap;
+
+      function MediaKeyMessageEvent(type, init) {
+        if (!(this instanceof MediaKeyMessageEvent)) throw new TypeError("Failed to construct 'MediaKeyMessageEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+        if (arguments.length < 2 || init === null || typeof init !== 'object') throw new TypeError("Failed to construct 'MediaKeyMessageEvent': 2 arguments required, but only " + arguments.length + ' present.');
+        if (init.messageType === undefined) throw new TypeError("Failed to construct 'MediaKeyMessageEvent': Failed to read the 'messageType' property from 'MediaKeyMessageEventInit': Required member is undefined.");
+        if (init.message === undefined) throw new TypeError("Failed to construct 'MediaKeyMessageEvent': Failed to read the 'message' property from 'MediaKeyMessageEventInit': Required member is undefined.");
+        var ev = Reflect.construct(global.Event, [type, init], MediaKeyMessageEvent);
+        var mt = String(init.messageType);
+        if (['license-request', 'license-renewal', 'license-release', 'individualization-request'].indexOf(mt) < 0) throw new TypeError("Failed to construct 'MediaKeyMessageEvent': The provided value '" + mt + "' is not a valid enum value of type MediaKeyMessageType.");
+        Object.defineProperty(ev, '_mt', { value: mt }); Object.defineProperty(ev, '_msg', { value: emeBytes(init.message, "Failed to construct 'MediaKeyMessageEvent'").buffer });
+        return ev;
+      }
+      derive(MediaKeyMessageEvent, global.Event); tag(MediaKeyMessageEvent, 'MediaKeyMessageEvent');
+      defGetter(MediaKeyMessageEvent.prototype, 'messageType', function () { return this._mt; });
+      defGetter(MediaKeyMessageEvent.prototype, 'message', function () { return this._msg; });
+      global.MediaKeyMessageEvent = MediaKeyMessageEvent;
+
+      function MediaEncryptedEvent(type, init) {
+        if (!(this instanceof MediaEncryptedEvent)) throw new TypeError("Failed to construct 'MediaEncryptedEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+        if (arguments.length < 1) throw new TypeError("Failed to construct 'MediaEncryptedEvent': 1 argument required, but only 0 present.");
+        var ev = Reflect.construct(global.Event, [type, init], MediaEncryptedEvent);
+        init = init || {};
+        Object.defineProperty(ev, '_t', { value: init.initDataType === undefined ? '' : String(init.initDataType) });
+        Object.defineProperty(ev, '_d', { value: init.initData === undefined || init.initData === null ? null : emeBytes(init.initData, "Failed to construct 'MediaEncryptedEvent'").buffer });
+        return ev;
+      }
+      derive(MediaEncryptedEvent, global.Event); tag(MediaEncryptedEvent, 'MediaEncryptedEvent');
+      defGetter(MediaEncryptedEvent.prototype, 'initDataType', function () { return this._t; });
+      defGetter(MediaEncryptedEvent.prototype, 'initData', function () { return this._d; });
+      global.MediaEncryptedEvent = MediaEncryptedEvent;
+
+      // key IDs named by initialization data
+      function initKids(type, u8) {
+        var kids = [];
+        if (type === 'keyids') {
+          var j;
+          try { j = JSON.parse(new TextDecoder().decode(u8)); } catch (e) { return null; }
+          if (!j || !Array.isArray(j.kids)) return null;
+          for (var i = 0; i < j.kids.length; i++) { try { kids.push(fromB64url(j.kids[i])); } catch (e) { return null; } }
+        } else if (type === 'webm') {
+          if (u8.length === 0 || u8.length > 512) return null;
+          kids.push(u8);
+        } else { // cenc: pssh boxes
+          var p = 0, COMMON = '1077efecc0b24d02ace33c1e52e2fb4b';
+          while (p + 32 <= u8.length) {
+            var size = ((u8[p] << 24) | (u8[p + 1] << 16) | (u8[p + 2] << 8) | u8[p + 3]) >>> 0;
+            if (size < 32 || p + size > u8.length || String.fromCharCode(u8[p + 4], u8[p + 5], u8[p + 6], u8[p + 7]) !== 'pssh') return null;
+            var ver = u8[p + 8];
+            if (hex(u8.subarray(p + 12, p + 28)) === COMMON && ver === 1) {
+              var n = ((u8[p + 28] << 24) | (u8[p + 29] << 16) | (u8[p + 30] << 8) | u8[p + 31]) >>> 0;
+              if (p + 32 + 16 * n > p + size) return null;
+              for (var k = 0; k < n; k++) kids.push(u8.slice(p + 32 + 16 * k, p + 48 + 16 * k));
+            }
+            p += size;
+          }
+          if (p !== u8.length) return null;
+        }
+        return kids.length ? kids : null;
+      }
+      var sessSeq = 0;
+      function MediaKeySession() { illegal(); }
+      derive(MediaKeySession, EventTarget); tag(MediaKeySession, 'MediaKeySession');
+      defGetter(MediaKeySession.prototype, 'sessionId', function () { return this._st.id; });
+      defGetter(MediaKeySession.prototype, 'expiration', function () { return NaN; });
+      defGetter(MediaKeySession.prototype, 'closed', function () { return this._st.closed; });
+      defGetter(MediaKeySession.prototype, 'keyStatuses', function () { return this._ks; });
+      ['message', 'keystatuseschange'].forEach(function (t) {
+        var key = '__on' + t;
+        Object.defineProperty(MediaKeySession.prototype, 'on' + t, { configurable: true, enumerable: true,
+          get: function () { return this[key] || null; },
+          set: function (f) { if (this[key]) this.removeEventListener(t, this[key]); this[key] = typeof f === 'function' ? f : null; if (this[key]) this.addEventListener(t, this[key]); } });
+      });
+      defMethod(MediaKeySession.prototype, 'generateRequest', function generateRequest(initDataType, initData) {
+        var s = this, who = "Failed to execute 'generateRequest' on 'MediaKeySession'", args = arguments;
+        return new Promise(function (res, rej) {
+          try {
+            if (args.length < 2) throw new TypeError(who + ': 2 arguments required, but only ' + args.length + ' present.');
+            initDataType = String(initDataType);
+            var u8 = emeBytes(initData, who);
+            if (s._st.state === 'closed') throw dex(who + ': The session is already closed.', 'InvalidStateError');
+            if (s._st.state !== 'new') throw dex(who + ': The session is already initialized.', 'InvalidStateError');
+            if (u8.length === 0) throw new TypeError(who + ': The initData parameter is empty.');
+            if (INIT_TYPES.indexOf(initDataType) < 0) throw dex(who + ": The initialization data type '" + initDataType + "' is not supported by the key system.", 'NotSupportedError');
+            var kids = initKids(initDataType, u8);
+            if (!kids) throw new TypeError(who + ': The initialization data is not valid for the type ' + initDataType + '.');
+            s._st.state = 'ready'; s._st.id = 'ck' + (++sessSeq).toString(16).padStart(6, '0');
+            s._k._sessions.set(s._st.id, s);
+            var msg = tx(JSON.stringify({ kids: kids.map(b64url), type: 'temporary' })).buffer;
+            task(function () { if (s._st.state !== 'closed') fire(s, 'message', MediaKeyMessageEvent, { messageType: 'license-request', message: msg }); });
+            res();
+          } catch (e) { rej(e); }
+        });
+      });
+      defMethod(MediaKeySession.prototype, 'load', function load() { return Promise.reject(new TypeError("Failed to execute 'load' on 'MediaKeySession': The session type is 'temporary', which cannot be loaded.")); });
+      defMethod(MediaKeySession.prototype, 'update', function update(response) {
+        var s = this, who = "Failed to execute 'update' on 'MediaKeySession'", args = arguments;
+        return new Promise(function (res, rej) {
+          try {
+            if (args.length < 1) throw new TypeError(who + ': 1 argument required, but only 0 present.');
+            var u8 = emeBytes(response, who);
+            if (s._st.state === 'closed') throw dex(who + ': The session is already closed.', 'InvalidStateError');
+            if (s._st.state !== 'ready') throw dex(who + ': The session has no pending request (call generateRequest first).', 'InvalidStateError');
+            if (u8.length === 0) throw new TypeError(who + ': The response parameter is empty.');
+            var kids = emeHost(function () { return sw.emeLicense(s._k._id, new TextDecoder().decode(u8)); }), changed = false;
+            kids.forEach(function (k) {
+              var raw = fromB64url(k), id = hex(raw);
+              if (!s._st.statuses.has(id)) { s._st.statuses.set(id, { kid: raw, status: 'usable' }); changed = true; }
+            });
+            if (changed) task(function () { if (s._st.state !== 'closed') fire(s, 'keystatuseschange'); });
+            res();
+          } catch (e) { rej(e); }
+        });
+      });
+      defMethod(MediaKeySession.prototype, 'close', function close() {
+        var s = this;
+        return new Promise(function (res) {
+          if (s._st.state !== 'closed') {
+            s._st.state = 'closed';
+            if (s._st.id) s._k._sessions.delete(s._st.id);
+            s._st.statuses.clear();
+            s._st.closeRes('closed-by-application');
+          }
+          res();
+        });
+      });
+      defMethod(MediaKeySession.prototype, 'remove', function remove() { return Promise.reject(new TypeError("Failed to execute 'remove' on 'MediaKeySession': The session type is 'temporary', which has nothing to remove.")); });
+      global.MediaKeySession = MediaKeySession;
+    })();
     defMethod(global.Navigator.prototype, 'getUserMedia', function (c, ok, err) { devices.getUserMedia(c).then(ok, err); });
     defMethod(global.Navigator.prototype, 'webkitGetUserMedia', global.Navigator.prototype.getUserMedia);
   }
@@ -1525,7 +1792,7 @@
     r.bufs.push(sb); sbSync(this.sourceBuffers); sbSync(this.activeSourceBuffers);
     var self = this;
     task(function () { fire(self.sourceBuffers, 'addsourcebuffer'); });
-    if (r.el) plMSE(r.el, r.s);
+    if (r.el) { plMSE(r.el, r.s); emeBindAll(r.el); }
     return sb;
   });
   defMethod(MediaSource.prototype, 'removeSourceBuffer', function (sb) {
@@ -1716,6 +1983,7 @@
         return;
       }
       if (res.init) sbInit(sb, res.init);
+      if (mr.el) { if (res.init) emeEncrypted(mr.el, res.init.encrypted); emeEncrypted(mr.el, res.encrypted); }
       if (res.buffered) r.ranges = copyRanges(res.buffered);
       var mx = highestEnd(mr);
       if (isFinite(mr.dur) && mx > mr.dur && mr.ready === 'open') setMSDuration(ms, mx);

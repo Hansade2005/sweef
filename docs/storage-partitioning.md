@@ -81,12 +81,13 @@ run in a page. Frames are now loaded (see `frames.go`): separate document, origi
 `targetOrigin` checks, `window.parent/top/frames/frameElement`, same-origin `contentWindow`/`contentDocument` access through
 proxies, `sandbox`, `srcdoc`, `about:blank`, `data:`, `X-Frame-Options` and CSP `frame-ancestors`.
 
-Not done: frames are not painted into the parent's box and get no pointer or keyboard input (they are readable by
-`Tab.FrameTabs()`); `window.open`, popups and `window.opener`; `document.domain`; `allow` is stored but permissions policy is not
+Frames are painted into the parent's box and get pointer, wheel and keyboard input, and `window.open`, popups and
+`window.opener` exist: see [frames-popups.md](frames-popups.md). A popup opened by a page is a top-level window: its
+storage is first-party, as for any tab. Not done: `document.domain`; `allow` is stored but permissions policy is not
 enforced; `Sec-Fetch-Dest` for frames is sent but `Referrer-Policy` of the embedder is not consulted; navigations started by a frame to
 `javascript:` URLs; cross-window calls are synchronous only into the other VM (callbacks passed across run later and return
 nothing) and DOM nodes cannot be passed between windows; a frame of a data-saver "click to load" placeholder is not loaded until
-uncovered. `Options.DisableFrames` restores the old behaviour.
+uncovered. `Options.DisableFrames` restores the old behaviour (no frame is created, so none is painted).
 
 ## Cost
 

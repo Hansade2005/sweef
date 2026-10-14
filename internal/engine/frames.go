@@ -126,6 +126,8 @@ type FrameInfo struct {
 	Origin  string // "" = opaque
 	Blocked bool   // refused by X-Frame-Options or CSP frame-ancestors
 	Sandbox bool
+	Ref     string // the prefix of the refs inside the frame in a snapshot: f1, f2, ... (frames_snapshot.go)
+	Tab     *Tab   // the frame's document
 }
 
 // FrameTabs returns the child frames of the tab's document in document order. Each is a Tab that can be
@@ -155,8 +157,11 @@ func (t *Tab) FrameTabs() []*Tab {
 // Frames describes the child frames in document order.
 func (t *Tab) Frames() []FrameInfo {
 	var out []FrameInfo
-	for _, k := range t.FrameTabs() {
-		out = append(out, FrameInfo{Name: k.bc.name, URL: k.URL(), Origin: k.docOrigin(), Blocked: k.fr.blocked.Load(), Sandbox: k.bc.sandbox != 0})
+	for i, k := range t.FrameTabs() {
+		if !t.eng.frameReadable(k.URL()) {
+			continue // the embedder does not let this document be read
+		}
+		out = append(out, FrameInfo{Name: k.bc.name, URL: k.URL(), Origin: k.docOrigin(), Blocked: k.fr.blocked.Load(), Sandbox: k.bc.sandbox != 0, Ref: "f" + itoa(i+1), Tab: k})
 	}
 	return out
 }
@@ -210,6 +215,7 @@ type frameAttrs struct {
 	hasSrcdoc                bool
 	sandbox                  uint32
 	lite                     bool
+	lazy                     bool // loading="lazy": the frame loads when it comes near the viewport (frames_paint.go)
 }
 
 func (t *Tab) readFrameAttrs(d *fnet.Doc, id int64) (frameAttrs, bool) {
@@ -229,6 +235,9 @@ func (t *Tab) readFrameAttrs(d *fnet.Doc, id int64) (frameAttrs, bool) {
 	}
 	if v, _ := get(liteMark); v != "" {
 		a.lite = true
+	}
+	if v, _ := get("loading"); strings.EqualFold(strings.TrimSpace(v), "lazy") {
+		a.lazy = true
 	}
 	return a, true
 }
@@ -261,6 +270,9 @@ func (t *Tab) ensureFrame(elem int64) *Tab {
 	if !ok || attrs.lite {
 		return nil
 	}
+	if attrs.lazy && t.holdLazy(elem) {
+		return nil
+	}
 	top := t.topTab()
 	if top == nil || t.depth() >= maxFrameDepth || int(top.fr.total.Load()) >= maxFramesPerTop {
 		return nil
@@ -282,6 +294,9 @@ func (t *Tab) ensureFrame(elem int64) *Tab {
 	top.fr.total.Add(1)
 	t.fr.mu.Unlock()
 	c.beginFrameLoad(attrs)
+	// layout decides whether an iframe paints as a live frame: run it again now that the frame exists
+	_ = t.withDoc(func(d *fnet.Doc) error { d.Touch(); return nil })
+	t.contentChanged()
 	return c
 }
 
@@ -296,7 +311,9 @@ func (t *Tab) depth() int {
 func (t *Tab) newFrameTab(elem int64, a frameAttrs, top *Tab) *Tab {
 	c := newTab(t.eng, fmt.Sprintf("%s.f%d", t.ID, elem))
 	c.ctx = t.Context()
+	t.copyEnvironmentTo(c) // init scripts (the window's input helper), request interception (tracker blocker), bindings
 	c.consoleRing, c.netRing = t.consoleRing, t.netRing
+	c.SetUpdateHook(t.contentChanged) // images that arrive in the frame repaint the page
 	// emulation settings follow the page the frame is in
 	t.mu.RLock()
 	c.userAgent, c.offline, c.colorScheme, c.extraHdrs = t.userAgent, t.offline, t.colorScheme, t.extraHdrs
@@ -375,6 +392,7 @@ func (c *Tab) beginFrameLoad(a frameAttrs) {
 		}
 		c.startFramePump()
 		p.frameEvent(c.bc.elem, "load")
+		p.contentChanged()
 	}()
 }
 
@@ -382,6 +400,7 @@ func (c *Tab) setFrameDocument(src, finalURL string) {
 	if c.closed.Load() {
 		return
 	}
+	c.setIsolation(nil, finalURL)
 	c.setDocument(src, finalURL, false)
 }
 
@@ -431,10 +450,14 @@ func (c *Tab) startFramePump() {
 	}
 	rt := &bgRuntime{tab: c, wakeCh: make(chan struct{}, 1), quit: make(chan struct{}), done: make(chan struct{})}
 	rt.cur = func() *jsVM {
+		if top := c.topTab(); top != nil && top.win.framesPaused.Load() {
+			return nil // a background tab's frames do not run
+		}
 		c.mu.RLock()
 		defer c.mu.RUnlock()
 		return c.js
 	}
+	rt.tick = c.frameTick
 	c.fr.rt = rt
 	c.fr.mu.Unlock()
 	wake := func() { rt.nudge() }
@@ -591,6 +614,7 @@ func (t *Tab) frameMutation(m fnet.Mutation) {
 			}
 		}()
 		t.frameEvent(m.BackendID, "load")
+		t.contentChanged()
 	}()
 }
 
