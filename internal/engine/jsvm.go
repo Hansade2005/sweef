@@ -151,6 +151,7 @@ type jsVM struct {
 	importMap map[string]string // <script type=importmap> entries
 	mu        sync.Mutex
 	vm        *quickjs.VM
+	cv        *cvHost // the canvas host of this VM, when the canvas extension is installed
 	tab       *Tab
 	start     time.Time
 	closed    bool
@@ -1425,6 +1426,12 @@ func (j *jsVM) registerHost() error {
 		sb.WriteString(x.name + ":__sw_" + x.name)
 	}
 	sb.WriteString("};")
+	if j.cv != nil {
+		if err := j.cv.registerBufferFns(); err != nil {
+			return err
+		}
+		sb.WriteString("__sw.cvGetBuf=__swCvGetBuf;__sw.cvPutBuf=__swCvPutBuf;delete globalThis.__swCvGetBuf;delete globalThis.__swCvPutBuf;")
+	}
 	for _, x := range hs {
 		sb.WriteString("delete globalThis.__sw_" + x.name + ";")
 	}
