@@ -530,6 +530,18 @@ func (e *WCOpusEncoder) FrameSamples() int { return e.frameSamples }
 // SetBitrate changes the target bitrate.
 func (e *WCOpusEncoder) SetBitrate(bps int) { _ = e.enc.SetBitrate(bps) }
 
+// SetCBR switches between constant and variable bitrate.
+func (e *WCOpusEncoder) SetCBR(on bool) {
+	if on {
+		_ = e.enc.SetBitrateMode(gopus.BitrateModeCBR)
+	} else {
+		_ = e.enc.SetBitrateMode(gopus.BitrateModeVBR)
+	}
+}
+
+// PreSkip is the encoder delay in samples at 48 kHz (what OpusHead's pre-skip field carries).
+func (e *WCOpusEncoder) PreSkip() int { return e.enc.Lookahead() * 48000 / e.rate }
+
 // Encode encodes exactly FrameSamples samples per channel (interleaved).
 func (e *WCOpusEncoder) Encode(pcm []float32) ([]byte, error) {
 	n, err := e.enc.Encode(pcm, e.buf)

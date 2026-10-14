@@ -1243,7 +1243,16 @@
     if (t._t.ready === 'ended') return;
     t._t.ready = 'ended'; delete capTracks[t._t.id];
     if (fire) { var ev = new Event('ended'); t.dispatchEvent(ev); }
+    trackEnded(t);
   }
+  // Internal watchers (MediaRecorder) learn that a track ended for any reason, including track.stop(), which fires no event.
+  function trackEnded(t) { var o = t._t && t._t.obs; if (o) o.slice().forEach(function (f) { try { f(t); } catch (e) { /* ignore */ } }); }
+  global.__swTrackWatch = function (track, fn) {
+    if (track._t) { (track._t.obs || (track._t.obs = [])).push(fn); return; }
+    // a plain track object (canvas.captureStream()): wrap its stop()
+    var orig = track.stop;
+    if (typeof orig === 'function') track.stop = function () { var was = track.readyState; orig.apply(this, arguments); if (was !== 'ended') fn(track); };
+  };
   function copyJSON(o) { try { return JSON.parse(JSON.stringify(o)); } catch (e) { return {}; } }
   [['kind', 'kind'], ['label', 'label'], ['id', 'id'], ['readyState', 'ready']].forEach(function (p) { defGetter(MediaStreamTrack.prototype, p[0], function () { return this._t[p[1]]; }); });
   defGetter(MediaStreamTrack.prototype, 'enabled', function () { return this._t.enabled; }, function (v) { v = !!v; this._t.enabled = v; if (this._t.cap && this._t.ready === 'live') { try { sw.capEnable(this._t.id, v); } catch (e) { /* ignore */ } } });
@@ -1254,6 +1263,7 @@
     var t = this._t; if (t.ready === 'ended') return;
     t.ready = 'ended';
     if (t.cap) { delete capTracks[t.id]; try { sw.capStop(t.id); } catch (e) { /* ignore */ } }
+    trackEnded(this);
   });
   defMethod(MediaStreamTrack.prototype, 'clone', function () {
     var t = this._t;
@@ -1670,11 +1680,6 @@
     })();
     defMethod(global.Navigator.prototype, 'getUserMedia', function (c, ok, err) { devices.getUserMedia(c).then(ok, err); });
     defMethod(global.Navigator.prototype, 'webkitGetUserMedia', global.Navigator.prototype.getUserMedia);
-  }
-  if (!global.MediaRecorder) {
-    var MR = function MediaRecorder() { throw dex('MediaRecorder is not supported in this browser.', 'NotSupportedError'); };
-    MR.isTypeSupported = function () { return false; };
-    global.MediaRecorder = MR;
   }
   // speech
   (function () {

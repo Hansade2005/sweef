@@ -45,6 +45,7 @@ func init() {
 		j.opfsHost(f)
 		j.cryptoHost(f)
 		j.wcHost(f)
+		j.recHostFns(f)
 		return f
 	})
 }

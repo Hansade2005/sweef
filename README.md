@@ -306,6 +306,7 @@ Three states: **works** (covered by tests), **partial** (works for the common ca
 | Media: `<video>` and `<audio>` element behavior, MSE, text tracks, Web Audio (all node types, worklets, offline rendering) | works (codec limits below) |
 | WebRTC: `RTCPeerConnection`, data channels, VP8 and Opus calls, jitter buffers, NACK, PLI, congestion control, `getStats` ([docs/webrtc.md](docs/webrtc.md)) | works between two Sweef peers on loopback; **real Meet, Zoom and Jitsi calls untested** |
 | Camera, microphone and screen capture: `getUserMedia`, `getDisplayMedia`, `enumerateDevices`, permission prompts and indicator ([docs/capture.md](docs/capture.md)) | works on Linux (V4L2 and PulseAudio, synthetic devices in tests); Windows and macOS compile-checked only |
+| `MediaRecorder` of camera, microphone, screen, `canvas.captureStream()` and Web Audio streams to WebM (VP8, Opus) and Ogg Opus, with `timeslice`, pause and `isTypeSupported` ([docs/mediarecorder.md](docs/mediarecorder.md)) | works against synthetic devices and local servers; no MP4, VP9 or H.264 recording; **WhatsApp Web voice notes not tried on the real site** |
 | WebAssembly: full JS API on wazero, live `memory.buffer`, workers, shared memory and atomics ([docs/webassembly.md](docs/webassembly.md)) | works; an Emscripten pthreads program was not tried |
 | `SharedArrayBuffer`, `Atomics` (blocking `wait` in workers), cross-origin isolation (COOP + COEP) | works |
 | WebCodecs: video and audio decoders for VP8, VP9, H.264, HEVC, AV1, Opus, AAC, MP3, Vorbis; VP8 and Opus encoders ([docs/webcodecs.md](docs/webcodecs.md)) | partial (no H.264 or AV1 encoder, no hardware path) |
@@ -319,7 +320,6 @@ Three states: **works** (covered by tests), **partial** (works for the common ca
 | `Intl`: `NumberFormat`, `DateTimeFormat`, `PluralRules`, `RelativeTimeFormat`, `ListFormat`, `DisplayNames`, `DurationFormat`, `Collator`, `Segmenter` on CLDR 47 data for 73 locales, with the IANA time zone database embedded | partial (golden tests against Node 22: numbers 32 of 47,000 cases differ, dates about 89% on an adversarial matrix, collation about 0.3% of pairs; no East Asian collation or dictionary word breaking; non-Gregorian calendars other than buddhist and persian fall back) |
 | Echo cancellation, noise suppression and automatic gain on the WebRTC send path | works (reported in `getSettings`); not compared with Chromium's processing |
 | Fullscreen API, Media Session (now-playing control in the browser), Async Clipboard with a per-site permission | works |
-| `MediaRecorder` | **not yet**: `start()` throws `NotSupportedError`, so WhatsApp voice notes and in-page recording do not work |
 | Browser extensions | not planned |
 
 ## Rendering fidelity
@@ -352,7 +352,7 @@ What is still different, honestly:
 - **SVG not done:** CSS `mask` image layers on SVG elements, `kernelUnitLength`, and a few filter inputs (BackgroundImage, FillPaint).
 - **Codecs.** Everything below decodes in pure Go, with no ffmpeg. Audio: MP3, Vorbis, FLAC, PCM, Opus (SILK, CELT, hybrid; Ogg, WebM, MP4), AAC-LC and HE-AAC v1/v2 (SBR and PS; checked against real MPEG conformance streams at 72 to 78 dB) in ADTS and MP4, and USAC / xHE-AAC in MP4 (frequency-domain and LPD cores, eSBR with the harmonic transposer, PVC and inter-TES, MPEG Surround 2-1-2 upmix; checked against the real conformance streams at 61 to 89 dB and against libxaac). Video: VP8, VP9 (profiles 0 to 3, 8 to 12 bit, 4:2:0/4:2:2/4:4:0/4:4:4, intra-only and scaled references), H.264 (Baseline, Main, Extended with data partitioning and SP/SI slices, High, High 10, 4:2:2, 4:4:4, 9 to 14 bit, interlaced PAFF and MBAFF, FMO, long-term references, lossless), HEVC (Main, Main 10, Main Still Picture, the whole range-extension set including extended precision and 16-bit, tiles, wavefront, SAO, MV-HEVC with every layer decodable, and screen content coding with palette, intra block copy, adaptive colour transform and adaptive MV resolution) and AV1 (8, 10 and 12 bit, all common tools, film grain, superres, Annex B, layers and operating points, large-scale tile), bit-exact with ffmpeg, libdav1d, libaom, the JVT and JCT-VC conformance streams and the HM and SCM reference decoders on the test corpus. Frames are decoded on demand from the nearest preceding sync sample, so seeking and `drawImage(video)` work without ffmpeg (`SWEEF_NO_FFMPEG=1` proves it). Not decoded natively, so they use ffmpeg when installed: HEVC SHVC and 3D-HEVC, MV-HEVC POC reset and inferred scaling lists, USAC streams using time-warped MDCT, MPS212 residual coding, phase coding, temporal shaping or transient steering, and HEVC separate colour planes (H.264 separate colour planes decode natively but are only checked by eye). The player outputs the base view of multilayer HEVC. H.264 SI slices and the switching form of SP slices have no real conformance stream, so they are checked only against a model derived from the JM reference decoder and synthetic streams. USAC and HE-AAC multichannel layouts beyond 5.1 are unverified. CABAC with data partitioning cannot occur in a valid stream (the Extended profile requires CAVLC).
 - **WebGL.** No compressed textures, `EXT_sRGB` or multi-draw; lines are 1 px; `sin` differs from SwiftShader in the last digit.
-- **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.4 s, because QuickJS cannot share typed arrays with Go. `MediaRecorder`, EME and picture-in-picture reject.
+- **Canvas.** `getImageData` on a 1280x720 canvas takes about 0.4 s, because QuickJS cannot share typed arrays with Go. EME with Widevine, PlayReady or FairPlay and picture-in-picture reject.
 - **Exact pixel identity with Chromium is not a goal.** Screenshots are not byte-identical.
 
 Set `SWEEF_RENDERER=flow` to fall back to the old schematic layout.
@@ -405,7 +405,7 @@ Requires Go 1.26 (the `go` toolchain downloads it automatically when `GOTOOLCHAI
 
 - Verify on real hardware and sites: YouTube, Google Meet, Zoom, WhatsApp Web, real sign-in popups, Windows and macOS audio, capture and notifications
 - Netflix-class DRM: a Widevine signing arrangement, and PlayReady and FairPlay verified on real machines
-- `MediaRecorder` (voice notes), and Zoom web: an H.264 encoder (it may expect one) and an Emscripten pthreads run
+- Zoom web: an H.264 encoder (it may expect one) and an Emscripten pthreads run
 - Binary size: only about 0.7 MiB of the 40 MiB budget is left, so new data (locales, time zones, fonts) needs a compression or download-on-demand plan
 - Iframes: scrollbars, cross-window DOM access, popups that inherit a sandbox
 - `sweef watch` live event stream

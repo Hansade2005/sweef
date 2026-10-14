@@ -138,6 +138,13 @@ and checks the sum, the wait/notify tests ping-pong between the page and a worke
 and Workers, backed by the pure-Go codecs of `internal/media`, running off the JavaScript thread. What is supported and
 what is not, per codec, is in [webcodecs.md](webcodecs.md).
 
+## MediaRecorder
+
+`MediaRecorder` and `BlobEvent` record `getUserMedia` / `getDisplayMedia` streams, `canvas.captureStream()` and the stream of a
+`MediaStreamAudioDestinationNode` into WebM (Opus, VP8) or Ogg (Opus), with `timeslice`, `pause()` / `resume()` /
+`requestData()`, the specified state machine and events, and `isTypeSupported()` that says `false` for what has no encoder
+(MP4, VP9, H.264, AV1). Encoding runs off the JavaScript thread. Supported types, limits and tests: [mediarecorder.md](mediarecorder.md).
+
 ## Encrypted Media Extensions
 
 Clear Key only (`org.w3.clearkey`), temporary sessions, in the MSE pipeline. Widevine, PlayReady and FairPlay reject
@@ -200,6 +207,5 @@ other work streams and are neither listed nor asserted here.
 | `navigator.userAgentData` | implemented | Truthful brands (the browser's own name, no Chromium impersonation). |
 | `MediaStreamTrackProcessor`, `MediaStreamTrackGenerator`, `VideoTrackGenerator` | implemented | On the WebCodecs frame storage. Audio tracks yield `AudioData`. |
 | Voice processing (echo cancellation, noise suppression, auto gain) | implemented | Applied to microphone audio on the way to a peer connection. |
-| `MediaRecorder` | absent | Throws `NotSupportedError` on `start()`. |
 | Document Picture-in-Picture, `ImageCapture`, File System Access pickers | absent / stubs | Pickers reject; the Origin Private File System works. |
 | `navigator.hardwareConcurrency`, `deviceMemory` | fixed | Both report 1: pages see a small machine. |

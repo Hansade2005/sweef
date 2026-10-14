@@ -104,9 +104,7 @@ var compatChecks = map[string][][2]string{
 }
 
 // known absent or stubbed: documented in docs/compat.md and docs/web-platform.md
-var compatAbsent = map[string]string{
-	"MediaRecorder start": `(() => { try { const r = new MediaRecorder(new MediaStream()); r.start(); return 'started'; } catch (e) { return e.name; } })()`,
-}
+var compatAbsent = map[string]string{}
 
 func TestCompatSiteFeatureDetection(t *testing.T) {
 	tab := platformTab(t)
