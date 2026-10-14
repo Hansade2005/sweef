@@ -145,5 +145,6 @@
   SW.applyTheme();
   /* a page can force a theme with ?theme=dark (used by previews and error pages) */
   try { var q = /[?&]theme=(\w+)/.exec(location.search); if (q) document.documentElement.setAttribute("data-theme", q[1]); var pf = /[?&]platform=(\w+)/.exec(location.search); if (pf) document.documentElement.setAttribute("data-platform", pf[1]); } catch (e) {}
-  SW.query = function (k) { var m = new RegExp("[?&]" + k + "=([^&#]*)").exec(location.search); return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : ""; };
+  /* untrusted: strip markup and control chars */
+  SW.query = function (k) { var m = new RegExp("[?&]" + k + "=([^&#]*)").exec(location.search), v = ""; if (m) try { v = decodeURIComponent(m[1].replace(/\+/g, " ")); } catch (e) {} return v.replace(/[<>"'`\u0000-\u001f\u007f]/g, ""); };
 })();
