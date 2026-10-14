@@ -156,8 +156,16 @@ func (p *selParser) ident() string {
 			p.pos++
 			continue
 		}
-		if c == '\\' && p.pos+1 < len(p.s) { // escaped char
-			p.pos += 2
+		if c == '\\' && p.pos+1 < len(p.s) { // escaped char, or up to 6 hex digits and one optional whitespace
+			p.pos++
+			if n := hexRun(p.s[p.pos:]); n > 0 {
+				p.pos += n
+				if p.pos < len(p.s) && isCSSSpace(p.s[p.pos]) {
+					p.pos++
+				}
+				continue
+			}
+			p.pos++
 			continue
 		}
 		break
@@ -171,13 +179,45 @@ func unescapeCSS(s string) string {
 	}
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' && i+1 < len(s) {
-			i++
+		if s[i] != '\\' || i+1 >= len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		i++
+		if n := hexRun(s[i:]); n > 0 { // CSS Syntax 4.3.7: a code point in hex, then one optional whitespace
+			v, _ := strconv.ParseUint(s[i:i+n], 16, 32)
+			if v == 0 || v > 0x10FFFF || (v >= 0xD800 && v <= 0xDFFF) {
+				v = 0xFFFD
+			}
+			b.WriteRune(rune(v))
+			i += n
+			if i < len(s) && isCSSSpace(s[i]) {
+				if s[i] == '\r' && i+1 < len(s) && s[i+1] == '\n' {
+					i++
+				}
+			} else {
+				i--
+			}
+			continue
+		}
+		if s[i] == '\n' || s[i] == '\f' || s[i] == '\r' { // an escaped line break inside a string is removed
+			continue
 		}
 		b.WriteByte(s[i])
 	}
 	return b.String()
 }
+
+// hexRun is the number of leading hex digits of s, at most 6.
+func hexRun(s string) int {
+	n := 0
+	for n < len(s) && n < 6 && strings.IndexByte("0123456789abcdefABCDEF", s[n]) >= 0 {
+		n++
+	}
+	return n
+}
+
+func isCSSSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' }
 
 func (p *selParser) compound() (compoundSel, error) {
 	var c compoundSel

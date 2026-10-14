@@ -84,7 +84,7 @@
     if (q) {
       var any = false; SECS.forEach(function (s) { var d = h("div", P[s[0]]()); if (d.textContent.toLowerCase().indexOf(q) >= 0) { any = true; SW.$$(".group", d).forEach(function (g) { if (g.textContent.toLowerCase().indexOf(q) >= 0) { col.appendChild(h("div.gh2", { style: { margin: "6px 4px", color: "var(--text-3)", fontWeight: 700, fontSize: "12px" }, text: s[2] })); col.appendChild(g); } }); } });
       if (!any) col.appendChild(h("div.empty2", S.f(S.page.noResults, { q: q })));
-    } else SW.add(col, P[cur] ? P[cur]() : P.general());
+    } else SW.add(col, Object.prototype.hasOwnProperty.call(P, cur) && typeof P[cur] === "function" ? P[cur]() : P.general()); // cur comes from the URL
     sc.refresh();
   }
   $("sq").addEventListener("input", function (e) { q = e.target.value.trim().toLowerCase(); render(); });

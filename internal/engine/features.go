@@ -405,8 +405,27 @@ func suggestedName(h http.Header, rawurl, fallback string) string {
 	return "download"
 }
 
+// safeFileName keeps only the last path element of a suggested download name (from the URL, the
+// download attribute or Content-Disposition), so a name such as "../x" or "..\\x" cannot leave the
+// downloads directory.
+func safeFileName(name string) string {
+	name = strings.ReplaceAll(name, "\\", "/")
+	name = path.Base(path.Clean("/" + name))
+	name = strings.Map(func(r rune) rune {
+		if r < 0x20 || strings.ContainsRune(`<>:"|?*`, r) {
+			return '_'
+		}
+		return r
+	}, name)
+	if name == "" || name == "/" || name == "." || name == ".." {
+		return "download"
+	}
+	return name
+}
+
 // saveDownload streams body to the downloads directory and records it.
 func (t *Tab) saveDownload(rawurl, name, mimeType string, body io.Reader) Download {
+	name = safeFileName(name)
 	dir := t.downloadsDir()
 	dst := filepath.Join(dir, name)
 	for i := 1; ; i++ {

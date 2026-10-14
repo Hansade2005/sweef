@@ -69,6 +69,19 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - README shows the real browser UI (first-run setup with the real browser logos, Sidekick, Data Saver, new tab, omnibox), rendered by `uipreview`.
 - The omnibox dropdown uses a lighter shadow (the `--sh-2` token plus a 1 px ring instead of `--sh-3`).
 
+### Fixed
+- `fetch` and `XMLHttpRequest` send the request headers page code sets (Supabase `apikey`, `Authorization`); they were dropped.
+- `<img>` elements in the document fire `error` when the response is not an image and report their real `naturalWidth`/`naturalHeight`.
+- Images with `max-width: 100%` (Tailwind's reset) are no longer 0 px wide in inline-block, inline-flex, float, flex-item and max-content boxes.
+- Grid area and line names keep their case (Wikipedia's camelCase areas now place their items).
+- `sweef eval`, `sweef console` and `sweef network` print results again (the RPC returns `.result`, `.messages`, `.entries`), and the first navigation of a session loads the page once, not twice.
+- `getComputedStyle` answers from the cascade for display, position, sizes, margins, padding, borders, colours, fonts, line-height, opacity and z-index.
+- Variable web fonts paint at the requested weight (they drew their default instance), and the `opsz` axis follows the font size.
+- Absolutely positioned children of flex containers take their static position from `justify-content` and `align-items`/`align-self`.
+- Quirks-mode pages no longer grow a needless scrollbar when the first child's top margin collapses through `body`; `document.compatMode` reports `BackCompat` for them.
+- Selectors the DOM builds for ids and names escape backslashes and line breaks, and the selector parser understands CSS hex escapes; `CSSStyleSheet.insertRule` keeps nested braces in the declaration block.
+- A download name cannot leave the downloads directory (`../x`, `..\x`), clicking a link never navigates the top level to `data:` or runs `vbscript:`, and the settings page ignores section names it does not define.
+
 ### Performance
 - Opening the omnibox dropdown: rows and section headings are pooled and reused, and rows no longer get `id`/index
   attribute writes when they move (about 13.0 ms to 11.3 ms median in-process at 1x with history present; the shadow
