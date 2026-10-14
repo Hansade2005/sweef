@@ -55,8 +55,26 @@ type agentCluster struct {
 	mu      sync.Mutex
 	next    uint64
 	regions map[uint64]*sabRegion
+	objs    map[uint64]any // shared WebAssembly memories and module bytes handed to workers (wasm_threads.go)
 	bytes   int64
 	dead    bool
+}
+
+func (c *agentCluster) putObj(v any) uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.next++
+	if c.objs == nil {
+		c.objs = map[uint64]any{}
+	}
+	c.objs[c.next] = v
+	return c.next
+}
+
+func (c *agentCluster) getObj(id uint64) any {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.objs[id]
 }
 
 func newAgentCluster() *agentCluster { return &agentCluster{regions: map[uint64]*sabRegion{}} }
@@ -118,7 +136,7 @@ func (c *agentCluster) get(id uint64) *sabRegion {
 func (c *agentCluster) release() {
 	c.mu.Lock()
 	rs := c.regions
-	c.regions, c.dead = map[uint64]*sabRegion{}, true
+	c.regions, c.objs, c.dead = map[uint64]*sabRegion{}, nil, true
 	c.mu.Unlock()
 	for _, r := range rs {
 		sabByBase.Delete(r.base)
@@ -376,12 +394,16 @@ func (j *jsVM) sabRegisterNatives() {
 		}
 		return int(r.(*sabRegion).id)
 	})
-	reg("open", func(id any) quickjs.Value {
+	reg("open", func(id, n any) quickjs.Value {
 		r := j.agentCluster().get(uint64(toInt(id)))
 		if r == nil {
 			return quickjs.UndefinedValue
 		}
-		return j.sabBuffer(raw, r, len(r.data))
+		l := int(toInt(n))
+		if l < 0 || l > len(r.data) {
+			l = len(r.data)
+		}
+		return j.sabBuffer(raw, r, l)
 	})
 	reg("wait", func(v quickjs.Value, off, size, exp, timeoutMs any) any {
 		sz := int(toInt(size))

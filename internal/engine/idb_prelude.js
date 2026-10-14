@@ -286,6 +286,10 @@
         ids.set(v, id);
         return ['SB', id, sid, v.byteLength];
       }
+      if (typeof global.__swWasmSer === 'function') { // WebAssembly is loaded: Modules and shared Memories travel by reference
+        var wd = global.__swWasmSer(v, !!share && !!xports);
+        if (wd) { ids.set(v, id); return ['WA', id, wd]; }
+      }
       if (global.MessagePort && v instanceof global.MessagePort) {
         var pi = xports ? xports.indexOf(v) : -1;
         if (pi < 0) throw cloneFail('#<MessagePort>');
@@ -350,8 +354,12 @@
         case 'd': return (objs[n[1]] = new Date(n[2] === null ? NaN : n[2]));
         case 'r': return (objs[n[1]] = new RegExp(n[2], n[3]));
         case 'P': return (objs[n[1]] = xports && xports[n[2]]);
+        case 'WA': {
+          if (typeof global.__swWasmDe !== 'function') void global.WebAssembly; // loads the API
+          return (objs[n[1]] = global.__swWasmDe(n[2]));
+        }
         case 'SB': {
-          var sb = typeof global.__swSabOpen === 'function' ? global.__swSabOpen(n[2]) : undefined;
+          var sb = typeof global.__swSabOpen === 'function' ? global.__swSabOpen(n[2], n[3]) : undefined;
           if (!sb) throw cloneFail('#<SharedArrayBuffer>');
           return (objs[n[1]] = sb);
         }

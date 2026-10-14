@@ -177,6 +177,7 @@ func (rt *bgRuntime) stop() {
 		rt.stopped.Store(true)
 		close(rt.quit)
 		rt.j.sabInterrupt() // a worker blocked in Atomics.wait must come back to notice
+		rt.j.wasmAbort()    // and so must one that is inside a wasm thread: its shared memories are released now
 		rt.nudge()
 		if rt.started.Load() {
 			<-rt.done

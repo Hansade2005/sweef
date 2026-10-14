@@ -123,6 +123,7 @@ func (r *wrunner) next() *wcall {
 }
 
 func (r *wrunner) run(c *wcall) {
+	r.h.inflight.Add(1)
 	defer func() {
 		if rec := recover(); rec != nil {
 			c.err = fmt.Errorf("webassembly call panicked: %v", rec)
@@ -260,11 +261,11 @@ func (h *wasmHost) runJS(tok, idx int, args []any) (any, error) {
 func (h *wasmHost) finishCall(c *wcall) {
 	h.life.Lock()
 	defer h.life.Unlock()
-	if c.state.Load() != 2 {
-		return
+	h.inflight.Add(-1)
+	if c.state.Load() == 2 {
+		h.zomb = false
 	}
-	h.zomb = false
-	if h.wantClose {
+	if h.wantClose && !h.zomb && h.inflight.Load() == 0 {
 		h.reallyClose()
 	}
 }
@@ -273,6 +274,9 @@ func (h *wasmHost) finishCall(c *wcall) {
 func (h *wasmHost) hostFunc(tok, idx int, ft wFuncType) api.GoModuleFunction {
 	params, results := ft.params, ft.results
 	return api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+		if h.aborted.Load() {
+			panic(&wasmJSThrow{msg: "webassembly host is closing", internal: true})
+		}
 		args := make([]any, len(params))
 		for i, p := range params {
 			args[i] = wasmDecode(p, stack[i])

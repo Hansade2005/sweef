@@ -83,8 +83,8 @@
 
   // ---- sharing with other VMs ---------------------------------------------------------------------------
   Object.defineProperty(global, '__swSabId', { value: function (buf) { return N.id(buf); } });
-  Object.defineProperty(global, '__swSabOpen', { value: function (id) { return N.open(id); } });
-  Object.defineProperty(global, '__swSabShare', { value: function (buf) { var id = N.id(buf); return id < 0 ? buf : N.open(id); } });
+  Object.defineProperty(global, '__swSabOpen', { value: function (id, len) { return N.open(id, len); } });
+  Object.defineProperty(global, '__swSabShare', { value: function (buf) { var id = N.id(buf); return id < 0 ? buf : N.open(id, buf.byteLength); } });
 
   // ---- gating ---------------------------------------------------------------------------------------
   Object.defineProperty(global, '__swCoiBind', { value: function () {

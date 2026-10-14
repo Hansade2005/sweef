@@ -166,6 +166,7 @@ type jsVM struct {
 	clMu    sync.Mutex
 	cluster *agentCluster // SharedArrayBuffer agent cluster (sab.go)
 	sabv    *vmSAB
+	wasmh   *wasmHost
 
 	closerMu sync.Mutex
 	closers  []func() // run first when the VM closes (host extensions, media players, audio streams); they must not call into the VM
@@ -350,6 +351,10 @@ func (j *jsVM) close() {
 	if j == nil {
 		return
 	}
+	// A script that is blocked (Atomics.wait, a wasm thread waiting on a futex) holds j.mu and would hold up this
+	// close for ever: wake it first, without the lock.
+	j.sabInterrupt()
+	j.wasmAbort()
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.closed {
