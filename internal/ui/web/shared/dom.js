@@ -29,7 +29,8 @@
   function add(el, c) {
     if (c == null || c === false) return;
     if (Array.isArray(c)) c.forEach(function (x) { add(el, x); });
-    else el.appendChild(c instanceof Node ? c : document.createTextNode(String(c)));
+    else if (c instanceof Node) el.appendChild(c);
+    else el.appendChild(document.createTextNode(String(c))); // strings are always text, never markup
   }
   SW.add = add;
   SW.clear = function (el) { while (el.firstChild) el.removeChild(el.firstChild); return el; };

@@ -85,8 +85,10 @@
       var any = false; SECS.forEach(function (s) { var d = h("div", P[s[0]]()); if (d.textContent.toLowerCase().indexOf(q) >= 0) { any = true; SW.$$(".group", d).forEach(function (g) { if (g.textContent.toLowerCase().indexOf(q) >= 0) { col.appendChild(h("div.gh2", { style: { margin: "6px 4px", color: "var(--text-3)", fontWeight: 700, fontSize: "12px" }, text: s[2] })); col.appendChild(g); } }); } });
       if (!any) col.appendChild(h("div.empty2", S.f(S.page.noResults, { q: q })));
     } else {
-      var page = Object.prototype.hasOwnProperty.call(P, cur) ? P[cur] : null; // cur comes from the URL
-      SW.add(col, typeof page === "function" ? page() : P.general());
+      // cur comes from the URL: only a section from the fixed SECS list is ever called
+      var page = P.general;
+      SECS.forEach(function (s) { if (s[0] === cur && typeof P[s[0]] === "function") page = P[s[0]]; });
+      SW.add(col, page.call(P));
     }
     sc.refresh();
   }
