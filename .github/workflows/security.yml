@@ -38,4 +38,9 @@ jobs:
         with:
           fail-on-severity: high
           # Licences we accept for new dependencies (see CONTRIBUTING.md).
-          allow-licenses: Apache-2.0, BSD-2-Clause, BSD-3-Clause, MIT, ISC, 0BSD, MPL-2.0, Unlicense, CC0-1.0, Zlib
+          # LicenseRef-scancode-google-patent-license-golang is the Go project's additional patent grant
+          # (PATENTS file) on golang.org/x/* and google.golang.org/protobuf: a permission on top of BSD-3-Clause.
+          allow-licenses: Apache-2.0, BSD-2-Clause, BSD-3-Clause, MIT, ISC, 0BSD, MPL-2.0, Unlicense, CC0-1.0, Zlib, LicenseRef-scancode-google-patent-license-golang
+          # golang.org/x/exp is BSD-3-Clause + the same grant; GitHub's licence data reports NOASSERTION for this
+          # old pseudo-version (only tools/kvbench, a benchmark harness that is not shipped, uses it).
+          allow-dependencies-licenses: pkg:golang/golang.org/x/exp
