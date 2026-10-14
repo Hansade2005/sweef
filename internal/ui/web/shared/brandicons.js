@@ -6,7 +6,7 @@
   window.SW.brandIcon = function (key, size) {
     var b = B[key]; if (!b) return null;
     var s = document.createElement("span"); s.className = "brandic"; s.style.background = rgba(b.c, 0.12); s.style.color = b.c;
-    var n = size || 24;
+    var n = +size > 0 && isFinite(+size) ? Math.min(+size, 4096) : 24; // numbers only: this becomes markup
     s.innerHTML = '<svg width="' + n + '" height="' + n + '" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="' + b.d + '"/></svg>';
     return s;
   };

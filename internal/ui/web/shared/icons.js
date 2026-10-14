@@ -52,16 +52,19 @@
     key: '<circle cx="8" cy="15" r="3.500"/>' + P("M10.500 12.500L19 4M16 7l2.500 2.500M14 9l2 2"), flag: P("M6 20V4.500M6 5h11l-2 4 2 4H6")
   };
   var cache = {};
+  // px returns a finite positive number for markup sizes (never the caller's string).
+  function px(v, d) { v = +v; return isFinite(v) && v > 0 ? Math.min(v, 4096) : d; }
   function icon(name, size, cls) {
     var s = document.createElement("span");
     s.className = "ic" + (cls ? " " + cls : "");
-    var n = size || 18;
-    s.innerHTML = '<svg width="' + n + '" height="' + n + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[name] || "") + "</svg>";
+    var n = px(size, 18); // numbers only: these strings become markup
+    s.innerHTML = '<svg width="' + n + '" height="' + n + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (Object.prototype.hasOwnProperty.call(I, name) ? I[name] : "") + "</svg>";
     return s;
   }
   /* Logo mark: an "S" built from two speed streaks, with motion lines trailing behind it. */
   function logoSVG(size, id) {
-    id = id || "lg";
+    size = px(size, 20);
+    id = String(id || "lg").replace(/[^\w-]/g, "");
     return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 32 32" fill="none" aria-hidden="true"><defs><linearGradient id="' + id + '" x1="3" y1="4" x2="29" y2="29" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5B5BFF"/><stop offset=".55" stop-color="#8F8BFF"/><stop offset="1" stop-color="#3DF5C4"/></linearGradient></defs>' +
       '<path d="M25.500 8H15a5 5 0 0 0 0 10h2a5 5 0 0 1 0 10H6.500" stroke="url(#' + id + ')" stroke-width="3.800" stroke-linecap="round" stroke-linejoin="round"/>' +
       '<path d="M3 8h6.500M5.500 13h2.500" stroke="url(#' + id + ')" stroke-width="2.200" stroke-linecap="round" opacity=".55"/><path d="M29 28h-2.500" stroke="url(#' + id + ')" stroke-width="2.200" stroke-linecap="round" opacity=".55"/></svg>';
@@ -75,7 +78,7 @@
   }
   /* Progress ring: pct 0..100, drawn in currentColor so the wrapper's colour is the tone. */
   function dataRing(pct, size, sw) {
-    var n = size || 18, w = sw || 4, c = 2 * Math.PI * 14, f = Math.max(0, Math.min(100, +pct || 0)) / 100, s = document.createElement("span");
+    var n = px(size, 18), w = px(sw, 4), c = 2 * Math.PI * 14, f = Math.max(0, Math.min(100, +pct || 0)) / 100, s = document.createElement("span");
     s.className = "dring";
     s.innerHTML = '<svg width="' + n + '" height="' + n + '" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-opacity=".2" stroke-width="' + w + '"/>' +
       (f > 0 ? '<circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="' + w + '" stroke-linecap="round" stroke-dasharray="' + (c * f).toFixed(1) + " " + c.toFixed(1) + '" transform="rotate(-90 16 16)"/>' : "") + "</svg>";
