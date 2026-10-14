@@ -18,6 +18,22 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   longer shared between a private window and the normal one.
 
 ### Added
+- Cross-origin isolation, `SharedArrayBuffer` and `Atomics` across the page and its dedicated Workers: `crossOriginIsolated` follows
+  COOP `same-origin` plus COEP `require-corp` / `credentialless`, `SharedArrayBuffer` exists only then, `Atomics.wait` blocks in
+  Workers (and throws on the page), `notify` and `waitAsync` work across VMs. COEP is enforced for cross-origin scripts,
+  stylesheets, images and media, frames and Worker scripts; `credentialless` drops credentials. Not done: shared memory with
+  SharedWorkers or Service Workers, COOP browsing-context-group switching ([docs/web-platform.md](docs/web-platform.md)).
+- WebAssembly threads: shared `WebAssembly.Memory`, atomic instructions and `memory.atomic.wait/notify`, and posting a shared
+  `Memory` or a `Module` to Workers, on cross-origin isolated pages. Verified with hand-assembled modules, not with an
+  emscripten or wasm-bindgen program ([docs/webassembly.md](docs/webassembly.md)).
+- WebCodecs: `VideoDecoder` (VP8, VP9, H.264, HEVC, AV1), `AudioDecoder` (Opus, AAC, MP3, Vorbis, PCM, A-law, mu-law),
+  `VideoEncoder` (VP8 only), `AudioEncoder` (Opus only), `VideoFrame`, `AudioData`, `EncodedVideoChunk`, `EncodedAudioChunk`,
+  `ImageDecoder` and `isConfigSupported`, off the JS thread, with frames drawable to canvas and creatable from canvas,
+  `ImageBitmap` and `<video>`. No H.264/VP9/AV1/AAC encoder and no hardware paths ([docs/webcodecs.md](docs/webcodecs.md)).
+- Encrypted Media Extensions with Clear Key: `requestMediaKeySystemAccess('org.w3.clearkey')`, `MediaKeys`, `MediaKeySession`
+  (temporary sessions), `setMediaKeys`, `encrypted` / `waitingforkey` events, and `cenc`, `cens`, `cbc1` and `cbcs` decryption of
+  fragmented MP4 in the MSE pipeline. Widevine, PlayReady and FairPlay still reject with `NotSupportedError`; no persistent
+  sessions, no encrypted WebM, no encrypted progressive `src` ([docs/media-streaming.md](docs/media-streaming.md)).
 - Dedicated Workers run on a full script VM of their own goroutine: IndexedDB, Cache Storage, `navigator.storage`, the Origin Private
   File System with `FileSystemSyncAccessHandle`, `fetch`, WebAssembly and nested workers work inside them; real
   `SharedWorker`, `BroadcastChannel` and `navigator.locks`; structured clone with transferred `MessagePort`s and `ArrayBuffer`s.

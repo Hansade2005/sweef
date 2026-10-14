@@ -80,10 +80,11 @@ type mp4Track struct {
 	mdhdDur   uint64
 	samples   []mp4Sample
 	fourcc    string
-	editDur   int    // elst segment duration (movie timescale), -1 none
-	editStart int    // elst media_time of the first non-empty edit (-1 none)
-	cfg       []byte // esds payload (AAC) or dOps (Opus) of the first sample entry
-	vcfg      []byte // avcC / vpcC / av1C payload of a video sample entry
+	editDur   int         // elst segment duration (movie timescale), -1 none
+	editStart int         // elst media_time of the first non-empty edit (-1 none)
+	cfg       []byte      // esds payload (AAC) or dOps (Opus) of the first sample entry
+	vcfg      []byte      // avcC / vpcC / av1C payload of a video sample entry
+	prot      *Protection // the sample entry is encv/enca: its sinf information
 	// fragmented
 	trex struct{ dur, size, flags uint32 }
 }
@@ -300,7 +301,8 @@ func parseStsd(t *mp4Track, d []byte) {
 			if w > 0 && h > 0 {
 				t.Width, t.Height = w, h
 			}
-			t.parseVideoConfig(e.typ, parseBoxes(ed[78:]))
+			kids := parseBoxes(ed[78:])
+			t.parseVideoConfig(t.unprotect(e.typ, kids), kids)
 		}
 	case "audio":
 		if len(ed) >= 28 {
@@ -318,7 +320,8 @@ func parseStsd(t *mp4Track, d []byte) {
 				}
 			}
 			if off <= len(ed) {
-				t.parseAudioConfig(e.typ, parseBoxes(ed[off:]))
+				kids := parseBoxes(ed[off:])
+				t.parseAudioConfig(t.unprotect(e.typ, kids), kids)
 			}
 		}
 	}
@@ -326,6 +329,21 @@ func parseStsd(t *mp4Track, d []byte) {
 		t.Codec = strings.TrimSpace(e.typ)
 		t.CodecName = strings.ToLower(strings.TrimSpace(e.typ))
 	}
+}
+
+// unprotect maps an encrypted sample entry (encv, enca) to the format it was before encryption and records the
+// protection scheme; other entries are returned as they are.
+func (t *mp4Track) unprotect(typ string, kids []mp4box) string {
+	if typ != "encv" && typ != "enca" {
+		return typ
+	}
+	if sinf := findBox(kids, "sinf"); sinf != nil {
+		if orig, p := parseSinf(*sinf); orig != "" {
+			t.prot = p
+			return orig
+		}
+	}
+	return typ
 }
 
 func (t *mp4Track) parseVideoConfig(typ string, kids []mp4box) {

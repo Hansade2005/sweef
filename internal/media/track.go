@@ -16,14 +16,12 @@ type Sample struct {
 	Cfg  *TrackConfig
 	data []byte
 	load func() ([]byte, error) // lazy payload (progressive files); nil when data is set
-}
 
-// Bytes returns the coded payload.
-func (s Sample) Bytes() ([]byte, error) {
-	if s.data != nil || s.load == nil {
-		return s.data, nil
-	}
-	return s.load()
+	// Common Encryption: the per-sample information, the track's protection and the key holder of the buffer
+	// (cenc.go). Bytes decrypts.
+	enc  *SampleEnc
+	prot *Protection
+	kh   *KeyHolder
 }
 
 // End is the end of the sample's presentation interval.
@@ -43,6 +41,8 @@ type TrackConfig struct {
 	SampleRate int
 	Channels   int
 	Skip       int // audio: samples (at the output rate) to discard at the start of the track (priming)
+
+	Prot *Protection // Common Encryption protection of the track (nil: clear)
 }
 
 // TrackStore holds the samples of one track sorted by decode time. It backs

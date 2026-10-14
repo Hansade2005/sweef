@@ -12,6 +12,7 @@ package engine
 // volume) and reads the clock; nothing here calls into the VM.
 
 import (
+	"errors"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -105,6 +106,7 @@ type mediaPlayer struct {
 	audioErr                  atomic.Bool
 	videoErr                  atomic.Bool
 	underruns                 atomic.Int64
+	waitKey                   atomic.Bool // decoding is blocked on a content key the page has not supplied (EME)
 }
 
 func newMediaPlayer(tab *Tab, node int64, src trackSource, vs *videoSource) *mediaPlayer {
@@ -426,9 +428,19 @@ func (p *mediaPlayer) audioLoop(gen int, start, rate float64, prev, done chan st
 			continue
 		}
 		data, err := n.Bytes()
+		if errors.Is(err, media.ErrNoKey) { // encrypted and the key is not here yet: wait, do not skip the sample
+			p.waitKey.Store(true)
+			if !sleep(25 * time.Millisecond) {
+				return
+			}
+			continue
+		}
 		if err != nil {
 			curDTS = n.DTS
 			continue
+		}
+		if n.Encrypted() {
+			p.waitKey.Store(false)
 		}
 		cfg := n.Cfg
 		if cfg == nil {
@@ -723,6 +735,14 @@ func (p *mediaPlayer) videoLoop() {
 					}
 				}
 				data, err := nxt.Bytes()
+				if errors.Is(err, media.ErrNoKey) {
+					p.waitKey.Store(true)
+					nap(25 * time.Millisecond)
+					continue
+				}
+				if err == nil && nxt.Encrypted() {
+					p.waitKey.Store(false)
+				}
 				if err == nil && lag > 0 && nxt.DTS != want.DTS && dec.Disposable(data) {
 					decDTS = nxt.DTS // late and nothing refers to it: not decoded, counted as dropped when the next picture shows
 					continue
@@ -743,6 +763,11 @@ func (p *mediaPlayer) videoLoop() {
 				// nothing new is due: decode ahead
 				if len(ready) < aheadMax && stepOK && nxt.PTS-t < aheadWindow.Seconds()*p.rate {
 					data, err := nxt.Bytes()
+					if errors.Is(err, media.ErrNoKey) {
+						p.waitKey.Store(true)
+						nap(25 * time.Millisecond)
+						continue
+					}
 					var pc media.Picture
 					if err == nil {
 						pc, err = dec.Decode(data)
@@ -810,6 +835,17 @@ func (p *mediaPlayer) videoLoop() {
 			s := from
 			for {
 				data, err := s.Bytes()
+				if errors.Is(err, media.ErrNoKey) { // the key arrives with the page's license: hold here
+					p.waitKey.Store(true)
+					nap(25 * time.Millisecond)
+					if p.closed.Load() {
+						break
+					}
+					continue
+				}
+				if err == nil && s.Encrypted() {
+					p.waitKey.Store(false)
+				}
 				var pc media.Picture
 				if err == nil {
 					pc, err = dec.Decode(data)

@@ -237,11 +237,12 @@ type mediaHost struct {
 	wa      *waState
 	players map[int64]*mediaPlayer
 	mse     *mseHost
+	eme     *emeKeys // Clear Key content keys (eme.go)
 }
 
 func newMediaHost(j *jsVM) *mediaHost {
 	m := &mediaHost{j: j, res: map[int]*mediaRes{}, vsrcs: map[int64]*videoSource{}, pcm: map[int]*media.PCM{}, next: 1, nextP: 1,
-		players: map[int64]*mediaPlayer{}, mse: newMSEHost()}
+		players: map[int64]*mediaPlayer{}, mse: newMSEHost(), eme: &emeKeys{stores: map[int]*media.KeyStore{}}}
 	j.onClose(m.shutdown)
 	return m
 }
