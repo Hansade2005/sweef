@@ -63,6 +63,7 @@ type Decoder struct {
 	sps     [32]*SPS
 	pps     [256]*PPS
 	lenSize int
+	lastSPS *SPS // the most recent sequence parameter set (ReorderDepth)
 
 	// reference pictures
 	shortRef   []*Picture
@@ -191,6 +192,49 @@ func (d *Decoder) Reset() {
 	d.firstField = false
 	d.pending = nil
 	d.resetPOC()
+}
+
+// ReorderDepth is how many pictures a presentation-order consumer has to hold back: the stream's own
+// max_num_reorder_frames when its VUI has one, none for Baseline (it has no B pictures), otherwise the DPB size
+// the level allows for the picture size (A.3.1), which is what a conforming output process would use.
+func (d *Decoder) ReorderDepth() int {
+	s := d.lastSPS
+	if s == nil {
+		return 0
+	}
+	if s.HasReorder {
+		return s.NumReorder
+	}
+	if s.Profile == 66 {
+		return 0
+	}
+	var maxMbs int
+	switch s.Level {
+	case 9, 10:
+		maxMbs = 396
+	case 11:
+		maxMbs = 900
+	case 12, 13, 20:
+		maxMbs = 2376
+	case 21:
+		maxMbs = 4752
+	case 22, 30:
+		maxMbs = 8100
+	case 31:
+		maxMbs = 18000
+	case 32:
+		maxMbs = 20480
+	case 40, 41:
+		maxMbs = 32768
+	case 42:
+		maxMbs = 34816
+	case 50:
+		maxMbs = 110400
+	default:
+		maxMbs = 184320
+	}
+	n := maxMbs / max(s.MbW*s.MbH, 1)
+	return max(0, min(n, 16))
 }
 
 // SetAVCC configures the decoder from an AVCDecoderConfigurationRecord and
@@ -371,6 +415,7 @@ func (d *Decoder) setSPS(s *SPS) {
 		return
 	}
 	d.sps[s.ID] = s
+	d.lastSPS = s
 	for i, p := range d.pps {
 		if p != nil && p.SPSID == s.ID {
 			if np, err := parsePPS(p.raw, &d.sps); err == nil {

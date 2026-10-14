@@ -426,6 +426,7 @@ func (h *cvHost) fns() map[string]hostFn {
 			return h.put(c.snapshotLocked()), nil
 		},
 		"cvDrawImage": h.drawImage,
+		"cvToFrame":   h.toFrame,
 		"cvGetImageData": func(a []any) (any, error) {
 			c := h.get(cvI(a, 0))
 			if c == nil || c.ctx == nil {
@@ -709,6 +710,8 @@ func (h *cvHost) surfaceOf(kind string, a []any, i int) *raster.Surface {
 	case "img":
 		s, _ := h.objOf(cvI(a, i)).(*raster.Surface)
 		return s
+	case "vf": // a WebCodecs VideoFrame
+		return wcSurface(wcLookup(int64(cvI(a, i))))
 	case "url":
 		return h.loadURL(cvS(a, i))
 	case "node":

@@ -286,6 +286,10 @@
         ids.set(v, id);
         return ['SB', id, sid, v.byteLength];
       }
+      if (typeof global.__swMediaSer === 'function') { // WebCodecs frames and audio travel by token to the same agent cluster
+        var md = global.__swMediaSer(v, !!share && !!xports);
+        if (md) { ids.set(v, id); return ['MD', id, md]; }
+      }
       if (typeof global.__swWasmSer === 'function') { // WebAssembly is loaded: Modules and shared Memories travel by reference
         var wd = global.__swWasmSer(v, !!share && !!xports);
         if (wd) { ids.set(v, id); return ['WA', id, wd]; }
@@ -354,6 +358,10 @@
         case 'd': return (objs[n[1]] = new Date(n[2] === null ? NaN : n[2]));
         case 'r': return (objs[n[1]] = new RegExp(n[2], n[3]));
         case 'P': return (objs[n[1]] = xports && xports[n[2]]);
+        case 'MD': {
+          if (typeof global.__swMediaDe !== 'function') void global.VideoFrame; // loads the WebCodecs module
+          return (objs[n[1]] = global.__swMediaDe(n[2]));
+        }
         case 'WA': {
           if (typeof global.__swWasmDe !== 'function') void global.WebAssembly; // loads the API
           return (objs[n[1]] = global.__swWasmDe(n[2]));

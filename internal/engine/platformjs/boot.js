@@ -65,6 +65,7 @@
     ['devices', g.Screen.prototype, 'orientation', 1],
     ['devices', D, 'hasStorageAccess requestStorageAccess', 1],
     ['devices', D, 'pictureInPictureEnabled pictureInPictureElement exitPictureInPicture', 1, 1], // the media prelude has the Chromium-matched versions
+    ['webcodecs', L, 'VideoDecoder VideoEncoder AudioDecoder AudioEncoder VideoFrame AudioData EncodedVideoChunk EncodedAudioChunk VideoColorSpace ImageDecoder ImageTrack ImageTrackList'],
     ['opfs', L, 'FileSystemHandle FileSystemFileHandle FileSystemDirectoryHandle FileSystemWritableFileStream showOpenFilePicker showSaveFilePicker showDirectoryPicker'],
     ['es', Array, 'fromAsync', 0, 1],
     ['es', Symbol, 'dispose asyncDispose', 0, 1],

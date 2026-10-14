@@ -2543,6 +2543,7 @@
     if (v instanceof Date) return new Date(v.getTime());
     if (v instanceof RegExp) return new RegExp(v.source, v.flags);
     if (v instanceof ArrayBuffer) return v.slice(0);
+    if (v._isVF || v._isAD) return v.clone(); // WebCodecs frames
     if (global.__swSAB && v instanceof global.__swSAB) return typeof global.__swSabShare === 'function' ? global.__swSabShare(v) : v;
     if (ArrayBuffer.isView(v)) return v.buffer && global.__swSAB && v.buffer instanceof global.__swSAB ? new v.constructor(clone(v.buffer, seen), v.byteOffset, v instanceof DataView ? v.byteLength : v.length) : new v.constructor(v);
     if (v instanceof Map) { out = new Map(); seen.set(v, out); v.forEach(function (val, k) { out.set(clone(k, seen), clone(val, seen)); }); return out; }

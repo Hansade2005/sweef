@@ -63,7 +63,7 @@
   }
   // serialize first (it can throw DataCloneError without side effects), then bridge the ports and detach the buffers
   function prepare(message, transfer) {
-    var list = transferList(transfer), ports = [], bufs = [];
+    var list = transferList(transfer), ports = [], bufs = [], frames = [];
     list.forEach(function (x) {
       if (global.MessagePort && x instanceof global.MessagePort) {
         if (ports.indexOf(x) >= 0) throw mkErr('DataCloneError', 'Transfer list contains duplicate entries.');
@@ -72,6 +72,10 @@
         if (bufs.indexOf(x) >= 0) throw mkErr('DataCloneError', 'Transfer list contains duplicate entries.');
         if (x.detached) throw mkErr('DataCloneError', 'An ArrayBuffer is detached and could not be cloned.');
         bufs.push(x);
+      } else if (x && (x._isVF || x._isAD) && typeof x.close === 'function') { // WebCodecs frames are transferable
+        if (frames.indexOf(x) >= 0) throw mkErr('DataCloneError', 'Transfer list contains duplicate entries.');
+        if (x._closed) throw mkErr('DataCloneError', 'A closed frame cannot be transferred.');
+        frames.push(x);
       } else {
         throw mkErr('DataCloneError', 'Value not transferable.');
       }
@@ -82,6 +86,7 @@
       commit: function () {
         var eps = ports.length ? global.__swPorts.bridge(ports) : [];
         bufs.forEach(function (b) { try { b.transfer(); } catch (e) { /* not detachable here */ } });
+        frames.forEach(function (f) { try { f.close(); } catch (e) { /* already closed */ } });
         return eps;
       }
     };
