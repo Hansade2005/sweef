@@ -18,6 +18,18 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   longer shared between a private window and the normal one.
 
 ### Added
+- **A real `Intl`.** `NumberFormat`, `DateTimeFormat`, `PluralRules`, `RelativeTimeFormat`, `ListFormat`, `DisplayNames`,
+  `DurationFormat`, `Collator` and `Segmenter` now run on CLDR 47 data for 73 locales with the IANA time zone database
+  embedded, instead of an English-only shim; `toLocaleString`, `toLocaleDateString` and `localeCompare` use them. Compared with
+  Node 22 case by case (`tools/intlgen`, `internal/engine/intl_test.go`); gaps are listed in
+  [docs/web-platform.md](docs/web-platform.md). Adds about 1.2 MB to the binary.
+- **Video-call and player platform APIs.** Fullscreen API with the app giving the page the window; Media Session wired to
+  a now-playing control; `ManagedMediaSource`; Async Clipboard API with a per-site permission, copy/cut/paste events,
+  `DataTransfer`, `FileList`; a real `WebSocket` client (binary, fragments, close codes, backpressure); native
+  `btoa`/`atob`; faster IndexedDB cursors; page visibility; echo cancellation, noise suppression and automatic gain on
+  the WebRTC send path; `MediaStreamTrackProcessor`, `MediaStreamTrackGenerator` and `VideoTrackGenerator`; WebRTC
+  `MediaCapabilities`. The compatibility status of Google Meet, WhatsApp Web and YouTube, with what was and was not tried
+  against the live sites, is in [docs/compat.md](docs/compat.md). `MediaRecorder` is still absent.
 - **Iframes render and take input.** Every `<iframe>` is now a child document with its own JavaScript VM, layout and
   paint, drawn into the parent at the iframe's box (clipped, with the transforms, opacity and radius of its ancestors),
   scrollable inside its box, repainted when it changes, and loaded lazily for `loading="lazy"`. `srcdoc`, nested frames,

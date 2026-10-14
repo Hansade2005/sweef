@@ -183,9 +183,10 @@ type Tab struct {
 	progMode   atomic.Bool               // the current navigation is progressive: page-initiated navigations are too
 	tr         atomic.Pointer[loadTrace] // timeline of the current navigation (loadtrace.go)
 	traceNet   atomic.Bool               // record DNS/connect/TLS/first byte of every request
-
-	win   winState // frames, opener/popups, messaging (windows.go, frames.go)
-	audio tabAudio // mix group, mute and audible state (tabaudio.go)
+	win        winState                  // frames, opener/popups, messaging (windows.go, frames.go)
+	audio      tabAudio                  // mix group, mute and audible state (tabaudio.go)
+	fs         tabFullscreen             // element fullscreen (tabfullscreen.go)
+	ms         tabMediaSession           // navigator.mediaSession (tabmediasession.go)
 }
 
 func newTab(e *Engine, id string) *Tab {
@@ -496,7 +497,9 @@ func (t *Tab) SetDocument(htmlSrc, finalURL string) {
 }
 
 func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
-	t.closeFrames() // the frames of the document being replaced
+	t.closeFrames()        // the frames of the document being replaced
+	t.setFullscreen(false) // a new document is never fullscreen
+	t.resetMediaSession()  // ...nor does it have its predecessor's media session
 	tp := time.Now()
 	doc, err := fnet.ParseDocument(htmlSrc, finalURL)
 	t.tspan("doc.parse", itoa(len(htmlSrc))+" bytes", tp)

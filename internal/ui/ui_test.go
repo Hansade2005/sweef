@@ -28,8 +28,9 @@ const (
 	// Data with its plain-language level cards, the hard-stop page, the onboarding step, about 46 KB, of
 	// which about 9 KB are copy in strings.js). The chrome page's eager set went from about 122 KB to
 	// about 134 KB: the meter chip is eager (tiny), the popover is lazy, and the copy deck is shared.
-	budgetPage  = 150*1024 + 256 // +256 B: the popup mark in the tab strip (one class toggle, one CSS rule)
-	budgetTotal = 334 * 1024     // raised from 324 (+10 KB: notification permission prompt, site-info entry, DND, Settings > Notifications; mostly lazy); earlier: from 322 (+2 KB: the per-site storage list in Settings, Data); earlier: from 315 (+7 KB; the capture UI added 18.8 KB, of which the prompt and popover, about 13 KB, load only when used): camera/mic/screen prompt, indicators and copy; earlier: from 295, brand marks for the import cards (about 16 KB, onboarding page only)
+	// +1.5 KB (152 KB + 256 B): the now-playing button and its icons are eager, the controls are lazy (media.js); +256 B: the popup mark in the tab strip.
+	budgetPage  = 152*1024 + 256
+	budgetTotal = 342 * 1024 // raised from 334 (+4 KB: the now-playing control of the page's Media Session, lazy with the capture popover; +4 KB merged from the popup/frames work); earlier: from 324 (+10 KB: notification permission prompt, site-info entry, DND, Settings > Notifications; mostly lazy)
 )
 
 // pageWeight sums the JS and CSS an HTML page loads eagerly.

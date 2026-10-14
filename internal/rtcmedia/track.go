@@ -34,6 +34,7 @@ type LocalTrack struct {
 	id       string
 	streamID string
 	mime     string
+	rid      string // RTP stream id of a simulcast layer ("" for an ordinary track)
 
 	mu     sync.RWMutex
 	w      webrtc.TrackLocalWriter
@@ -41,6 +42,7 @@ type LocalTrack struct {
 	neg    Negotiated
 	audID  uint8
 	absID  uint8
+	ridID  uint8
 	midFn  func() string
 	ready  func() bool
 	rtx    *RTXCounter
@@ -58,8 +60,16 @@ func NewLocalTrack(kind webrtc.RTPCodecType, id, streamID string) *LocalTrack {
 	return &LocalTrack{kind: kind, id: id, streamID: streamID, mime: mime}
 }
 
+// NewLocalTrackRID creates one simulcast layer: a track with an RTP stream id (rid). Layers of one sender share
+// the track and stream ids.
+func NewLocalTrackRID(kind webrtc.RTPCodecType, id, streamID, rid string) *LocalTrack {
+	t := NewLocalTrack(kind, id, streamID)
+	t.rid = rid
+	return t
+}
+
 func (t *LocalTrack) ID() string                 { return t.id }
-func (t *LocalTrack) RID() string                { return "" }
+func (t *LocalTrack) RID() string                { return t.rid }
 func (t *LocalTrack) StreamID() string           { return t.streamID }
 func (t *LocalTrack) Kind() webrtc.RTPCodecType  { return t.kind }
 func (t *LocalTrack) SetMidFunc(f func() string) { t.mu.Lock(); t.midFn = f; t.mu.Unlock() }
@@ -151,7 +161,7 @@ func (t *LocalTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParamete
 			n.REMB = true
 		}
 	}
-	var aud, abs, mid uint8
+	var aud, abs, mid, rid uint8
 	for _, e := range ctx.HeaderExtensions() {
 		switch e.URI {
 		case ExtTransportCC:
@@ -162,6 +172,8 @@ func (t *LocalTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParamete
 			abs = uint8(e.ID)
 		case ExtMid:
 			mid = uint8(e.ID)
+		case ExtRID:
+			rid = uint8(e.ID)
 		}
 	}
 	n.MidID = mid
@@ -169,7 +181,7 @@ func (t *LocalTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParamete
 	t.w = ctx.WriteStream()
 	t.ctxID = ctx.ID()
 	t.neg = n
-	t.audID, t.absID = aud, abs
+	t.audID, t.absID, t.ridID = aud, abs, rid
 	cbs := append([]func(Negotiated){}, t.onBind...)
 	t.mu.Unlock()
 	for _, f := range cbs {
@@ -204,7 +216,7 @@ type WriteOpts struct {
 // Write sends one RTP packet (payload type and SSRC are filled in).
 func (t *LocalTrack) Write(h *rtp.Header, payload []byte, o WriteOpts) (int, error) {
 	t.mu.RLock()
-	w, n, audID, absID, midFn := t.w, t.neg, t.audID, t.absID, t.midFn
+	w, n, audID, absID, ridID, midFn := t.w, t.neg, t.audID, t.absID, t.ridID, t.midFn
 	t.mu.RUnlock()
 	if w == nil {
 		return 0, ErrNotBound
@@ -223,6 +235,9 @@ func (t *LocalTrack) Write(h *rtp.Header, payload []byte, o WriteOpts) (int, err
 			lvl |= 0x80
 		}
 		_ = h.SetExtension(audID, []byte{lvl})
+	}
+	if t.rid != "" && ridID != 0 {
+		_ = h.SetExtension(ridID, []byte(t.rid))
 	}
 	if o.WithMid && n.MidID != 0 && midFn != nil {
 		if mid := midFn(); mid != "" {

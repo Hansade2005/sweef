@@ -67,7 +67,7 @@
   };
   S.incog = { badge: "Incognito", tip: "Incognito: nothing from this window is saved to your history. It does not hide you from sites, your employer or your network." };
   S.perm = {
-    title: "{host} wants to", notif: "Show notifications", note: "You can change this any time in the site info next to the address.", allow: "Allow", block: "Block", later: "Not now",
+    title: "{host} wants to", notif: "Show notifications", clipRead: "See text and images you copied", note: "You can change this any time in the site info next to the address.", allow: "Allow", block: "Block", later: "Not now",
     label: "Notifications", st: { ask: "Ask me", allowed: "Allowed", blocked: "Blocked" }, subAsk: "The site asks before it shows notifications.", subAllowed: "The site can show notifications and receive pushes.", subBlocked: "The site cannot show notifications.",
     dnd: "Do not disturb", dndOn: "On: notifications are held back", open: "Open", dismiss: "Dismiss", focus: "Answer the notification question",
     set: { lead: "Sites can ask to show notifications. Nothing arrives while {brand} is closed.", gAll: "All sites", dnd: "Do not disturb", dndD: "Keeps notifications off the screen. Pages still behave as if they were shown.", dflt: "When a site asks", ask: "Ask me", blocked: "Block without asking",
@@ -114,7 +114,7 @@
     noAudio: "Sound is not shared yet.", noOs: "Other apps and your whole screen are not available.", device: "Choose a device",
     inUse: "In use", allowed: "Allowed", blocked: "Blocked", ask: "Ask", reset: "Reset",
     usingCam: "Camera in use", usingMic: "Microphone in use", usingBoth: "Camera and microphone in use", usingShare: "Sharing screen content",
-    popTitle: "In use now", stop: "Stop", sharing: "{host} is sharing {what}", whatTab: "a tab", whatWin: "this window", stopSharing: "Stop sharing", hide: "Hide", sitePerms: "Permissions"
+    popTitle: "In use now", nowPlaying: "Now playing", stop: "Stop", sharing: "{host} is sharing {what}", whatTab: "a tab", whatWin: "this window", stopSharing: "Stop sharing", hide: "Hide", sitePerms: "Permissions"
   };
   /* Data Saver. Plain words, never guilt: say what is happening and what the person can do.
      "Measured" = counted from the network. "Estimated" = our best guess. The UI never adds the two. */

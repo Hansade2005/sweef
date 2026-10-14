@@ -172,6 +172,8 @@ function stateOf(desc) {
   switch (n) {
     case 'notifications': case 'push': return secure() ? sw.pwaPermission('notifications') : 'denied';
     case 'periodic-background-sync': return secure() ? sw.pwaPermission('periodic-background-sync') : 'denied';
+    case 'clipboard-read': return secure() ? sw.pwaPermission('clipboard-read') : 'denied';
+    case 'clipboard-write': return secure() && g.document && g.document.visibilityState === 'visible' ? 'granted' : 'prompt';
     case 'background-sync': return secure() ? sw.pwaPermission('background-sync') : 'denied';
   }
   return 'prompt';
@@ -510,16 +512,136 @@ H.glob('__pwaEvent', function (json) {
   if (f) { try { f(m); } catch (e) { report(e); } }
 });
 
+
+// ---- Async Clipboard API ----------------------------------------------------------------------------------------------------
+// navigator.clipboard (Clipboard, ClipboardItem). Writing needs a visible page; reading needs the clipboard-read
+// permission (Permissions.query reports it, a read asks for it on a user gesture). Host side: clipboard.go.
+var CB_STD = ['text/plain', 'text/html', 'image/png'];
+function cbTypeOK(t) { return CB_STD.indexOf(t) >= 0 || /^web [a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/.test(t); }
+var ClipboardItem = cls('ClipboardItem', null, function ClipboardItem(items, options) {
+  if (!new.target) throw terr("Failed to construct 'ClipboardItem': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+  if (arguments.length < 1) throw terr("Failed to construct 'ClipboardItem': 1 argument required, but only 0 present.");
+  if (items === null || typeof items !== 'object') throw terr("Failed to construct 'ClipboardItem': The provided value is not of type 'record<DOMString, (DOMString or Blob or Promise<(DOMString or Blob)>)>'.");
+  var keys = Object.keys(items);
+  if (!keys.length) throw terr("Failed to construct 'ClipboardItem': At least one entry required.");
+  var style = 'unspecified';
+  if (options !== undefined && options !== null) {
+    if (typeof options !== 'object') throw terr("Failed to construct 'ClipboardItem': The provided value is not of type 'ClipboardItemOptions'.");
+    if (options.presentationStyle !== undefined) {
+      style = String(options.presentationStyle);
+      if (['unspecified', 'inline', 'attachment'].indexOf(style) < 0) throw terr("Failed to construct 'ClipboardItem': Failed to read the 'presentationStyle' property from 'ClipboardItemOptions': The provided value '" + style + "' is not a valid enum value of type PresentationStyle.");
+    }
+  }
+  var map = new Map();
+  keys.forEach(function (k) { map.set(String(k).toLowerCase(), Promise.resolve(items[k])); });
+  Object.defineProperty(this, '_', { value: { map: map, style: style } });
+});
+H.attrs(ClipboardItem.prototype, {
+  types: function () { return Object.freeze(Array.from(this._.map.keys())); },
+  presentationStyle: function () { return this._.style; }
+});
+function asBlob(v, type) { return typeof v === 'string' ? new g.Blob([v], { type: type }) : v; }
+H.define(ClipboardItem.prototype, 'getType', function getType(type) {
+  var self = this;
+  if (arguments.length < 1) return Promise.reject(terr("Failed to execute 'getType' on 'ClipboardItem': 1 argument required, but only 0 present."));
+  var t = String(type).toLowerCase(), p = this._.map.get(t);
+  if (!p) return rej('NotFoundError', "Failed to execute 'getType' on 'ClipboardItem': The type was not found");
+  return p.then(function (v) {
+    var b = asBlob(v, t);
+    if (!(b instanceof g.Blob)) throw terr("Failed to execute 'getType' on 'ClipboardItem': The provided value is not a Blob.");
+    return b;
+  });
+});
+H.define(ClipboardItem, 'supports', function supports(type) {
+  if (arguments.length < 1) throw terr("Failed to execute 'supports' on 'ClipboardItem': 1 argument required, but only 0 present.");
+  return cbTypeOK(String(type).toLowerCase());
+});
+
+function cbBytesToB64(buf) {
+  var u8 = new Uint8Array(buf), s = '';
+  for (var i = 0; i < u8.length; i += 0x2000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x2000));
+  return g.btoa(s);
+}
+function cbVisible() { return g.document && g.document.visibilityState === 'visible'; }
+function cbEnsureRead() {
+  if (!cbVisible()) return rej('NotAllowedError', 'Document is not focused.');
+  var st = sw.pwaPermission('clipboard-read');
+  if (st === 'granted') return Promise.resolve();
+  if (st === 'denied') return rej('NotAllowedError', 'Read permission denied.');
+  return call('pwaRequestPermission', 'clipboard-read').then(function (r) { if (r !== 'granted') throw dex('NotAllowedError', 'Read permission denied.'); });
+}
+function cbReadEntries() {
+  return cbEnsureRead().then(function () {
+    try { return JSON.parse(sw.clipRead() || '[]'); } catch (e) { throw hostErrorOf(e); }
+  });
+}
+function cbWrite(entries) {
+  if (!cbVisible()) return rej('NotAllowedError', 'Document is not focused.');
+  try { sw.clipWrite(JSON.stringify(entries)); } catch (e) { return Promise.reject(hostErrorOf(e)); }
+  return Promise.resolve(undefined);
+}
+var Clipboard = cls('Clipboard', ET);
+H.define(Clipboard.prototype, 'readText', function readText() {
+  return cbReadEntries().then(function (es) {
+    for (var i = 0; i < es.length; i++) if (es[i].type === 'text/plain') return new g.TextDecoder().decode(fromB64Std(es[i].b64));
+    return '';
+  });
+});
+H.define(Clipboard.prototype, 'writeText', function writeText(text) {
+  if (arguments.length < 1) return Promise.reject(terr("Failed to execute 'writeText' on 'Clipboard': 1 argument required, but only 0 present."));
+  var u8 = new g.TextEncoder().encode(String(text));
+  return cbWrite([{ type: 'text/plain', b64: cbBytesToB64(u8) }]);
+});
+H.define(Clipboard.prototype, 'read', function read(options) {
+  return cbReadEntries().then(function (es) {
+    var items = {}, n = 0;
+    es.forEach(function (e) {
+      if (!cbTypeOK(e.type)) return;
+      items[e.type] = new g.Blob([fromB64Std(e.b64)], { type: e.type }); n++;
+    });
+    return n ? [new ClipboardItem(items)] : [];
+  });
+});
+H.define(Clipboard.prototype, 'write', function write(data) {
+  if (arguments.length < 1) return Promise.reject(terr("Failed to execute 'write' on 'Clipboard': 1 argument required, but only 0 present."));
+  var list;
+  try { list = Array.prototype.slice.call(data); } catch (e) { list = null; }
+  if (!list || data === null || typeof data !== 'object' || typeof data.length !== 'number') return Promise.reject(terr("Failed to execute 'write' on 'Clipboard': The provided value cannot be converted to a sequence."));
+  for (var i = 0; i < list.length; i++) if (!(list[i] instanceof ClipboardItem)) return Promise.reject(terr("Failed to execute 'write' on 'Clipboard': Failed to convert value to 'ClipboardItem'."));
+  if (list.length > 1) return rej('NotAllowedError', 'Support for multiple ClipboardItems is not implemented.');
+  if (!cbVisible()) return rej('NotAllowedError', 'Document is not focused.');
+  var item = list[0];
+  if (!item) return cbWrite([]);
+  var types = Array.from(item._.map.keys());
+  for (var k = 0; k < types.length; k++) if (!cbTypeOK(types[k])) return rej('NotAllowedError', 'Type ' + types[k] + ' does not match the blob\'s type');
+  return Promise.all(types.map(function (t) {
+    return item._.map.get(t).then(function (v) {
+      var b = asBlob(v, t);
+      if (!(b instanceof g.Blob)) throw dex('NotAllowedError', 'Type ' + t + ' does not match the blob\'s type');
+      if (b.type !== t) throw dex('NotAllowedError', 'Type ' + t + " does not match the blob's type " + b.type);
+      return b.arrayBuffer().then(function (ab) { return { type: t, b64: cbBytesToB64(ab) }; });
+    });
+  })).then(cbWrite);
+});
+var clipboardObj = Object.create(Clipboard.prototype);
+ET.call(clipboardObj);
+function fromB64Std(s) {
+  var bin = g.atob(s), u8 = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+
 // ---- globals -------------------------------------------------------------------------------------------------------------------------
 var N = g.Navigator.prototype;
 function navMember(name, value) {
   Object.defineProperty(N, name, { get: function () { return value(); }, set: function (v) { Object.defineProperty(this, name, { value: v, writable: true, configurable: true, enumerable: true }); }, enumerable: true, configurable: true });
 }
 navMember('permissions', function () { return permissions; });
+navMember('clipboard', function () { return secure() ? clipboardObj : undefined; });
 navMember('locks', function () { return secure() ? lockManager : undefined; });
 navMember('setAppBadge', function () { return secure() ? badgeSet : undefined; });
 navMember('clearAppBadge', function () { return secure() ? badgeClear : undefined; });
 var G = { Notification: Notification, NotificationEvent: NotificationEvent, Permissions: Permissions, PermissionStatus: PermissionStatus, PushManager: PushManager, PushSubscription: PushSubscription,
-  PushSubscriptionOptions: PushSubscriptionOptions, PushEvent: PushEvent, PushMessageData: PushMessageData, PushSubscriptionChangeEvent: PushSubscriptionChangeEvent,
+  PushSubscriptionOptions: PushSubscriptionOptions, Clipboard: Clipboard, ClipboardItem: ClipboardItem, PushEvent: PushEvent, PushMessageData: PushMessageData, PushSubscriptionChangeEvent: PushSubscriptionChangeEvent,
   SyncManager: SyncManager, SyncEvent: SyncEvent, PeriodicSyncManager: PeriodicSyncManager, PeriodicSyncEvent: PeriodicSyncEvent, Lock: Lock, LockManager: LockManager };
 Object.keys(G).forEach(function (k) { H.glob(k, G[k]); });

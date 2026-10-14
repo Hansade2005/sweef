@@ -55,3 +55,33 @@ wazero. Sites that only need the core API work; sites that need `WebAssembly.Tag
 `externref` at the JS boundary do not, and a module that crosses into JS tens of thousands of times per frame is slow
 because each crossing costs microseconds. Threads and `SharedArrayBuffer` work on cross-origin isolated pages (COOP + COEP), see [web-platform.md](web-platform.md). Full list, design and measured costs: [webassembly.md](webassembly.md).
 No real site was run for this entry; the evidence is the hand-assembled modules in `internal/engine/wasm_test.go`.
+
+## Google Meet, WhatsApp Web and YouTube: platform APIs
+
+None of these three sites was run against its live service for this entry: the sandbox has no accounts, no camera
+and no route to the services' media servers, and Sweef does not try to get around sign-in, DRM or anti-abuse checks.
+What exists is a set of feature-detection pages and tests (`internal/engine/compat_sites_test.go`) that run the checks
+the sites' own scripts make at start-up against local `httptest` servers, plus per-API tests. "Implemented" below means
+the API exists, behaves as specified in those tests and (for the media paths) was exercised between two Sweef peers.
+"Untested live" means nothing more than that.
+
+| Need | Site | State |
+|---|---|---|
+| `getUserMedia` with echoCancellation / noiseSuppression / autoGainControl | Meet, WhatsApp calls | Implemented: partitioned frequency-domain echo canceller, spectral noise suppression and AGC on the send path (`internal/audioproc`), reported in `getSettings` / `getCapabilities`. Not measured against Chromium's WebRTC AEC3; no double-talk detector beyond the canceller's own divergence guard. |
+| `RTCPeerConnection`: offer/answer, ICE, DTLS-SRTP, data channels, `getStats`, `jitterBufferTarget`, codec preferences, simulcast send, encoded transforms (`RTCRtpScriptTransform`, insertable streams) | Meet, WhatsApp | Implemented, interoperating with pion peers in tests and with Sweef itself. Codecs: VP8 and Opus only. Real-time H.264 is in the separate H.264 work (`docs/webrtc.md`); Meet and WhatsApp offer VP8/VP9/H.264/AV1 and need one in common, which VP8 provides, but this was not tried against their servers. |
+| Screen sharing, `getDisplayMedia` | Meet | Implemented where the host app provides a source; untested live. |
+| `MediaStreamTrackProcessor`, `MediaStreamTrackGenerator`, `VideoTrackGenerator` | Meet (effects), WhatsApp | Implemented on the WebCodecs `VideoFrame` / `AudioData` storage; tested with a fake camera and over a peer connection. |
+| `MediaRecorder` | WhatsApp voice notes | **Not implemented**: the constructor exists and `start()` throws `NotSupportedError`. Voice-note recording does not work. |
+| Web Audio (`AudioContext`, worklets, `MediaStreamAudioSourceNode`, `MediaStreamAudioDestinationNode`) | Meet, WhatsApp | Implemented. Worklets run in the page's VM, not on a separate audio thread. |
+| `OffscreenCanvas`, `requestVideoFrameCallback` | Meet (backgrounds) | Implemented; WebGL-based segmentation models are limited by the software WebGL. |
+| Fullscreen API | YouTube, Meet | Implemented: the element covers the window, the app hides its chrome, Esc/F11 leave. |
+| Media Session | YouTube | Implemented and wired to a now-playing control in the app chrome. |
+| `MediaSource` / `ManagedMediaSource`, `isTypeSupported`, `MediaCapabilities` | YouTube | Implemented for the codecs the engine decodes (VP8/VP9 video where available, Opus/Vorbis/AAC audio as per `docs/media.md`). YouTube's default streams are H.264 or AV1 and encrypted for some content: those are not decodable here, so the site's player falls back to what `isTypeSupported` admits. Untested live. |
+| Autoplay policy, `getVideoPlaybackQuality`, Picture-in-Picture | YouTube | Implemented (autoplay needs user activation or muted playback; PiP is a stub window API). |
+| Notification, Push, Permissions, Clipboard (async, with a permission prompt) | WhatsApp Web | Implemented; no push service, so no push message ever arrives. |
+| `BroadcastChannel`, Web Locks, IndexedDB (cursor read-ahead), `CompressionStream`, `crypto.subtle`, `WebSocket` binary and large frames | WhatsApp Web | Implemented and tested. WhatsApp's own end-to-end crypto and noise-protocol handshake run in the site's JavaScript or WebAssembly and were not tried. |
+| `Intl` (NumberFormat, DateTimeFormat, PluralRules, RelativeTimeFormat, ListFormat, DisplayNames, Collator, Segmenter) | all three | Implemented for 73 locales on CLDR 47 data, compared with Node 22 in `internal/engine/intl_test.go`; limits in [web-platform.md](web-platform.md). |
+| Widevine / PlayReady DRM | YouTube (some titles), Meet (none) | Not available. Clear Key only. Sweef does not bypass DRM. |
+
+Not claims: that YouTube plays, that a Meet call connects, or that WhatsApp Web links a phone. Each site also runs
+bot and client checks Sweef does not answer (see the Cloudflare and Akamai entries above) and its own sign-in.

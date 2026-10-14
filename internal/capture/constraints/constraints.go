@@ -553,23 +553,27 @@ type AudioResult struct {
 	Device   int
 	Rate     int
 	Channels int
+	// the voice processing of the track (it runs on the WebRTC send path, internal/rtcmedia/audioproc)
+	EchoCancellation, AutoGainControl, NoiseSuppression bool
 }
 
 var audioOrder = []string{"deviceId", "groupId", "sampleRate", "sampleSize", "channelCount", "latency", "echoCancellation", "autoGainControl", "noiseSuppression"}
 
-// SolveAudio picks the microphone. The browser does no echo cancellation, noise suppression or gain control, so
-// those properties are always false and an exact:true request for one is overconstrained.
+// SolveAudio picks the microphone. Echo cancellation, noise suppression and gain control are each available on and
+// off; as in Chrome they are on unless the page says otherwise (the candidates with everything on come first).
 func SolveAudio(c Constraints, devs []AudioDevice) (AudioResult, error) {
 	var cands []*cand
 	ord := 0
 	for di, d := range devs {
 		for _, r := range d.Rates {
-			cands = append(cands, &cand{dev: di, ord: ord,
-				num: map[string]ivl{"sampleRate": {float64(r), float64(r)}, "sampleSize": {16, 16},
-					"channelCount": {float64(d.MinChannels), float64(d.MaxChannels)}, "latency": {0.01, 0.01}},
-				str: map[string]string{"deviceId": d.ID, "groupId": d.GroupID},
-				b:   map[string]bool{"echoCancellation": false, "autoGainControl": false, "noiseSuppression": false}})
-			ord++
+			for combo := 0; combo < 8; combo++ { // 0 = everything on
+				cands = append(cands, &cand{dev: di, ord: ord,
+					num: map[string]ivl{"sampleRate": {float64(r), float64(r)}, "sampleSize": {16, 16},
+						"channelCount": {float64(d.MinChannels), float64(d.MaxChannels)}, "latency": {0.01, 0.01}},
+					str: map[string]string{"deviceId": d.ID, "groupId": d.GroupID},
+					b:   map[string]bool{"echoCancellation": combo&1 == 0, "autoGainControl": combo&2 == 0, "noiseSuppression": combo&4 == 0}})
+				ord++
+			}
 		}
 	}
 	if len(cands) == 0 {
@@ -586,7 +590,8 @@ func SolveAudio(c Constraints, devs []AudioDevice) (AudioResult, error) {
 		chans = v
 	}
 	chans = clampTo(chans, best.num["channelCount"])
-	return AudioResult{Device: best.dev, Rate: int(best.num["sampleRate"][0]), Channels: int(chans)}, nil
+	return AudioResult{Device: best.dev, Rate: int(best.num["sampleRate"][0]), Channels: int(chans),
+		EchoCancellation: best.b["echoCancellation"], AutoGainControl: best.b["autoGainControl"], NoiseSuppression: best.b["noiseSuppression"]}, nil
 }
 
 // ---- display --------------------------------------------------------------------------------------------------

@@ -390,6 +390,19 @@ func (h *storageHost) fns() map[string]hostFn {
 			}
 			return r, err
 		},
+		// idbCursorN is idbCursor for plain continue() calls: the next n positions at once (the page buffers them)
+		"idbCursorN": func(a []any) (any, error) {
+			q := sitestore.CursorReq{
+				Index: argS(a, 2), Range: rangeArgs(a, 3), Dir: int(argI(a, 7)),
+				HasCur: argB(a, 8), CurKey: argS(a, 9), CurPK: argS(a, 10), KeyOnly: argB(a, 14),
+			}
+			rows, err := m().CursorN(argI(a, 0), argS(a, 1), q, int(argI(a, 15)))
+			out := make([]any, len(rows))
+			for i, r := range rows {
+				out[i] = r
+			}
+			return out, err
+		},
 		"storageEstimate": func(a []any) (any, error) {
 			o, err := h.site()
 			if err != nil {

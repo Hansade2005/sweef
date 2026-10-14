@@ -543,12 +543,15 @@ Object.defineProperty(globalThis, '__swCanvasFactories', { enumerable: false });
       return u ? ['url', u] : null;
     }
     if (global.HTMLVideoElement && x instanceof global.HTMLVideoElement) return ['node', idOfEl(x)];
+    if (x && typeof x.__swCvSource === 'function') return x.__swCvSource(); // VideoFrame (platformjs/webcodecs.js)
     throw new TypeError("Failed to execute '" + fn + "' on 'CanvasRenderingContext2D': The provided value is not of type '(CSSImageValue or HTMLImageElement or SVGImageElement or HTMLVideoElement or HTMLCanvasElement or ImageBitmap or OffscreenCanvas or VideoFrame)'.");
   }
+  Object.defineProperty(global, '__swCanvasSource', { value: function (x) { return srcOf(x, 'VideoFrame'); }, configurable: true });
   Object.defineProperty(global, '__swCvSource', { value: function (x, fn) { return srcOf(x, fn); } });
   function srcSize(x) {
     if (x && x._isVF) return [x.visibleRect.width, x.visibleRect.height];
     if (x && x._isBitmap) return [x.width, x.height];
+    if (x && typeof x.__swCvSize === 'function') return x.__swCvSize();
     if (x instanceof global.HTMLImageElement) return [x.naturalWidth, x.naturalHeight];
     if (x && x.videoWidth !== undefined) return [x.videoWidth, x.videoHeight];
     return [x.width, x.height];

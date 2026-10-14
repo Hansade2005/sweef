@@ -24,6 +24,8 @@ type waState struct {
 	ctxs  map[int]*webaudio.Context
 	sinks map[int]*waSink
 	next  int
+	rts   map[int]*waRT     // render goroutines of running contexts (media_audio_rt.go)
+	feeds map[int][]*waFeed // MediaStreamAudioSourceNode feeders per context
 }
 
 func (m *mediaHost) waReset() {
@@ -45,7 +47,7 @@ func anyF(v any) float64 { return argF([]any{v}, 0) }
 
 func (m *mediaHost) waHost(f map[string]hostFn) {
 	m.mseFns(f)
-	m.wa = &waState{ctxs: map[int]*webaudio.Context{}, sinks: map[int]*waSink{}, next: 1}
+	m.wa = &waState{ctxs: map[int]*webaudio.Context{}, sinks: map[int]*waSink{}, next: 1, rts: map[int]*waRT{}}
 	f["waNew"] = func(a []any) (any, error) {
 		id := m.wa.next
 		m.wa.next++
@@ -60,6 +62,7 @@ func (m *mediaHost) waHost(f map[string]hostFn) {
 	}
 	f["waClose"] = func(a []any) (any, error) {
 		id := int(argI(a, 0))
+		m.waStopCtx(id)
 		delete(m.wa.ctxs, id)
 		if sk := m.wa.sinks[id]; sk != nil {
 			sk.close()
@@ -406,6 +409,7 @@ func (m *mediaHost) waHost(f map[string]hostFn) {
 		c.Provide(c.Node(int(argI(a, 1))), out)
 		return nil, nil
 	}
+	m.waRTHost(f)
 }
 
 func toAnyInts(v []int) []any {
@@ -428,6 +432,9 @@ func (m *mediaHost) storePCMRaw(ch [][]float32, rate int) map[string]any {
 func (m *mediaHost) waShutdown() {
 	if m.wa == nil {
 		return
+	}
+	for id := range m.wa.ctxs {
+		m.waStopCtx(id)
 	}
 	for id, sk := range m.wa.sinks {
 		sk.close()

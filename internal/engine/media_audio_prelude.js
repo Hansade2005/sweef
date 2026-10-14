@@ -559,15 +559,37 @@
   makeNodeClass('MediaStreamAudioSourceNode', {
     go: 'mediastreamsource', ins: 0, outs: 1, cc: 2, cm: 'max', ci: 'speakers', params: {},
     pre: function (o) { if (!o.mediaStream || !(o.mediaStream instanceof global.MediaStream)) throw new TypeError("Failed to construct 'MediaStreamAudioSourceNode': required member mediaStream is undefined."); if (!o.mediaStream.getAudioTracks().length) throw dex("Failed to construct 'MediaStreamAudioSourceNode': MediaStream has no audio track", 'InvalidStateError'); },
-    init: function (n, o) { n.__ms = o.mediaStream; }
+    init: function (n, o, ctx) { n.__ms = o.mediaStream; feedFromTrack(ctx, n, o.mediaStream.getAudioTracks()[0]); }
   });
   attr(DEFS.MediaStreamAudioSourceNode.cls, 'mediaStream', function () { return this.__ms; });
   makeNodeClass('MediaStreamAudioDestinationNode', {
     go: 'mediastreamdest', ins: 1, outs: 0, cc: 2, cm: 'explicit', ci: 'speakers', params: {}, numOut: function () { return 0; },
-    init: function (n) { var ms = new global.MediaStream(); ms.addTrack(global.__swMakeTrack('audio', 'MediaStreamAudioDestinationNode')); n.__stream = ms; }
+    init: function (n, o, ctx) {
+      var ms = new global.MediaStream(), track = null;
+      // what reaches the node becomes a real audio track (a peer connection, a recorder or a processor can use it)
+      if (typeof global.__swCapTrack === 'function' && !ctx.__offline) {
+        try { track = global.__swCapTrack(JSON.parse(sw.waStreamOut(ctx._id, n._gid)), {}); } catch (e) { track = null; }
+      }
+      ms.addTrack(track || global.__swMakeTrack('audio', 'MediaStreamAudioDestinationNode')); n.__stream = ms;
+    }
   });
   attr(DEFS.MediaStreamAudioDestinationNode.cls, 'stream', function () { return this.__stream; });
-  makeNodeClass('MediaStreamTrackAudioSourceNode', { go: 'mediastreamsource', ins: 0, outs: 1, cc: 2, cm: 'max', ci: 'speakers', params: {} });
+  makeNodeClass('MediaStreamTrackAudioSourceNode', {
+    go: 'mediastreamsource', ins: 0, outs: 1, cc: 2, cm: 'max', ci: 'speakers', params: {},
+    pre: function (o) {
+      if (!o.mediaStreamTrack || !(o.mediaStreamTrack instanceof global.MediaStreamTrack)) throw new TypeError("Failed to construct 'MediaStreamTrackAudioSourceNode': required member mediaStreamTrack is undefined.");
+      if (o.mediaStreamTrack.kind !== 'audio') throw dex("Failed to construct 'MediaStreamTrackAudioSourceNode': MediaStreamTrack must be of kind 'audio'.", 'InvalidStateError');
+    },
+    init: function (n, o, ctx) { n.__track = o.mediaStreamTrack; feedFromTrack(ctx, n, o.mediaStreamTrack); }
+  });
+  // connect a source node to the audio of a track: capture and generated tracks live in the capture layer, remote
+  // WebRTC tracks in the peer connection; anything else (a track of no known origin) stays silent
+  function feedFromTrack(ctx, node, track) {
+    if (!track || ctx.__offline) return;
+    var t = track._t || {}, spec = t.cap ? { cap: track.id } : t.rtc ? { rtc: [t.rtc.pc, t.rtc.tr] } : null;
+    if (!spec) return;
+    try { sw.waStreamIn(ctx._id, node._gid, JSON.stringify(spec)); } catch (e) { /* a track that ended before the node was made stays silent */ }
+  }
 
   // MediaElementAudioSourceNode
   makeNodeClass('MediaElementAudioSourceNode', {
@@ -640,7 +662,7 @@
       var n = this.__srcs[k];
       if (n.__endedL || (n.__h && n.__h.ended) || n.onended || nodeInfo(n).stopAt !== undefined) { any = true; break; }
     }
-    return any || Object.keys(this.__ext).length > 0 || (this.__suspends && this.__suspends.length > 0);
+    return any || Object.keys(this.__ext).length > 0 || this.__els.length > 0 || (this.__suspends && this.__suspends.length > 0);
   };
   BaseAudioContext.prototype._ensureTimer = function () {
     var ctx = this;
@@ -670,7 +692,7 @@
   BaseAudioContext.prototype._bindElement = function (node) {
     var el = node.__el;
     if (el.__swSourceNode) throw dex("Failed to construct 'MediaElementAudioSourceNode': HTMLMediaElement already connected previously to a different MediaElementSourceNode.", 'InvalidStateError');
-    el.__swSourceNode = node; this.__els.push(node);
+    el.__swSourceNode = node; this.__els.push(node); this._stopRT(); this._ensureTimer();
     try { sw.playerRoute(global.__swIdOf(el), true); } catch (e) { /* the element's own output goes silent: its sound reaches the device through the graph */ }
   };
   function dispatchEnded(ctx, ids) {
@@ -704,9 +726,32 @@
       sw.waProvide(ctx._id, s.node, JSON.stringify(out || [f32ToB64(new Float32Array(Q))]));
     }
   };
+  // A context that needs no JavaScript to render is rendered by a goroutine (media_audio_rt.go); the page only reads
+  // the clock and collects ended events. One with a worklet or script processor stays on the page's clock.
+  BaseAudioContext.prototype._startRT = function () {
+    var ctx = this;
+    if (ctx.__rt || ctx.__offline || ctx.__closed || ctx._needsPage()) return;
+    try { ctx.__rt = !!sw.waRealtime(ctx._id, true); } catch (e) { ctx.__rt = false; }
+  };
+  // worklets, script processors and media element sources are driven from the page's thread
+  BaseAudioContext.prototype._needsPage = function () { return this.__els.length > 0 || sw.waHasExternal(this._id); };
+  BaseAudioContext.prototype._stopRT = function () {
+    var ctx = this;
+    if (!ctx.__rt) return;
+    ctx.__rt = false;
+    try { sw.waRealtime(ctx._id, false); ctx.__goFrame = sw.waFrame(ctx._id); } catch (e) { /* closed */ }
+    ctx.__wall = _now(); ctx.__baseFrames = ctx.__goFrame;
+  };
   BaseAudioContext.prototype._catchUp = function () {
     var ctx = this;
     if (ctx.__closed || ctx.__offline || ctx.__state !== 'running') return;
+    if (ctx.__rt) {
+      if (ctx._needsPage()) { ctx._stopRT(); } // a worklet appeared: the page drives the clock from here
+      else { ctx.__goFrame = sw.waFrame(ctx._id); dispatchEnded(ctx, sw.waEnded(ctx._id)); return; }
+    } else if (!ctx._needsPage()) {
+      ctx._startRT();
+      if (ctx.__rt) { ctx.__goFrame = sw.waFrame(ctx._id); dispatchEnded(ctx, sw.waEnded(ctx._id)); return; }
+    }
     var target = ctx.__baseFrames + Math.floor((_now() - ctx.__wall) * ctx.__rate / 1000);
     target = Math.floor(target / Q) * Q;
     var delta = target - ctx.__goFrame;
@@ -722,7 +767,7 @@
   BaseAudioContext.prototype._run = function () {
     var ctx = this;
     ctx.__wall = _now(); ctx.__baseFrames = ctx.__goFrame;
-    setState(ctx, 'running'); ctx._ensureTimer();
+    setState(ctx, 'running'); ctx._startRT(); ctx._ensureTimer();
   };
 
   // factory methods
@@ -809,7 +854,7 @@
   defMethod(AudioContext.prototype, 'suspend', function () {
     var ctx = this;
     if (ctx.__closed) return Promise.reject(dex('Cannot suspend a closed AudioContext', 'InvalidStateError'));
-    ctx._catchUp();
+    ctx._catchUp(); ctx._stopRT();
     if (ctx.__timer) { _clearTimeout(ctx.__timer); ctx.__timer = null; }
     setState(ctx, 'suspended');
     return new Promise(function (res) { _setTimeout(res, 0); });
@@ -817,13 +862,13 @@
   defMethod(AudioContext.prototype, 'close', function () {
     var ctx = this;
     if (ctx.__closed) return Promise.reject(dex('Cannot close a closed AudioContext', 'InvalidStateError'));
-    ctx._catchUp(); ctx.__lastTime = sw.waTime(ctx._id);
+    ctx._catchUp(); ctx.__lastTime = sw.waTime(ctx._id); ctx._stopRT();
     ctx.__closed = true; if (ctx.__timer) { _clearTimeout(ctx.__timer); ctx.__timer = null; }
     try { sw.waClose(ctx._id); } catch (e) { /* ignore */ }
     setState(ctx, 'closed');
     return new Promise(function (res) { _setTimeout(res, 0); });
   });
-  defMethod(AudioContext.prototype, 'createMediaStreamTrackSource', function (t) { return new global.MediaStreamTrackAudioSourceNode(this); });
+  defMethod(AudioContext.prototype, 'createMediaStreamTrackSource', function (t) { return new global.MediaStreamTrackAudioSourceNode(this, { mediaStreamTrack: t }); });
   global.AudioContext = AudioContext; global.webkitAudioContext = AudioContext;
 
   // ---- OfflineAudioContext ---------------------------------------------------------------------------------------------------------------
@@ -931,6 +976,7 @@
       }
       return outChans.map(f32ToB64);
     };
+    ctx._stopRT(); ctx._ensureTimer();
     return node;
   }
   global.ScriptProcessorNode = ScriptProcessorNode;
@@ -950,9 +996,17 @@
           var u = String(url), text;
           try {
             var abs = new global.URL(u, global.location.href).href;
-            var r = sw.http('GET', abs, {}, '');
-            if (r.status !== 200) throw new Error('HTTP ' + r.status);
-            text = r.body;
+            if (/^blob:/i.test(abs)) {
+              text = typeof global.__swBlobText === 'function' ? global.__swBlobText(abs) : null;
+              if (text === null || text === undefined) throw new Error('blob not found');
+            } else if (/^data:/i.test(abs)) {
+              var comma = abs.indexOf(','), meta = abs.slice(5, comma), body = abs.slice(comma + 1);
+              text = /;base64$/i.test(meta) ? global.atob(body) : decodeURIComponent(body);
+            } else {
+              var r = sw.http('GET', abs, {}, '');
+              if (r.status !== 200) throw new Error('HTTP ' + r.status);
+              text = r.body;
+            }
           } catch (e) { rej(dex("Unable to load a worklet's module.", 'AbortError')); return; }
           var reg = REG.get(ctx) || new Map(); REG.set(ctx, reg);
           try { runWorkletCode(ctx, text, reg); } catch (e2) { rej(dex(String(e2 && e2.message || e2), 'AbortError')); return; }
@@ -1036,6 +1090,7 @@
       return outputs[0].map(f32ToB64);
     };
     ctx._register(this);
+    ctx._stopRT(); ctx._ensureTimer(); // the page renders this context now: its timer must run
   }
   derive(AudioWorkletNode, AudioNode); tag(AudioWorkletNode, 'AudioWorkletNode');
   handlerProps(AudioWorkletNode.prototype, ['processorerror']);

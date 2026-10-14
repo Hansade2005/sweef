@@ -127,7 +127,7 @@ func (c *Context) AddNode(typ string, o map[string]any) (int, error) {
 		n.proc = &clipProc{}
 	case "mediastreamsource":
 		n = c.newNode(typ, 0, 1)
-		n.proc = silenceProc{}
+		n.proc = streamInProc{}
 	case "mediastreamdest":
 		n = c.newNode(typ, 1, 1)
 		n.ChCount, n.ChMode = 2, "explicit"
@@ -393,6 +393,9 @@ func (passProc) process(n *Node, c *Context, start int64, frames int, in [][][]f
 	out := n.setOut(0, len(in[0]))
 	for ch := range out {
 		copy(out[ch], in[0][ch])
+	}
+	if n.Tap != nil {
+		n.Tap(out)
 	}
 }
 

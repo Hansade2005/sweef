@@ -38,13 +38,16 @@ type apkt struct {
 // adaptive jitter buffer, packet loss concealment (in-band FEC when the next packet carries it, else
 // the decoder's PLC) and level metering.
 type AudioReceiver struct {
-	track *webrtc.TrackRemote
-	rcv   *webrtc.RTPReceiver
-	ssrc  uint32
+	track     *webrtc.TrackRemote
+	rcv       *webrtc.RTPReceiver
+	ssrc      uint32
+	hook      hookSlot
+	minTarget int // packets: RTCRtpReceiver.jitterBufferTarget (guarded by mu)
 
 	mu      sync.Mutex
 	sink    AudioSink
 	proc    AudioProcessor
+	taps    []func(pcm []int16, rate, channels int) // see AddTap
 	pkts    map[uint32]*apkt
 	highest uint32
 	haveSeq bool
@@ -167,9 +170,40 @@ func (a *AudioReceiver) readRTP() {
 			return
 		default:
 		}
+		if hk := a.hook.get(); hk != nil && len(p.Payload) > 0 {
+			out, ok := hk(&EncodedFrame{Key: true, Timestamp: p.Timestamp, SSRC: p.SSRC, PayloadType: p.PayloadType, Data: p.Payload})
+			if !ok || len(out) == 0 {
+				continue // undecodable: a lost packet to the jitter buffer
+			}
+			p.Payload = out
+		}
 		a.insert(p, time.Now())
 	}
 }
+
+// AddTap calls f with every decoded 20 ms block (interleaved stereo, 48 kHz) after it went to the sink: what a
+// MediaStreamTrackProcessor or a Web Audio MediaStreamAudioSourceNode reads. The slice must not be kept or changed.
+func (a *AudioReceiver) AddTap(f func(pcm []int16, rate, channels int)) {
+	a.mu.Lock()
+	a.taps = append(append([]func(pcm []int16, rate, channels int){}, a.taps...), f)
+	a.mu.Unlock()
+}
+
+// SetMinDelay sets the least jitter buffer depth in seconds (RTCRtpReceiver.jitterBufferTarget; 0 removes it).
+func (a *AudioReceiver) SetMinDelay(sec float64) {
+	a.mu.Lock()
+	a.minTarget = int(math.Ceil(sec / 0.02))
+	if a.minTarget > 200 {
+		a.minTarget = 200
+	}
+	if a.target < a.minTarget {
+		a.target = a.minTarget
+	}
+	a.mu.Unlock()
+}
+
+// SetHook installs (nil removes) the encoded-frame transform: it sees each packet's payload before it is buffered.
+func (a *AudioReceiver) SetHook(f FrameHook) { a.hook.set(f) }
 
 func (a *AudioReceiver) setMuted(m bool) {
 	if a.muted == m {
@@ -232,7 +266,10 @@ func (a *AudioReceiver) insert(p *rtp.Packet, now time.Time) {
 	if t < 2 {
 		t = 2
 	}
-	if t > 12 {
+	if t < a.minTarget {
+		t = a.minTarget
+	}
+	if t > 12 && t > a.minTarget {
 		t = 12
 	}
 	if t > a.target {
@@ -293,13 +330,16 @@ func (a *AudioReceiver) tick(now time.Time) {
 		a.owed -= n
 		frames = append(frames, pcm)
 	}
-	sink, proc := a.sink, a.proc
+	sink, proc, taps := a.sink, a.proc, a.taps
 	a.mu.Unlock()
 	for _, f := range frames {
 		if proc != nil {
 			proc.AnalyzeFarEnd(f, opusRate, 2)
 		}
 		sink.Write(f, opusRate, 2)
+		for _, t := range taps {
+			t(f, opusRate, 2)
+		}
 	}
 }
 

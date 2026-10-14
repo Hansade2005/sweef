@@ -40,7 +40,10 @@
     var m = e && typeof e.message === 'string' ? /^([A-Za-z]+Error): ([\s\S]*)$/.exec(e.message) : null;
     return m ? mkErr(m[1], m[2]) : e;
   }
+  // wgen counts writes (anything that can change what a cursor would read next): cursor read-ahead is dropped when it moves
+  var wgen = 0, WRITES = { idbPut: 1, idbDelRange: 1, idbClear: 1, idbCreateIndex: 1, idbDeleteIndex: 1, idbCreateStore: 1, idbDeleteStore: 1, idbRenameStore: 1, idbRenameIndex: 1 };
   function host(name) {
+    if (WRITES[name] === 1) wgen++;
     var args = Array.prototype.slice.call(arguments, 1);
     try { return H[name].apply(null, args); } catch (e) { throw hostErr(e); }
   }
@@ -246,6 +249,10 @@
     for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
     return u;
   }
+  // Types implemented elsewhere (CryptoKey, VideoFrame, ...) take part in structured clone and IndexedDB storage with
+  // a method under this symbol returning { tag, data } (data must be JSON-able) and a factory in __swCloneTypes[tag].
+  var CLONE_SYM = Symbol.for('sweef.structuredClone');
+  Object.defineProperty(global, '__swCloneTypes', { value: Object.create(null) });
   var ERR_NAMES = ['Error', 'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError'];
   function cloneFail(what) { return mkErr('DataCloneError', (what || 'value') + ' could not be cloned.'); }
   // xports: the MessagePorts of a postMessage transfer list. A port inside the value is replaced by its index;
@@ -253,6 +260,7 @@
   var NATIVE_B64 = typeof Uint8Array.prototype.toBase64 === 'function' && typeof Uint8Array.fromBase64 === 'function';
   // share: the value goes to another VM of the same agent cluster (Worker.postMessage, a worker's postMessage), where
   // a SharedArrayBuffer travels as a reference to the same memory; storage and BroadcastChannel refuse it.
+  var held = []; // objects structuredClone() cannot pass through JSON (WebCodecs frames)
   function ser(value, xports, share) {
     var ids = new Map(), next = 0;
     // messages (xports given) carry binary data as base64, which the engine converts natively; stored values keep
@@ -286,6 +294,11 @@
         ids.set(v, id);
         return ['SB', id, sid, v.byteLength];
       }
+      if (share === 'clone' && (v._isVF === true || v._isAD === true)) { // structuredClone(): an independent frame, kept on the side
+        ids.set(v, id);
+        held.push(v.clone());
+        return ['MH', id, held.length - 1];
+      }
       if (typeof global.__swMediaSer === 'function') { // WebCodecs frames and audio travel by token to the same agent cluster
         var md = global.__swMediaSer(v, !!share && !!xports);
         if (md) { ids.set(v, id); return ['MD', id, md]; }
@@ -312,6 +325,10 @@
         if (global.File && v instanceof global.File) return [b64 ? 'F6' : 'F', id, v.name, v.type, v.lastModified, raw];
         return [b64 ? 'B6' : 'Bl', id, v.type, raw];
       }
+      var hook = v[CLONE_SYM];
+      if (typeof hook === 'function') { var hp = hook.call(v); ids.set(v, id); return ['K', id, hp.tag, hp.data]; }
+      if (global.DOMException && v instanceof global.DOMException) { ids.set(v, id); return ['X', id, String(v.name), String(v.message), typeof v.stack === 'string' ? v.stack : '']; }
+      if (global.ImageData && v instanceof global.ImageData) { ids.set(v, id); return ['I', id, v.width, v.height, node(v.data)]; }
       if (v instanceof Promise || v instanceof WeakMap || v instanceof WeakSet || (global.WeakRef && v instanceof global.WeakRef)) throw cloneFail('#<' + (v.constructor && v.constructor.name || 'Object') + '>');
       if (v instanceof Boolean) { ids.set(v, id); return ['W', id, 'B', v.valueOf()]; }
       if (v instanceof Number) { ids.set(v, id); return ['W', id, 'N', node(v.valueOf())]; }
@@ -381,6 +398,10 @@
         case 'B6': return (objs[n[1]] = new global.Blob([Uint8Array.fromBase64(n[3])], { type: n[2] }));
         case 'F': { var f = new global.File([strBin(n[5])], n[2], { type: n[3], lastModified: n[4] }); return (objs[n[1]] = f); }
         case 'F6': return (objs[n[1]] = new global.File([Uint8Array.fromBase64(n[5])], n[2], { type: n[3], lastModified: n[4] }));
+        case 'MH': return (objs[n[1]] = held[n[2]]);
+        case 'K': { if (n[2] === 'CryptoKey') void global.CryptoKey; var mk = global.__swCloneTypes && global.__swCloneTypes[n[2]]; if (!mk) throw cloneFail(n[2]); return (objs[n[1]] = mk(n[3])); }
+        case 'X': { var dx = new global.DOMException(n[3], n[2]); if (n[4]) { try { Object.defineProperty(dx, 'stack', { value: n[4], writable: true, configurable: true }); } catch (x) { /* ignore */ } } return (objs[n[1]] = dx); }
+        case 'I': { var idata = build(n[4]); return (objs[n[1]] = new global.ImageData(idata, n[2], n[3])); }
         case 'W': return (objs[n[1]] = n[2] === 'B' ? new Boolean(n[3]) : n[2] === 'N' ? new Number(build(n[3])) : new String(n[3]));
         case 'E': {
           var E = global[n[2]] || Error, e = new E(n[3]);
@@ -396,6 +417,11 @@
     }
     return build(JSON.parse(s));
   }
+  Object.defineProperty(global, 'structuredClone', { value: function structuredClone(value) {
+    if (arguments.length < 1) throw new TypeError("Failed to execute 'structuredClone' on 'Window': 1 argument required, but only 0 present.");
+    held = [];
+    try { return de(ser(value, [], 'clone'), []); } finally { held = []; }
+  }, writable: true, configurable: true, enumerable: true });
   Object.defineProperty(global, '__swSer', { value: ser });
   Object.defineProperty(global, '__swDe', { value: de });
 
@@ -1031,9 +1057,22 @@
   function stepCursor(c, target, targetPK, advance) {
     var st = c._store, tx = st._tx, ix = c._index, req = c._req, dir = DIRS[c._dir];
     return place(ix || st, tx, function () {
-      var r = host('idbCursor', tx._id, st._name, ix ? ix._name : '', c._rg[0], c._rg[1], c._rg[2], c._rg[3], dir,
-        c._has, c._kEnc, c._pEnc, target, targetPK, advance, c._keyOnly);
-      if (!r.length) { c._got = false; c._key = c._pk = c._val = undefined; return null; }
+      var r;
+      var plain = c._has && target === '' && targetPK === '' && advance === 1;
+      if (plain && c._buf && c._buf.length && c._bufGen === wgen) r = c._buf.shift(); // read ahead
+      else if (plain && c._ra !== 0) {
+        // a cursor that is being stepped one by one: fetch the next positions together (8, then doubling to 128)
+        var n = c._raN = Math.min((c._raN || 4) * 2, 128);
+        var rows = host('idbCursorN', tx._id, st._name, ix ? ix._name : '', c._rg[0], c._rg[1], c._rg[2], c._rg[3], dir,
+          c._has, c._kEnc, c._pEnc, '', '', 1, c._keyOnly, n);
+        r = rows.length ? rows.shift() : [];
+        c._buf = rows; c._bufGen = wgen;
+      } else {
+        c._buf = null;
+        r = host('idbCursor', tx._id, st._name, ix ? ix._name : '', c._rg[0], c._rg[1], c._rg[2], c._rg[3], dir,
+          c._has, c._kEnc, c._pEnc, target, targetPK, advance, c._keyOnly);
+      }
+      if (!r.length) { c._got = false; c._key = c._pk = c._val = undefined; c._buf = null; return null; }
       c._has = true; c._kEnc = r[0]; c._pEnc = r[1];
       c._key = decodeKey(r[0]); c._pk = ix ? decodeKey(r[1]) : c._key;
       c._val = c._keyOnly ? undefined : de(r[2]);

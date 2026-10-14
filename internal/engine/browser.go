@@ -30,6 +30,8 @@ type BrowserContext struct {
 	created time.Time
 	closed  bool
 	mu      sync.RWMutex
+	clipMu  sync.Mutex
+	clip    Clipboard // the clipboard of the pages of this context (clipboard.go)
 
 	httpClient *http.Client            // per-context client with its own cookie jar (see clientFor)
 	ds         atomic.Pointer[ctxData] // Data Saver policy, counters and stats (datasaver.go)

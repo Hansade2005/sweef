@@ -10,6 +10,7 @@ package engine
 import (
 	_ "embed"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -17,9 +18,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
-
-	"golang.org/x/net/websocket"
 )
 
 //go:embed dom_prelude_ext.js
@@ -33,6 +31,7 @@ type asyncEvent struct {
 	binary bool
 	code   int
 	reason string
+	clean  bool // ws close: the closing handshake completed
 }
 
 // realtime holds a page VM's sockets, workers and their pending events.
@@ -44,9 +43,10 @@ type realtime struct {
 	mu          sync.Mutex
 	queue       []asyncEvent
 	nextID      int64
-	sockets     map[int64]*websocket.Conn
-	bg          *vmBG    // workers, channels and locks this VM owns (workers.go)
-	closers     []func() // feature packages (webrtc.go) register their teardown here
+	sockets     map[int64]*wsClient
+	cancelled   map[int64]bool // sockets close()d while still connecting
+	bg          *vmBG          // workers, channels and locks this VM owns (workers.go)
+	closers     []func()       // feature packages (webrtc.go) register their teardown here
 }
 
 // asyncHandlers let a feature deliver its own queued events without editing
@@ -63,7 +63,7 @@ func (r *realtime) addCloser(f func()) {
 
 func (j *jsVM) rt() *realtime {
 	j.rtOnce.Do(func() {
-		j.realtime = &realtime{sockets: map[int64]*websocket.Conn{}}
+		j.realtime = &realtime{sockets: map[int64]*wsClient{}}
 	})
 	return j.realtime
 }
@@ -99,13 +99,13 @@ func (r *realtime) id() int64 {
 func (r *realtime) closeAll() {
 	r.mu.Lock()
 	socks, closers, bg := r.sockets, r.closers, r.bg
-	r.sockets, r.closers, r.bg = map[int64]*websocket.Conn{}, nil, nil
+	r.sockets, r.closers, r.bg = map[int64]*wsClient{}, nil, nil
 	r.mu.Unlock()
 	for _, f := range closers {
 		f()
 	}
 	for _, c := range socks {
-		c.Close()
+		c.Abort()
 	}
 	if bg != nil {
 		bg.closeAll()
@@ -137,67 +137,90 @@ func (j *jsVM) wsOpen(rawurl, protocols string) int64 {
 			r.push(asyncEvent{kind: "ws", id: id, typ: "close", code: 1006, reason: "offline"})
 			return
 		}
-		cfg, err := websocket.NewConfig(rawurl, origin)
-		if err != nil {
+		u, err := url.Parse(rawurl)
+		if err != nil || (u.Scheme != "ws" && u.Scheme != "wss") || u.Host == "" {
+			if err == nil {
+				err = errors.New("invalid WebSocket URL")
+			}
 			r.push(asyncEvent{kind: "ws", id: id, typ: "error"})
 			r.push(asyncEvent{kind: "ws", id: id, typ: "close", code: 1006, reason: err.Error()})
 			return
 		}
+		var protos []string
 		if protocols != "" {
-			cfg.Protocol = strings.Split(protocols, ",")
+			protos = strings.Split(protocols, ",")
 		}
-		cfg.Header = http.Header{}
-		cfg.Header.Set("User-Agent", t.UserAgent())
+		hdr := http.Header{}
+		hdr.Set("User-Agent", t.UserAgent())
+		hdr.Set("Pragma", "no-cache")
+		hdr.Set("Cache-Control", "no-cache")
+		if al := t.Context().AcceptLanguage(); al != "" {
+			hdr.Set("Accept-Language", al)
+		}
 		httpURL := strings.Replace(rawurl, "ws", "http", 1)
 		if ck := t.Context().jar.Header(httpURL, t.cookieScopeFor(httpURL, KindXHR).query(false)); ck != "" {
-			cfg.Header.Set("Cookie", ck)
+			hdr.Set("Cookie", ck)
 		}
 		t.touchNet()
-		conn, err := t.eng.dialWebSocket(t.eng.ctx, t.Context(), cfg)
+		conn, resp, err := t.eng.dialWebSocket(t.eng.ctx, t.Context(), u, origin, protos, hdr)
+		if resp != nil { // cookies of the handshake response are stored whether or not the upgrade worked
+			host := strings.ToLower(u.Hostname())
+			for _, sch := range resp.Header.Values("Set-Cookie") {
+				if ck := parseCookie(sch, t.eng.now()); ck != nil {
+					t.Context().storeCookie(ck, host, t.cookieScopeFor(httpURL, KindXHR))
+				}
+			}
+			if resp.Body != nil {
+				resp.Body.Close()
+			}
+		}
 		if err != nil {
 			j.wsLog("error", rawurl, err.Error(), false)
 			r.push(asyncEvent{kind: "ws", id: id, typ: "error"})
-			r.push(asyncEvent{kind: "ws", id: id, typ: "close", code: 1006, reason: err.Error()})
+			r.push(asyncEvent{kind: "ws", id: id, typ: "close", code: 1006, reason: ""})
 			return
 		}
 		r.mu.Lock()
+		if r.cancelled[id] { // close() while connecting: the connection is dropped as soon as it exists
+			delete(r.cancelled, id)
+			r.mu.Unlock()
+			conn.Abort()
+			r.push(asyncEvent{kind: "ws", id: id, typ: "error"})
+			r.push(asyncEvent{kind: "ws", id: id, typ: "close", code: 1006})
+			return
+		}
 		r.sockets[id] = conn
 		r.mu.Unlock()
-		proto := ""
-		if len(conn.Config().Protocol) > 0 {
-			proto = conn.Config().Protocol[0]
-		}
-		j.wsLog("open", rawurl, proto, false)
-		r.push(asyncEvent{kind: "ws", id: id, typ: "open", data: proto})
+		j.wsLog("open", rawurl, conn.Protocol(), false)
+		r.push(asyncEvent{kind: "ws", id: id, typ: "open", data: conn.Protocol()})
 		for {
-			var msg []byte
-			if err := websocket.Message.Receive(conn, &msg); err != nil {
+			msg, bin, err := conn.Read()
+			if err != nil {
 				r.mu.Lock()
-				_, still := r.sockets[id]
 				delete(r.sockets, id)
 				r.mu.Unlock()
-				code := 1006
-				if !still {
-					code = 1000 // we closed it
+				oc := wsOutcome(err)
+				j.wsLog("close", rawurl, fmt.Sprintf("%d %s", oc.Code, oc.Reason), false)
+				if oc.Code == 1006 {
+					r.push(asyncEvent{kind: "ws", id: id, typ: "error"})
 				}
-				j.wsLog("close", rawurl, err.Error(), false)
-				r.push(asyncEvent{kind: "ws", id: id, typ: "close", code: code})
+				r.push(asyncEvent{kind: "ws", id: id, typ: "close", code: oc.Code, reason: oc.Reason, clean: oc.Clean})
 				return
 			}
-			if utf8.Valid(msg) {
-				j.wsLog("receive", rawurl, string(msg), false)
-				r.push(asyncEvent{kind: "ws", id: id, typ: "message", data: string(msg)})
-			} else {
+			if bin {
 				b64 := base64.StdEncoding.EncodeToString(msg)
 				j.wsLog("receive", rawurl, b64, true)
 				r.push(asyncEvent{kind: "ws", id: id, typ: "message", data: b64, binary: true})
+			} else {
+				j.wsLog("receive", rawurl, string(msg), false)
+				r.push(asyncEvent{kind: "ws", id: id, typ: "message", data: string(msg)})
 			}
 		}
 	}()
 	return id
 }
 
-func (j *jsVM) wsSend(id int64, data string, binary bool) error {
+func (j *jsVM) wsSend(id int64, data string, isBinary bool) error {
 	r := j.rt()
 	r.mu.Lock()
 	conn := r.sockets[id]
@@ -205,26 +228,46 @@ func (j *jsVM) wsSend(id int64, data string, binary bool) error {
 	if conn == nil {
 		return fmt.Errorf("InvalidStateError: socket %d is not open", id)
 	}
-	j.wsLog("send", conn.Config().Location.String(), data, binary)
-	if binary {
+	j.wsLog("send", "", data, isBinary)
+	if isBinary {
 		b, err := base64.StdEncoding.DecodeString(data)
 		if err != nil {
 			return err
 		}
-		return websocket.Message.Send(conn, b)
+		return conn.Send(b, true)
 	}
-	return websocket.Message.Send(conn, data)
+	return conn.Send([]byte(data), false)
 }
 
-func (j *jsVM) wsClose(id int64) {
+// wsBuffered is WebSocket.bufferedAmount.
+func (j *jsVM) wsBuffered(id int64) int64 {
 	r := j.rt()
 	r.mu.Lock()
 	conn := r.sockets[id]
-	delete(r.sockets, id)
+	r.mu.Unlock()
+	if conn == nil {
+		return 0
+	}
+	return conn.BufferedAmount()
+}
+
+// wsClose starts the closing handshake; the close event arrives when the server answers (or after a timeout).
+func (j *jsVM) wsClose(id int64, code int, reason string) {
+	r := j.rt()
+	r.mu.Lock()
+	conn := r.sockets[id]
 	r.mu.Unlock()
 	if conn != nil {
-		conn.Close()
+		conn.Close(code, reason)
+		return
 	}
+	// closed before the connection was open: the attempt is dropped, the page sees an error and a 1006 close
+	r.mu.Lock()
+	if r.cancelled == nil {
+		r.cancelled = map[int64]bool{}
+	}
+	r.cancelled[id] = true
+	r.mu.Unlock()
 }
 
 // drainAsync hands queued socket and worker events to page JavaScript.
@@ -237,7 +280,7 @@ func (j *jsVM) drainAsync() bool {
 	for _, e := range evs {
 		switch e.kind {
 		case "ws":
-			if _, err := j.call("__swWsEvent", e.id, e.typ, e.data, e.binary, e.code, e.reason); err != nil {
+			if _, err := j.call("__swWsEvent", e.id, e.typ, e.data, e.binary, e.code, e.reason, e.clean); err != nil {
 				j.tab.LogConsole("error", jsErrorText(err, "websocket "+e.typ))
 			}
 		case "http":

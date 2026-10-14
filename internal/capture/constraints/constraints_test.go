@@ -126,7 +126,7 @@ func TestSolveAudioTable(t *testing.T) {
 		{"channel count", `{"channelCount":2}`, []AudioDevice{mic}, 0, 44100, 2, ""},
 		{"channel count exact beyond the device", `{"channelCount":{"exact":6}}`, []AudioDevice{mic}, 0, 0, 0, "channelCount"},
 		{"echo cancellation ideal is accepted", `{"echoCancellation":true,"noiseSuppression":true,"autoGainControl":true}`, []AudioDevice{mic}, 0, 44100, 1, ""},
-		{"echo cancellation exact true is overconstrained", `{"echoCancellation":{"exact":true}}`, []AudioDevice{mic}, 0, 0, 0, "echoCancellation"},
+		{"echo cancellation exact true", `{"echoCancellation":{"exact":true}}`, []AudioDevice{mic}, 0, 44100, 1, ""},
 		{"echo cancellation exact false", `{"echoCancellation":{"exact":false}}`, []AudioDevice{mic}, 0, 44100, 1, ""},
 		{"device id", `{"deviceId":{"exact":"mic-b"}}`, []AudioDevice{mic, mic2}, 1, 48000, 1, ""},
 		{"device id missing", `{"deviceId":{"exact":"zzz"}}`, []AudioDevice{mic}, 0, 0, 0, "deviceId"},

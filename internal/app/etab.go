@@ -578,6 +578,12 @@ func (a *App) onEngineEvent(ev engine.Event) {
 		if st, ok := ev.Data.(engine.AudioState); ok {
 			a.post(func() { a.onTabAudio(e, st) })
 		}
+	case engine.EvMediaSession:
+		a.post(func() { a.markState() })
+	case engine.EvFullscreen:
+		if st, ok := ev.Data.(engine.FullscreenState); ok {
+			a.post(func() { a.onTabFullscreen(e, st.Active) })
+		}
 	case engine.EvDialog:
 		a.post(func() {
 			a.sendChrome(mToast, map[string]any{"text": "This page showed a dialog that was handled automatically", "kind": "info"})

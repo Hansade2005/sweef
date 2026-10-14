@@ -157,6 +157,8 @@ type jsVM struct {
 	closed    bool
 
 	capture *capHost // getUserMedia & co (capture_host.go)
+	cvh     *cvHost  // 2D canvas host (canvas.go), reachable for VideoFrame and ImageBitmap interop
+	rtc     *rtcHost // peer connections (webrtc.go), reachable for track processors
 
 	rtOnce   sync.Once
 	realtime *realtime // WebSockets and Workers (lazily created)
@@ -256,6 +258,9 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 	}
 	_, _ = j.call("__swCoiBind")
 	j.installBindings()
+	if t.IsBackground() {
+		_, _ = j.call("__swSetHidden", true, true) // a page opened or reloaded in a background tab starts hidden
+	}
 	if t.isFrame() {
 		_, _ = j.call("__swFrameInit", t.windowName())
 	}
@@ -1379,7 +1384,8 @@ func (j *jsVM) registerHost() error {
 		}},
 		{"wsOpen", func(a []any) (any, error) { return j.wsOpen(argS(a, 0), argS(a, 1)), nil }},
 		{"wsSend", func(a []any) (any, error) { return nil, j.wsSend(argI(a, 0), argS(a, 1), argB(a, 2)) }},
-		{"wsClose", func(a []any) (any, error) { j.wsClose(argI(a, 0)); return nil, nil }},
+		{"wsClose", func(a []any) (any, error) { j.wsClose(argI(a, 0), int(argI(a, 1)), argS(a, 2)); return nil, nil }},
+		{"wsBuffered", func(a []any) (any, error) { return j.wsBuffered(argI(a, 0)), nil }},
 		{"binding", func(a []any) (any, error) {
 			name, args := argS(a, 0), argS(a, 1)
 			if !json.Valid([]byte(args)) {

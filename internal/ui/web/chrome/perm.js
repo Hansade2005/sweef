@@ -16,9 +16,10 @@
     node.style.left = Math.round(SW.clamp(r.left, 8, W - w - 8)) + "px"; node.style.top = Math.round(r.bottom + 8) + "px";
   }
   function build(p) {
+    var clip = p.kind === "clipboard-read";
     var allow = h("button.btn.sm.primary", { text: P.allow, onclick: function () { answer("allow"); } });
     var n = h("div.pop.permpop", { role: "alertdialog", "aria-labelledby": "permt", "aria-describedby": "permd", tabindex: "-1" },
-      h("div.pp-h", h("span.pp-i", icon("bell", 20)), h("div", h("b", { id: "permt", text: S.f(P.title, { host: p.host }) }), h("span", { text: P.notif }))),
+      h("div.pp-h", h("span.pp-i", icon(clip ? "copy" : "bell", 20)), h("div", h("b", { id: "permt", text: S.f(P.title, { host: p.host }) }), h("span", { text: clip ? P.clipRead : P.notif }))),
       h("p.pp-n", { id: "permd", text: P.note }),
       h("div.pp-b", allow, h("button.btn.sm", { text: P.block, onclick: function () { answer("block"); } }), h("button.btn.sm.ghost", { text: P.later, onclick: function () { answer("dismiss"); } })));
     n.addEventListener("keydown", function (e) {
@@ -35,7 +36,7 @@
       var p = cur(); if (!p) { close(); return; }
       if (shown === p.id && node && node.isConnected) { place(); return; }
       close(); shown = p.id; node = build(p); node.style.visibility = "hidden"; document.getElementById("layer").appendChild(node); place(); node.style.visibility = "";
-      node.setAttribute("aria-label", S.f(P.title, { host: p.host }) + " " + P.notif);
+      node.setAttribute("aria-label", S.f(P.title, { host: p.host }) + " " + (p.kind === "clipboard-read" ? P.clipRead : P.notif));
     },
     focus: function () { if (node) { var b = node.querySelector(".btn"); if (b) b.focus(); } }
   };

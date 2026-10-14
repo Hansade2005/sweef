@@ -8,6 +8,7 @@ import (
 
 	"github.com/sweefbrowser/sweef/internal/app/state"
 	"github.com/sweefbrowser/sweef/internal/app/store"
+	"github.com/sweefbrowser/sweef/internal/engine"
 	"github.com/sweefbrowser/sweef/internal/notify"
 )
 
@@ -188,6 +189,10 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 	case "window.close":
 		a.requestClose()
 	case "window.fullscreen":
+		if a.htmlFS {
+			a.leaveHTMLFullscreen(true)
+			return
+		}
 		a.fullscreen = !a.fullscreen
 		a.win.SetFullscreen(a.fullscreen)
 	case "window.minimize", "window.maximize", "window.drag":
@@ -208,9 +213,9 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 		a.model.Find = state.Find{}
 		a.markState()
 	case "clipboard.write":
-		a.win.SetClipboard(decode[struct {
+		_ = a.clip.writeNow([]engine.ClipboardEntry{{Type: "text/plain", Data: []byte(decode[struct {
 			Text string `json:"text"`
-		}](raw).Text)
+		}](raw).Text)}})
 	case "openExternal":
 		a.openExternal(decode[struct {
 			URL string `json:"url"`

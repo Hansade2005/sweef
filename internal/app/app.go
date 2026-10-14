@@ -118,6 +118,9 @@ type App struct {
 	vpMu                sync.Mutex
 	vpShadow            rect // copy of vpLog readable from workers
 	haveLayout          bool
+	vpChrome            rect   // the hole the chrome page reported (vpLog is the hole in use: the whole window during element fullscreen)
+	htmlFS, fsWinSet    bool   // a page element is fullscreen / the window went fullscreen because of it
+	fsTab               string // tab id of the fullscreen element
 	focus               string // "chrome" | "page"
 	lastState           map[string]any
 	stateDirty          bool
@@ -162,6 +165,7 @@ type App struct {
 	ovl                 overlayState
 	dat                 dataSaver
 	media               *appMedia // camera, microphone and screen-share permissions (media.go)
+	clip                *appClip  // the clipboard: text from the window plus the flavours pages put on it (clipboard.go)
 	pw                  *pwaApp   // notifications, push and background sync (notifications.go); nil in a private window
 }
 
@@ -277,6 +281,8 @@ func New(cfg Config) (*App, error) {
 		at.AttachApp(a)
 	}
 	a.media = newAppMedia(a)
+	a.clip = newAppClip(a)
+	a.eng.DefaultContext().SetClipboard(a.clip)
 	a.startChrome()
 	return a, nil
 }

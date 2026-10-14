@@ -25,13 +25,15 @@
   function derive(Sub, Sup) { Object.setPrototypeOf(Sub.prototype, Sup.prototype); Object.setPrototypeOf(Sub, Sup); }
 
   // ---- user activation -----------------------------------------------------
-  var activation = { has: false, listeners: [] };
+  var activation = { has: false, listeners: [], at: 0 };
   global.__swUserActivation = {
     has: function () { return activation.has; },
     onActivate: function (cb) { if (activation.has) cb(); else activation.listeners.push(cb); },
-    grant: function () { grantActivation(); }
+    grant: function () { grantActivation(); },
+    transient: function () { return activation.has && Date.now() - activation.at < 5000; }
   };
   function grantActivation() {
+    activation.at = Date.now(); // transient activation lasts 5 s (navigator.userActivation.isActive)
     if (activation.has) return;
     activation.has = true;
     var l = activation.listeners; activation.listeners = [];
@@ -61,7 +63,7 @@
   });
   if (global.Navigator && !('userActivation' in global.Navigator.prototype)) {
     defGetter(global.Navigator.prototype, 'userActivation', function () {
-      return { get hasBeenActive() { return activation.has; }, get isActive() { return activation.has; } };
+      return { get hasBeenActive() { return activation.has; }, get isActive() { return activation.has && Date.now() - activation.at < 5000; } };
     });
   }
 
@@ -1236,6 +1238,7 @@
     capTracks[info.id] = t;
     return t;
   }
+  Object.defineProperty(global, '__swCapTrack', { value: capTrack, configurable: true });
   function endTrack(t, fire) {
     if (t._t.ready === 'ended') return;
     t._t.ready = 'ended'; delete capTracks[t._t.id];
@@ -1712,7 +1715,7 @@
   // ======================= MediaSource Extensions =====================================================
   // Byte-stream parsing, coded frame processing, buffered ranges, eviction and the quota live in Go
   // (internal/media/mse.go). This is the API surface with its events and the element's readyState logic.
-  // Not implemented: ManagedMediaSource, MediaSource in workers (canConstructInDedicatedWorker is false),
+  // Not implemented: MediaSource in workers (canConstructInDedicatedWorker is false),
   // MediaSourceHandle, SourceBuffer.audioTracks/videoTracks/textTracks, appendBufferAsync.
   var MS_STATE = new WeakMap();
   function MediaSource() {
@@ -1876,6 +1879,59 @@
   }
   global.MediaSource = MediaSource; global.SourceBufferList = SourceBufferList;
 
+  // ---- ManagedMediaSource: a MediaSource that tells the page when to stream (startstreaming/endstreaming) and its
+  // SourceBuffers report bufferedchange. Sweef never asks a page to stop (there is no battery or radio to save), so
+  // streaming is true from sourceopen on.
+  function ManagedMediaSource() {
+    if (!new.target) throw new TypeError("Failed to construct 'ManagedMediaSource': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+    MediaSource.call(this);
+    Object.defineProperty(this, '_streaming', { value: { on: false }, enumerable: false });
+  }
+  derive(ManagedMediaSource, MediaSource); tag(ManagedMediaSource, 'ManagedMediaSource');
+  defGetter(ManagedMediaSource.prototype, 'streaming', function () { return this._streaming.on; });
+  evHandlers(ManagedMediaSource, ['startstreaming', 'endstreaming']);
+  var baseAttach = MediaSource.prototype._attach, baseDetach = MediaSource.prototype._detach;
+  ManagedMediaSource.prototype._attach = function (el, s) {
+    var ok = baseAttach.call(this, el, s), self = this;
+    if (ok) { this._streaming.on = true; task(function () { fire(self, 'startstreaming'); }); }
+    return ok;
+  };
+  ManagedMediaSource.prototype._detach = function () {
+    var was = this._streaming.on, self = this;
+    baseDetach.call(this);
+    if (was) { this._streaming.on = false; task(function () { fire(self, 'endstreaming'); }); }
+  };
+  function BufferedChangeEvent(type, init) {
+    if (!new.target) throw new TypeError("Failed to construct 'BufferedChangeEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+    Event.call(this, type, init); init = init || {};
+    Object.defineProperty(this, '_r', { value: { added: init.addedRanges || makeRanges([]), removed: init.removedRanges || makeRanges([]) } });
+  }
+  derive(BufferedChangeEvent, Event); tag(BufferedChangeEvent, 'BufferedChangeEvent');
+  defGetter(BufferedChangeEvent.prototype, 'addedRanges', function () { return this._r.added; });
+  defGetter(BufferedChangeEvent.prototype, 'removedRanges', function () { return this._r.removed; });
+  global.ManagedMediaSource = ManagedMediaSource; global.BufferedChangeEvent = BufferedChangeEvent;
+  // set difference of two sorted range lists: what a is not covered by in b
+  function subtractRanges(a, b) {
+    var out = [];
+    a.forEach(function (x) {
+      var s = x[0];
+      for (var i = 0; i < b.length && s < x[1]; i++) {
+        if (b[i][1] <= s || b[i][0] >= x[1]) continue;
+        if (b[i][0] > s) out.push([s, b[i][0]]);
+        s = Math.max(s, b[i][1]);
+      }
+      if (s < x[1]) out.push([s, x[1]]);
+    });
+    return out;
+  }
+  // a managed SourceBuffer queues bufferedchange when its buffered ranges changed
+  function bufferedChanged(sb, before, after) {
+    if (!(sb._ms instanceof ManagedMediaSource)) return;
+    var added = subtractRanges(after, before), removed = subtractRanges(before, after);
+    if (!added.length && !removed.length) return;
+    task(function () { fire(sb, 'bufferedchange', BufferedChangeEvent, { addedRanges: makeRanges(added), removedRanges: makeRanges(removed) }); });
+  }
+
   function SourceBuffer() { illegal(); } derive(SourceBuffer, EventTarget); tag(SourceBuffer, 'SourceBuffer'); global.SourceBuffer = SourceBuffer;
   function newSourceBuffer(ms, type) {
     var sb = Object.create(SourceBuffer.prototype); EventTarget.call(sb);
@@ -1884,7 +1940,7 @@
     Object.defineProperty(sb, '_ms', { value: ms });
     return sb;
   }
-  evHandlers(SourceBuffer, ['updatestart', 'update', 'updateend', 'error', 'abort']);
+  evHandlers(SourceBuffer, ['updatestart', 'update', 'updateend', 'error', 'abort', 'bufferedchange']);
   function sbCheck(sb, op, attr) {
     var r = sb._r, w = attr ? "Failed to set the '" + op + "' property on 'SourceBuffer': " : "Failed to execute '" + op + "' on 'SourceBuffer': ";
     if (r.removed) throw dex(w + "This SourceBuffer has been removed from the parent media source.", 'InvalidStateError');
@@ -1984,7 +2040,9 @@
       }
       if (res.init) sbInit(sb, res.init);
       if (mr.el) { if (res.init) emeEncrypted(mr.el, res.init.encrypted); emeEncrypted(mr.el, res.encrypted); }
+      var before = r.ranges;
       if (res.buffered) r.ranges = copyRanges(res.buffered);
+      bufferedChanged(sb, before, r.ranges);
       var mx = highestEnd(mr);
       if (isFinite(mr.dur) && mx > mr.dur && mr.ready === 'open') setMSDuration(ms, mx);
       fire(sb, 'update'); fire(sb, 'updateend');
@@ -2016,7 +2074,9 @@
       _setTimeout(function () {
         task(function () {
           if (r.removed || r.token !== tok) return;
+          var before = r.ranges;
           try { r.ranges = copyRanges(sw.mseRemove(r.id, start, end)); } catch (e) { /* ignore */ }
+          bufferedChanged(sb, before, r.ranges);
           r.updating = false; fire(sb, 'update'); fire(sb, 'updateend');
           if (mr.el) msUpdate(mr.el);
         });
@@ -2123,6 +2183,11 @@
       if (/hev1|hvc1|hevc/.test(ct)) return 14;
       return 28;
     }
+    // the codecs a peer connection negotiates (internal/engine/webrtc_sdp.go): VP8 video and Opus audio
+    function rtcCodec(ct) {
+      var m = String(ct).toLowerCase().split(';')[0].trim();
+      return m === 'video/vp8' || m === 'audio/opus' || m === 'audio/red' || m === 'video/rtx' || m === 'audio/telephone-event' ? true : false;
+    }
     function MediaCapabilities() { illegal(); } tag(MediaCapabilities, 'MediaCapabilities');
     var mc = Object.create(MediaCapabilities.prototype);
     function typeErr(m) { return Promise.reject(new TypeError("Failed to execute 'decodingInfo' on 'MediaCapabilities': " + m)); }
@@ -2135,6 +2200,7 @@
       var supported = true, smooth = true;
       var check = function (ct) {
         if (badMime(ct)) return false;
+        if (type === 'webrtc') return rtcCodec(ct);
         if (type === 'media-source') return !!sw.mediaIsTypeSupported(ct);
         return sw.mediaCanPlay(ct) !== '';
       };
@@ -2157,7 +2223,14 @@
     });
     defMethod(MediaCapabilities.prototype, 'encodingInfo', function (cfg) {
       if (!cfg || typeof cfg !== 'object') return Promise.reject(new TypeError("Failed to execute 'encodingInfo' on 'MediaCapabilities': The provided value is not of type 'MediaEncodingConfiguration'."));
-      return Promise.resolve({ supported: false, smooth: false, powerEfficient: false });
+      var t = cfg.type;
+      if (t !== 'record' && t !== 'webrtc') return Promise.reject(new TypeError("Failed to execute 'encodingInfo' on 'MediaCapabilities': The provided value '" + t + "' is not a valid enum value of type MediaEncodingType."));
+      if (!cfg.video && !cfg.audio) return Promise.reject(new TypeError("Failed to execute 'encodingInfo' on 'MediaCapabilities': The configuration object has neither \"video\" nor \"audio\" field."));
+      // WebRTC sends VP8 and Opus (pure-Go encoders, software); MediaRecorder does not exist, so 'record' is unsupported
+      var ok = t === 'webrtc' && (!cfg.video || rtcCodec(cfg.video.contentType)) && (!cfg.audio || rtcCodec(cfg.audio.contentType));
+      var smooth = ok;
+      if (ok && cfg.video) smooth = (cfg.video.width || 0) * (cfg.video.height || 0) * (cfg.video.framerate || 0) / 1e6 <= 14; // about 640x360 at 30 fps: what the pure-Go VP8 encoder sustains in the call tests on 4 cores
+      return Promise.resolve({ supported: ok, smooth: smooth, powerEfficient: false });
     });
     global.MediaCapabilities = MediaCapabilities;
     try { Object.defineProperty(global.Navigator.prototype, 'mediaCapabilities', { get: function () { return mc; }, configurable: true, enumerable: true }); } catch (e) { /* ignore */ }
@@ -2340,6 +2413,73 @@
         }
         return xsend.apply(this, arguments);
       }, writable: true, configurable: true });
+    }
+  })();
+
+
+  // ======================= Fullscreen API ===============================================================
+  // requestFullscreen needs transient user activation (like Chrome). The element gets the internal attribute
+  // data-sw-fullscreen, which the UA style sheet turns into "fixed, covering the viewport"; the host event
+  // (Tab events: Media.fullscreen) makes the app give the page the whole window (chrome hidden, window
+  // fullscreen). The user leaving fullscreen (Esc, F11) comes back through __swFsExit().
+  (function () {
+    var D = global.Document && global.Document.prototype, E = global.Element && global.Element.prototype;
+    if (!D || !E) return;
+    var cur = null, queue = null;
+    // top-level documents only; looked up when asked, not at load (the window relations belong to the bound page)
+    function enabled() { try { return global.top === global; } catch (e) { return false; } }
+    function mark(el, on) { try { var id = global.__swIdOf(el); if (on) sw.setAttr(id, 'data-sw-fullscreen', ''); else sw.removeAttr(id, 'data-sw-fullscreen'); } catch (e) { /* ignore */ } }
+    function fire(el, type) {
+      var ev = new Event(type, { bubbles: true, composed: true });
+      try { el.dispatchEvent(ev); } catch (e) { /* ignore */ }
+      // the document sees the element's event through bubbling; a detached element's does not bubble to it
+      if (!el.isConnected) { try { global.document.dispatchEvent(new Event(type, { bubbles: true })); } catch (e) { /* ignore */ } }
+    }
+    function change(el, was) {
+      if (was && was !== el) fire(was, 'fullscreenchange');
+      fire(el || was, 'fullscreenchange');
+    }
+    function host(on) { try { sw.fullscreen(!!on); } catch (e) { /* no tab */ } }
+    function fail(el, msg) {
+      _setTimeout(function () { fire(el, 'fullscreenerror'); }, 0);
+      return Promise.reject(new TypeError(msg));
+    }
+    function request(options) {
+      var el = this;
+      if (!enabled()) return fail(el, "Failed to execute 'requestFullscreen' on 'Element': Fullscreen is not allowed in this frame.");
+      if (!el.isConnected) return fail(el, "Failed to execute 'requestFullscreen' on 'Element': Element is not connected.");
+      if (!global.__swUserActivation.transient()) return fail(el, "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.");
+      if (options !== undefined && options !== null && typeof options !== 'object') return Promise.reject(new TypeError("Failed to execute 'requestFullscreen' on 'Element': The provided value is not of type 'FullscreenOptions'."));
+      var was = cur;
+      if (was === el) return Promise.resolve();
+      if (was) mark(was, false);
+      cur = el; mark(el, true); host(true);
+      return new Promise(function (res) { _setTimeout(function () { change(el, was); res(); }, 0); });
+    }
+    function exit() {
+      var was = cur;
+      if (!was) return Promise.reject(new TypeError("Failed to execute 'exitFullscreen' on 'Document': Document not active"));
+      cur = null; mark(was, false); host(false);
+      return new Promise(function (res) { _setTimeout(function () { fire(was, 'fullscreenchange'); res(); }, 0); });
+    }
+    function def(o, n, v) { Object.defineProperty(o, n, { value: v, writable: true, configurable: true, enumerable: true }); }
+    function getter(o, n, g) { Object.defineProperty(o, n, { get: g, set: undefined, configurable: true, enumerable: true }); }
+    def(E, 'requestFullscreen', request); def(E, 'webkitRequestFullscreen', request); def(E, 'webkitRequestFullScreen', request);
+    def(D, 'exitFullscreen', exit); def(D, 'webkitExitFullscreen', exit); def(D, 'webkitCancelFullScreen', exit);
+    getter(D, 'fullscreenElement', function () { return cur && cur.isConnected ? cur : null; });
+    getter(D, 'webkitFullscreenElement', function () { return cur && cur.isConnected ? cur : null; });
+    getter(D, 'webkitCurrentFullScreenElement', function () { return cur && cur.isConnected ? cur : null; });
+    getter(D, 'fullscreenEnabled', enabled); getter(D, 'webkitFullscreenEnabled', enabled);
+    getter(D, 'webkitIsFullScreen', function () { return !!cur; }); getter(D, 'webkitFullscreen', function () { return !!cur; });
+    // the host leaves fullscreen (Esc, F11, tab switch): the page is told like any exit
+    Object.defineProperty(global, '__swFsExit', { value: function () { var was = cur; if (!was) return false; cur = null; mark(was, false); fire(was, 'fullscreenchange'); return true; }, configurable: true });
+    var VP = global.HTMLVideoElement && global.HTMLVideoElement.prototype;
+    if (VP) {
+      def(VP, 'webkitEnterFullscreen', function () { return request.call(this).catch(function () { }); });
+      def(VP, 'webkitEnterFullScreen', VP.webkitEnterFullscreen);
+      def(VP, 'webkitExitFullscreen', function () { if (cur === this) exit(); });
+      def(VP, 'webkitExitFullScreen', VP.webkitExitFullscreen);
+      getter(VP, 'webkitDisplayingFullscreen', function () { return cur === this; });
     }
   })();
 

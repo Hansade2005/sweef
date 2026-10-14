@@ -106,23 +106,37 @@ function artworkList(list) {
   });
 }
 ['title', 'artist', 'album'].forEach(function (k) {
-  Object.defineProperty(MediaMetadata.prototype, k, { get: function () { return this._[k]; }, set: function (v) { this._[k] = String(v); }, enumerable: true, configurable: true });
+  Object.defineProperty(MediaMetadata.prototype, k, { get: function () { return this._[k]; }, set: function (v) { this._[k] = String(v); if (g.navigator.mediaSession._.metadata === this) msPublish(); }, enumerable: true, configurable: true });
 });
 Object.defineProperty(MediaMetadata.prototype, 'artwork', { get: function () { return this._.artwork.map(function (a) { return { src: a.src, sizes: a.sizes, type: a.type }; }); }, set: function (v) { this._.artwork = artworkList(v); }, enumerable: true, configurable: true });
 H.tag(MediaMetadata, 'MediaMetadata');
 var MediaSession = cls('MediaSession');
+// What the page tells the browser about its media (title, artwork, state, the actions it handles) goes to the
+// embedding app (the chrome's "now playing" control); its buttons come back through __swMediaAction.
+var msPending = false;
+function msPublish() {
+  if (msPending) return;
+  msPending = true;
+  Promise.resolve().then(function () {
+    msPending = false;
+    var m = g.navigator.mediaSession._, md = m.metadata;
+    var info = { playbackState: m.playbackState, position: m.position, actions: Object.keys(m.handlers), camera: !!m.camera, mic: !!m.mic,
+      metadata: md ? { title: md.title, artist: md.artist, album: md.album, artwork: md.artwork } : null };
+    try { g.__sw.mediaSession(JSON.stringify(info)); } catch (e) { /* no host (worker) */ }
+  });
+}
 var ACTIONS = ['play', 'pause', 'seekbackward', 'seekforward', 'previoustrack', 'nexttrack', 'skipad', 'stop', 'seekto', 'togglemicrophone', 'togglecamera', 'hangup', 'previousslide', 'nextslide', 'enterpictureinpicture'];
 H.attrs(MediaSession.prototype, {
   metadata: {
     get: function () { return this._.metadata; },
     set: function (v) {
       if (v !== null && !(v instanceof MediaMetadata)) throw new TypeError("Failed to set the 'metadata' property on 'MediaSession': Failed to convert value to 'MediaMetadata'.");
-      this._.metadata = v;
+      this._.metadata = v; msPublish();
     }
   },
   playbackState: {
     get: function () { return this._.playbackState; },
-    set: function (v) { v = String(v); if (['none', 'paused', 'playing'].indexOf(v) >= 0) this._.playbackState = v; }
+    set: function (v) { v = String(v); if (['none', 'paused', 'playing'].indexOf(v) >= 0) { this._.playbackState = v; msPublish(); } }
   }
 });
 H.define(MediaSession.prototype, 'setActionHandler', function setActionHandler(action, handler) {
@@ -131,18 +145,71 @@ H.define(MediaSession.prototype, 'setActionHandler', function setActionHandler(a
   if (ACTIONS.indexOf(action) < 0) throw new TypeError("Failed to execute 'setActionHandler' on 'MediaSession': The provided value '" + action + "' is not a valid enum value of type MediaSessionAction.");
   if (handler !== null && typeof handler !== 'function') throw new TypeError("Failed to execute 'setActionHandler' on 'MediaSession': The callback provided as parameter 2 is not a function.");
   if (handler === null) delete this._.handlers[action]; else this._.handlers[action] = handler;
+  msPublish();
 });
 H.define(MediaSession.prototype, 'getActionHandler', function getActionHandler(action) { return this._.handlers[String(action)] || null; });
 H.define(MediaSession.prototype, 'setPositionState', function setPositionState(state) {
-  if (state === undefined) { this._.position = null; return; }
+  if (state === undefined) { this._.position = null; msPublish(); return; }
   var d = Number(state.duration), p = state.position === undefined ? 0 : Number(state.position), r = state.playbackRate === undefined ? 1 : Number(state.playbackRate);
   if (!(d >= 0) || !(p >= 0) || p > d || r === 0 || r !== r) throw new TypeError("Failed to execute 'setPositionState' on 'MediaSession': The provided position state is invalid.");
-  this._.position = { duration: d, position: p, playbackRate: r };
+  this._.position = { duration: d, position: p, playbackRate: r }; msPublish();
 });
-H.define(MediaSession.prototype, 'setCameraActive', function setCameraActive(active) { this._.camera = !!active; });
-H.define(MediaSession.prototype, 'setMicrophoneActive', function setMicrophoneActive(active) { this._.mic = !!active; });
+H.define(MediaSession.prototype, 'setCameraActive', function setCameraActive(active) { this._.camera = !!active; msPublish(); });
+H.define(MediaSession.prototype, 'setMicrophoneActive', function setMicrophoneActive(active) { this._.mic = !!active; msPublish(); });
 var mediaSession = make(MediaSession, { metadata: null, playbackState: 'none', handlers: {}, position: null });
 H.attrs(g.Navigator.prototype, { mediaSession: function () { return mediaSession; } });
+// A button of the browser's media controls: the page's handler runs; play, pause and seeking fall back to the
+// page's media element when the page set no handler (what Chrome does).
+Object.defineProperty(g, '__swMediaAction', { configurable: true, value: function (action, arg) {
+  var m = mediaSession._, h = m.handlers[action];
+  var det = { action: action };
+  if (action === 'seekto') det.seekTime = +arg || 0;
+  if (action === 'seekbackward' || action === 'seekforward') det.seekOffset = +arg || 10;
+  if (h) { try { h.call(mediaSession, det); } catch (e) { /* the page's error */ } return true; }
+  var el = null, els = g.document.querySelectorAll('video,audio');
+  for (var i = 0; i < els.length; i++) { if (!els[i].paused || !el) el = els[i]; }
+  if (!el) return false;
+  if (action === 'play') { el.play().catch(function () { }); return true; }
+  if (action === 'pause') { el.pause(); return true; }
+  if (action === 'stop') { el.pause(); el.currentTime = 0; return true; }
+  if (action === 'seekto') { el.currentTime = det.seekTime; return true; }
+  if (action === 'seekbackward') { el.currentTime = Math.max(0, el.currentTime - det.seekOffset); return true; }
+  if (action === 'seekforward') { el.currentTime = el.currentTime + det.seekOffset; return true; }
+  return false;
+} });
+
+
+// ---- User-Agent Client Hints (navigator.userAgentData) -------------------------------------------------------------
+// Truthful: the brand is this browser's own (from the User-Agent string), not Chromium's. Sites that look for a
+// Chromium brand see that this is not Chromium. Secure contexts only, like Chromium.
+var NavigatorUAData = cls('NavigatorUAData');
+function uaInfo() {
+  var ua = ''; try { ua = g.navigator.userAgent || ''; } catch (e) { /* ignore */ }
+  var m = /\b(Sweef)\/([0-9][0-9.]*)/.exec(ua) || /\b(Firefox|Chrome|Safari)\/([0-9][0-9.]*)/.exec(ua);
+  var brand = m ? m[1] : 'Sweef', full = m ? m[2] : '0';
+  var platform = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /Macintosh|Mac OS X/.test(ua) ? 'macOS' : /Linux|X11/.test(ua) ? 'Linux' : 'Unknown';
+  var arch = /arm|aarch64/i.test(ua) ? 'arm' : 'x86';
+  return { brand: brand, major: String(full).split('.')[0], full: full, platform: platform, arch: arch, mobile: /Mobile|Android/.test(ua) };
+}
+H.attrs(NavigatorUAData.prototype, {
+  brands: function () { var u = uaInfo(); return Object.freeze([Object.freeze({ brand: u.brand, version: u.major })]); },
+  mobile: function () { return uaInfo().mobile; },
+  platform: function () { return uaInfo().platform; }
+});
+H.define(NavigatorUAData.prototype, 'getHighEntropyValues', function getHighEntropyValues(hints) {
+  if (arguments.length < 1) return Promise.reject(new TypeError("Failed to execute 'getHighEntropyValues' on 'NavigatorUAData': 1 argument required, but only 0 present."));
+  if (hints === null || typeof hints !== 'object' || typeof hints.length !== 'number') return Promise.reject(new TypeError("Failed to execute 'getHighEntropyValues' on 'NavigatorUAData': The provided value cannot be converted to a sequence."));
+  var u = uaInfo(), all = {
+    architecture: u.arch, bitness: '64', model: '', platformVersion: '', uaFullVersion: u.full, wow64: false,
+    fullVersionList: [{ brand: u.brand, version: u.full }], formFactors: [u.mobile ? 'Mobile' : 'Desktop']
+  };
+  var out = { brands: [{ brand: u.brand, version: u.major }], mobile: u.mobile, platform: u.platform };
+  Array.prototype.forEach.call(hints, function (h) { h = String(h); if (h in all) out[h] = all[h]; });
+  return Promise.resolve(out);
+});
+H.define(NavigatorUAData.prototype, 'toJSON', function toJSON() { return { brands: this.brands.map(function (b) { return { brand: b.brand, version: b.version }; }), mobile: this.mobile, platform: this.platform }; });
+var uaData = Object.create(NavigatorUAData.prototype);
+H.attrs(g.Navigator.prototype, { userAgentData: function () { return g.isSecureContext ? uaData : undefined; } });
 
 // ---- Credential Management / WebAuthn: no credential provider ------------------------------------------------------
 var Credential = cls('Credential'), PasswordCredential = cls('PasswordCredential', Credential), FederatedCredential = cls('FederatedCredential', Credential);

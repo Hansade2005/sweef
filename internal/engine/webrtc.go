@@ -202,7 +202,9 @@ type rtcHost struct {
 }
 
 func newRTCHost(j *jsVM) *rtcHost {
-	return &rtcHost{j: j, peers: map[int64]*rtcPeer{}, certs: map[int64]*webrtc.Certificate{}}
+	h := &rtcHost{j: j, peers: map[int64]*rtcPeer{}, certs: map[int64]*webrtc.Certificate{}}
+	j.rtc = h
+	return h
 }
 
 func (h *rtcHost) closeAll() {
@@ -234,21 +236,27 @@ type rtcDC struct {
 }
 
 type rtcTR struct {
-	id int64
-	t  *webrtc.RTPTransceiver
+	id   int64
+	t    *webrtc.RTPTransceiver
+	peer *rtcPeer
 
 	// send side (smu): the local track stays bound to the sender for its whole life, so replaceTrack only
 	// swaps the source behind the pipeline
-	smu       sync.Mutex
-	local     *rtcmedia.LocalTrack
-	vs        *rtcmedia.VideoSender
-	as        *rtcmedia.AudioSender
-	desc      RTCTrackDesc
-	params    rtcmedia.SendParams
-	live      atomic.Bool // a live track is attached and the sender is active
-	encActive atomic.Bool // RTCRtpEncodingParameters.active
-	rtcpH     atomic.Pointer[func([]rtcp.Packet)]
-	drained   sync.Once
+	smu    sync.Mutex
+	local  *rtcmedia.LocalTrack
+	vs     *rtcmedia.VideoSender
+	as     *rtcmedia.AudioSender
+	encs   []rtcEnc    // the sender's encodings; more than one means simulcast (webrtc_simulcast.go)
+	extras []*rtcLayer // simulcast layers 1..n; layer 0 is local / vs
+	// simFallback: the remote answer did not accept simulcast, only layer 0 is sent
+	simFallback bool
+	sendXform   bool // an encoded transform is attached to the send side (smu)
+	desc        RTCTrackDesc
+	params      rtcmedia.SendParams
+	live        atomic.Bool // a live track is attached and the sender is active
+	encActive   atomic.Bool // RTCRtpEncodingParameters.active
+	rtcpH       atomic.Pointer[func([]rtcp.Packet)]
+	drained     sync.Once
 
 	// receive side (rmu)
 	rmu     sync.Mutex
@@ -256,6 +264,11 @@ type rtcTR struct {
 	ar      *rtcmedia.AudioReceiver
 	nodes   map[int64]*rtcBitmap
 	audioOn bool
+	// recvXform: an encoded transform is attached to the receive side (rmu)
+	recvXform bool
+	vtaps     []rtcmedia.FrameSink // MediaStreamTrackProcessor readers of the received video (rmu)
+	ataps     []*audioTap          // ... and audio
+	minDelay  float64              // RTCRtpReceiver.jitterBufferTarget in seconds (rmu)
 }
 
 type rtcPeer struct {
@@ -277,6 +290,13 @@ type rtcPeer struct {
 	sg      stats.Getter
 	rtx     *rtcmedia.RTXCounter
 	proc    rtcmedia.AudioProcessor
+
+	mungeNote atomic.Bool // the "edited SDP is not applied" console warning was written
+
+	// encoded transforms (webrtc_xform.go): frames waiting for the page's answer
+	xmu      sync.Mutex
+	xnext    uint64
+	xpending map[uint64]chan xres
 }
 
 func (p *rtcPeer) emit(typ string, v any) {
@@ -549,7 +569,7 @@ func (h *rtcHost) fns() map[string]hostFn {
 		if err != nil {
 			return nil, err
 		}
-		return p.addTransceiver(argS(a, 1), argS(a, 2), argS(a, 3), argS(a, 4))
+		return p.addTransceiver(argS(a, 1), argS(a, 2), argS(a, 3), argS(a, 4), argS(a, 5))
 	}
 	f["rtcSetSender"] = func(a []any) (any, error) {
 		p, err := h.peer(a)
@@ -959,12 +979,25 @@ func (p *rtcPeer) setDescription(local bool, typ, sdp string) error {
 		p.mu.Unlock()
 		if raw != "" && (sdp == raw || sdp == rtcSanitizeSDP(raw, p.mode)) {
 			d.SDP = raw
+		} else if raw != "" && sameSDPShape(sdp, raw) {
+			// The page edited the description (codec order, fmtp, bandwidth, vendor flags). pion requires its own text
+			// back, so the edit is not applied; the call continues with what Sweef generated instead of failing. Pages
+			// that munge the SDP (stereo Opus, start bitrates) mostly treat the edit as a hint.
+			d.SDP = raw
+			if p.mungeNote.CompareAndSwap(false, true) {
+				if t := p.h.j.tab; t != nil {
+					t.LogConsole("warning", "WebRTC: the edited SDP was accepted but its changes are not applied (Sweef sends the description it generated)")
+				}
+			}
 		}
 	}
 	if local {
 		err = p.pc.SetLocalDescription(d)
 	} else {
 		err = p.pc.SetRemoteDescription(d)
+		if err == nil && st == webrtc.SDPTypeAnswer {
+			p.checkSimulcastAnswer(sdp)
+		}
 	}
 	return rtcErr(err)
 }
@@ -1034,7 +1067,7 @@ func (p *rtcPeer) trFor(t *webrtc.RTPTransceiver) *rtcTR {
 		}
 	}
 	p.nextTR++
-	x := &rtcTR{id: p.nextTR, t: t}
+	x := &rtcTR{id: p.nextTR, t: t, peer: p}
 	x.encActive.Store(true)
 	x.params = rtcmedia.DefaultSendParams()
 	p.trs = append(p.trs, x)
@@ -1128,7 +1161,7 @@ func (p *rtcPeer) addTrack(kind, descJSON, streamID string) (any, error) {
 	return jsonOut(map[string]any{"id": x.id, "all": p.snapshot()})
 }
 
-func (p *rtcPeer) addTransceiver(kind, dir, descJSON, streamID string) (any, error) {
+func (p *rtcPeer) addTransceiver(kind, dir, descJSON, streamID, encsJSON string) (any, error) {
 	dd := webrtc.RTPTransceiverDirectionSendrecv
 	switch dir {
 	case "sendonly":
@@ -1143,7 +1176,15 @@ func (p *rtcPeer) addTransceiver(kind, dir, descJSON, streamID string) (any, err
 	var err error
 	var lt *rtcmedia.LocalTrack
 	d := parseTrackDesc(descJSON)
-	if d.ID != "" {
+	encs := parseEncodings(encsJSON)
+	var simLocals []*rtcmedia.LocalTrack
+	if len(encs) > 1 && kind == "video" && dd != webrtc.RTPTransceiverDirectionRecvonly {
+		// simulcast: one pion encoding per rid, whether or not a track is attached yet
+		t, simLocals, err = p.newSimulcastSender(init, encs, d.ID, streamID)
+		if err == nil {
+			lt = simLocals[0]
+		}
+	} else if d.ID != "" {
 		lt = p.newLocal(nil, kind, d.ID, streamID)
 		t, err = p.pc.AddTransceiverFromTrack(lt, init)
 	} else {
@@ -1157,7 +1198,16 @@ func (p *rtcPeer) addTransceiver(kind, dir, descJSON, streamID string) (any, err
 		return nil, rtcErr(err)
 	}
 	x := p.trFor(t)
-	if lt != nil {
+	if simLocals != nil {
+		p.attachSimulcast(x, encs, simLocals)
+		if err := p.ensurePipeline(x); err != nil {
+			return nil, rtcErr(err)
+		}
+		if d.ID != "" {
+			p.bindSource(x, d)
+			x.setLive(true)
+		}
+	} else if lt != nil {
 		lt.SetMidFunc(t.Mid)
 		lt.ReadyWhenConnected(t.Sender())
 		x.smu.Lock()

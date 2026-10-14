@@ -51,6 +51,8 @@ type AudioSender struct {
 	bitrate int
 	dtx     bool
 
+	hook hookSlot // RTCRtpScriptTransform / createEncodedStreams
+
 	// Processor is the optional echo cancellation / noise suppression hook.
 	Processor AudioProcessor
 
@@ -111,6 +113,9 @@ func (a *AudioSender) SetSource(src capture.AudioSource, c capture.AudioConstrai
 	}
 	return nil
 }
+
+// SetHook installs (nil removes) the encoded-frame transform of the sender.
+func (a *AudioSender) SetHook(f FrameHook) { a.hook.set(f) }
 
 // SetEnabled implements MediaStreamTrack.enabled: a disabled track sends silence.
 func (a *AudioSender) SetEnabled(on bool) { a.mu.Lock(); a.enabled = on; a.mu.Unlock() }
@@ -315,6 +320,16 @@ func (a *AudioSender) tick() {
 		a.ts += opusFrame
 		a.marker = true
 		return
+	}
+	if hk := a.hook.get(); hk != nil {
+		neg := a.track.Negotiated()
+		out, ok := hk(&EncodedFrame{Key: true, Timestamp: a.ts, SSRC: neg.SSRC, PayloadType: neg.PT, Data: data})
+		if !ok || len(out) == 0 {
+			a.ts += opusFrame
+			a.marker = true
+			return
+		}
+		data = out
 	}
 	h := rtp.Header{Version: 2, SequenceNumber: a.seq, Timestamp: a.ts, Marker: a.marker}
 	a.seq++

@@ -85,6 +85,11 @@ func (a *App) sitePermission(origin, name string) string {
 			return "denied"
 		}
 		return "prompt"
+	case engine.PermClipboardRead:
+		if rule.ClipboardRead == "granted" || rule.ClipboardRead == "denied" {
+			return rule.ClipboardRead
+		}
+		return "prompt"
 	case engine.PermPeriodicSync:
 		if rule.Periodic != "" {
 			return rule.Periodic
@@ -230,12 +235,16 @@ func (a *App) answerPrompt(id, answer string) {
 		return
 	}
 	res := "prompt"
+	set := a.prof.Sites.SetNotify
+	if p.name == engine.PermClipboardRead {
+		set = a.prof.Sites.SetClipboardRead
+	}
 	switch answer {
 	case "allow":
-		a.prof.Sites.SetNotify(p.origin, "granted")
+		set(p.origin, "granted")
 		res = "granted"
 	case "block":
-		a.prof.Sites.SetNotify(p.origin, "denied")
+		set(p.origin, "denied")
 		res = "denied"
 	default:
 		if a.prof.Sites.NoteDismissed(p.origin, a.now()) {
@@ -264,6 +273,8 @@ func (a *App) setSitePermission(origin, name, st string) {
 	switch name {
 	case store.PermPeriodicSync:
 		a.prof.Sites.SetPeriodic(o, st)
+	case store.PermClipboardRead:
+		a.prof.Sites.SetClipboardRead(o, st)
 	default:
 		a.prof.Sites.SetNotify(o, st)
 	}

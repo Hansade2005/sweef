@@ -355,6 +355,14 @@ func (m *mediaHost) fns() map[string]hostFn {
 		}
 		return m.j.tab.policy().BlockMediaLoad, nil
 	}
+	// the page enters or leaves element fullscreen: the embedding app gives it the whole window
+	f["fullscreen"] = func(a []any) (any, error) {
+		if m.j.tab != nil {
+			on, _ := a[0].(bool)
+			m.j.tab.setFullscreen(on)
+		}
+		return nil, nil
+	}
 	f["mediaCanPlay"] = func(a []any) (any, error) { return media.CanPlayType(argS(a, 0)), nil }
 	f["mediaIsTypeSupported"] = func(a []any) (any, error) { return media.IsTypeSupportedMSE(argS(a, 0)), nil }
 	f["mediaFFmpeg"] = func(a []any) (any, error) { return media.FFmpegPath() != "", nil }

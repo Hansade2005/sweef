@@ -318,6 +318,11 @@ func (st *pwaState) permission(origin, name string) string {
 		return normPerm(st.o.Permission(origin, PermNotifications))
 	case "background-sync":
 		return "granted"
+	case PermClipboardRead:
+		if st.o.Permission == nil {
+			return "denied"
+		}
+		return normPerm(st.o.Permission(origin, PermClipboardRead))
 	case PermPeriodicSync:
 		if st.o.Permission == nil {
 			return "denied"

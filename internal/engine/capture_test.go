@@ -139,7 +139,7 @@ func TestGetUserMediaPromptsAndDescribesTheRealMode(t *testing.T) {
 		t.Fatalf("device id must be a per-origin hash, got %q", id)
 	}
 	as := out["as"].(map[string]any)
-	if as["sampleRate"].(float64) != 48000 || as["channelCount"].(float64) != 1 || as["echoCancellation"] != false {
+	if as["sampleRate"].(float64) != 48000 || as["channelCount"].(float64) != 1 || as["echoCancellation"] != true || as["noiseSuppression"] != true || as["autoGainControl"] != true { // on by default, as in Chrome
 		t.Fatalf("audio settings: %v", as)
 	}
 	vc := out["vc"].(map[string]any)
@@ -210,8 +210,9 @@ func TestGetUserMediaErrors(t *testing.T) {
 	if r := run(`{video:{facingMode:{exact:"environment"}}}`); r["name"] != "OverconstrainedError" {
 		t.Errorf("facing: %v", r)
 	}
-	if r := run(`{audio:{echoCancellation:{exact:true}}}`); r["constraint"] != "echoCancellation" {
-		t.Errorf("AEC exact: %v", r)
+	// voice processing exists (internal/rtcmedia/audioproc), so exact:true is satisfiable; an impossible rate is not
+	if r := run(`{audio:{sampleRate:{exact:12345}}}`); r["constraint"] != "sampleRate" {
+		t.Errorf("sample rate exact: %v", r)
 	}
 	if r := run(`{video:{width:"bogus-not-number-but-string",height:{min:"x"}}}`); r["name"] != "TypeError" {
 		t.Errorf("bad min: %v", r)

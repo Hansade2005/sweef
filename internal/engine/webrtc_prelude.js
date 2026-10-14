@@ -238,7 +238,8 @@
     return JSON.stringify({
       id: track.id, kind: track.kind, deviceId: ex.deviceId || st.deviceId || '', label: track.label || '',
       width: (st.width | 0) || (ex.width | 0), height: (st.height | 0) || (ex.height | 0), frameRate: +(st.frameRate || ex.frameRate) || 0,
-      canvas: track.canvas ? (global.__swIdOf ? global.__swIdOf(track.canvas) : 0) : 0, enabled: track.enabled !== false
+      canvas: track.canvas ? (global.__swIdOf ? global.__swIdOf(track.canvas) : 0) : 0, enabled: track.enabled !== false,
+      echoCancellation: st.echoCancellation, noiseSuppression: st.noiseSuppression, autoGainControl: st.autoGainControl
     });
   }
   function watchTrack(rec, x, track) {
@@ -298,13 +299,16 @@
     var gs = P.getSettings;
     P.getSettings = function () {
       var o = gs.apply(this, arguments);
-      if (this.kind === 'audio') { o.echoCancellation = false; o.noiseSuppression = false; o.autoGainControl = false; o.channelCount = 1; o.sampleRate = 48000; }
+      if (this.kind === 'audio') { // the voice processing flags are the track's own (default on, as in Chrome)
+        ['echoCancellation', 'noiseSuppression', 'autoGainControl'].forEach(function (k) { if (typeof o[k] !== 'boolean') o[k] = true; });
+        o.channelCount = 1; o.sampleRate = 48000;
+      }
       return o;
     };
     P.getSettings.__rtc = true;
     P.getCapabilities = function () {
       var id = (this._t && this._t.extra && this._t.extra.deviceId) || '';
-      if (this.kind === 'audio') return { deviceId: id, groupId: '', sampleRate: { min: 8000, max: 48000 }, channelCount: { min: 1, max: 2 }, echoCancellation: [false], noiseSuppression: [false], autoGainControl: [false], latency: { min: 0.01, max: 0.5 }, sampleSize: { min: 16, max: 16 } };
+      if (this.kind === 'audio') return { deviceId: id, groupId: '', sampleRate: { min: 8000, max: 48000 }, channelCount: { min: 1, max: 2 }, echoCancellation: [true, false], noiseSuppression: [true, false], autoGainControl: [true, false], latency: { min: 0.01, max: 0.5 }, sampleSize: { min: 16, max: 16 } };
       return { deviceId: id, groupId: '', width: { min: 16, max: 1920 }, height: { min: 16, max: 1080 }, frameRate: { min: 1, max: 60 }, aspectRatio: { min: 0.01, max: 100 }, facingMode: ['user'], resizeMode: ['none', 'crop-and-scale'] };
     };
     P.getConstraints = function () { return (this._t && this._t.constraints) || {}; };
@@ -451,6 +455,7 @@
         if (!s.tx || p.transactionId !== s.tx) throw dex("Failed to execute 'setParameters' on 'RTCRtpSender': getParameters() needs to be called before setParameters().", 'InvalidStateError');
         var enc = p.encodings || [];
         if (enc.length !== s.encodings.length) throw dex("Failed to execute 'setParameters' on 'RTCRtpSender': Attempted to change the number of encodings.", 'InvalidModificationError');
+        enc.forEach(function (e, i) { if ((e.rid || undefined) !== (s.encodings[i].rid || undefined)) throw dex("Failed to execute 'setParameters' on 'RTCRtpSender': Attempted to set an unimplemented parameter of RtpParameters: rid.", 'InvalidModificationError'); });
         enc.forEach(function (e) {
           if (e.maxBitrate !== undefined && !(e.maxBitrate >= 0)) throw new RangeError('maxBitrate must be non-negative');
           if (e.maxFramerate !== undefined && !(e.maxFramerate >= 0)) throw new RangeError('maxFramerate must be non-negative');
@@ -465,10 +470,36 @@
       } catch (e) { rej(e); }
     });
   });
-  // a single layer is sent: the first encoding decides (the others, if the page asked for simulcast, are ignored)
+  // every encoding is pushed: with several, the engine sends one simulcast layer per encoding (rid)
   function pushParams(x) {
-    var e = x.sender._s.encodings[0] || {};
-    call('rtcSetParams', x.rec.id, x.id, JSON.stringify({ active: e.active !== false, maxBitrate: e.maxBitrate, maxFramerate: e.maxFramerate, scaleResolutionDownBy: e.scaleResolutionDownBy }));
+    var encs = x.sender._s.encodings;
+    call('rtcSetParams', x.rec.id, x.id, JSON.stringify(encs.map(function (e) { return { rid: e.rid, active: e.active !== false, maxBitrate: e.maxBitrate, maxFramerate: e.maxFramerate, scaleResolutionDownBy: e.scaleResolutionDownBy }; })));
+  }
+  // sendEncodings as RTCPeerConnection.addTransceiver validates and completes them
+  function normalizeEncodings(encs, kind) {
+    var name = "Failed to execute 'addTransceiver' on 'RTCPeerConnection': ";
+    if (kind === 'audio' && encs.length > 1) encs = encs.slice(0, 1); // audio has no simulcast: the first encoding is kept
+    if (encs.length > 3) encs = encs.slice(0, 3);
+    var seen = {};
+    var out = encs.map(function (e) {
+      if (e === null || typeof e !== 'object') throw new TypeError(name + 'The provided value is not of type RTCRtpEncodingParameters.');
+      var o = {};
+      for (var k in e) o[k] = e[k];
+      if (o.rid !== undefined) {
+        o.rid = String(o.rid);
+        if (!/^[A-Za-z0-9_-]{1,255}$/.test(o.rid)) throw new TypeError(name + 'Invalid RID value: ' + o.rid);
+        if (seen[o.rid]) throw new TypeError(name + 'Duplicate RID: ' + o.rid);
+        seen[o.rid] = 1;
+      } else if (encs.length > 1) throw new TypeError(name + 'Missing RID: every encoding needs a rid when several are given.');
+      if (o.scaleResolutionDownBy !== undefined && !(o.scaleResolutionDownBy >= 1)) throw new RangeError(name + 'scaleResolutionDownBy must be >= 1.0');
+      if (o.maxFramerate !== undefined && !(o.maxFramerate >= 0)) throw new RangeError(name + 'maxFramerate must be >= 0');
+      if (o.maxBitrate !== undefined && !(o.maxBitrate >= 0)) throw new RangeError(name + 'maxBitrate must be >= 0');
+      if (o.active === undefined) o.active = true;
+      return o;
+    });
+    // several video layers: encodings that give no scale get powers of two, the last one full size (as browsers do)
+    if (kind === 'video' && out.length > 1) out.forEach(function (o, i) { if (o.scaleResolutionDownBy === undefined) o.scaleResolutionDownBy = Math.pow(2, out.length - 1 - i); });
+    return out;
   }
   defMethod(RTCRtpSender.prototype, 'setStreams', function () {
     var x = this._s.tr._x;
@@ -483,7 +514,24 @@
   tag(RTCRtpReceiver, 'RTCRtpReceiver');
   defGetter(RTCRtpReceiver.prototype, 'track', function () { return this._r.track; });
   defGetter(RTCRtpReceiver.prototype, 'transport', function () { var r = this._r.tr._x.rec; return r.hasDesc ? dtlsTransportOf(r) : null; });
-  defGetter(RTCRtpReceiver.prototype, 'jitterBufferTarget', function () { return null; }, function () { });
+  // jitterBufferTarget (ms) and the older playoutDelayHint (s): the least delay the receiver keeps in its jitter buffer
+  function setJitterTarget(r, ms) {
+    var x = r._r.tr._x;
+    r._r.jbt = ms;
+    if (!x.rec.closed) call('rtcJitterTarget', x.rec.id, x.id, ms === null ? 0 : ms);
+  }
+  defGetter(RTCRtpReceiver.prototype, 'jitterBufferTarget', function () { return this._r.jbt === undefined ? null : this._r.jbt; }, function (v) {
+    if (v === null || v === undefined) return setJitterTarget(this, null);
+    v = +v;
+    if (!(v >= 0 && v <= 4000)) throw new RangeError("Failed to set the 'jitterBufferTarget' property on 'RTCRtpReceiver': The provided value is outside the range [0, 4000].");
+    setJitterTarget(this, v);
+  });
+  defGetter(RTCRtpReceiver.prototype, 'playoutDelayHint', function () { return this._r.jbt === undefined || this._r.jbt === null ? null : this._r.jbt / 1000; }, function (v) {
+    if (v === null || v === undefined) return setJitterTarget(this, null);
+    v = +v;
+    if (!(v >= 0)) throw new TypeError("Failed to set the 'playoutDelayHint' property on 'RTCRtpReceiver': The provided double value is non-finite.");
+    setJitterTarget(this, Math.min(4000, v * 1000));
+  });
   defMethod(RTCRtpReceiver.prototype, 'getParameters', function () { var c = capabilities(this._r.tr._x.kind) || { codecs: [], headerExtensions: [] }; return { headerExtensions: c.headerExtensions, rtcp: { cname: '', reducedSize: false }, codecs: c.codecs.map(function (k) { return k; }) }; });
   defMethod(RTCRtpReceiver.prototype, 'getContributingSources', function () { return []; });
   defMethod(RTCRtpReceiver.prototype, 'getSynchronizationSources', function () {
@@ -547,7 +595,7 @@
 
   function newTransceiver(rec, id, kind, dir) {
     var tr = Object.create(RTCRtpTransceiver.prototype);
-    var x = { rec: rec, id: id, kind: kind, mid: null, dir: dir, curDir: null, stopped: false, recvActive: false, codecPrefs: null, els: [], vw: 0, vh: 0 };
+    var x = { rec: rec, id: id, kind: kind, mid: null, dir: dir, curDir: null, stopped: false, recvActive: false, codecPrefs: null, els: [], vw: 0, vh: 0, xf: { send: null, recv: null }, tf: { send: null, recv: null } };
     var snd = Object.create(RTCRtpSender.prototype);
     hid(snd, '_s', { tr: tr, track: null, streams: [], encodings: [{ active: true }], tx: null, dtmf: null });
     var rcv = Object.create(RTCRtpReceiver.prototype);
@@ -717,7 +765,8 @@
       super();
       var cfg = normConfig(config);
       var id = call('rtcNew', hostConfig(cfg));
-      var rec = { id: id, pc: this, closed: false, cfg: cfg, trs: [], byId: new Map(), dcs: new Map(), remoteStreams: new Map(), localCands: [], remoteCands: [], dtls: null, iceT: null, sctpT: null, nnQueued: false, tok: 0, tickets: new Map(), at: null, held: [], releasing: false, hasDesc: false, finalStates: null, finalState: null, finalTransport: null };
+      var enc = { insertable: !!(config && config.encodedInsertableStreams), forceVideo: !!(config && config.forceEncodedVideoInsertableStreams), forceAudio: !!(config && config.forceEncodedAudioInsertableStreams) };
+      var rec = { id: id, pc: this, closed: false, cfg: cfg, enc: enc, trs: [], byId: new Map(), dcs: new Map(), remoteStreams: new Map(), localCands: [], remoteCands: [], dtls: null, iceT: null, sctpT: null, nnQueued: false, tok: 0, tickets: new Map(), at: null, held: [], releasing: false, hasDesc: false, finalStates: null, finalState: null, finalTransport: null };
       hid(this, '_p', rec);
       pcs.set(id, rec);
     }
@@ -920,10 +969,11 @@
       if (DIRS.indexOf(dir) < 0) throw new TypeError("Failed to execute 'addTransceiver' on 'RTCPeerConnection': The provided value '" + dir + "' is not a valid enum value of type RTCRtpTransceiverDirection.");
       var streams = init.streams ? Array.from(init.streams) : [];
       var encs = init.sendEncodings ? Array.from(init.sendEncodings) : [];
-      var r = callJSON('rtcAddTransceiver', rec.id, kind, dir, track ? trackDesc(track) : '', streams.length ? streams[0].id : '');
+      encs = normalizeEncodings(encs, kind);
+      var r = callJSON('rtcAddTransceiver', rec.id, kind, dir, track ? trackDesc(track) : '', streams.length ? streams[0].id : '', encs.length > 1 ? JSON.stringify(encs) : '');
       syncSnap(rec, r.all);
       var tr = rec.byId.get(r.id), x = tr._x, s = x.sender._s;
-      if (encs.length) { s.encodings = encs.map(function (e) { var o = {}; for (var k in e) o[k] = e[k]; if (o.active === undefined) o.active = true; return o; }); pushParams(x); }
+      if (encs.length) { s.encodings = encs; if (encs.length === 1) pushParams(x); }
       s.streams = streams;
       if (track) {
         s.track = track;
@@ -1056,6 +1106,153 @@
   }
   function statsFor(rec, type, kind) { return op(rec, 'getStats', function () { return buildStats(rec, type, kind); }); }
 
+
+  // ---- encoded transforms: RTCEncodedVideoFrame / RTCEncodedAudioFrame, createEncodedStreams, RTCRtpScriptTransform ----
+  // Frames come from the engine as "encframe" events (webrtc_xform.go); whatever the page writes back replaces the
+  // frame's payload. The slot of a frame holds the engine's id for it so only frames that came from the engine are
+  // accepted back.
+  var FSLOT = new WeakMap();
+  function frameData(d) {
+    if (d instanceof ArrayBuffer) return d;
+    throw new TypeError("Failed to set the 'data' property on 'RTCEncodedVideoFrame': The provided value is not of type 'ArrayBuffer'.");
+  }
+  function mkFrameClass(name, video) {
+    var C = function (original, options) {
+      if (!(this instanceof C)) throw new TypeError("Failed to construct '" + name + "': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+      if (arguments.length < 1) throw new TypeError("Failed to construct '" + name + "': 1 argument required, but only 0 present.");
+      var o = original && FSLOT.get(original);
+      if (!o) throw new TypeError("Failed to construct '" + name + "': parameter 1 is not of type '" + name + "'.");
+      var s = { id: o.id, type: o.type, timestamp: o.timestamp, data: o.data.slice(0), meta: Object.assign({}, o.meta), video: o.video };
+      if (options && options.metadata) Object.assign(s.meta, options.metadata);
+      FSLOT.set(this, s);
+    };
+    var P = C.prototype;
+    if (video) defGetter(P, 'type', function () { return slotOf(this).type; });
+    defGetter(P, 'timestamp', function () { return slotOf(this).timestamp; });
+    defGetter(P, 'data', function () { return slotOf(this).data; }, function (v) { slotOf(this).data = frameData(v); });
+    defMethod(P, 'getMetadata', function () { var m = Object.assign({}, slotOf(this).meta); if (m.contributingSources) m.contributingSources = m.contributingSources.slice(); return m; });
+    tag(C, name);
+    Object.defineProperty(C, 'name', { value: name, configurable: true });
+    global[name] = C;
+    return C;
+  }
+  function slotOf(f) { var s = FSLOT.get(f); if (!s) throw new TypeError('Illegal invocation'); return s; }
+  var RTCEncodedVideoFrame = mkFrameClass('RTCEncodedVideoFrame', true), RTCEncodedAudioFrame = mkFrameClass('RTCEncodedAudioFrame', false);
+  function newEncodedFrame(m) {
+    var f = Object.create((m.kind === 'video' ? RTCEncodedVideoFrame : RTCEncodedAudioFrame).prototype);
+    var meta = { synchronizationSource: m.ssrc, payloadType: m.pt, contributingSources: [] };
+    if (m.kind === 'video') { meta.width = m.w; meta.height = m.h; meta.spatialIndex = 0; meta.temporalIndex = 0; if (m.w) { } }
+    if (m.meta) Object.assign(meta, m.meta);
+    FSLOT.set(f, { id: m.id, type: m.type || (m.key ? 'key' : 'delta'), timestamp: m.ts !== undefined ? m.ts : m.timestamp, data: m.data, meta: meta, video: m.kind === 'video' });
+    return f;
+  }
+  Object.defineProperty(global, '__swEncodedFrame', { value: { make: newEncodedFrame, slot: function (f) { return FSLOT.get(f) || null; } }, configurable: true });
+
+  function RTCRtpScriptTransformer() { illegal(); }
+  tag(RTCRtpScriptTransformer, 'RTCRtpScriptTransformer');
+  global.RTCRtpScriptTransformer = RTCRtpScriptTransformer;
+  function RTCTransformEvent() { illegal(); }
+  Object.setPrototypeOf(RTCTransformEvent.prototype, Ev.prototype);
+  defGetter(RTCTransformEvent.prototype, 'transformer', function () { return this._tr; });
+  tag(RTCTransformEvent, 'RTCTransformEvent');
+  global.RTCTransformEvent = RTCTransformEvent;
+  // used by worker_scope.js when the owner attaches a transform to a sender or receiver
+  Object.defineProperty(global, '__swMakeTransformEvent', { value: function (port, msg) {
+    var T = Object.create(RTCRtpScriptTransformer.prototype), ctrl = null;
+    var readable = new global.ReadableStream({ start: function (c) { ctrl = c; } });
+    port.onmessage = function (e) { var m = e.data; if (m && m.data instanceof ArrayBuffer) ctrl.enqueue(newEncodedFrame(m)); };
+    var writable = new global.WritableStream({ write: function (frame) {
+      var s = FSLOT.get(frame);
+      if (!s) throw new TypeError('The chunk is not an RTCEncodedVideoFrame or RTCEncodedAudioFrame.');
+      port.postMessage({ id: s.id, data: s.data }, [s.data]);
+    } });
+    Object.defineProperty(T, 'readable', { value: readable, enumerable: true });
+    Object.defineProperty(T, 'writable', { value: writable, enumerable: true });
+    Object.defineProperty(T, 'options', { value: msg.options, enumerable: true });
+    defMethod(T, 'generateKeyFrame', function (rids) { port.postMessage({ cmd: 'keyframe' }); return Promise.resolve(); });
+    defMethod(T, 'sendKeyFrameRequest', function () { port.postMessage({ cmd: 'pli' }); return Promise.resolve(); });
+    var ev = Object.create(RTCTransformEvent.prototype);
+    Ev.call(ev, 'rtctransform');
+    hid(ev, '_tr', T);
+    return ev;
+  } });
+
+  function RTCRtpScriptTransform(worker, options, transfer) {
+    if (!(this instanceof RTCRtpScriptTransform)) throw new TypeError("Failed to construct 'RTCRtpScriptTransform': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+    if (arguments.length < 1) throw new TypeError("Failed to construct 'RTCRtpScriptTransform': 1 argument required, but only 0 present.");
+    if (!global.Worker || !(worker instanceof global.Worker)) throw new TypeError("Failed to construct 'RTCRtpScriptTransform': parameter 1 is not of type 'Worker'.");
+    hid(this, '_t', { worker: worker, options: options, transfer: transfer ? Array.from(transfer) : [], user: null });
+  }
+  tag(RTCRtpScriptTransform, 'RTCRtpScriptTransform');
+  global.RTCRtpScriptTransform = RTCRtpScriptTransform;
+
+  function returnFrame(x, side, frame) {
+    var s = FSLOT.get(frame);
+    if (!s) throw new TypeError("Failed to execute 'write' on 'WritableStreamDefaultWriter': The chunk is not an " + (x.kind === 'video' ? 'RTCEncodedVideoFrame' : 'RTCEncodedAudioFrame') + '.');
+    if (x.rec.closed) return;
+    call('rtcEncResult', x.rec.id, s.id, bytesToB64(new Uint8Array(s.data)), true);
+  }
+  function encodedAllowed(x, which) {
+    var e = x.rec.enc;
+    return e.insertable || (x.kind === 'video' ? e.forceVideo : e.forceAudio);
+  }
+  function openXform(x, side, port) {
+    var xf = { side: side, ctrl: null, port: port };
+    x.xf[side] = xf;
+    call('rtcEncEnable', x.rec.id, x.id, side, true);
+    return xf;
+  }
+  function closeXform(x, side) {
+    var xf = x.xf[side];
+    if (!xf) return;
+    x.xf[side] = null;
+    if (!x.rec.closed) call('rtcEncEnable', x.rec.id, x.id, side, false);
+    if (xf.port) { try { xf.port.close(); } catch (e) { /* closed */ } }
+    if (xf.ctrl) { try { xf.ctrl.close(); } catch (e) { /* closed */ } }
+  }
+  function createEncodedStreams(x, side, cls) {
+    if (x.rec.closed) throw dex("Failed to execute 'createEncodedStreams' on '" + cls + "': The RTCPeerConnection is closed.", 'InvalidStateError');
+    if (!encodedAllowed(x)) throw dex("Failed to execute 'createEncodedStreams' on '" + cls + "': Encoded streams not requested (set encodedInsertableStreams in the RTCConfiguration).", 'InvalidStateError');
+    if (x.xf[side] || x.tf[side]) throw dex("Failed to execute 'createEncodedStreams' on '" + cls + "': Encoded streams are already in use.", 'InvalidStateError');
+    var xf = openXform(x, side, null);
+    var readable = new global.ReadableStream({ start: function (c) { xf.ctrl = c; } });
+    var writable = new global.WritableStream({ write: function (frame) { returnFrame(x, side, frame); } });
+    return { readable: readable, writable: writable };
+  }
+  function setTransform(x, side, t, cls) {
+    if (t !== null && !(t instanceof RTCRtpScriptTransform)) throw new TypeError("Failed to set the 'transform' property on '" + cls + "': The provided value is not of type 'RTCRtpScriptTransform'.");
+    if (x.xf[side] && !x.tf[side]) throw dex("Failed to set the 'transform' property on '" + cls + "': Encoded streams are in use.", 'InvalidStateError');
+    if (t && t._t.user && t._t.user !== x) throw dex("Failed to set the 'transform' property on '" + cls + "': The transform is already attached to another sender or receiver.", 'InvalidStateError');
+    if (x.tf[side] === t) return;
+    if (x.tf[side]) { x.tf[side]._t.user = null; closeXform(x, side); x.tf[side] = null; }
+    if (!t) return;
+    var ch = new global.MessageChannel();
+    var xf = openXform(x, side, ch.port1);
+    ch.port1.onmessage = function (e) {
+      var m = e.data;
+      if (!m) return;
+      if (m.cmd === 'keyframe' || m.cmd === 'pli') { if (!x.rec.closed) call('rtcEncKeyFrame', x.rec.id, x.id, side); return; }
+      if (m.data instanceof ArrayBuffer && !x.rec.closed) call('rtcEncResult', x.rec.id, m.id, bytesToB64(new Uint8Array(m.data)), true);
+    };
+    x.tf[side] = t; t._t.user = x;
+    t._t.worker.postMessage({ __swRtcTransform: 1, options: t._t.options, kind: x.kind, side: side }, [ch.port2].concat(t._t.transfer));
+  }
+  // an "encframe" event from the engine
+  function onEncodedFrame(rec, v) {
+    var tr = rec.byId.get(v.tr), x = tr && tr._x, xf = x && x.xf[v.side];
+    if (!xf) { call('rtcEncResult', rec.id, v.id, v.data, true); return; } // nobody transforms any more: pass through
+    var data = b64ToBytes(v.data);
+    var ab = data.buffer.byteLength === data.length ? data.buffer : data.buffer.slice(data.byteOffset, data.byteOffset + data.length);
+    var m = { id: v.id, kind: v.kind, key: v.key, ts: v.ts, ssrc: v.ssrc, pt: v.pt, w: v.w, h: v.h, data: ab, type: v.kind === 'video' ? (v.key ? 'key' : 'delta') : undefined };
+    if (xf.port) xf.port.postMessage(m, [ab]);
+    else if (xf.ctrl) xf.ctrl.enqueue(newEncodedFrame(m));
+    else call('rtcEncResult', rec.id, v.id, v.data, true);
+  }
+  defMethod(RTCRtpSender.prototype, 'createEncodedStreams', function () { return createEncodedStreams(this._s.tr._x, 'send', 'RTCRtpSender'); });
+  defMethod(RTCRtpReceiver.prototype, 'createEncodedStreams', function () { return createEncodedStreams(this._r.tr._x, 'recv', 'RTCRtpReceiver'); });
+  defGetter(RTCRtpSender.prototype, 'transform', function () { return this._s.tr._x.tf.send || null; }, function (v) { setTransform(this._s.tr._x, 'send', v === undefined ? null : v, 'RTCRtpSender'); });
+  defGetter(RTCRtpReceiver.prototype, 'transform', function () { return this._r.tr._x.tf.recv || null; }, function (v) { setTransform(this._r.tr._x, 'recv', v === undefined ? null : v, 'RTCRtpReceiver'); });
+
   // ---- events from Go --------------------------------------------------------------------------------------------
   global.__swRtcEvent = function (id, type, data) {
     var rec = pcs.get(id);
@@ -1102,6 +1299,7 @@
         case 'negotiationneeded':
           if (sts(rec)[0] === 'stable') { rec.nnQueued = false; fire(pc, 'negotiationneeded'); }
           break;
+        case 'encframe': onEncodedFrame(rec, v); break;
         case 'icecandidate': {
           var cand = null;
           if (v) { cand = new RTCIceCandidate(v); rec.localCands.push(cand); }

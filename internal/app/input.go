@@ -1,6 +1,8 @@
 package app
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"math"
 	"runtime"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/app/state"
+	"github.com/sweefbrowser/sweef/internal/engine"
 	"github.com/sweefbrowser/sweef/internal/shell"
 )
 
@@ -400,6 +403,10 @@ func (a *App) ctrlMod(m shell.Mods) bool {
 }
 
 func (a *App) onKeyDown(ev shell.Event) {
+	if ev.Key == "Escape" && a.htmlFS {
+		a.leaveHTMLFullscreen(true)
+		return
+	}
 	if a.shortcut(ev) {
 		return
 	}
@@ -574,25 +581,50 @@ func (a *App) clipboardOp(op string) {
 	if e == nil {
 		return
 	}
-	clip := ""
+	var flavours []engine.ClipboardEntry
 	if op == "paste" {
-		clip = a.win.Clipboard()
+		flavours = a.clip.readNow()
 	}
 	e.w.do(func() {
 		tt := e.inputTab()
 		switch op {
 		case "copy", "cut":
-			var sel string
-			_ = e.evalOn(tt, "__sweefSel()", &sel)
-			if sel != "" {
-				a.post(func() { a.win.SetClipboard(sel) })
+			var r struct {
+				Handled bool `json:"handled"`
+				Entries []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"entries"`
 			}
-			if op == "cut" {
+			_ = e.evalOn(tt, "__sweefCopy("+jsString(op)+")", &r)
+			var es []engine.ClipboardEntry
+			for _, x := range r.Entries {
+				es = append(es, engine.ClipboardEntry{Type: x.Type, Data: []byte(x.Text)})
+			}
+			if len(es) > 0 {
+				a.post(func() { _ = a.clip.writeNow(es) })
+			}
+			if op == "cut" && !r.Handled {
 				_, _ = tt.Evaluate("__sweefEdit('cut')")
 			}
 		case "paste":
-			if clip != "" {
-				_, _ = tt.Evaluate("__sweefInsert(" + jsString(clip) + ")")
+			type item struct {
+				Type string `json:"type"`
+				Text string `json:"text,omitempty"`
+				B64  string `json:"b64,omitempty"`
+			}
+			var items []item
+			for _, f := range flavours {
+				switch {
+				case f.Type == "text/plain" || f.Type == "text/html":
+					items = append(items, item{Type: f.Type, Text: string(f.Data)})
+				case strings.HasPrefix(f.Type, "image/"):
+					items = append(items, item{Type: f.Type, B64: base64.StdEncoding.EncodeToString(f.Data)})
+				}
+			}
+			if len(items) > 0 {
+				b, _ := json.Marshal(items)
+				_, _ = tt.Evaluate("__sweefPaste(" + string(b) + ")")
 			}
 		case "selectall":
 			_, _ = tt.Evaluate("__sweefEdit('selectall')")
@@ -685,6 +717,8 @@ func (a *App) shortcut(ev shell.Event) bool {
 		a.traverse(act, -1)
 	case alt && key == "ArrowRight", ctrl && key == "]" && runtime.GOOS == "darwin":
 		a.traverse(act, +1)
+	case key == "F11" && a.htmlFS:
+		a.leaveHTMLFullscreen(true)
 	case key == "F11":
 		a.fullscreen = !a.fullscreen
 		a.win.SetFullscreen(a.fullscreen)

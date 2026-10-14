@@ -1283,7 +1283,7 @@
     type: { get: function () { var t = (this.getAttribute('type') || 'text').toLowerCase(); return /^(text|password|checkbox|radio|submit|reset|button|file|hidden|image|email|number|tel|url|search|date|time|datetime-local|month|week|color|range)$/.test(t) ? t : 'text'; }, set: function (v) { this.setAttribute('type', toStr(v)); } },
     valueAsNumber: { get: function () { var n = parseFloat(this.value); return isNaN(n) ? NaN : n; }, set: function (v) { this.value = isNaN(v) ? '' : String(v); } },
     valueAsDate: { get: function () { var d = new Date(this.value); return isNaN(d.getTime()) ? null : d; }, set: function (v) { this.value = v ? new Date(v).toISOString().slice(0, 10) : ''; } },
-    files: { get: function () { return slots(this).files || (this.type === 'file' ? Object.assign([], { item: function (i) { return this[i] || null; } }) : null); }, set: function (v) { slots(this).files = v; } },
+    files: { get: function () { var sl = slots(this); return sl.files || (this.type === 'file' ? (sl.files = makeFileList([])) : null); }, set: function (v) { if (v instanceof FileList || v === null) slots(this).files = v; else if (v && typeof v.length === 'number') slots(this).files = makeFileList(Array.prototype.slice.call(v)); } },
     selectionStart: { get: function () { var s = slots(this); return s.selStart === undefined ? this.value.length : Math.min(s.selStart, this.value.length); }, set: function (v) { slots(this).selStart = v | 0; } },
     selectionEnd: { get: function () { var s = slots(this); return s.selEnd === undefined ? this.value.length : Math.min(s.selEnd, this.value.length); }, set: function (v) { slots(this).selEnd = v | 0; } },
     selectionDirection: { get: function () { return 'none'; }, set: function () { } },
@@ -1504,7 +1504,7 @@
 
   // --- Document -------------------------------------------------------------
   var Document = makeClass('Document', Node, function Document() { return createDetachedDocument(); });
-  var readyState = 'loading', currentScript = null;
+  var readyState = 'loading', currentScript = null, pageHidden = false; // pageHidden: the tab is in the background (Tab.SetBackground)
   function createDetachedDocument() {
     // used by DOMParser / implementation.createHTMLDocument: a detached <html> element masquerading as a document
     var html = documentWrapper.createElement('html');
@@ -1544,7 +1544,7 @@
     lastModified: { get: function () { return new Date().toLocaleString(); } },
     characterSet: { get: function () { return 'UTF-8'; } }, charset: { get: function () { return 'UTF-8'; } }, inputEncoding: { get: function () { return 'UTF-8'; } },
     contentType: { get: function () { return 'text/html'; } }, compatMode: { get: function () { var q = false; try { q = !!sw.quirks(); } catch (e) { /* ignore */ } return q ? 'BackCompat' : 'CSS1Compat'; } },
-    hidden: { get: function () { return false; } }, visibilityState: { get: function () { return 'visible'; } },
+    hidden: { get: function () { return pageHidden; } }, visibilityState: { get: function () { return pageHidden ? 'hidden' : 'visible'; } },
     designMode: { get: function () { return 'off'; }, set: function () { } },
     dir: { get: function () { var h = this.documentElement; return h ? h.getAttribute('dir') || '' : ''; }, set: function (v) { var h = this.documentElement; if (h) h.setAttribute('dir', toStr(v)); } },
     forms: { get: function () { return this.getElementsByTagName('form'); } },
@@ -2151,9 +2151,8 @@
     platform: { get: function () { return viewport().mobile ? 'Linux armv8l' : 'Linux x86_64'; } },
     onLine: { get: function () { try { return sw.pwaOnline ? sw.pwaOnline() : true; } catch (e) { return true; } } }, cookieEnabled: { get: function () { return true; } }, doNotTrack: { get: function () { return null; } }, globalPrivacyControl: { get: function () { return false; } },
     hardwareConcurrency: { get: function () { return 1; } }, deviceMemory: { get: function () { return 1; } }, maxTouchPoints: { get: function () { return viewport().mobile ? 5 : 0; } },
-    userAgentData: { get: function () { return undefined; } }, webdriver: { get: function () { return false; } }, pdfViewerEnabled: { get: function () { return false; } },
+    webdriver: { get: function () { return false; } }, pdfViewerEnabled: { get: function () { return false; } },
     plugins: { get: function () { var p = []; p.item = function () { return null; }; p.namedItem = function () { return null; }; p.refresh = function () { }; return p; } }, mimeTypes: { get: function () { var p = []; p.item = function () { return null; }; p.namedItem = function () { return null; }; return p; } },
-    clipboard: { get: function () { return { writeText: function (t) { clipboardText = String(t); return Promise.resolve(); }, readText: function () { return Promise.resolve(clipboardText); }, write: function () { return Promise.resolve(); }, read: function () { return Promise.resolve([]); } }; } },
     connection: { get: function () { return { effectiveType: '4g', downlink: 10, rtt: 50, saveData: false, addEventListener: function () { }, removeEventListener: function () { } }; } },
     permissions: { get: function () { return { query: function () { return Promise.resolve({ state: 'prompt', onchange: null, addEventListener: function () { }, removeEventListener: function () { } }); } }; } },
     serviceWorker: { get: function () { return undefined; } }, geolocation: { get: function () { return { getCurrentPosition: function (ok, err) { if (err) setTimeoutImpl(function () { err({ code: 1, message: 'User denied Geolocation', PERMISSION_DENIED: 1 }); }, [], 0, false); }, watchPosition: function () { return 0; }, clearWatch: function () { } }; } },
@@ -2338,23 +2337,32 @@
   def(global, 'performance', { value: perfObj, enumerable: true });
 
   // ---- crypto
-  var cryptoObj = {
-    getRandomValues: function (arr) {
-      if (!ArrayBuffer.isView(arr)) throw new TypeError("Failed to execute 'getRandomValues' on 'Crypto': parameter 1 is not of type 'ArrayBufferView'.");
-      var bytes = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
-      for (var i = 0; i < bytes.length; i++) bytes[i] = (Math.random() * 256) | 0;
+  function Crypto() { illegal(); }
+  var cryptoRand = function (n) {
+    var b64 = sw.cryptoRandom(n);
+    if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(b64);
+    var s = atob(b64), u = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+    return u;
+  };
+  methods(Crypto.prototype, {
+    getRandomValues: function getRandomValues(arr) {
+      if (arguments.length < 1) throw new TypeError("Failed to execute 'getRandomValues' on 'Crypto': 1 argument required, but only 0 present.");
+      if (!ArrayBuffer.isView(arr) || arr instanceof DataView || arr instanceof Float32Array || arr instanceof Float64Array) throw DOMException("Failed to execute 'getRandomValues' on 'Crypto': The data argument must be an integer-type TypedArray", 'TypeMismatchError');
+      if (arr.byteLength > 65536) throw DOMException("Failed to execute 'getRandomValues' on 'Crypto': The ArrayBufferView's byte length (" + arr.byteLength + ") exceeds the number of bytes of entropy available via this API (65536).", 'QuotaExceededError');
+      new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength).set(cryptoRand(arr.byteLength));
       return arr;
     },
-    randomUUID: function () {
-      var b = cryptoObj.getRandomValues(new Uint8Array(16));
+    randomUUID: function randomUUID() {
+      var b = cryptoRand(16);
       b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
       var h = Array.prototype.map.call(b, function (x) { return (x < 16 ? '0' : '') + x.toString(16); }).join('');
       return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
-    },
-    subtle: { digest: function () { return Promise.reject(DOMException('SubtleCrypto is not available', 'NotSupportedError')); }, importKey: function () { return Promise.reject(DOMException('SubtleCrypto is not available', 'NotSupportedError')); }, sign: function () { return Promise.reject(DOMException('SubtleCrypto is not available', 'NotSupportedError')); }, encrypt: function () { return Promise.reject(DOMException('SubtleCrypto is not available', 'NotSupportedError')); }, decrypt: function () { return Promise.reject(DOMException('SubtleCrypto is not available', 'NotSupportedError')); }, generateKey: function () { return Promise.reject(DOMException('SubtleCrypto is not available', 'NotSupportedError')); } }
-  };
+    }
+  });
+  setTag(Crypto, 'Crypto'); global.Crypto = Crypto;
+  var cryptoObj = Object.create(Crypto.prototype);
   def(global, 'crypto', { value: cryptoObj, enumerable: true });
-  global.Crypto = function Crypto() { illegal(); }; global.SubtleCrypto = function SubtleCrypto() { illegal(); };
 
   // ---- custom elements
   function CustomElementRegistry() { illegal(); }
@@ -2431,80 +2439,54 @@
   global.Audio = function Audio(src) { var a = documentWrapper.createElement('audio'); a.setAttribute('preload', 'auto'); if (src !== undefined) a.setAttribute('src', toStr(src)); return a; };
   global.Audio.prototype = global.HTMLAudioElement.prototype;
 
-  // ---- Intl (minimal; QuickJS ships none)
+  // ---- Intl: QuickJS ships none. The Intl object exists here; its members (NumberFormat, DateTimeFormat, ...) load
+  // lazily from platformjs/intl*.js (boot.js). The toLocale* methods below go through them with a small cache.
   if (typeof global.Intl === 'undefined') {
-    function fmtNumber(x, opts) {
-      if (typeof x !== 'number') x = Number(x);
-      if (!isFinite(x)) return String(x);
-      opts = opts || {};
-      var min = opts.minimumFractionDigits, max = opts.maximumFractionDigits;
-      var s;
-      if (opts.style === 'percent') x = x * 100;
-      if (max !== undefined || min !== undefined) { s = x.toFixed(max !== undefined ? max : Math.max(min || 0, 3)); if (max !== undefined && (min === undefined || min < max)) s = String(parseFloat(s)); if (min !== undefined) { var dec = (s.split('.')[1] || '').length; if (dec < min) s = parseFloat(s).toFixed(min); } }
-      else s = opts.style === 'currency' ? x.toFixed(2) : String(Math.round(x * 1000) / 1000);
-      if (opts.useGrouping !== false) { var p = s.split('.'); p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ','); s = p.join('.'); }
-      if (opts.style === 'percent') s += '%';
-      if (opts.style === 'currency') { var sym = { USD: '$', EUR: '€', GBP: '£', JPY: '¥' }[opts.currency] || (opts.currency ? opts.currency + ' ' : ''); s = s[0] === '-' ? '-' + sym + s.slice(1) : sym + s; }
-      return s;
-    }
-    function NumberFormat(locale, opts) { if (!(this instanceof NumberFormat)) return new NumberFormat(locale, opts); this._opts = opts || {}; this._locale = locale; }
-    NumberFormat.prototype = { format: function (x) { return fmtNumber(x, this._opts); }, formatToParts: function (x) { return [{ type: 'integer', value: fmtNumber(x, this._opts) }]; }, resolvedOptions: function () { return Object.assign({ locale: 'en-US', numberingSystem: 'latn', style: 'decimal', minimumIntegerDigits: 1, minimumFractionDigits: 0, maximumFractionDigits: 3, useGrouping: true }, this._opts); } };
-    NumberFormat.supportedLocalesOf = function (l) { return [].concat(l); };
-    var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    function pad2(n) { return (n < 10 ? '0' : '') + n; }
-    function fmtDate(d, opts) {
-      d = d === undefined ? new Date() : new Date(d);
-      if (isNaN(d.getTime())) throw new RangeError('Invalid time value');
-      opts = opts || {};
-      var utc = opts.timeZone === 'UTC';
-      var Y = utc ? d.getUTCFullYear() : d.getFullYear(), M = utc ? d.getUTCMonth() : d.getMonth(), D = utc ? d.getUTCDate() : d.getDate(), h = utc ? d.getUTCHours() : d.getHours(), m = utc ? d.getUTCMinutes() : d.getMinutes(), s = utc ? d.getUTCSeconds() : d.getSeconds(), wd = utc ? d.getUTCDay() : d.getDay();
-      var hasDate = opts.year || opts.month || opts.day || opts.weekday || opts.dateStyle, hasTime = opts.hour || opts.minute || opts.second || opts.timeStyle;
-      if (!hasDate && !hasTime) hasDate = true;
-      var parts = [];
-      if (hasDate) {
-        if (opts.dateStyle === 'full' || opts.dateStyle === 'long' || opts.month === 'long') parts.push((opts.weekday || opts.dateStyle === 'full' ? DAYS[wd] + ', ' : '') + MONTHS[M] + ' ' + D + ', ' + Y);
-        else if (opts.dateStyle === 'medium' || opts.month === 'short') parts.push((opts.weekday ? DAYS[wd].slice(0, 3) + ', ' : '') + MONTHS[M].slice(0, 3) + ' ' + D + ', ' + Y);
-        else if (opts.weekday && !opts.month && !opts.day && !opts.year) parts.push(opts.weekday === 'long' ? DAYS[wd] : DAYS[wd].slice(0, 3));
-        else parts.push((opts.month === '2-digit' ? pad2(M + 1) : (M + 1)) + '/' + (opts.day === '2-digit' ? pad2(D) : D) + '/' + (opts.year === '2-digit' ? pad2(Y % 100) : Y));
-      }
-      if (hasTime) {
-        var h12 = opts.hour12 !== false && opts.hourCycle !== 'h23' && opts.hourCycle !== 'h24';
-        var hh = h12 ? (h % 12 || 12) : (opts.hour === '2-digit' ? pad2(h) : h);
-        var t = String(hh) + ':' + pad2(m);
-        if (opts.second || opts.timeStyle === 'medium' || opts.timeStyle === 'long') t += ':' + pad2(s);
-        if (h12) t += ' ' + (h < 12 ? 'AM' : 'PM');
-        parts.push(t);
-      }
-      return parts.join(', ');
-    }
-    function DateTimeFormat(locale, opts) { if (!(this instanceof DateTimeFormat)) return new DateTimeFormat(locale, opts); this._opts = opts || {}; this._locale = locale; }
-    DateTimeFormat.prototype = { format: function (d) { return fmtDate(d, this._opts); }, formatToParts: function (d) { return [{ type: 'literal', value: fmtDate(d, this._opts) }]; }, formatRange: function (a, b) { return fmtDate(a, this._opts) + ' – ' + fmtDate(b, this._opts); }, resolvedOptions: function () { return Object.assign({ locale: 'en-US', calendar: 'gregory', numberingSystem: 'latn', timeZone: 'UTC' }, this._opts); } };
-    DateTimeFormat.supportedLocalesOf = NumberFormat.supportedLocalesOf;
-    function Collator(locale, opts) { if (!(this instanceof Collator)) return new Collator(locale, opts); this._opts = opts || {}; }
-    Collator.prototype = { compare: function (a, b) { a = String(a); b = String(b); if (this._opts.sensitivity === 'base' || this._opts.sensitivity === 'accent') { a = a.toLowerCase(); b = b.toLowerCase(); } if (this._opts.numeric) { var na = parseFloat(a), nb = parseFloat(b); if (!isNaN(na) && !isNaN(nb) && na !== nb) return na < nb ? -1 : 1; } return a < b ? -1 : a > b ? 1 : 0; }, resolvedOptions: function () { return Object.assign({ locale: 'en-US', usage: 'sort', sensitivity: 'variant' }, this._opts); } };
-    Collator.prototype.compare = (function (orig) { return function () { var self = this; var f = function (a, b) { return orig.call(self, a, b); }; Object.defineProperty(this, 'compare', { value: f }); return f.apply(this, arguments); }; })(Collator.prototype.compare);
-    Collator.supportedLocalesOf = NumberFormat.supportedLocalesOf;
-    function PluralRules(locale, opts) { this._opts = opts || {}; }
-    PluralRules.prototype = { select: function (n) { n = Number(n); if (this._opts.type === 'ordinal') { var t = n % 10, h = n % 100; return t === 1 && h !== 11 ? 'one' : t === 2 && h !== 12 ? 'two' : t === 3 && h !== 13 ? 'few' : 'other'; } return n === 1 ? 'one' : 'other'; }, resolvedOptions: function () { return { locale: 'en-US', type: this._opts.type || 'cardinal' }; } };
-    PluralRules.supportedLocalesOf = NumberFormat.supportedLocalesOf;
-    function RelativeTimeFormat(locale, opts) { this._opts = opts || {}; }
-    RelativeTimeFormat.prototype = { format: function (v, unit) { v = Number(v); unit = String(unit).replace(/s$/, ''); var abs = Math.abs(v); var u = abs === 1 ? unit : unit + 's'; if (this._opts.numeric === 'auto') { if (v === 0 && unit === 'day') return 'today'; if (v === 1 && unit === 'day') return 'tomorrow'; if (v === -1 && unit === 'day') return 'yesterday'; } return v < 0 ? abs + ' ' + u + ' ago' : 'in ' + abs + ' ' + u; }, formatToParts: function (v, u) { return [{ type: 'literal', value: this.format(v, u) }]; }, resolvedOptions: function () { return { locale: 'en-US', numeric: this._opts.numeric || 'always', style: 'long' }; } };
-    function ListFormat(locale, opts) { this._opts = opts || {}; }
-    ListFormat.prototype = { format: function (list) { list = Array.from(list).map(String); var word = this._opts.type === 'disjunction' ? 'or' : 'and'; if (list.length <= 1) return list.join(''); if (list.length === 2) return list[0] + ' ' + word + ' ' + list[1]; return list.slice(0, -1).join(', ') + ', ' + word + ' ' + list[list.length - 1]; } };
-    function DisplayNames(locale, opts) { this._opts = opts || {}; }
-    DisplayNames.prototype = { of: function (code) { return String(code); } };
-    function Segmenter(locale, opts) { this._opts = opts || {}; }
-    Segmenter.prototype = { segment: function (str) { str = String(str); var g = this._opts.granularity || 'grapheme'; var segs = g === 'word' ? (str.match(/\w+|\s+|[^\w\s]+/g) || []) : g === 'sentence' ? (str.match(/[^.!?]+[.!?]*\s*/g) || [str]) : Array.from(str); var idx = 0; var out = segs.map(function (s) { var r = { segment: s, index: idx, input: str, isWordLike: g === 'word' ? /\w/.test(s) : undefined }; idx += s.length; return r; }); out.containing = function (i) { for (var k = 0; k < out.length; k++) if (i >= out[k].index && i < out[k].index + out[k].segment.length) return out[k]; return undefined; }; return out; } };
-    global.Intl = { NumberFormat: NumberFormat, DateTimeFormat: DateTimeFormat, Collator: Collator, PluralRules: PluralRules, RelativeTimeFormat: RelativeTimeFormat, ListFormat: ListFormat, DisplayNames: DisplayNames, Segmenter: Segmenter, getCanonicalLocales: function (l) { return [].concat(l || []); }, supportedValuesOf: function () { return []; } };
-    // toLocale* on primitives route through the shims
-    Number.prototype.toLocaleString = function (locale, opts) { return fmtNumber(this.valueOf(), opts); };
-    Date.prototype.toLocaleDateString = function (locale, opts) { return fmtDate(this, Object.assign({ year: 'numeric', month: 'numeric', day: 'numeric' }, opts || {})); };
-    Date.prototype.toLocaleTimeString = function (locale, opts) { return fmtDate(this, Object.assign({ hour: 'numeric', minute: '2-digit', second: '2-digit' }, opts || {})); };
-    Date.prototype.toLocaleString = function (locale, opts) { return opts && Object.keys(opts).some(function (k) { return /^(year|month|day|weekday|hour|minute|second|dateStyle|timeStyle)$/.test(k); }) ? fmtDate(this, opts) : fmtDate(this, Object.assign({ year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }, opts || {})); };
-    String.prototype.localeCompare = function (b, locale, opts) { return new Collator(locale, opts).compare(this, b); };
-    if (typeof Array.prototype.toLocaleString !== 'function') Array.prototype.toLocaleString = function () { return this.map(function (x) { return x === null || x === undefined ? '' : x.toLocaleString(); }).join(','); };
+    var IntlObj = {};
+    Object.defineProperty(IntlObj, Symbol.toStringTag, { value: 'Intl', configurable: true });
+    def(global, 'Intl', { value: IntlObj, writable: true, configurable: true, enumerable: false });
   }
+  var fmtCache = new Map();
+  function cachedFormat(name, locales, options) {
+    var key;
+    try { key = name + '|' + (Array.isArray(locales) ? locales.join(',') : String(locales)) + '|' + (options === undefined ? '' : JSON.stringify(options)); } catch (e) { return new global.Intl[name](locales, options); }
+    var f = fmtCache.get(key);
+    if (!f) { f = new global.Intl[name](locales, options); if (fmtCache.size >= 64) fmtCache.clear(); fmtCache.set(key, f); }
+    return f;
+  }
+  function method(proto, name, fn) { Object.defineProperty(proto, name, { value: fn, writable: true, configurable: true, enumerable: false }); Object.defineProperty(fn, 'name', { value: name, configurable: true }); }
+  method(Number.prototype, 'toLocaleString', function (locales, options) { return cachedFormat('NumberFormat', locales, options).format(Number.prototype.valueOf.call(this)); });
+  if (typeof BigInt === 'function') method(BigInt.prototype, 'toLocaleString', function (locales, options) { return cachedFormat('NumberFormat', locales, options).format(BigInt.prototype.valueOf.call(this)); });
+  // ToDateTimeOptions (ECMA-402): which fields a toLocale*String call adds when the options name none
+  function dateOptions(options, required, defaults) {
+    if (options === undefined) options = {}; else if (options === null) throw new TypeError('Cannot convert undefined or null to object'); else options = Object.assign({}, Object(options));
+    var need = true, k;
+    if (required === 'date' || required === 'any') for (k of ['weekday', 'year', 'month', 'day']) if (options[k] !== undefined) need = false;
+    if (required === 'time' || required === 'any') for (k of ['dayPeriod', 'hour', 'minute', 'second', 'fractionalSecondDigits']) if (options[k] !== undefined) need = false;
+    if (options.dateStyle !== undefined || options.timeStyle !== undefined) need = false;
+    if (required === 'date' && options.timeStyle !== undefined) throw new TypeError('Invalid option : timeStyle');
+    if (required === 'time' && options.dateStyle !== undefined) throw new TypeError('Invalid option : dateStyle');
+    if (need && (defaults === 'date' || defaults === 'all')) { options.year = 'numeric'; options.month = 'numeric'; options.day = 'numeric'; }
+    if (need && (defaults === 'time' || defaults === 'all')) { options.hour = 'numeric'; options.minute = 'numeric'; options.second = 'numeric'; }
+    return options;
+  }
+  function dateLocale(self, locales, options, required, defaults) {
+    var t = Date.prototype.getTime.call(self);
+    if (t !== t) return 'Invalid Date';
+    return new global.Intl.DateTimeFormat(locales, dateOptions(options, required, defaults)).format(t);
+  }
+  method(Date.prototype, 'toLocaleString', function (locales, options) { return dateLocale(this, locales, options, 'any', 'all'); });
+  method(Date.prototype, 'toLocaleDateString', function (locales, options) { return dateLocale(this, locales, options, 'date', 'date'); });
+  method(Date.prototype, 'toLocaleTimeString', function (locales, options) { return dateLocale(this, locales, options, 'time', 'time'); });
+  method(String.prototype, 'localeCompare', function (that, locales, options) {
+    if (this === null || this === undefined) throw new TypeError('String.prototype.localeCompare called on null or undefined');
+    return cachedFormat('Collator', locales, options).compare(String(this), String(that));
+  });
+  method(Array.prototype, 'toLocaleString', function (locales, options) {
+    var out = [];
+    for (var i = 0; i < this.length; i++) { var x = this[i]; out.push(x === null || x === undefined ? '' : String(x.toLocaleString(locales, options))); }
+    return out.join(',');
+  });
 
   // ---- WebSocket / Worker / Notification / misc stubs
   function WebSocket(url) {
@@ -2565,25 +2547,26 @@
   // ---- base64 / text encoding
   var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   global.btoa = function btoa(s) {
-    s = toStr(s); var out = '';
-    for (var i = 0; i < s.length; i += 3) {
-      var a = s.charCodeAt(i), b = s.charCodeAt(i + 1), c = s.charCodeAt(i + 2);
-      if (a > 255 || b > 255 || c > 255) throw DOMException("Failed to execute 'btoa' on 'Window': The string to be encoded contains characters outside of the Latin1 range.", 'InvalidCharacterError');
-      var n = (a << 16) | ((b || 0) << 8) | (c || 0);
-      out += B64[n >> 18] + B64[(n >> 12) & 63] + (isNaN(b) ? '=' : B64[(n >> 6) & 63]) + (isNaN(c) ? '=' : B64[n & 63]);
-    }
-    return out;
+    if (arguments.length < 1) throw new TypeError("Failed to execute 'btoa' on 'Window': 1 argument required, but only 0 present.");
+    var r = sw.b64enc(toStr(s));
+    if (r === null) throw DOMException("Failed to execute 'btoa' on 'Window': The string to be encoded contains characters outside of the Latin1 range.", 'InvalidCharacterError');
+    return r;
   };
   global.atob = function atob(s) {
-    s = toStr(s).replace(/[\t\n\f\r ]/g, '');
-    if (s.length % 4 === 0) s = s.replace(/==?$/, '');
-    if (s.length % 4 === 1 || /[^A-Za-z0-9+\/]/.test(s)) throw DOMException("Failed to execute 'atob' on 'Window': The string to be decoded is not correctly encoded.", 'InvalidCharacterError');
-    var out = '', bits = 0, buf = 0;
-    for (var i = 0; i < s.length; i++) { buf = (buf << 6) | B64.indexOf(s[i]); bits += 6; if (bits >= 8) { bits -= 8; out += String.fromCharCode((buf >> bits) & 255); } }
-    return out;
+    if (arguments.length < 1) throw new TypeError("Failed to execute 'atob' on 'Window': 1 argument required, but only 0 present.");
+    var r = sw.b64dec(toStr(s));
+    if (r === null) throw DOMException("Failed to execute 'atob' on 'Window': The string to be decoded is not correctly encoded.", 'InvalidCharacterError');
+    return r;
   };
   var B64LUT = null;
   function b64ToBytes(str) {
+    var bin = sw.b64dec(toStr(str)); // Go decodes; the loop only copies the bytes into the typed array
+    if (bin !== null) {
+      var bn = bin.length, bo = new Uint8Array(bn), bi = 0;
+      for (; bi + 4 <= bn; bi += 4) { bo[bi] = bin.charCodeAt(bi); bo[bi + 1] = bin.charCodeAt(bi + 1); bo[bi + 2] = bin.charCodeAt(bi + 2); bo[bi + 3] = bin.charCodeAt(bi + 3); }
+      for (; bi < bn; bi++) bo[bi] = bin.charCodeAt(bi);
+      return bo;
+    }
     if (!B64LUT) { B64LUT = new Uint8Array(256).fill(255); for (var k = 0; k < 64; k++) B64LUT[B64.charCodeAt(k)] = k; }
     var n = str.length, pad = n && str.charCodeAt(n - 1) === 61 ? (str.charCodeAt(n - 2) === 61 ? 2 : 1) : 0;
     var out = new Uint8Array((n * 3 >> 2) - pad), o = 0, buf = 0, bits = 0;
@@ -3145,18 +3128,114 @@
   global.ProgressEvent = global.ProgressEvent;
 
   // ==== 10. Lifecycle & exports for Go =====================================
-  function DataTransfer() { this._items = new Map(); this.dropEffect = 'none'; this.effectAllowed = 'all'; this.files = []; }
-  DataTransfer.prototype = {
-    constructor: DataTransfer,
-    setData: function (fmt, data) { this._items.set(String(fmt).toLowerCase() === 'text' ? 'text/plain' : String(fmt).toLowerCase(), String(data)); },
-    getData: function (fmt) { fmt = String(fmt).toLowerCase(); if (fmt === 'text') fmt = 'text/plain'; if (fmt === 'url') fmt = 'text/uri-list'; return this._items.get(fmt) || ''; },
-    clearData: function (fmt) { if (fmt === undefined) this._items.clear(); else this._items.delete(String(fmt).toLowerCase()); },
-    setDragImage: function () { },
-    get types() { return Array.from(this._items.keys()); },
-    get items() { var self = this; var arr = Array.from(this._items.entries()).map(function (e) { return { kind: 'string', type: e[0], getAsString: function (cb) { cb(e[1]); }, getAsFile: function () { return null; } }; }); arr.add = function (d, t) { self.setData(t, d); }; arr.clear = function () { self.clearData(); }; arr.remove = function (i) { var k = Array.from(self._items.keys())[i]; if (k) self._items.delete(k); }; return arr; }
+  // FileList: an immutable list of File objects (input.files, DataTransfer.files)
+  function FileList() { illegal(); }
+  FileList.prototype.item = function item(i) { i = i >>> 0; return this[i] || null; };
+  Object.defineProperty(FileList.prototype, 'length', { get: function () { return this._n; }, enumerable: true, configurable: true });
+  FileList.prototype[Symbol.iterator] = function () { var a = []; for (var k = 0; k < this._n; k++) a.push(this[k]); return a[Symbol.iterator](); };
+  setTag(FileList, 'FileList'); global.FileList = FileList;
+  function makeFileList(files) {
+    var l = Object.create(FileList.prototype);
+    def(l, '_n', { value: files.length, enumerable: false });
+    for (var k = 0; k < files.length; k++) def(l, k, { value: files[k], enumerable: true });
+    return l;
+  }
+  // DataTransfer (drag and drop, clipboard events): string items by type, file items, in insertion order
+  var DT_STATE = new WeakMap();
+  function dtNorm(fmt) { fmt = String(fmt).toLowerCase(); return fmt === 'text' ? 'text/plain' : fmt === 'url' ? 'text/uri-list' : fmt; }
+  function dtList(dt) { var s = DT_STATE.get(dt); if (!s) throw new TypeError('Illegal invocation'); return s; }
+  function DataTransfer() {
+    if (!new.target) throw new TypeError("Failed to construct 'DataTransfer': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+    DT_STATE.set(this, { list: [], readOnly: false, itemList: null });
+    this.dropEffect = 'none'; this.effectAllowed = 'all';
+  }
+  function DataTransferItem() { illegal(); }
+  function DataTransferItemList() { illegal(); }
+  function makeItem(dt, rec) {
+    var it = Object.create(DataTransferItem.prototype);
+    def(it, '_', { value: { dt: dt, rec: rec } });
+    return it;
+  }
+  function liveItems(dt) { return dtList(dt).list; }
+  Object.defineProperties(DataTransferItem.prototype, {
+    kind: { get: function () { return this._.rec.kind; }, enumerable: true, configurable: true },
+    type: { get: function () { return this._.rec.type; }, enumerable: true, configurable: true }
+  });
+  DataTransferItem.prototype.getAsString = function getAsString(cb) {
+    if (cb === null || cb === undefined) return;
+    if (typeof cb !== 'function') throw new TypeError("Failed to execute 'getAsString' on 'DataTransferItem': The callback provided as parameter 1 is not a function.");
+    var r = this._.rec; if (r.kind !== 'string') return;
+    var v = r.data; setTimeoutImpl(function () { cb(v); }, [], 0, false);
   };
+  DataTransferItem.prototype.getAsFile = function getAsFile() { return this._.rec.kind === 'file' ? this._.rec.file : null; };
+  DataTransferItem.prototype.webkitGetAsEntry = function webkitGetAsEntry() { return null; };
+  setTag(DataTransferItem, 'DataTransferItem'); global.DataTransferItem = DataTransferItem;
+  Object.defineProperty(DataTransferItemList.prototype, 'length', { get: function () { return liveItems(this._dt).length; }, enumerable: true, configurable: true });
+  DataTransferItemList.prototype.add = function add(data, type) {
+    var dt = this._dt, st = dtList(dt);
+    if (st.readOnly) return null;
+    if (typeof File === 'function' && data instanceof File) {
+      var rec = { kind: 'file', type: String(data.type || '').toLowerCase(), file: data };
+      st.list.push(rec); return makeItem(dt, rec);
+    }
+    if (arguments.length < 2) throw new TypeError("Failed to execute 'add' on 'DataTransferItemList': parameter 1 is not of type 'File'.");
+    type = dtNorm(type);
+    for (var i = 0; i < st.list.length; i++) if (st.list[i].kind === 'string' && st.list[i].type === type) throw new global.DOMException("An item already exists for type '" + type + "'.", 'NotSupportedError');
+    var r = { kind: 'string', type: type, data: String(data) };
+    st.list.push(r); return makeItem(dt, r);
+  };
+  DataTransferItemList.prototype.remove = function remove(i) { var st = dtList(this._dt); if (st.readOnly) throw new global.DOMException('The list is not writable.', 'InvalidStateError'); i = i >>> 0; if (i < st.list.length) st.list.splice(i, 1); };
+  DataTransferItemList.prototype.clear = function clear() { var st = dtList(this._dt); if (!st.readOnly) st.list.length = 0; };
+  DataTransferItemList.prototype[Symbol.iterator] = function () { var dt = this._dt, a = liveItems(dt).map(function (r) { return makeItem(dt, r); }); return a[Symbol.iterator](); };
+  setTag(DataTransferItemList, 'DataTransferItemList'); global.DataTransferItemList = DataTransferItemList;
+  function itemListOf(dt) {
+    var st = dtList(dt);
+    if (st.itemList) return st.itemList;
+    var l = Object.create(DataTransferItemList.prototype);
+    def(l, '_dt', { value: dt });
+    // index access: a Proxy keeps l[0], l[1] live
+    st.itemList = typeof Proxy === 'function' ? new Proxy(l, { get: function (t, k, r) { if (typeof k === 'string' && /^\d+$/.test(k)) { var rec = liveItems(dt)[+k]; return rec ? makeItem(dt, rec) : undefined; } return Reflect.get(t, k, r); }, has: function (t, k) { return typeof k === 'string' && /^\d+$/.test(k) ? +k < liveItems(dt).length : k in t; } }) : l;
+    return st.itemList;
+  }
+  DataTransfer.prototype.setData = function setData(fmt, data) {
+    var st = dtList(this); if (st.readOnly) return;
+    fmt = dtNorm(fmt); data = String(data);
+    for (var i = 0; i < st.list.length; i++) if (st.list[i].kind === 'string' && st.list[i].type === fmt) { st.list[i].data = data; return; }
+    st.list.push({ kind: 'string', type: fmt, data: data });
+  };
+  DataTransfer.prototype.getData = function getData(fmt) {
+    var st = dtList(this); fmt = dtNorm(fmt);
+    for (var i = 0; i < st.list.length; i++) if (st.list[i].kind === 'string' && st.list[i].type === fmt) return st.list[i].data;
+    return '';
+  };
+  DataTransfer.prototype.clearData = function clearData(fmt) {
+    var st = dtList(this); if (st.readOnly) return;
+    if (fmt === undefined) st.list = st.list.filter(function (r) { return r.kind !== 'string'; });
+    else { var f = dtNorm(fmt); st.list = st.list.filter(function (r) { return !(r.kind === 'string' && r.type === f); }); }
+    if (st.itemList) { /* the live view reads st.list */ }
+  };
+  DataTransfer.prototype.setDragImage = function setDragImage() { };
+  Object.defineProperties(DataTransfer.prototype, {
+    types: { get: function () { var st = dtList(this), out = []; st.list.forEach(function (r) { if (r.kind === 'string') out.push(r.type); }); if (st.list.some(function (r) { return r.kind === 'file'; })) out.push('Files'); return Object.freeze(out); }, enumerable: true, configurable: true },
+    items: { get: function () { return itemListOf(this); }, enumerable: true, configurable: true },
+    files: { get: function () { return makeFileList(dtList(this).list.filter(function (r) { return r.kind === 'file'; }).map(function (r) { return r.file; })); }, enumerable: true, configurable: true }
+  });
   setTag(DataTransfer, 'DataTransfer'); global.DataTransfer = DataTransfer;
-  global.DataTransferItemList = function DataTransferItemList() { illegal(); }; global.DataTransferItem = function DataTransferItem() { illegal(); };
+  // the host builds a DataTransfer for clipboard events: entries are {type, text} or {type, file}; readOnly while a paste handler reads it
+  exportFn('__swMakeDataTransfer', function (entries, readOnly) {
+    var dt = new DataTransfer(), st = dtList(dt);
+    (entries || []).forEach(function (e) {
+      if (e.file) st.list.push({ kind: 'file', type: String(e.type).toLowerCase(), file: e.file });
+      else st.list.push({ kind: 'string', type: dtNorm(e.type), data: String(e.text) });
+    });
+    st.readOnly = !!readOnly;
+    return dt;
+  });
+  exportFn('__swDataTransferEntries', function (dt) {
+    var out = [];
+    dtList(dt).list.forEach(function (r) { if (r.kind === 'string') out.push({ type: r.type, text: r.data }); else out.push({ type: r.type, file: r.file }); });
+    return out;
+  });
   global.ClipboardEvent.prototype.clipboardData = null;
 
   function targetOf(id) { if (id === 0 || id === null || id === undefined) return documentWrapper; if (id === -1) return global; return wrap(+id) || documentWrapper; }
@@ -3381,6 +3460,7 @@
   exportFn('__swSetValueFromGo', function (id, value) { try { return setValueFromGo(id, value); } catch (e) { reportError(e); return false; } });
   exportFn('__swRunTimers', function (now, withBg) { try { return runTimers(now, !!withBg); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
   exportFn('__swFlushMutationObservers', function () { try { flushMutationObservers(); } catch (e) { reportError(e); } return pendingObservers.length; });
+  exportFn('__swSetHidden', function (h, quiet) { h = !!h; if (h === pageHidden) return false; pageHidden = h; if (!quiet) { try { fire(documentWrapper, 'visibilitychange', { bubbles: true }); } catch (e) { reportError(e); } } return true; });
   exportFn('__swFireLifecycle', function (name) { try { return fireLifecycle(name); } catch (e) { reportError(e); return true; } });
   exportFn('__swSetDocument', function (url, state) { return setDocument(url, state); });
   exportFn('__swDefaultAction', function (id) { try { defaultAction(wrap(+id)); return true; } catch (e) { reportError(e); return false; } });

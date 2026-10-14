@@ -79,22 +79,72 @@ const helperJS = `(function(G){
     }
     try { return String(G.getSelection ? G.getSelection() : ''); } catch(x){ return ''; }
   };
-  function setVal(el, v, caret){
+  function inputEvent(type, init){
+    try { return new G.InputEvent(type, init); } catch(x){ return new G.Event(type, init); }
+  }
+  function setVal(el, v, caret, inputType, data){
     el.value = v;
     try { el.setSelectionRange(caret, caret); } catch(x){}
-    try { el.dispatchEvent(new G.Event('input', {bubbles:true})); } catch(x){}
+    try { el.dispatchEvent(inputEvent('input', {bubbles:true, inputType: inputType || 'insertText', data: data === undefined ? null : data})); } catch(x){}
   }
-  G.__sweefInsert = function(text){
+  // insert text at the caret of the focused editable element; kind is the InputEvent inputType
+  G.__sweefInsert = function(text, kind){
     var el = D.activeElement;
     if (!el || !isEditable(el)) return false;
+    text = String(text); kind = kind || 'insertText';
     if (el.localName === 'input' || el.localName === 'textarea') {
       var v = el.value || '', s = el.selectionStart, e = el.selectionEnd;
       if (s == null) { s = e = v.length; }
       if (s > e) { var t = s; s = e; e = t; }
-      if (el.localName === 'input') text = String(text).replace(/[\r\n]+/g, ' ');
-      setVal(el, v.slice(0, s) + text + v.slice(e), s + String(text).length);
-    } else { el.textContent = (el.textContent||'') + text; }
+      if (el.localName === 'input') text = text.replace(/[\r\n]+/g, ' ');
+      setVal(el, v.slice(0, s) + text + v.slice(e), s + text.length, kind, text);
+    } else {
+      // contenteditable: replace the selection when it is inside, else append
+      var sel = null; try { sel = G.getSelection(); } catch(x){}
+      var tn = D.createTextNode(text);
+      if (sel && sel.rangeCount && el.contains(sel.anchorNode)) {
+        var r = sel.getRangeAt(0); r.deleteContents(); r.insertNode(tn); r.setStartAfter(tn); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+      } else el.appendChild(tn);
+      try { el.dispatchEvent(inputEvent('input', {bubbles:true, inputType: kind, data: text})); } catch(x){}
+    }
     return true;
+  };
+  function bytesOfB64(b64){ var bin = G.atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  // Ctrl+V: entries are the clipboard's flavours [{type, text} | {type, b64}]. The page sees a cancelable paste event
+  // with a read-only DataTransfer; when it does not cancel it, the text goes in (beforeinput, then input).
+  G.__sweefPaste = function(entries){
+    var target = D.activeElement && D.activeElement !== D.documentElement ? D.activeElement : D.body;
+    if (!target) return false;
+    var list = [];
+    (entries || []).forEach(function(e){
+      if (e.b64 !== undefined) { var ext = (e.type.split('/')[1] || 'bin').replace(/[^a-z0-9]/g, ''); try { list.push({type: e.type, file: new G.File([bytesOfB64(e.b64)], 'image.' + ext, {type: e.type})}); } catch(x){} }
+      else list.push({type: e.type, text: e.text});
+    });
+    var dt = G.__swMakeDataTransfer(list, true), ev;
+    try { ev = new G.ClipboardEvent('paste', {bubbles:true, cancelable:true, clipboardData: dt}); } catch(x){ return false; }
+    if (!target.dispatchEvent(ev)) return true; // the page handled it
+    var text = dt.getData('text/plain');
+    if (!text || !isEditable(D.activeElement)) return false;
+    var bi = inputEvent('beforeinput', {bubbles:true, cancelable:true, inputType:'insertFromPaste', data:text});
+    if (!D.activeElement.dispatchEvent(bi)) return true;
+    return G.__sweefInsert(text, 'insertFromPaste');
+  };
+  function selectionHTML(){
+    try {
+      var s = G.getSelection(); if (!s || !s.rangeCount || s.isCollapsed) return '';
+      var d = D.createElement('div'); d.appendChild(s.getRangeAt(0).cloneContents()); return d.innerHTML;
+    } catch(x){ return ''; }
+  }
+  // Ctrl+C / Ctrl+X: the page sees a cancelable copy or cut event with a writable DataTransfer; when it supplies data
+  // or cancels, its data is what is copied, otherwise the selection (text and html)
+  G.__sweefCopy = function(op){
+    var target = D.activeElement && D.activeElement !== D.documentElement ? D.activeElement : D.body;
+    var dt = G.__swMakeDataTransfer([], false), prevented = false;
+    if (target) { try { prevented = !target.dispatchEvent(new G.ClipboardEvent(op, {bubbles:true, cancelable:true, clipboardData: dt})); } catch(x){} }
+    var set = G.__swDataTransferEntries(dt).filter(function(e){ return e.text !== undefined; });
+    if (prevented || set.length) return {handled: true, entries: set};
+    var text = G.__sweefSel();
+    return {handled: false, entries: text ? [{type:'text/plain', text: text}].concat((function(){ var h = selectionHTML(); return h ? [{type:'text/html', text:h}] : []; })()) : []};
   };
   // edit: selectall | cut | delete
   G.__sweefEdit = function(op){

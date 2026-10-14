@@ -74,6 +74,8 @@ func featComplex(c complexSel, f *SelFeatures, add func(string), nested bool) {
 				add("href")
 			case "focus", "focus-visible", "focus-within":
 				add("data-sw-focused")
+			case "fullscreen", "-webkit-full-screen":
+				add("data-sw-fullscreen")
 			case "read-only", "read-write":
 				add("readonly")
 			case "lang", "dir":

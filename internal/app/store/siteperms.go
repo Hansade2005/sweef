@@ -6,6 +6,7 @@ import "time"
 const (
 	PermNotifications = "notifications"
 	PermPeriodicSync  = "periodic-background-sync"
+	PermClipboardRead = "clipboard-read"
 )
 
 // Quiet-UI rules: a site whose prompt the user dismisses this many times in a row stops being asked for a while.
@@ -45,6 +46,20 @@ func (s *Sites) SetPeriodic(originOrURL, state string) {
 	s.save()
 }
 
+// SetClipboardRead records the decision about reading the clipboard ("granted", "denied", or "" to ask again).
+func (s *Sites) SetClipboardRead(originOrURL, state string) {
+	o := OriginOf(originOrURL)
+	if o == "" || (state != "" && state != "granted" && state != "denied") {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r := s.rules[o]
+	r.ClipboardRead = state
+	s.put(o, r)
+	s.save()
+}
+
 // NoteDismissed counts a prompt the user closed with "Not now". After DismissLimit in a row the origin is embargoed
 // for EmbargoLength (no prompt, requests are answered "denied" without asking). It reports whether the embargo began.
 func (s *Sites) NoteDismissed(originOrURL string, now time.Time) bool {
@@ -76,7 +91,7 @@ func (s *Sites) WithPermissions() map[string]SiteRule {
 	defer s.mu.RUnlock()
 	out := map[string]SiteRule{}
 	for o, r := range s.rules {
-		if r.Notify != "" || r.Periodic != "" || r.NotifyEmbargo != 0 {
+		if r.Notify != "" || r.Periodic != "" || r.NotifyEmbargo != 0 || r.ClipboardRead != "" {
 			out[o] = r
 		}
 	}

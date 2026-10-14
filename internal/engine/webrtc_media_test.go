@@ -91,7 +91,9 @@ window.rv = rv; window.rvEvents = [];
 ['loadedmetadata','loadeddata','resize','playing','canplay'].forEach(function (n) { rv.addEventListener(n, function () { rvEvents.push(n + ':' + rv.videoWidth + 'x' + rv.videoHeight + ':' + rv.readyState); }); });
 b.ontrack = function (e) { tracks.push(e.track.kind); if (e.track.kind === 'video') rv.srcObject = e.streams[0]; };
 (async function () {
-  window.local = await navigator.mediaDevices.getUserMedia({ video: { width: %d, height: %d, frameRate: %d }, audio: true });
+  window.local = await navigator.mediaDevices.getUserMedia({ video: { width: %d, height: %d, frameRate: %d },
+    // the transport test: a stationary test tone is noise to a noise suppressor, so voice processing is off here (aec has its own tests)
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
   local.getTracks().forEach(function (t) { a.addTrack(t, local); });
   var o = await a.createOffer(); await a.setLocalDescription(o);
   await b.setRemoteDescription(a.localDescription);

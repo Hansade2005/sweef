@@ -34,6 +34,7 @@ type SiteRule struct {
 	// Web permissions (siteperms.go). "" = not decided: the default applies, or the user is asked.
 	Notify          string `json:"notify,omitempty"`          // "granted" | "denied" for notifications and push
 	Periodic        string `json:"periodic,omitempty"`        // "granted" | "denied" overrides the bookmark rule for periodic sync
+	ClipboardRead   string `json:"clipboardRead,omitempty"`   // "granted" | "denied": the Async Clipboard API reading what was copied
 	NotifyDismissed int    `json:"notifyDismissed,omitempty"` // prompts dismissed with "Not now" since the last decision
 	NotifyEmbargo   int64  `json:"notifyEmbargo,omitempty"`   // unix seconds: no prompt before this time
 }

@@ -43,6 +43,7 @@ func init() {
 		}
 		j.codecHost(f)
 		j.opfsHost(f)
+		j.cryptoHost(f)
 		j.wcHost(f)
 		return f
 	})
