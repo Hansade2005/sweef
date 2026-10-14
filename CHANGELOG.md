@@ -9,6 +9,16 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ## [Unreleased]
 
+### Fixed
+- **Windows: the Start-menu and desktop shortcut started a console that closed at once.** The GUI launcher (`Sweef.exe`) and the
+  command-line binary (`sweef.exe`) differ only in case, so on Windows (and on macOS inside `Sweef.app`) one overwrote the other.
+  The launcher is now `SweefLauncher.exe` / `SweefLauncher`. This also explains why the macOS `.app` failed `codesign`.
+- Windows showed two sets of window buttons (the native title bar and one drawn by the page chrome); only the native ones remain.
+- Response bodies were cut silently at 8 MiB, which broke pages with large scripts (YouTube's main script is about 11 MB) with a
+  `SyntaxError` at the cut. The limit is now 128 MiB.
+- A tab that left its `sweef://` page no longer logs a `ReferenceError` for every UI state update.
+- The GUI writes panics and fatal runtime errors to `crash.log` (`%LocalAppData%\Sweef` on Windows).
+
 ## [0.1.0-alpha] - 2026-10-14
 
 ### Security

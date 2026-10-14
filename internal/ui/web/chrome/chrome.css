@@ -79,7 +79,7 @@ html, body { background: transparent; height: 100%; overflow: hidden; user-selec
 #dlbtn.active { color: var(--accent); }
 
 #wc { display: none; align-self: stretch; margin: -6px -6px 0 4px; }
-:root[data-platform="windows"] #wc, :root[data-platform="linux"] #wc { display: flex; }
+:root[data-platform="linux"] #wc { display: flex; }  /* Windows keeps the native title bar and its buttons: two sets of controls was a bug */
 #wc button { width: 44px; height: 100%; display: inline-flex; align-items: center; justify-content: center; color: var(--text-2); }
 #wc button:hover { background: var(--hover); color: var(--text); }
 #wc button.x:hover { background: #E5334F; color: #fff; }

@@ -15,7 +15,7 @@ work="$DIST/work/macos"
 app="$work/Sweef.app"
 rm -rf "$work"; mkdir -p "$work/universal"
 
-for n in sweef Sweef; do
+for n in sweef SweefLauncher; do
   "$PT" lipo -o "$work/universal/$n" "$(require_bin darwin amd64 "$n")" "$(require_bin darwin arm64 "$n")"
   "$PT" lipo-info "$work/universal/$n" >&2
 done
@@ -23,7 +23,7 @@ done
 [ -f "$DIST/icons/sweef.icns" ] || "$ROOT/scripts/release/icons.sh" >&2
 
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-install -m 755 "$work/universal/Sweef"  "$app/Contents/MacOS/Sweef"   # bundle executable: runs `sweef gui`
+install -m 755 "$work/universal/SweefLauncher" "$app/Contents/MacOS/SweefLauncher"   # bundle executable: runs `sweef gui`
 install -m 755 "$work/universal/sweef"  "$app/Contents/MacOS/sweef"
 install -m 644 "$DIST/icons/sweef.icns" "$app/Contents/Resources/Sweef.icns"
 install -m 644 "$ROOT/NOTICE"           "$app/Contents/Resources/NOTICE"

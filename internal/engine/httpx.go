@@ -156,7 +156,9 @@ func (t *Tab) httpDo(o httpOpts) (*httpResp, error) {
 		t.recordResponse(&rec, res, start, out.cacheState)
 		return out, nil
 	}
-	const limit = int64(8 << 20)
+	// big enough for the largest real bundles (YouTube's main script is about 11 MB); a body is cut silently
+	// at this size, which turns into a SyntaxError at the cut, so it must stay well above any legitimate script
+	const limit = int64(128 << 20)
 	var data []byte
 	buf := make([]byte, 32<<10)
 	for int64(len(data)) < limit {
