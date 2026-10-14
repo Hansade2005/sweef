@@ -61,6 +61,22 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 - Quota management for site storage: a global budget (60% of the profile volume's available space, at most 64 GiB) with at most 20% per origin, exact usage accounting across IndexedDB, Cache Storage, the origin private file system and service worker scripts, `QuotaExceededError` on writes over the cap, eviction of whole least-recently-used best-effort origins under pressure (open connections get `close`), a working `navigator.storage.persist()` decided by the application (bookmarked sites, or a prompt the embedder installs), `estimate()` with real usage and quota, and a per-site storage list with a "Clear" button in Settings > Data. `engine.Options.StorageBudgetMiB`; see docs/storage.md.
 - ADR 0002 (the ordered store, with measurements) and `tools/kvbench`, the harness behind it.
+- `internal/media/cdm`: the key system layer behind Encrypted Media Extensions, one Go interface for every key system
+  (`Registry` with capability negotiation, `Backend`/`Session`, events, `Decrypt`, optional decrypt-and-decode and platform
+  renderer interfaces), with Clear Key implemented in full (cenc, cens, cbc1, cbcs). The JavaScript EME API is not part of
+  this change. Contract and status: [docs/drm.md](docs/drm.md).
+- Widevine host (`com.widevine.alpha`): `cmd/sweef-cdm`, a separate dynamically linked helper process that loads the Widevine
+  CDM the user already has (explicit path or `SWEEF_WIDEVINE_CDM`, else the WidevineCdm directory of an installed Google
+  Chrome, Chromium or Edge) through purego and implements Chromium's CDM host ABI (interface versions 10, 11, 12), and a
+  framed stdin/stdout protocol to the browser, so the Linux browser binary stays static. A VMP signature next to the helper
+  (`sweef-cdm.sig`, as castLabs EVS writes it) is passed to the CDM; no signature is ever fabricated. Sweef does not bundle or
+  download a CDM. **Not tested against a real Widevine library** (none in the build environment): the host is tested against
+  a fake CDM that implements the same binary interface in Go. The desktop CDM is software (L3), typically capped at 720p by
+  services.
+- PlayReady (Windows, Media Foundation) and FairPlay (macOS, AVContentKeySession) backends, **unverified and compile-checked
+  only**, off unless `SWEEF_PLAYREADY=1` / `SWEEF_FAIRPLAY=1`; license exchange only, playback through the platform renderer
+  is not implemented.
+- `scripts/release/build.sh` also builds `sweef-cdm` next to `sweef` (`--skip-cdm-host` to omit); packages do not install it yet.
 
 ### Changed
 - The release binary-size budget is 40 MiB (was 32 MiB): WebRTC (pion), WebAssembly (wazero) and the web platform layer add about 12 MiB. The stripped linux/amd64 build is about 34.7 MiB.
