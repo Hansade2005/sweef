@@ -382,6 +382,7 @@ func (c *Tab) setFrameDocument(src, finalURL string) {
 	if c.closed.Load() {
 		return
 	}
+	c.setIsolation(nil, finalURL)
 	c.setDocument(src, finalURL, false)
 }
 

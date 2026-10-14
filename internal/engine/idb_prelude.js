@@ -251,7 +251,9 @@
   // xports: the MessagePorts of a postMessage transfer list. A port inside the value is replaced by its index;
   // anywhere else it cannot be cloned.
   var NATIVE_B64 = typeof Uint8Array.prototype.toBase64 === 'function' && typeof Uint8Array.fromBase64 === 'function';
-  function ser(value, xports) {
+  // share: the value goes to another VM of the same agent cluster (Worker.postMessage, a worker's postMessage), where
+  // a SharedArrayBuffer travels as a reference to the same memory; storage and BroadcastChannel refuse it.
+  function ser(value, xports, share) {
     var ids = new Map(), next = 0;
     // messages (xports given) carry binary data as base64, which the engine converts natively; stored values keep
     // the byte-per-character form their files were written in
@@ -276,7 +278,22 @@
       var id = next++;
       if (v instanceof Date) { ids.set(v, id); return ['d', id, v.getTime() === v.getTime() ? v.getTime() : null]; }
       if (v instanceof RegExp) { ids.set(v, id); return ['r', id, v.source, v.flags]; }
-      if (typeof SharedArrayBuffer === 'function' && v instanceof SharedArrayBuffer) throw cloneFail('#<SharedArrayBuffer>');
+      if (global.__swSAB && v instanceof global.__swSAB) {
+        if (!share || typeof global.__swSabId !== 'function') throw cloneFail('#<SharedArrayBuffer>');
+        if (!global.crossOriginIsolated) throw mkErr('DataCloneError', 'SharedArrayBuffer transfer requires self.crossOriginIsolated.');
+        var sid = global.__swSabId(v);
+        if (sid < 0) throw cloneFail('#<SharedArrayBuffer>');
+        ids.set(v, id);
+        return ['SB', id, sid, v.byteLength];
+      }
+      if (typeof global.__swMediaSer === 'function') { // WebCodecs frames and audio travel by token to the same agent cluster
+        var md = global.__swMediaSer(v, !!share && !!xports);
+        if (md) { ids.set(v, id); return ['MD', id, md]; }
+      }
+      if (typeof global.__swWasmSer === 'function') { // WebAssembly is loaded: Modules and shared Memories travel by reference
+        var wd = global.__swWasmSer(v, !!share && !!xports);
+        if (wd) { ids.set(v, id); return ['WA', id, wd]; }
+      }
       if (global.MessagePort && v instanceof global.MessagePort) {
         var pi = xports ? xports.indexOf(v) : -1;
         if (pi < 0) throw cloneFail('#<MessagePort>');
@@ -341,6 +358,19 @@
         case 'd': return (objs[n[1]] = new Date(n[2] === null ? NaN : n[2]));
         case 'r': return (objs[n[1]] = new RegExp(n[2], n[3]));
         case 'P': return (objs[n[1]] = xports && xports[n[2]]);
+        case 'MD': {
+          if (typeof global.__swMediaDe !== 'function') void global.VideoFrame; // loads the WebCodecs module
+          return (objs[n[1]] = global.__swMediaDe(n[2]));
+        }
+        case 'WA': {
+          if (typeof global.__swWasmDe !== 'function') void global.WebAssembly; // loads the API
+          return (objs[n[1]] = global.__swWasmDe(n[2]));
+        }
+        case 'SB': {
+          var sb = typeof global.__swSabOpen === 'function' ? global.__swSabOpen(n[2], n[3]) : undefined;
+          if (!sb) throw cloneFail('#<SharedArrayBuffer>');
+          return (objs[n[1]] = sb);
+        }
         case 'AB': { var u = strBin(n[2]); return (objs[n[1]] = u.buffer); }
         case 'A6': return (objs[n[1]] = Uint8Array.fromBase64(n[2]).buffer);
         case 'TA': {

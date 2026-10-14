@@ -37,9 +37,7 @@ func TestECMAScriptBuiltins(t *testing.T) {
 		{"disposable tags", `return [String(new DisposableStack()), String(new AsyncDisposableStack()), typeof DisposableStack.prototype[Symbol.dispose], DisposableStack.prototype[Symbol.dispose] === DisposableStack.prototype.dispose];`, `["[object DisposableStack]","[object AsyncDisposableStack]","function",true]`},
 		{"SuppressedError ctor", `const e = new SuppressedError('a', 'b', 'msg'); return [e.error, e.suppressed, e.message, e.name, SuppressedError('x', 'y').suppressed];`, `["a","b","msg","SuppressedError","y"]`},
 
-		{"Atomics.waitAsync not-equal and timeout", `const ia = new Int32Array(new SharedArrayBuffer(8)); const a = Atomics.waitAsync(ia, 0, 1); const b = Atomics.waitAsync(ia, 0, 0, 0); return [a.async, a.value, b.async, b.value];`, `[false,"not-equal",false,"timed-out"]`},
-		{"Atomics.waitAsync notified", `const ia = new Int32Array(new SharedArrayBuffer(8)); const w = Atomics.waitAsync(ia, 0, 0); const n = Atomics.notify(ia, 0); return [w.async, n, await w.value];`, `[true,1,"ok"]`},
-		{"Atomics.waitAsync times out", `const ia = new Int32Array(new SharedArrayBuffer(8)); const w = Atomics.waitAsync(ia, 1, 0, 10); return await w.value;`, `"timed-out"`},
+		// the three waitAsync cases that need a SharedArrayBuffer run in an isolated page: TestAtomicsWaitAsyncSingleAgent
 		{"Atomics.waitAsync rejects plain buffers", `try { Atomics.waitAsync(new Int32Array(2), 0, 0); } catch (e) { return e.name; }`, `"TypeError"`},
 
 		{"Intl.Locale basics", `const l = new Intl.Locale('EN_us'); return [l.language, l.region, l.script, l.baseName, l.toString()];`, `["en","US",null,"en-US","en-US"]`},

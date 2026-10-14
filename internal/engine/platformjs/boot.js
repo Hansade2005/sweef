@@ -65,6 +65,7 @@
     ['devices', g.Screen.prototype, 'orientation', 1],
     ['devices', D, 'hasStorageAccess requestStorageAccess', 1],
     ['devices', D, 'pictureInPictureEnabled pictureInPictureElement exitPictureInPicture', 1, 1], // the media prelude has the Chromium-matched versions
+    ['webcodecs', L, 'VideoDecoder VideoEncoder AudioDecoder AudioEncoder VideoFrame AudioData EncodedVideoChunk EncodedAudioChunk VideoColorSpace ImageDecoder ImageTrack ImageTrackList'],
     ['opfs', L, 'FileSystemHandle FileSystemFileHandle FileSystemDirectoryHandle FileSystemWritableFileStream showOpenFilePicker showSaveFilePicker showDirectoryPicker'],
     ['es', Array, 'fromAsync', 0, 1],
     ['es', Symbol, 'dispose asyncDispose', 0, 1],
@@ -75,7 +76,6 @@
     ['pwa', L, 'Notification NotificationEvent Permissions PermissionStatus PushManager PushSubscription PushSubscriptionOptions PushEvent PushMessageData PushSubscriptionChangeEvent SyncManager SyncEvent PeriodicSyncManager PeriodicSyncEvent Lock LockManager __pwa __pwaEvent __pwaDispatch'],
     ['pwa', N, 'permissions locks setAppBadge clearAppBadge', 1]
   ];
-  if (typeof Atomics === 'object') T.push(['es', Atomics, 'waitAsync', 0, 1]);
   if (g.HTMLVideoElement) T.push(['devices', g.HTMLVideoElement.prototype, 'requestPictureInPicture disablePictureInPicture', 1, 1]);
   for (var i = 0; i < T.length; i++) {
     var row = T[i], ns = row[2].split(' ');

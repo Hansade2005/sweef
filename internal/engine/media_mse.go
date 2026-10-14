@@ -117,7 +117,10 @@ func (m *mediaHost) mseFns(f map[string]hostFn) {
 			for _, t := range r.Init.Tracks {
 				tracks = append(tracks, trackAny(t))
 			}
-			out["init"] = map[string]any{"duration": r.Init.Duration, "tracks": tracks, "first": r.Init.First}
+			out["init"] = map[string]any{"duration": r.Init.Duration, "tracks": tracks, "first": r.Init.First, "encrypted": initDataAny(r.Init.InitData)}
+		}
+		if len(r.InitData) > 0 {
+			out["encrypted"] = initDataAny(r.InitData)
 		}
 		return out, nil
 	}
@@ -198,6 +201,7 @@ func (m *mediaHost) mseFns(f map[string]hostFn) {
 		m.waReset()
 		return nil, nil
 	}
+	m.emeFns(f)
 	m.playerFns(f)
 }
 
@@ -343,7 +347,7 @@ func (m *mediaHost) playerFns(f map[string]hostFn) {
 			return nil, nil
 		}
 		t, playing, audio := p.State()
-		return map[string]any{"t": t, "playing": playing, "audio": audio}, nil
+		return map[string]any{"t": t, "playing": playing, "audio": audio, "wk": p.waitKey.Load()}, nil
 	}
 	f["playerStats"] = func(a []any) (any, error) {
 		p := m.playerFor(argI(a, 0))

@@ -11,12 +11,14 @@ type codedFrame struct {
 	dts, pts, dur float64
 	key           bool
 	data          []byte
+	enc           *SampleEnc // Common Encryption information of the sample (nil: clear)
 }
 
 // initSegment is the parsed initialization segment of a byte stream.
 type initSegment struct {
 	duration float64 // seconds, 0 when unknown
 	tracks   []TrackConfig
+	pssh     [][]byte // the pssh boxes of the moov box, header included
 }
 
 // segParser turns appended bytes into initialization data and coded frames.
@@ -40,6 +42,14 @@ type mp4Parser struct {
 	// a moof waits for its mdat
 	moof      []byte
 	moofStart int64
+	psshQ     [][]byte // pssh boxes of movie fragments seen since the last takePSSH
+}
+
+// takePSSH returns (and forgets) the pssh boxes found in movie fragments.
+func (p *mp4Parser) takePSSH() [][]byte {
+	q := p.psshQ
+	p.psshQ = nil
+	return q
 }
 
 func newMP4Parser() *mp4Parser { return &mp4Parser{byID: map[int]*mp4Track{}, next: map[int]int64{}} }
@@ -98,7 +108,7 @@ func (p *mp4Parser) feed(data []byte) (*initSegment, []codedFrame, error) {
 				p.byID[t.ID] = t
 				cfgs = append(cfgs, mp4TrackConfig(t))
 			}
-			init = &initSegment{duration: m.Duration, tracks: cfgs}
+			init = &initSegment{duration: m.Duration, tracks: cfgs, pssh: psshBoxes(parseBoxes(body))}
 			if m.Duration == 0 && m.FragDur > 0 {
 				init.duration = m.FragDur
 			}
@@ -108,6 +118,7 @@ func (p *mp4Parser) feed(data []byte) (*initSegment, []codedFrame, error) {
 			}
 			p.moof = append(p.moof[:0], buf[:sz]...)
 			p.moofStart = boxStart
+			p.psshQ = append(p.psshQ, psshBoxes(parseBoxes(body))...)
 		case "mdat":
 			if p.moof != nil {
 				fs, err := p.frames(p.moof[hdrOf(p.moof):], p.moofStart, buf[:sz], boxStart, int(hdr))
@@ -138,7 +149,7 @@ func hdrOf(box []byte) int {
 
 func mp4TrackConfig(t *mp4Track) TrackConfig {
 	c := TrackConfig{ID: t.ID, Kind: t.Kind, Codec: t.Codec, CodecName: t.CodecName,
-		Width: t.Width, Height: t.Height, FrameRate: t.FrameRate, SampleRate: t.SampleRate, Channels: t.Channels}
+		Width: t.Width, Height: t.Height, FrameRate: t.FrameRate, SampleRate: t.SampleRate, Channels: t.Channels, Prot: t.prot}
 	switch t.Kind {
 	case "video":
 		c.Cfg = t.vcfg
@@ -206,6 +217,25 @@ func (p *mp4Parser) frames(moof []byte, moofAbs int64, mdat []byte, mdatAbs int6
 		} else if !ok {
 			dts = 0
 		}
+		// Common Encryption: one SampleEnc per sample of the traf, from senc or from saiz/saio auxiliary data
+		var encs []*SampleEnc
+		if trk.prot != nil && trk.prot.Protected {
+			if sc := findBox(kids, "senc"); sc != nil {
+				encs, _ = parseSenc(sc.data, trk.prot.IVSize)
+			} else if saiz, saio := findBox(kids, "saiz"), findBox(kids, "saio"); saiz != nil && saio != nil {
+				area := func(abs int64, n int) []byte {
+					if rel := abs - (moofAbs + 8); rel >= 0 && rel+int64(n) <= int64(len(moof)) {
+						return moof[rel : rel+int64(n)]
+					}
+					if rel := abs - (mdatAbs + int64(mdatHdr)); rel >= 0 && rel+int64(n) <= int64(len(mdat)-mdatHdr) {
+						return mdat[mdatHdr+int(rel) : mdatHdr+int(rel)+n]
+					}
+					return nil
+				}
+				encs = parseAux(saiz.data, saio.data, base, area, trk.prot.IVSize, true)
+			}
+		}
+		encIdx := 0
 		ts := float64(trk.timescale)
 		// an edit list that starts at media_time > 0 (B-frame composition offset, AAC priming) moves
 		// the track's timeline so that the first shown frame is at 0, like the other players do
@@ -288,10 +318,15 @@ func (p *mp4Parser) frames(moof []byte, moofAbs int64, mdat []byte, mdatAbs int6
 				if audio {
 					key = true
 				}
-				out = append(out, codedFrame{
+				cf := codedFrame{
 					track: id, dts: float64(dts)/ts - shift, pts: float64(dts+cto)/ts - shift, dur: float64(dur) / ts,
 					key: key, data: append([]byte(nil), payload...),
-				})
+				}
+				if encIdx < len(encs) {
+					cf.enc = encs[encIdx]
+				}
+				encIdx++
+				out = append(out, cf)
 				cur += int64(sz)
 				dts += int64(dur)
 			}

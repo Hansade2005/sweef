@@ -181,6 +181,7 @@ type SPS struct {
 	ColorMatrix        int // VUI matrix_coefficients (2 = unspecified)
 	FullRange          bool
 	NumReorder         int
+	HasReorder         bool // the VUI carried bitstream_restriction (NumReorder is then the stream's own value)
 	raw                []byte
 }
 
@@ -346,6 +347,7 @@ func parseVUI(r *bitReader, s *SPS) {
 		r.ue()
 		r.ue()
 		s.NumReorder = int(r.ue())
+		s.HasReorder = true
 		r.ue()
 	}
 }

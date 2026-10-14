@@ -224,6 +224,11 @@ func (w *bgWorker) boot(src string) {
 		return
 	}
 	rt.tab.wk = w
+	if w.kind == "dedicated" && w.owner != nil {
+		rt.j.joinCluster(w.owner.agentCluster()) // SharedArrayBuffers can be posted within the owner's agent cluster
+	} else {
+		rt.tab.isoState.Store(&isolation{}) // a shared worker is its own agent cluster: not isolated here
+	}
 	w.mu.Lock()
 	if w.dead {
 		w.mu.Unlock()
@@ -232,6 +237,27 @@ func (w *bgWorker) boot(src string) {
 	}
 	w.rt = rt
 	w.mu.Unlock()
+	if src == "" && w.kind == "dedicated" && w.ownerTab.embedderPolicy() != "" && siteOriginOf(w.scriptURL) != "" {
+		// a worker of a COEP document has to carry the policy itself
+		r, herr := rt.tab.httpDo(httpOpts{method: "GET", url: w.scriptURL, kind: KindScript})
+		msg := ""
+		switch {
+		case herr != nil:
+			msg = fmt.Sprintf("Failed to load worker script %s: %s", w.scriptURL, herr.Error())
+		case r.status >= 400:
+			msg = fmt.Sprintf("Failed to load worker script %s: HTTP %d", w.scriptURL, r.status)
+		case parseCOEP(r.header) == "":
+			msg = fmt.Sprintf("Worker script %s was blocked: the creating document sets Cross-Origin-Embedder-Policy and the script response does not.", w.scriptURL)
+		default:
+			src = string(r.body)
+		}
+		if msg != "" {
+			t.LogConsole("error", msg)
+			w.report(map[string]any{"net": true, "message": msg, "filename": w.scriptURL})
+			w.kill()
+			return
+		}
+	}
 	if src == "" {
 		body, status, ferr := rt.tab.fetchResourceKind(w.scriptURL, KindScript)
 		if ferr != nil || status >= 400 {

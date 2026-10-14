@@ -28,10 +28,20 @@ type MSEInit struct {
 	Duration float64
 	Tracks   []Track
 	First    bool // the first initialization segment of this buffer
+	// InitData is what an "encrypted" event carries: the pssh boxes ("cenc"), or the key IDs ("keyids") when the
+	// stream names them without a pssh box.
+	InitData []MSEInitData
+}
+
+// MSEInitData is one initialization data blob for EME.
+type MSEInitData struct {
+	Type string // "cenc" or "keyids"
+	Data []byte
 }
 
 // MSEResult is what one append produced.
 type MSEResult struct {
+	InitData []MSEInitData // pssh boxes of movie fragments (init segments report theirs in Init)
 	Init     *MSEInit
 	Frames   int // coded frames added to the buffer
 	Dropped  int // frames discarded (append window, missing random access point)
@@ -64,7 +74,11 @@ type MSEBuffer struct {
 	needRAP       map[int]bool
 	quota         int
 	gen           uint64
+	keys          KeyHolder // the key store of the MediaKeys attached to the element that plays this buffer
 }
+
+// SetKeyStore attaches the content keys (or nil) used to decrypt the samples of this buffer as they are read.
+func (b *MSEBuffer) SetKeyStore(k *KeyStore) { b.keys.Set(k) }
 
 // NewMSEBuffer creates a buffer for a SourceBuffer of the given MIME type.
 func NewMSEBuffer(mime string) *MSEBuffer {
@@ -210,6 +224,11 @@ func (b *MSEBuffer) Append(data []byte, cur float64) (*MSEResult, error) {
 	if err != nil {
 		return res, fmt.Errorf("%w: %v", ErrBadStream, err)
 	}
+	if q, ok := b.parser.(interface{ takePSSH() [][]byte }); ok {
+		for _, p := range q.takePSSH() {
+			res.InitData = append(res.InitData, MSEInitData{Type: "cenc", Data: p})
+		}
+	}
 	if init != nil {
 		b.applyInit(init, res)
 	}
@@ -240,6 +259,19 @@ func (b *MSEBuffer) applyInit(in *initSegment, res *MSEResult) {
 	b.inited = true
 	b.resetState()
 	res.Init = &MSEInit{Duration: in.duration, Tracks: tracks, First: first}
+	if len(in.pssh) > 0 {
+		var all []byte
+		for _, p := range in.pssh {
+			all = append(all, p...)
+		}
+		res.Init.InitData = append(res.Init.InitData, MSEInitData{Type: "cenc", Data: all})
+	} else {
+		for _, c := range in.tracks {
+			if c.Prot != nil && c.Prot.Protected {
+				res.Init.InitData = append(res.Init.InitData, MSEInitData{Type: "keyids", Data: []byte(`{"kids":["` + b64url(c.Prot.KID[:]) + `"]}`)})
+			}
+		}
+	}
 }
 
 // process runs the coded frame processing algorithm over frames in decode
@@ -309,6 +341,9 @@ func (b *MSEBuffer) process(frames []codedFrame, res *MSEResult) {
 			}
 			s := NewSample(dts, pts, f.dur, f.key, f.data)
 			s.Cfg = b.cfgs[f.track]
+			if f.enc != nil && s.Cfg != nil && s.Cfg.Prot != nil {
+				s.enc, s.prot, s.kh = f.enc, s.Cfg.Prot, &b.keys
+			}
 			runs[f.track] = append(runs[f.track], s)
 			break
 		}
