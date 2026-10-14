@@ -44,5 +44,5 @@ jobs:
         run: |
           for f in sarif-results/*.sarif; do
             [ -f "$f" ] || continue
-            jq -r '.runs[].results[] | "\(.level // "warning") \(.ruleId) \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine) \(.message.text | gsub("\n"; " ") | .[0:200])"' "$f"
+            jq -r '.runs[].results[] | "\(.level // "warning") \(.ruleId) \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine) \(.message.text | gsub("\n"; " ") | .[0:200]) \((.relatedLocations // []) | map("[\(.id)] \(.physicalLocation.artifactLocation.uri):\(.physicalLocation.region.startLine)") | join(" "))"' "$f"
           done
