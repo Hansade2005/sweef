@@ -32,7 +32,7 @@ func (t *Tab) fetchResourceKind(rawurl string, kind DataKind) (string, int, erro
 func (t *Tab) knownSize(key string) int64 { return t.eng.res.peekXfer(key) }
 
 func (t *Tab) knownSizeURL(u string) int64 {
-	key, _ := t.eng.res.key(t.Context(), u, "")
+	key, _ := t.cacheKey(u, "")
 	return t.knownSize(key)
 }
 
@@ -46,7 +46,7 @@ func (t *Tab) fetchRes(rawurl string, o fetchOpts) (string, int, error) {
 		kind = KindOther
 	}
 	pol := t.policy()
-	key, _ := t.eng.res.key(t.Context(), abs, "")
+	key, _ := t.cacheKey(abs, "")
 
 	budget := int64(-1) // remaining first-party script budget, -1 = none
 	if !o.forced {
@@ -229,7 +229,7 @@ func (t *Tab) takeStash(key string) (string, bool) {
 // resourceReady reports whether fetchRes would answer for abs without waiting for
 // the network: the navigation already read it (or the HTTP cache holds it).
 func (t *Tab) resourceReady(abs string, kind DataKind) bool {
-	key, _ := t.eng.res.key(t.Context(), abs, "")
+	key, _ := t.cacheKey(abs, "")
 	if t.memoGet(itoa(int(t.ds.epoch.Load()))+" "+string(kind)+" "+key) != nil {
 		return true
 	}
@@ -241,7 +241,7 @@ func (t *Tab) resourceReady(abs string, kind DataKind) bool {
 
 // fetchInFlight reports whether a request for abs of this kind is being made right now in this navigation.
 func (t *Tab) fetchInFlight(abs string, kind DataKind) bool {
-	key, _ := t.eng.res.key(t.Context(), abs, "")
+	key, _ := t.cacheKey(abs, "")
 	fk := itoa(int(t.ds.epoch.Load())) + " " + string(kind) + " " + key
 	t.ds.mu.Lock()
 	_, ok := t.ds.flights[fk]

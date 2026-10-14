@@ -96,12 +96,23 @@ func loopbackHost(h string) bool {
 	return false
 }
 
-// key partitions the cache. The default context uses the plain URL (and may persist); every other context
-// has its own namespace in memory.
+// key partitions the cache by browsing context. The default context uses the plain URL (and may persist); every
+// other context has its own namespace in memory.
 func (c *httpCache) key(ctx *BrowserContext, rawurl, rng string) (key string, persist bool) {
+	return c.keyTop(ctx, "", rawurl, rng)
+}
+
+// keyTop is key for a request made under a top-level site: the same URL is a different entry for each top-level
+// site that asks for it, so what one site loaded says nothing to another about what the person has visited
+// (the cache-probing side channel), and a third party cannot recognise a person through a cached copy. top is the
+// schemeful site ("" = none, as for a page without a site).
+func (c *httpCache) keyTop(ctx *BrowserContext, top, rawurl, rng string) (key string, persist bool) {
 	norm := normalizeURL(rawurl)
 	if rng != "" {
 		norm += "\x00range=" + rng
+	}
+	if top != "" {
+		norm = top + "\x00" + norm
 	}
 	if ctx == nil || ctx.name == "default" {
 		persist = c.disk != nil

@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// A worker whose script is slow and then throws holds its own lock while it pushes the error to the page's
-// event queue; the page's event loop asks whether workers have work while holding the queue lock. Taking the
-// two in opposite orders hung the navigation forever (bbc.com/news did exactly this).
+// A worker whose script is slow and then throws reports the error to the page's event queue while the page's
+// event loop runs. Taking the worker's and the queue's locks in opposite orders hung the navigation forever
+// (bbc.com/news did exactly this); workers now run on their own goroutine and only post to the queue.
 func TestWorkerStartupErrorDoesNotDeadlockThePageLoop(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -42,34 +42,5 @@ setTimeout(function(){ document.getElementById('t').textContent='done'; }, 50);
 		}
 	case <-time.After(30 * time.Second):
 		t.Fatal("navigation hangs: worker start vs hasLiveWork lock order")
-	}
-}
-
-// The lock order itself, deterministically: a worker busy in its script holds its VM lock and then pushes an
-// event; the page loop polling for live work must not wait for that VM lock while holding the queue lock.
-func TestHasLiveWorkDoesNotWaitForABusyWorker(t *testing.T) {
-	w := &workerVM{}
-	r := &realtime{workers: map[int64]*workerVM{1: w}}
-	j := &jsVM{realtime: r}
-	w.mu.Lock() // the worker is evaluating its script
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		r.push(asyncEvent{kind: "worker", id: 1, typ: "error"}) // the script threw
-		w.mu.Unlock()
-	}()
-	done := make(chan struct{})
-	go func() {
-		j.hasLiveWork()
-		time.Sleep(200 * time.Millisecond)
-		j.hasLiveWork()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("hasLiveWork deadlocked against a worker that pushes while holding its VM lock")
-	}
-	if len(r.take()) != 1 {
-		t.Fatal("the worker's event was lost")
 	}
 }

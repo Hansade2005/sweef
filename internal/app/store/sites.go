@@ -1,6 +1,8 @@
 package store
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/url"
 	"strings"
@@ -23,6 +25,17 @@ type SiteRule struct {
 	Agent     Visibility `json:"agent,omitempty"`
 	NoBlock   bool       `json:"noBlock,omitempty"`   // privacy exception: blocking off here
 	NoUpgrade bool       `json:"noUpgrade,omitempty"` // https upgrade off here
+	// Camera, Microphone and Screen are the stored capture decisions: "allow", "block" or "" (ask). Screen is never
+	// "allow": sharing the screen asks every time; only a block is remembered.
+	Camera     string `json:"camera,omitempty"`
+	Microphone string `json:"microphone,omitempty"`
+	Screen     string `json:"screen,omitempty"`
+
+	// Web permissions (siteperms.go). "" = not decided: the default applies, or the user is asked.
+	Notify          string `json:"notify,omitempty"`          // "granted" | "denied" for notifications and push
+	Periodic        string `json:"periodic,omitempty"`        // "granted" | "denied" overrides the bookmark rule for periodic sync
+	NotifyDismissed int    `json:"notifyDismissed,omitempty"` // prompts dismissed with "Not now" since the last decision
+	NotifyEmbargo   int64  `json:"notifyEmbargo,omitempty"`   // unix seconds: no prompt before this time
 }
 
 // Sites stores per-origin permissions with a default agent visibility.
@@ -30,6 +43,7 @@ type Sites struct {
 	b       Backend
 	mu      sync.RWMutex
 	rules   map[string]SiteRule
+	salt    string
 	Default Visibility
 }
 
@@ -37,6 +51,7 @@ type sitesDoc struct {
 	V       int                 `json:"v"`
 	Default Visibility          `json:"default"`
 	Rules   map[string]SiteRule `json:"rules"`
+	Salt    string              `json:"salt,omitempty"`
 }
 
 func OpenSites(b Backend) *Sites {
@@ -50,6 +65,7 @@ func OpenSites(b Backend) *Sites {
 			if d.Default != "" {
 				s.Default = d.Default
 			}
+			s.salt = d.Salt
 		}
 	}
 	return s
@@ -68,7 +84,7 @@ func OriginOf(raw string) string {
 }
 
 func (s *Sites) save() {
-	b, _ := json.Marshal(sitesDoc{V: 1, Default: s.Default, Rules: s.rules})
+	b, _ := json.Marshal(sitesDoc{V: 1, Default: s.Default, Rules: s.rules, Salt: s.salt})
 	_ = s.b.WriteAtomic(sitesFile, b)
 }
 
@@ -144,4 +160,74 @@ func (s *Sites) All() map[string]SiteRule {
 		out[k] = v
 	}
 	return out
+}
+
+// Media returns the stored decision ("allow", "block" or "") for "camera", "microphone" or "screen".
+func (s *Sites) Media(originOrURL, name string) string {
+	o := OriginOf(originOrURL)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	r := s.rules[o]
+	switch name {
+	case "camera":
+		return r.Camera
+	case "microphone":
+		return r.Microphone
+	case "screen":
+		return r.Screen
+	}
+	return ""
+}
+
+// SetMedia stores a decision; "" forgets it.
+func (s *Sites) SetMedia(originOrURL, name, v string) {
+	o := OriginOf(originOrURL)
+	if o == "" || (v != "" && v != "allow" && v != "block") {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r := s.rules[o]
+	switch name {
+	case "camera":
+		r.Camera = v
+	case "microphone":
+		r.Microphone = v
+	case "screen":
+		if v == "allow" {
+			return
+		}
+		r.Screen = v
+	default:
+		return
+	}
+	s.put(o, r)
+	s.save()
+}
+
+// MediaOrigins lists the origins that have a stored capture decision.
+func (s *Sites) MediaOrigins() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []string
+	for o, r := range s.rules {
+		if r.Camera != "" || r.Microphone != "" || r.Screen != "" {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// Salt is the per-profile secret behind the per-origin device ids pages see. It is created on first use and kept
+// with the site rules, so a page that stores a deviceId finds it valid after a restart.
+func (s *Sites) Salt() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.salt == "" {
+		var b [16]byte
+		_, _ = rand.Read(b[:])
+		s.salt = hex.EncodeToString(b[:])
+		s.save()
+	}
+	return s.salt
 }

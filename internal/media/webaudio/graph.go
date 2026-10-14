@@ -50,18 +50,21 @@ type Node struct {
 
 // Context is a Web Audio graph plus its render clock.
 type Context struct {
-	SampleRate  float64
-	Offline     bool
-	Frame       int64
-	nodes       []*Node
-	byID        map[int]*Node
-	nextID      int
-	Dest        *Node
-	order       []*Node
-	dirty       bool
-	idx         int
-	started     bool
-	Output      [][]float32 // offline destination capture
+	SampleRate float64
+	Offline    bool
+	Frame      int64
+	nodes      []*Node
+	byID       map[int]*Node
+	nextID     int
+	Dest       *Node
+	order      []*Node
+	dirty      bool
+	idx        int
+	started    bool
+	Output     [][]float32 // offline destination capture
+	// Sink, when set on a real-time context, receives the destination's output (one slice per channel,
+	// valid only during the call) after every render quantum.
+	Sink        func(channels [][]float32)
 	outPos      int
 	Ended       []int
 	Buffers     map[int]*Buffer
@@ -522,6 +525,9 @@ func (c *Context) endQuantum() {
 			}
 		}
 		c.outPos += quantum
+	}
+	if !c.Offline && c.Dest != nil && c.Sink != nil {
+		c.Sink(c.Dest.outBufs[0])
 	}
 	c.Frame += quantum
 }

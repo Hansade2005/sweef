@@ -2,11 +2,11 @@ package engine
 
 import (
 	"net/http"
-	"sync"
 	"time"
 )
 
-// client lazily builds the shared HTTP client: cookie jar + bounded transport.
+// client lazily builds the shared HTTP client: bounded transport. Cookies are handled per request by cacheRT
+// (cookie_rt.go), not by a net/http jar.
 // One client for the whole Engine keeps connection pooling cheap on 1-core VMs.
 //
 // Every transport dials through a counting wrapper (wire.go) and sits behind a
@@ -19,18 +19,9 @@ func (e *Engine) client() *http.Client {
 		e.httpClient = &http.Client{
 			Timeout:   30 * time.Second,
 			Transport: e.newRoundTripper(&dc.data().wire, e.proxyFor(dc)),
-			Jar:       newCookieJar(),
 		}
 	}
 	return e.httpClient
-}
-
-var jarOnce sync.Once
-var sharedJar http.CookieJar
-
-func newCookieJar() http.CookieJar {
-	jarOnce.Do(func() { sharedJar = makeSimpleJar() })
-	return sharedJar
 }
 
 // clientFor returns the HTTP client for a browsing context. The default
@@ -48,7 +39,7 @@ func (e *Engine) clientFor(c *BrowserContext) *http.Client {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.httpClient == nil {
-		c.httpClient = &http.Client{Timeout: base.Timeout, Transport: e.newRoundTripper(&c.data().wire, e.proxyFor(c)), Jar: makeSimpleJar()}
+		c.httpClient = &http.Client{Timeout: base.Timeout, Transport: e.newRoundTripper(&c.data().wire, e.proxyFor(c))}
 	}
 	return c.httpClient
 }

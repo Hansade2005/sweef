@@ -37,3 +37,12 @@ jobs:
       - uses: github/codeql-action/analyze@v3
         with:
           category: /language:${{ matrix.language }}
+          output: sarif-results
+      # List the findings in the job log too (the code-scanning UI is not visible to every reviewer or tool).
+      - name: list findings
+        if: always()
+        run: |
+          for f in sarif-results/*.sarif; do
+            [ -f "$f" ] || continue
+            jq -r '.runs[].results[] | "\(.level // "warning") \(.ruleId) \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine) \(.message.text | gsub("\n"; " ") | .[0:200]) \((.relatedLocations // []) | map("[\(.id)] \(.physicalLocation.artifactLocation.uri):\(.physicalLocation.region.startLine)") | join(" "))"' "$f"
+          done

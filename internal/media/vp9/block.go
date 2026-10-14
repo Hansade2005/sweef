@@ -1,5 +1,11 @@
 package vp9
 
+import (
+	"runtime"
+	"sync"
+	"sync/atomic"
+)
+
 // Tile, partition and block level syntax (spec 6.4).
 
 type blockState struct {
@@ -38,6 +44,16 @@ func tileOffset(tile, mis, log2 int) int {
 	return off
 }
 
+// tileParallel enables decoding tile columns on several goroutines (tests switch it off to compare).
+var tileParallel = true
+
+// SetTileParallel switches multi-goroutine tile decoding on or off (tests compare both).
+func SetTileParallel(on bool) { tileParallel = on }
+
+// decodeTiles decodes the tiles of a frame. Tile columns of one tile row are independent (separate bool
+// decoders, no prediction or context across their edges), so they run on separate goroutines, each with a
+// private copy of the decoder state; their symbol counts are added up afterwards. Tile rows depend on the
+// row above and run one after another.
 func (d *Decoder) decodeTiles(data []byte) {
 	tileCols := 1 << uint(d.tileColsLog2)
 	tileRows := 1 << uint(d.tileRowsLog2)
@@ -46,7 +62,9 @@ func (d *Decoder) decodeTiles(data []byte) {
 	}
 	d.abovePart = make([]uint8, d.sb64Cols*8+8)
 	d.aboveSegPred = make([]uint8, d.sb64Cols*8+8)
+	parallel := tileCols > 1 && tileParallel && min(runtime.GOMAXPROCS(0), 4) > 1
 	for tr := 0; tr < tileRows; tr++ {
+		tiles := make([][]byte, tileCols)
 		for tc := 0; tc < tileCols; tc++ {
 			last := tr == tileRows-1 && tc == tileCols-1
 			var size int
@@ -62,24 +80,73 @@ func (d *Decoder) decodeTiles(data []byte) {
 					panic("short tile")
 				}
 			}
-			d.miRowStart = tileOffset(tr, d.miRows, d.tileRowsLog2)
-			d.miRowEnd = tileOffset(tr+1, d.miRows, d.tileRowsLog2)
-			d.miColStart = tileOffset(tc, d.miCols, d.tileColsLog2)
-			d.miColEnd = tileOffset(tc+1, d.miCols, d.tileColsLog2)
-			if !d.bd.init(data[:size]) {
-				panic("bad tile marker")
-			}
-			for r := d.miRowStart; r < d.miRowEnd; r += 8 {
-				for p := 0; p < 3; p++ {
-					d.leftNZ[p] = [16]uint8{}
-				}
-				d.leftPart = [8]uint8{}
-				d.leftSegPred = [8]uint8{}
-				for c := d.miColStart; c < d.miColEnd; c += 8 {
-					d.decodePartition(r, c, block64x64)
-				}
-			}
+			tiles[tc] = data[:size]
 			data = data[size:]
+		}
+		rowStart := tileOffset(tr, d.miRows, d.tileRowsLog2)
+		rowEnd := tileOffset(tr+1, d.miRows, d.tileRowsLog2)
+		if !parallel {
+			for tc := 0; tc < tileCols; tc++ {
+				d.decodeTile(tiles[tc], rowStart, rowEnd, tileOffset(tc, d.miCols, d.tileColsLog2), tileOffset(tc+1, d.miCols, d.tileColsLog2))
+			}
+			continue
+		}
+		var wg sync.WaitGroup
+		var fail atomic.Value
+		workers := make([]*Decoder, tileCols)
+		sem := make(chan struct{}, min(runtime.GOMAXPROCS(0), 4))
+		for tc := 0; tc < tileCols; tc++ {
+			w := d.tileWorker(tc)
+			*w = *d // frame state, shared slices and a private copy of the scratch state
+			w.cnt = counts{}
+			workers[tc] = w
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(tc int, w *Decoder) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				defer func() {
+					if r := recover(); r != nil {
+						fail.Store(r)
+					}
+				}()
+				w.decodeTile(tiles[tc], rowStart, rowEnd, tileOffset(tc, d.miCols, d.tileColsLog2), tileOffset(tc+1, d.miCols, d.tileColsLog2))
+			}(tc, w)
+		}
+		wg.Wait()
+		if r := fail.Load(); r != nil {
+			panic(r)
+		}
+		for _, w := range workers {
+			d.cnt.add(&w.cnt)
+		}
+	}
+}
+
+// tileWorker returns a reusable decoder for tile column tc.
+func (d *Decoder) tileWorker(tc int) *Decoder {
+	if tc >= len(d.workers) {
+		d.workers = append(d.workers, make([]*Decoder, tc+1-len(d.workers))...)
+	}
+	if d.workers[tc] == nil {
+		d.workers[tc] = new(Decoder)
+	}
+	return d.workers[tc]
+}
+
+func (d *Decoder) decodeTile(data []byte, rowStart, rowEnd, colStart, colEnd int) {
+	d.miRowStart, d.miRowEnd, d.miColStart, d.miColEnd = rowStart, rowEnd, colStart, colEnd
+	if !d.bd.init(data) {
+		panic("bad tile marker")
+	}
+	for r := d.miRowStart; r < d.miRowEnd; r += 8 {
+		for p := 0; p < 3; p++ {
+			d.leftNZ[p] = [16]uint8{}
+		}
+		d.leftPart = [8]uint8{}
+		d.leftSegPred = [8]uint8{}
+		for c := d.miColStart; c < d.miColEnd; c += 8 {
+			d.decodePartition(r, c, block64x64)
 		}
 	}
 }

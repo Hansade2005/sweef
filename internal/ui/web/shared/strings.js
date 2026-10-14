@@ -66,9 +66,17 @@
     incDownloads: "Downloads and bookmarks", incDownloadsBody: "Files you download and bookmarks you make are kept on your device after you close the window."
   };
   S.incog = { badge: "Incognito", tip: "Incognito: nothing from this window is saved to your history. It does not hide you from sites, your employer or your network." };
+  S.perm = {
+    title: "{host} wants to", notif: "Show notifications", note: "You can change this any time in the site info next to the address.", allow: "Allow", block: "Block", later: "Not now",
+    label: "Notifications", st: { ask: "Ask me", allowed: "Allowed", blocked: "Blocked" }, subAsk: "The site asks before it shows notifications.", subAllowed: "The site can show notifications and receive pushes.", subBlocked: "The site cannot show notifications.",
+    dnd: "Do not disturb", dndOn: "On: notifications are held back", open: "Open", dismiss: "Dismiss", focus: "Answer the notification question",
+    set: { lead: "Sites can ask to show notifications. Nothing arrives while {brand} is closed.", gAll: "All sites", dnd: "Do not disturb", dndD: "Keeps notifications off the screen. Pages still behave as if they were shown.", dflt: "When a site asks", ask: "Ask me", blocked: "Block without asking",
+      gPush: "Push", push: "Push service", pushD: "Pushes reach {brand} through a push service you choose. None is built in; leave empty to turn push off. The SWEEF_PUSH_SERVICE variable is used when this is empty.", pushOn: "Connected to the address above while {brand} runs.", pushOff: "No push service: sites cannot subscribe.", save: "Save",
+      gSites: "Sites", none: "No site has asked yet.", reset: "Ask again", allow: "Allow", block: "Block", embargo: "Not asking for a week" }
+  };
   S.set = {
     title: "Settings", search: "Search settings", about: "About", alpha: "Alpha", version: "Version", on: "On", off: "Off",
-    nav: { general: "General", search: "Search engine", privacy: "Privacy and security", agent: "{agent}", appearance: "Appearance", downloads: "Downloads", about: "About {brand}" },
+    nav: { general: "General", search: "Search engine", privacy: "Privacy and security", notif: "Notifications", agent: "{agent}", appearance: "Appearance", downloads: "Downloads", about: "About {brand}" },
     general: { lead: "The basics.", gStart: "On startup", when: "When {brand} opens", newtab: "Open the new tab page", restore: "Continue where I left off", pages: "Open specific pages", pagesT: "Startup pages", pagesD: "Used when you pick \"Open specific pages\". One address per line.", gDef: "Default browser", isDef: "{brand} is your default browser", notDef: "{brand} is not your default browser", defD: "Links from other apps open here.", make: "Make default", defBadge: "Default" },
     search_: { lead: "What the address bar uses when you type something that is not a web address.", engine: "Search engine", engineD: "Used for searches from the address bar and new tab page.", suggest: "Show search suggestions", suggestD: "Sends what you type to your search engine so it can suggest completions.", askRow: "Show \"Ask {brand}\" in the address bar", askRowD: "A row that sends your text to {agent} instead of a search engine." },
     privacy: { lead: "{brand} blocks known trackers and tells you plainly what it does and does not do.", gTrack: "Tracking", track: "Tracker blocking", trackD: "Standard blocks known trackers. Strict also blocks more third-party content and can break some sites.", std: "Standard", strict: "Strict", off: "Off", gpc: "Send Global Privacy Control", gpcD: "Tells sites you do not want your data sold or shared.", https: "Upgrade to HTTPS when possible", httpsD: "Tries the secure version of a site first.", gData: "Your data", clearExit: "Clear browsing data on exit", clearExitD: "History, cookies and cache are removed when you quit.", clearNow: "Clear browsing data now", clearNowD: "Choose what to remove and for how long.", clearBtn: "Clear data...", site: "Site settings", siteD: "Per-site permissions and what each site stored.", open: "Open" },
@@ -97,6 +105,17 @@
   ];
   S.overlay = { working: "{agent} is working", fulfilling: "Fulfilling \"{task}\"", takeControl: "Take control", stop: "Stop", control: "You are in control", controlSub: "{agent} is paused.", resume: "Hand back to {agent}", step: "Step {n}", done: "Done", stopped: "Stopped", cursorLabel: "{agent}" };
 
+  /* Camera, microphone and screen sharing */
+  S.media = {
+    camera: "Camera", mic: "Microphone", screen: "Screen sharing",
+    wantsBoth: "{host} wants to use your camera and microphone", wantsCam: "{host} wants to use your camera", wantsMic: "{host} wants to use your microphone", wantsShare: "{host} wants to share your screen content",
+    once: "Allow this time", always: "Always allow on this site", block: "Block", dismiss: "Not now", share: "Share", cancel: "Cancel", close: "Close",
+    priv: "Private window: nothing you choose here is remembered.", pick: "Choose what to share", thisTab: "This tab", otherTabs: "Other tabs", win: "The {brand} window", winSub: "Everything in this window, including tabs and menus.",
+    noAudio: "Sound is not shared yet.", noOs: "Other apps and your whole screen are not available.", device: "Choose a device",
+    inUse: "In use", allowed: "Allowed", blocked: "Blocked", ask: "Ask", reset: "Reset",
+    usingCam: "Camera in use", usingMic: "Microphone in use", usingBoth: "Camera and microphone in use", usingShare: "Sharing screen content",
+    popTitle: "In use now", stop: "Stop", sharing: "{host} is sharing {what}", whatTab: "a tab", whatWin: "this window", stopSharing: "Stop sharing", hide: "Hide", sitePerms: "Permissions"
+  };
   /* Data Saver. Plain words, never guilt: say what is happening and what the person can do.
      "Measured" = counted from the network. "Estimated" = our best guess. The UI never adds the two. */
   S.data = {
@@ -137,6 +156,7 @@
       top: "Busiest sites", topD: "Approximate, by site.", reset: "Reset counter", resetD: "Start counting from zero. Your budget stays as it is.", resetSure: "Reset the usage counter?", resetYes: "Yes, reset", cancel: "Cancel",
       gMore: "More", agentLite: "Light loading for {agent}", agentLiteD: "When {agent} researches for you, pages load as text without images or video. It never needs them.", showMeter: "Show the data meter in the toolbar", showMeterD: "A small chip next to the address bar.",
       gSites: "Sites with their own rule", sitesD: "Set from the data popover on any page.", sitesNone: "No site has its own rule yet.", forget: "Forget", ruleFull: "Always full", ruleLite: "Always lite",
+      gStorage: "Site storage", storageD: "Data that sites keep on this device: databases, caches and files. {used} of {budget} in use. When space runs short, the sites you used least recently are cleared first, except the ones marked kept.", storageNone: "No site is storing data on this device.", clearSite: "Clear", kept: "kept",
       gCount: "What is counted", countD: "Used is counted from the network, including encryption overhead. Downloads and favicons are included; {agent}'s own messages to the model are not. Saved is split in two: measured (files we did not download) and estimated (a guess from typical sizes). We never add them together.",
       unavailable: "Counting is not available in this build yet, so the numbers below stay empty."
     },

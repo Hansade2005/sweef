@@ -1437,7 +1437,8 @@ func (s *cstate) apply(name, v, l string) bool {
 	case "grid":
 		return s.gridTemplate(v, l)
 	case "grid-row-start", "grid-row-end", "grid-column-start", "grid-column-end":
-		g, ok := parseGridLine(l)
+		// Grid line and area names are case-sensitive custom idents, so parse v, not l.
+		g, ok := parseGridLine(v)
 		if !ok {
 			return false
 		}
@@ -1452,7 +1453,7 @@ func (s *cstate) apply(name, v, l string) bool {
 			c.GridColEnd = g
 		}
 	case "grid-row", "grid-column", "grid-area":
-		return s.gridPlacement(name, l)
+		return s.gridPlacement(name, v)
 	// ---- multicol ---------------------------------------------------------------------------
 	case "column-count":
 		if l == "auto" {

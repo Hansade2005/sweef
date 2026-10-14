@@ -131,6 +131,8 @@ html, body { background: transparent; height: 100%; overflow: hidden; user-selec
 #toasts { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 90; display: flex; flex-direction: column; align-items: center; gap: 8px; width: max-content; max-width: 90vw; }
 .toast { display: flex; align-items: center; gap: var(--s-3); max-width: 600px; padding: 10px 14px; border-radius: var(--r-2); background: var(--ink); color: var(--ink-text); box-shadow: var(--sh-3); font-size: var(--fs-md); animation: toast-in var(--dur-3) var(--ease-spring); }
 .toast.out { opacity: 0; transform: translateY(8px); transition: opacity var(--dur-2), transform var(--dur-2); }
+.toast.notify { align-items: center; max-width: 440px; padding: 10px 8px 10px 14px; } .toast.notify .nt { display: flex; flex-direction: column; min-width: 0; flex: 1; } .toast.notify .nt b { font-weight: 700; } .toast.notify .nt span { color: var(--ink-text); opacity: .86; } .toast.notify .nt small { color: var(--ink-text); opacity: .55; font-size: var(--fs-xs); }
+.toast.notify .ic { color: var(--volt-2); } .toast .x { color: var(--ink-text); opacity: .6; padding: 4px; } .toast .x:hover { opacity: 1; }
 .toast .ic { color: var(--mint); } .toast.error .ic { color: #FF8CA0; } .toast.warn .ic { color: #FFC56B; }
 .toast button { color: var(--volt-2); font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap; flex: none; } .toast button:hover { background: rgba(255, 255, 255, .1); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } }
@@ -143,3 +145,16 @@ html, body { background: transparent; height: 100%; overflow: hidden; user-selec
 #pal .pl { flex: 1; min-height: 0; overflow: hidden; position: relative; }
 #pal .orow { height: 40px; } #pal .orow .kbd { margin-left: auto; }
 #pal .pf { display: flex; justify-content: space-between; padding: 8px var(--s-4); border-top: 1px solid var(--line); font-size: var(--fs-xs); color: var(--text-3); }
+
+/* camera / microphone / screen sharing: tab icon, toolbar button, share bar */
+.tab .md { position: relative; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex: none; color: var(--text-2); }
+.tab .md.hide, .mediabtn.hide { display: none; }
+.mdot { position: absolute; right: 1px; top: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 1.5px var(--surface); }
+.rec .mdot { background: var(--danger); }
+.mediabtn { position: relative; width: 32px; height: 32px; margin-left: 4px; border-radius: var(--r-pill); display: inline-flex; align-items: center; justify-content: center; color: var(--text); background: var(--surface-2); flex: none; }
+.mediabtn:hover, .mediabtn[aria-expanded="true"] { background: var(--hover); }
+.mediabtn .mdot { right: 3px; top: 4px; }
+#sharebar { display: flex; align-items: center; gap: var(--s-3); flex: none; padding: 7px 14px; background: var(--surface); color: var(--accent); box-shadow: inset 0 -1px 0 var(--line), inset 3px 0 0 var(--accent); font-size: var(--fs-md); }
+#sharebar .t { flex: 1; min-width: 0; color: var(--text); } #sharebar .t b { font-weight: 650; } #sharebar .t span { color: var(--text-2); margin-left: 6px; }
+#sharebar.hide { display: none; }
+.permrow { cursor: default; } .permrow .ibtn { margin-left: 2px; }

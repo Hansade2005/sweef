@@ -2,7 +2,7 @@
 (function () {
   var SW = window.SW, S = window.S, h = SW.h, icon = SW.icon, post = SW.post, $ = function (id) { return document.getElementById(id); };
   var cur = (SW.query("s") || (location.hash || "").slice(1) || "general").split("/")[0], q = "";
-  var SECS = [["general", "globe", S.set.nav.general], ["search", "search", S.set.nav.search], ["privacy", "shield", S.set.nav.privacy], ["data", "drop", S.data.set.nav], ["agent", "spark", S.f(S.set.nav.agent)], ["appearance", "brush", S.set.nav.appearance], ["downloads", "download", S.set.nav.downloads], ["about", "info", S.f(S.set.nav.about)]];
+  var SECS = [["general", "globe", S.set.nav.general], ["search", "search", S.set.nav.search], ["privacy", "shield", S.set.nav.privacy], ["notif", "bell", S.set.nav.notif], ["data", "drop", S.data.set.nav], ["agent", "spark", S.f(S.set.nav.agent)], ["appearance", "brush", S.set.nav.appearance], ["downloads", "download", S.set.nav.downloads], ["about", "info", S.f(S.set.nav.about)]];
   $("ttl").textContent = S.set.title; $("sic").appendChild(icon("search", 16)); $("sq").setAttribute("placeholder", S.set.search); $("sq").setAttribute("aria-label", S.set.search);
   var val = function (k, d) { return SW.setting(k, d); };
   function toggle(key, def) {
@@ -38,6 +38,18 @@
         group(g.gTrack, [row(g.track, g.trackD, seg("privacy.trackers", [["standard", g.std], ["strict", g.strict], ["off", g.off]], "standard")), row(g.gpc, g.gpcD, toggle("privacy.gpc", true)), row(g.https, g.httpsD, toggle("privacy.httpsUpgrade", true))]),
         group(g.gData, [row(g.clearExit, g.clearExitD, toggle("privacy.clearOnExit", false)), row(g.clearNow, g.clearNowD, btn(g.clearBtn, function () { post("data.clear"); })), row(g.site, g.siteD, btn(g.open, function () { post("tab.new", { url: "sweef://settings#site" }); }))])];
     },
+    notif: function () {
+      var g = S.perm.set, ps = SW.state.perm || {}, sites = ps.sites || [], key = h("input.field.w", { value: String(val("push.service", "")), placeholder: "https://push.example.com", "aria-label": g.push, autocomplete: "off" });
+      var choose = function (s) {
+        var el = h("div.seg", { role: "radiogroup", "aria-label": SW.host(s.origin) });
+        [["allowed", "granted", g.allow], ["blocked", "denied", g.block], ["ask", "", g.reset]].forEach(function (o) { el.appendChild(h("button", { role: "radio", "aria-checked": s.state === o[0] ? "true" : "false", onclick: function () { post("perm.set", { origin: s.origin, name: "notifications", state: o[1] }); } }, o[2])); });
+        return el;
+      };
+      return [h("h2", S.perm.label), h("p.lead", F(g.lead)),
+        group(g.gAll, [row(g.dnd, g.dndD, toggle("notifications.dnd", false)), row(g.dflt, "", seg("notifications.default", [["ask", g.ask], ["blocked", g.blocked]], "ask"))]),
+        group(g.gPush, [row(g.push, F(g.pushD), [key, btn(g.save, function () { SW.set("push.service", key.value.trim()); }, "primary")]), row(ps.push ? F(g.pushOn) : g.pushOff, "", null)]),
+        group(g.gSites, sites.length ? sites.map(function (s) { return row(SW.host(s.origin), s.embargo ? g.embargo : "", choose(s)); }) : [row(g.none, "", null)])];
+    },
     data: function () { return SW.dataSet({ row: row, group: group, btn: btn, toggle: toggle }); },
     agent: function () {
       var g = T.agent, ag = SW.state.agent || {}, hasKey = ag.hasKey !== false, key = h("input.field.w", { type: "password", placeholder: S.ob.keyPlaceholder, "aria-label": g.key, autocomplete: "off" }), sites = (ag.sites || []).slice(0, 8);
@@ -72,7 +84,12 @@
     if (q) {
       var any = false; SECS.forEach(function (s) { var d = h("div", P[s[0]]()); if (d.textContent.toLowerCase().indexOf(q) >= 0) { any = true; SW.$$(".group", d).forEach(function (g) { if (g.textContent.toLowerCase().indexOf(q) >= 0) { col.appendChild(h("div.gh2", { style: { margin: "6px 4px", color: "var(--text-3)", fontWeight: 700, fontSize: "12px" }, text: s[2] })); col.appendChild(g); } }); } });
       if (!any) col.appendChild(h("div.empty2", S.f(S.page.noResults, { q: q })));
-    } else SW.add(col, P[cur] ? P[cur]() : P.general());
+    } else {
+      // cur comes from the URL: only a section from the fixed SECS list is ever called
+      var page = P.general;
+      SECS.forEach(function (s) { if (s[0] === cur && typeof P[s[0]] === "function") page = P[s[0]]; });
+      SW.add(col, page.call(P));
+    }
     sc.refresh();
   }
   $("sq").addEventListener("input", function (e) { q = e.target.value.trim().toLowerCase(); render(); });

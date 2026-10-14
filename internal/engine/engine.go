@@ -45,11 +45,15 @@ type Options struct {
 	ViewportWidth    int    // default viewport width (px) for text rendering
 	ViewportHeight   int    // default viewport height (px)
 	SettleMs         int    // event-loop budget after load and after actions (default 1500)
-	JSMemoryMiB      int    // QuickJS heap cap per tab (default 64)
+	JSMemoryMiB      int    // QuickJS heap cap per tab (default 256: YouTube's player and its BotGuard script need more than 64)
 	JSTimeoutMs      int    // single-eval timeout; a looping script is interrupted (default 5000)
 	WarmVMs          int    // JS VMs kept pre-built so navigations skip prelude setup (default 1)
 	DownloadsDir     string // where downloads are saved (default $TMPDIR/sweef-downloads)
 	CacheDir         string // on-disk bytecode cache ("" = $SWEEF_CACHE_DIR or user cache dir; "off" disables)
+	StorageDir       string // profile storage root of the default context: IndexedDB, Cache Storage, service workers ("" = memory only; other contexts: ContextOptions.StorageDir)
+	StorageQuotaMiB  int    // hard cap per origin for all site storage in MiB (0 = 20% of the budget)
+	StorageBudgetMiB int    // global budget of all origins in MiB (0 = 60% of the profile volume's free space, at most 64 GiB); see docs/storage.md
+	DisableFrames    bool   // do not load <iframe> documents (frames.go): pages see no content window, as before frames existed
 }
 
 func DefaultOptions() Options {
@@ -64,7 +68,7 @@ func DefaultOptions() Options {
 		ViewportWidth:    1280,
 		ViewportHeight:   720,
 		SettleMs:         1500,
-		JSMemoryMiB:      64,
+		JSMemoryMiB:      256,
 		JSTimeoutMs:      5000,
 		WarmVMs:          1,
 	}
@@ -351,6 +355,9 @@ func (e *Engine) Close() error {
 	e.mu.Unlock()
 	for _, t := range tabs {
 		t.close()
+	}
+	for _, c := range ctxs {
+		c.siteClose()
 	}
 	e.cancel()
 	e.vms.close()

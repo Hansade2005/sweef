@@ -147,22 +147,57 @@ func (n *netSource) have() [][2]int64 {
 	return out
 }
 
-// videoSource is the BitmapSource for one <video> node.
+// videoSource is the BitmapSource for one <video> node. Frames arrive either
+// as decoded pictures from a player (converted to RGBA only when something
+// paints or reads them) or as ready images from the legacy frame provider.
 type videoSource struct {
 	mu     sync.Mutex
 	poster image.Image
-	frame  image.Image
+	frame  image.Image   // RGBA of the current frame, nil until converted
+	pic    media.Picture // current decoded picture (player path)
+	hasPic bool
 	w, h   int
 	seq    int64
 }
 
 func (v *videoSource) Bitmap() image.Image {
 	v.mu.Lock()
+	if v.hasPic && v.frame == nil {
+		pic, seq := v.pic, v.seq
+		v.mu.Unlock()
+		img := pic.RGBA() // the conversion runs outside the lock
+		v.mu.Lock()
+		if v.seq == seq && v.frame == nil && img != nil {
+			v.frame = img
+		}
+		f := v.frame
+		v.mu.Unlock()
+		if f != nil {
+			return f
+		}
+		if img != nil {
+			return img
+		}
+		v.mu.Lock()
+	}
 	defer v.mu.Unlock()
 	if v.frame != nil {
 		return v.frame
 	}
 	return v.poster
+}
+
+// setPicture shows a decoded picture and reports whether its size differs from the previous one.
+func (v *videoSource) setPicture(p media.Picture) (resized bool) {
+	v.mu.Lock()
+	v.pic, v.hasPic, v.frame = p, true, nil
+	if w, h := p.Size(); w > 0 {
+		resized = w != v.w || h != v.h
+		v.w, v.h = w, h
+	}
+	v.seq++
+	v.mu.Unlock()
+	return resized
 }
 
 func (v *videoSource) Size() (int, int) {
@@ -192,18 +227,35 @@ type mediaRes struct {
 }
 
 type mediaHost struct {
-	j     *jsVM
-	mu    sync.Mutex
-	res   map[int]*mediaRes
-	next  int
-	vsrcs map[int64]*videoSource
-	pcm   map[int]*media.PCM
-	nextP int
-	wa    *waState
+	j       *jsVM
+	mu      sync.Mutex
+	res     map[int]*mediaRes
+	next    int
+	vsrcs   map[int64]*videoSource
+	pcm     map[int]*media.PCM
+	nextP   int
+	wa      *waState
+	players map[int64]*mediaPlayer
+	mse     *mseHost
 }
 
 func newMediaHost(j *jsVM) *mediaHost {
-	return &mediaHost{j: j, res: map[int]*mediaRes{}, vsrcs: map[int64]*videoSource{}, pcm: map[int]*media.PCM{}, next: 1, nextP: 1}
+	m := &mediaHost{j: j, res: map[int]*mediaRes{}, vsrcs: map[int64]*videoSource{}, pcm: map[int]*media.PCM{}, next: 1, nextP: 1,
+		players: map[int64]*mediaPlayer{}, mse: newMSEHost()}
+	j.onClose(m.shutdown)
+	return m
+}
+
+// shutdown stops every player and Web Audio output when the VM goes away.
+func (m *mediaHost) shutdown() {
+	m.mu.Lock()
+	pl := m.players
+	m.players = map[int64]*mediaPlayer{}
+	m.mu.Unlock()
+	for _, p := range pl {
+		p.Close()
+	}
+	m.waShutdown()
 }
 
 func (m *mediaHost) vsFor(node int64) *videoSource {
@@ -457,7 +509,7 @@ func (m *mediaHost) fns() map[string]hostFn {
 		node := argI(a, 0)
 		vs := m.vsFor(node)
 		vs.mu.Lock()
-		vs.frame = nil
+		vs.frame, vs.hasPic = nil, false
 		vs.w, vs.h = 0, 0
 		if r := m.get(int(argI(a, 1))); r != nil {
 			if v := r.info.Video(); v != nil {
@@ -597,7 +649,7 @@ func (m *mediaHost) frameWorker(r *mediaRes) {
 		img, err := fs.Frame(t)
 		if err == nil && img != nil {
 			r.vs.mu.Lock()
-			r.vs.frame = img
+			r.vs.frame, r.vs.hasPic = img, false
 			if b := img.Bounds(); r.vs.w == 0 {
 				r.vs.w, r.vs.h = b.Dx(), b.Dy()
 			}

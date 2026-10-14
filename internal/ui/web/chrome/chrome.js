@@ -2,8 +2,11 @@
 (function () {
   var SW = window.SW, S = window.S, h = SW.h, icon = SW.icon, post = SW.post;
   var $ = function (id) { return document.getElementById(id); };
-  var E = { tabs: $("tabs"), wrap: $("tabs-wrap"), strip: $("strip"), url: $("url"), omni: $("omni"), urlview: $("urlview"), secbtn: $("secbtn"), star: $("star"), reload: $("reload"), back: $("back"), fwd: $("fwd"), sb: $("sbtoggle"), agent: $("agentbtn"), dl: $("dlbtn"), data: $("databtn"), menu: $("menubtn"), progress: $("progress"), compat: $("compat"), layer: $("layer"), viewport: $("viewport"), toasts: $("toasts"), find: $("find"), bm: $("bmbar") };
+  var E = { tabs: $("tabs"), wrap: $("tabs-wrap"), strip: $("strip"), url: $("url"), omni: $("omni"), urlview: $("urlview"), secbtn: $("secbtn"), star: $("star"), reload: $("reload"), back: $("back"), fwd: $("fwd"), sb: $("sbtoggle"), agent: $("agentbtn"), dl: $("dlbtn"), data: $("databtn"), media: $("mediabtn"), sharebar: $("sharebar"), menu: $("menubtn"), progress: $("progress"), compat: $("compat"), layer: $("layer"), viewport: $("viewport"), toasts: $("toasts"), find: $("find"), bm: $("bmbar") };
   var ui = { sb: null, dismissed: {}, lastVp: "", zoom: 100 };
+  /* capture icons live here, not in shared/icons.js: the design-system sheet draws every shared icon and its paint golden is pinned */
+  SW.I.camera = '<rect x="3.500" y="6.500" width="12" height="11" rx="2.500"/><path d="M15.500 10.500l5-2.500v8l-5-2.500"/>';
+  SW.I.screen = '<rect x="3.500" y="4.500" width="17" height="12" rx="2.500"/><path d="M8.500 20h7M12 16.500V20"/>';
   var st = function () { return SW.state; };
   function activeTab() { var s = st(), a = s.tabs || []; for (var i = 0; i < a.length; i++) if (a[i].id === s.active) return a[i]; return a[0] || {}; }
   function field(k, d) { var s = st(), t = activeTab(); return s[k] != null ? s[k] : (t[k] != null ? t[k] : d); }
@@ -25,8 +28,17 @@
   buildWC(); $("sidebar").setAttribute("aria-label", S.f(S.agent.title));
 
   /* toasts ----------------------------------------------------------------- */
+  function notifyToast(p) {
+    var done = false, t = h("div.toast.notify", { role: "alert" }, icon("bell", 18), h("div.nt", h("b.trunc", { text: p.title || "" }), p.text ? h("span.trunc", { text: p.text }) : null, h("small.trunc", { text: SW.host(p.origin) })));
+    var kill = function (how) { if (done) return; done = true; if (how !== "click") post("notify.closed", { id: p.id, user: how === "user" }); t.classList.add("out"); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 220); };
+    t.appendChild(h("button", { text: S.perm.open, onclick: function () { post("notify.click", { id: p.id }); kill("click"); } }));
+    (p.actions || []).slice(0, 2).forEach(function (a) { t.appendChild(h("button", { text: a.title, onclick: function () { post("notify.action", { id: p.id, action: a.id }); kill("click"); } })); });
+    t.appendChild(h("button.x", { "aria-label": S.perm.dismiss, onclick: function () { kill("user"); } }, icon("close", 14)));
+    E.toasts.appendChild(t); while (E.toasts.children.length > 3) E.toasts.removeChild(E.toasts.firstChild);
+    if (!p.sticky) setTimeout(function () { kill("time"); }, 8000);
+  }
   function toast(text, kind, action) {
-    if (typeof text === "object") { var p = text; text = p.text; kind = p.kind; action = p.action; }
+    if (typeof text === "object") { var p = text; if (p.kind === "notify") return notifyToast(p); text = p.text; kind = p.kind; action = p.action; }
     var t = h("div.toast" + (kind ? "." + kind : ""), { role: "status" }, icon(kind === "error" ? "alert" : kind === "warn" ? "warn" : "check", 16), h("span", { text: text }));
     if (action) t.appendChild(h("button", { text: action.label, onclick: function () { if (action.type) post(action.type, action.payload || {}); kill(); } }));
     E.toasts.appendChild(t);
@@ -91,10 +103,10 @@
   function mkTab(t) {
     var r = {};
     var el = h("div.tab", { role: "tab", "data-id": t.id, tabindex: "-1" });
-    r.fav = h("span.fv"); r.tt = h("span.tt"); r.au = h("button.au", { tabindex: "-1" }); r.tx = h("button.tx", { tabindex: "-1" }, icon("close", 14));
+    r.fav = h("span.fv"); r.tt = h("span.tt"); r.md = h("span.md.hide"); r.au = h("button.au", { tabindex: "-1" }); r.tx = h("button.tx", { tabindex: "-1" }, icon("close", 14));
     r.au.addEventListener("click", function (e) { e.stopPropagation(); post("tab.mute", { id: t.id }); });
     r.tx.addEventListener("click", function (e) { e.stopPropagation(); post("tab.close", { id: t.id }); });
-    el.appendChild(r.fav); el.appendChild(r.tt); el.appendChild(r.au); el.appendChild(r.tx);
+    el.appendChild(r.fav); el.appendChild(r.tt); el.appendChild(r.md); el.appendChild(r.au); el.appendChild(r.tx);
     el._r = r; el._k = {}; return el;
   }
   function updTab(el, t, active) {
@@ -105,6 +117,11 @@
     if (k.title !== title) { k.title = title; r.tt.textContent = title; el.setAttribute("title", title); el.setAttribute("aria-label", title + (t.audible ? ", " + S.tab.playing : "") + (t.loading ? ", " + S.tab.loading : "")); }
     var au = t.audible || t.muted ? (t.muted ? "m" : "a") : "";
     if (k.au !== au) { k.au = au; SW.clear(r.au); r.au.classList.toggle("hide", !au); if (au) { r.au.appendChild(icon(au === "m" ? "speakeroff" : "speaker", 14)); r.au.setAttribute("aria-label", au === "m" ? S.tab.unmute : S.tab.mute); r.au.setAttribute("title", au === "m" ? S.tab.unmute : S.tab.mute); } }
+    var md = (t.camera ? "c" : "") + (t.mic ? "m" : "") + (t.sharing ? "s" : "");  /* capture in use: icon + dot, red for camera and sharing, green for a microphone alone */
+    if (k.md !== md) {
+      k.md = md; SW.clear(r.md); r.md.classList.toggle("hide", !md); r.md.className = "md" + (md ? "" : " hide") + (t.camera || t.sharing ? " rec" : " live");
+      if (md) { var mt = t.camera && t.mic ? S.media.usingBoth : t.camera ? S.media.usingCam : t.mic ? S.media.usingMic : S.media.usingShare; r.md.appendChild(icon(t.camera ? "camera" : t.sharing ? "screen" : "mic", 13)); r.md.appendChild(h("i.mdot")); r.md.setAttribute("title", mt); r.md.setAttribute("role", "img"); r.md.setAttribute("aria-label", mt); }
+    }
     r.tx.setAttribute("aria-label", S.tab.close); r.tx.setAttribute("title", S.tab.close);
     el.classList.toggle("pinned", !!t.pinned); el.classList.toggle("crashed", !!t.crashed);
     el.setAttribute("aria-selected", active ? "true" : "false"); el.setAttribute("tabindex", active ? "0" : "-1");
@@ -215,7 +232,7 @@
     var disp = /^sweef:\/\/newtab/.test(url) ? "" : url;
     if (!focus && lastUrl !== disp) { lastUrl = disp; E.url.value = disp; if (omni) omni.typed = disp; renderUrlView(disp); }
     var open = sbOpen(); E.sb.setAttribute("aria-pressed", open ? "true" : "false"); E.sb.classList.toggle("on", open);
-    renderAgentBtn(open); renderDl(); renderData(); renderProgress(loading); renderCompat(); renderBmBar();
+    renderAgentBtn(open); renderDl(); renderData(); renderMedia(); renderProgress(loading); renderCompat(); renderBmBar();
   }
   /* Data meter chip: a calm pill (ring + used / limit). It shows only when the meter is on, counting works, and a budget or a saver level is set.
      The popover (ring, this page, top sites) loads on first click. */
@@ -231,6 +248,41 @@
     label(el, free ? S.f(T.chipAriaFree, { period: per, used: usedT }) : S.f(T.chipAria, { period: per, used: usedT, limit: limT }));
     el.setAttribute("title", free ? S.f(T.chipTipFree, { period: per, used: usedT }) : S.f(T.chipTip, { period: per, used: usedT, limit: limT }));
   }
+  /* Camera, microphone, screen sharing: the indicators are here; the permission prompt and the "in use" popover load on first use. */
+  var shownPrompt = "";
+  /* the load event can fire before the script has run, so wait until it has defined its entry points */
+  var mq = [];
+  function mediaLazy(cb) {
+    if (SW.mediaPrompt && SW.mediaPop) return cb();
+    mq.push(cb); if (mq.length > 1) return;
+    function flush(n) { if (SW.mediaPrompt && SW.mediaPop) mq.splice(0).forEach(function (f) { f(); }); else if (n < 100) setTimeout(function () { flush(n + 1); }, 20); else mq = []; }
+    SW.lazy(["/chrome/media.css", "/chrome/media.js"], function () { flush(0); });
+  }
+  function renderMedia() {
+    var m = st().media || {}, ses = m.sessions || [], shares = m.shares || [], p = m.prompt || null, T = S.media;
+    var cam = ses.some(function (s) { return s.kind === "camera"; }), mic = ses.some(function (s) { return s.kind === "microphone"; }), scr = ses.some(function (s) { return s.kind === "screen"; });
+    var on = cam || mic || scr, el = E.media, k = (cam ? "c" : "") + (mic ? "m" : "") + (scr ? "s" : "");
+    el.classList.toggle("hide", !on);
+    if (el._k !== k) {
+      el._k = k; SW.clear(el); el.className = "mediabtn" + (on ? "" : " hide") + (cam || scr ? " rec" : " live");
+      if (on) {
+        var tx = cam && mic ? T.usingBoth : cam ? T.usingCam : mic ? T.usingMic : T.usingShare;
+        el.appendChild(icon(cam ? "camera" : scr ? "screen" : "mic", 16)); el.appendChild(h("i.mdot")); label(el, tx);
+      }
+    }
+    var sk = shares.map(function (s) { return s.id; }).join(",");
+    if (E.sharebar._k !== sk) {
+      E.sharebar._k = sk; SW.clear(E.sharebar); E.sharebar.classList.toggle("hide", !shares.length);
+      if (shares.length) {
+        var s0 = shares[0], what = s0.surface === "window" ? T.whatWin : T.whatTab;
+        E.sharebar.appendChild(icon("screen", 18)); E.sharebar.appendChild(h("span.t", h("b", { text: S.f(T.sharing, { host: s0.host, what: what }) }), shares.length > 1 ? h("span", { text: "+" + (shares.length - 1) }) : null));
+        E.sharebar.appendChild(h("button.btn.sm.danger", { onclick: function () { shares.forEach(function (s) { post("media.stop", { id: s.id }); }); } }, T.stopSharing));
+      }
+    }
+    var pid = p ? p.id : "";
+    if (pid !== shownPrompt) { var had = shownPrompt; shownPrompt = pid; if (p) mediaLazy(function () { SW.mediaPrompt.show(st().media && st().media.prompt || null); }); else if (had && SW.mediaPrompt) SW.mediaPrompt.show(null); }
+  }
+  E.media.addEventListener("click", function () { mediaLazy(function () { SW.mediaPop.open(E.media); }); });
   E.data.addEventListener("click", function () { SW.lazy(["/shared/datasaver.css", "/chrome/data.css", "/shared/datasaver.js", "/chrome/data.js"], function () { if (SW.dataPop) SW.dataPop.open(E.data); }); });
   function renderUrlView(u) {
     SW.clear(E.urlview);
@@ -277,6 +329,8 @@
     (st().bookmarksBar || []).slice(0, 14).forEach(function (b) { bar.appendChild(h("button", { title: b.url, onclick: function () { post("nav.go", { tab: st().active, input: b.url }); } }, SW.favicon(b.url, b.favicon, b.title), h("span.trunc", { text: b.title || SW.host(b.url) }))); });
   }
 
+  function renderPerm() { if ((st().perm || {}).prompt || SW.permPop) SW.lazy(["/chrome/perm.css", "/chrome/perm.js"], function () { SW.permPop.sync(); }); }
+
   /* toolbar events --------------------------------------------------------- */
   E.back.addEventListener("click", function () { post("nav.back"); }); E.fwd.addEventListener("click", function () { post("nav.forward"); });
   E.reload.addEventListener("click", function () { post(field("loading", false) ? "nav.stop" : "nav.reload"); });
@@ -312,6 +366,18 @@
     });
     box.appendChild(h("p", { text: S.f(v === "allowed" ? S.vis.subAllowed : v === "blocked" ? S.vis.subBlocked : S.vis.subAsk) })); return box;
   }
+  function permRow(ps) {
+    var box = h("div"), open = false, P = S.perm;
+    var row = h("button.mi", { "aria-expanded": "false", onclick: function () { open = !open; row.setAttribute("aria-expanded", open); SW.clear(box); if (open) box.appendChild(choose()); } }, icon("bell", 18), h("span.grow", { text: P.label }), h("span.valpill" + (ps.state === "allowed" ? ".on" : ps.state === "blocked" ? ".off" : ""), { text: P.st[ps.state] }), icon("chevr", 16));
+    function choose() {
+      var c = h("div.vischoice", { role: "radiogroup", "aria-label": P.label });
+      [["ask", "", P.subAsk], ["allowed", "granted", P.subAllowed], ["blocked", "denied", P.subBlocked]].forEach(function (o) {
+        c.appendChild(h("button.mi", { role: "radio", "aria-checked": ps.state === o[0] ? "true" : "false", onclick: function () { ps.state = o[0]; post("perm.set", { origin: ps.origin, name: "notifications", state: o[1] }); closePop(); } }, h("span.grow", { text: P.st[o[0]] }), ps.state === o[0] ? icon("check", 16, "ck") : null));
+      });
+      c.appendChild(h("p", { text: ps.state === "allowed" ? P.subAllowed : ps.state === "blocked" ? P.subBlocked : P.subAsk })); return c;
+    }
+    return h("div", row, box);
+  }
   function openSiteInfo() {
     var url = field("url", ""), sec = field("security", {}) || {}, level = E.secbtn.className.replace(/^secbtn\s*/, "") || "none", info = secInfo(level), internal = level === "internal";
     var node = h("div.wide");
@@ -320,6 +386,17 @@
       var vis = h("div"), val = pageVis(), open = false;
       var row = h("button.mi", { "aria-expanded": "false", onclick: function () { open = !open; row.setAttribute("aria-expanded", open); SW.clear(vis); if (open) vis.appendChild(visChooser(function () { closePop(); })); } }, icon("spark", 18), h("span.grow", { text: S.f(S.vis.title) }), h("span.valpill" + (val === "allowed" ? ".on" : val === "blocked" ? ".off" : ""), { text: visText(val) }), icon("chevr", 16));
       node.appendChild(row); node.appendChild(vis);
+      var ms = (st().media || {}).site;
+      if (ms) {  /* stored camera / microphone / screen decisions for this site, each with a way to take it back */
+        var rows = [["camera", "camera", S.media.camera], ["microphone", "mic", S.media.mic], ["screen", "screen", S.media.screen]].filter(function (x) { return ms[x[0]] === "allow" || ms[x[0]] === "block"; });
+        rows.forEach(function (x) {
+          var allowed = ms[x[0]] === "allow";
+          node.appendChild(h("div.mi.permrow", icon(x[1], 18), h("span.grow", { text: x[2] }), h("span.valpill" + (allowed ? ".on" : ".off"), { text: allowed ? S.media.allowed : S.media.blocked }),
+            h("button.ibtn.sm", { "aria-label": S.media.reset + ": " + x[2], title: S.media.reset, onclick: function () { ms[x[0]] = "ask"; post("site.media", { origin: ms.origin, name: x[0], value: "" }); closePop(); } }, icon("close", 14))));
+        });
+      }
+      var ps = (st().perm || {}).site;
+      if (ps) node.appendChild(permRow(ps));
       node.appendChild(h("div.sep"));
       node.appendChild(mi("cert", sec.certValid === false ? S.sec.certInvalid : S.sec.certValid, { on: function () { post("menu.open", { name: "certificate", origin: SW.origin(url) }); } }));
       node.appendChild(mi("cookie", S.sec.cookies, { on: function () { post("menu.open", { name: "cookies", origin: SW.origin(url) }); } }));
@@ -341,6 +418,7 @@
       h("div.zoomrow", icon("search", 18), h("span.grow", { text: S.menu.zoom }), h("button.ibtn.sm", { "aria-label": S.menu.zoomOut, onclick: function () { zoom(-1); } }, icon("minus", 16)), zv, h("button.ibtn.sm", { "aria-label": S.menu.zoomIn, onclick: function () { zoom(1); } }, icon("plus", 16)), h("button.ibtn.sm", { "aria-label": S.menu.fullscreen, onclick: function () { post("window.fullscreen"); closePop(); } }, icon("maxi", 16))),
       mi("search", S.menu.find, { kbd: SW.mod + "+F", on: openFind }), mi("cmd", S.menu.palette, { kbd: SW.mod + "+K", on: function () { SW.palette.open(); } }),
       mi("spark", sbOpen() ? S.f(S.menu.hideSidekick) : S.f(S.menu.sidekick), { kbd: SW.mod + "+Shift+A", on: function () { setSidebar(!sbOpen()); } }), h("div.sep"),
+      (st().perm || {}).available ? mi((st().perm || {}).dnd ? "belloff" : "bell", S.perm.dnd, { sub: (st().perm || {}).dnd ? S.perm.dndOn : null, on: function () { post("settings.set", { key: "notifications.dnd", value: !(st().perm || {}).dnd }); } }) : null,
       mi("gear", S.menu.settings, { on: page("sweef://settings") }), mi("info", S.f(S.menu.about), { on: page("sweef://settings#about") }), mi("flag", S.menu.reportSite, { on: function () { post("menu.open", { name: "reportSite" }); } }));
     openPop(E.menu, m, { role: "menu" });
   }
@@ -421,7 +499,7 @@
   /* wiring ----------------------------------------------------------------- */
   var first = true;
   SW.on("render", function () {
-    renderTabs(); renderToolbar(); applyLayout(); renderInc();
+    renderTabs(); renderToolbar(); applyLayout(); renderInc(); renderPerm();
     var s = st(), mx = s.window && s.window.maximized ? "1" : ""; if (mx) document.documentElement.setAttribute("data-maximized", "1"); else document.documentElement.removeAttribute("data-maximized");
     var mxb = $("wc").querySelector(".mx"); if (mxb && mxb._m !== !!mx) { mxb._m = !!mx; SW.clear(mxb); mxb.appendChild(icon(mx ? "restore" : "maxi", 14)); mxb.setAttribute("aria-label", mx ? S.win.restore : S.win.max); }
     sizeTabs();

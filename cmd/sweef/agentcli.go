@@ -599,8 +599,8 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 			for _, e := range entries {
 				em, _ := e.(map[string]any)
 				data, _ := em["data"].(map[string]any)
-				if data == nil {
-					continue
+				if data == nil || em["kind"] == "Network.request" {
+					continue // one line per answered request: the request event itself has no status yet
 				}
 				if st, ok := data["response.status"]; ok {
 					sb.WriteString(fmt.Sprintf("%v %v %v %vms\n", data["request.method"], st, data["request.url"], data["time"]))

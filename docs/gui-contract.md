@@ -59,6 +59,15 @@ In the chrome page, `window.sweef` exists:
    scale change) is always a full one. `SWEEF_INCR_CHECK=1` compares every incremental paint with a
    full paint and repairs a difference (development aid).
 
+## Tab audio
+
+Each tab owns an `audioout` group (see [audio-output.md](audio-output.md)). The engine emits `EvAudio` with
+`engine.AudioState{Audible, Muted}` when the tab starts or stops making sound (audible = the mixed peak of its
+media elements and Web Audio contexts passed a threshold within the last 1.5 s) and when its mute changes.
+`internal/app` turns the event into the `audible`/`muted` fields of the tab entry in the chrome state;
+`tab.mute {id}` calls `Tab.SetAudioMuted`, and the mute is re-applied when a tab is recreated. The chrome shows
+a speaker icon on the tab strip entry; clicking it sends `tab.mute`.
+
 ## Agent <-> app
 
 `internal/agent` defines `type Backend interface` (see that package). `internal/app` implements it on
@@ -123,3 +132,7 @@ Honesty: `used`, `usedToday`, `budget.used*` are **measured** (socket bytes, pri
 *Pages*: `sweef://datastop?url=<encoded>` (new page host `datastop`, in `ui.Pages`) is what a tab shows instead of `url` when the budget is used up and `hardStop` is on; the app injects `__sweefData {url, host, limitMB, usedMB, period, resetsInDays, resetsOn}` and keeps the requested address in the tab. Its three choices post `data.loadOnce`, `data.setBudget` followed by `nav.reload`, and `data.wait`. `sweef://settings#data` is the Settings section; `sweef://onboarding` has a fourth step ("Do you have a data plan?": 100 MB / 500 MB / 1 GB / No limit) that posts `data.setBudget` and `data.setLevel` (100 MB starts in Text first, 500 MB and 1 GB in Standard, No limit leaves the saver off) and posts nothing when skipped.
 
 *Go API (internal/app)*: `Config.DataEngine` (an interface over the engine's Data Saver API, `dataengine_real.go` is the adapter, tests inject a fake with deterministic byte counts) and `Config.Now` (clock for the budget). `App.AgentDataBegin()` / `App.AgentDataEnd() AgentData` bracket an agent run; `agentbridge` calls them. Usage is kept per local day in `datausage.json` of the profile (`store.DataUsage`: top origins per day, private-window bytes as a bare total, thresholds announced once per period and remembered across restarts).
+
+**Site storage (see `docs/storage.md`).** `state.data.storage` is `{sites: [{origin, bytes, persisted}], used, budget}`: what each site keeps on this device (IndexedDB, Cache Storage, the origin private file system, service worker scripts), largest first, at most 50, and the browser's storage budget; it is empty in a private window. UI -> Go: `data.storageClear {origin}` deletes everything that one site stored (open pages of the site get their database connections closed). `Go API`: `App.SetStoragePersistPrompt(func(origin string) bool)` installs the prompt behind `navigator.storage.persist()`; bookmarked sites are granted without asking, anything else is refused when no prompt is set.
+
+**Notifications and permissions (see `docs/notifications.md`).** *state.perm*: `{available, dnd, push, default, site{origin, state: ask|allowed|blocked} (http(s) page, not private), prompt{id, origin, host, kind}, sites[{origin,state,embargo,periodic}] (only while sweef://settings is active), badges{origin: n|-1}}`. *UI -> Go*: `perm.answer {id, answer: allow|block|dismiss}`, `perm.set {origin, name?, state: granted|denied|""}`, `notify.click {id}`, `notify.action {id, action}`, `notify.closed {id, user}`; settings keys `notifications.dnd`, `notifications.default` (`ask|blocked`), `push.service`. *Go -> UI*: `toast {kind:"notify", id, title, text, origin, sticky, actions[{id,title}]}` (the in-window fallback for a notification); `ui.command {name:"perm.focus"}` (Alt+Shift+P while a question is waiting).

@@ -92,6 +92,7 @@ func (a *App) newEtab(kind, id string, t *engine.Tab, incog bool) *etab {
 		e.t.SetProgressiveNav(true)
 		e.t.SetUpdateHook(func() { e.requestPaint(false) })
 		e.t.SetWakeHook(e.wakePump)
+		e.t.SetMediaBroker(a.media)
 	}
 	return e
 }
@@ -519,6 +520,10 @@ func (a *App) onEngineEvent(ev engine.Event) {
 	case engine.EvDownload:
 		if d, ok := ev.Data.(engine.Download); ok {
 			a.post(func() { a.onEngineDownload(e, d) })
+		}
+	case engine.EvAudio:
+		if st, ok := ev.Data.(engine.AudioState); ok {
+			a.post(func() { a.onTabAudio(e, st) })
 		}
 	case engine.EvDialog:
 		a.post(func() {

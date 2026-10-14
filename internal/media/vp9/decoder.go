@@ -139,6 +139,8 @@ type Decoder struct {
 	lvlLookup            [8][4][2]uint8
 	fp                   [4][4][3]int32 // dequant cache
 
+	workers []*Decoder // tile column workers (decodeTiles), reused between frames
+
 	predBuf   [2][64 * 64]uint16
 	tmpBuf    [(64 + 7) * (64 + 7)]uint16
 	predTmp   [(64 + 7) * 64]uint16

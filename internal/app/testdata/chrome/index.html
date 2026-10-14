@@ -43,6 +43,7 @@
 var S = {}, lastLayout = '';
 function merge(t, p) {
   for (var k in p) {
+    if (!Object.prototype.hasOwnProperty.call(p, k) || k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
     var v = p[k];
     if (v === null) { delete t[k]; }
     else if (typeof v === 'object' && !Array.isArray(v) && typeof t[k] === 'object' && t[k] && !Array.isArray(t[k])) { merge(t[k], v); }

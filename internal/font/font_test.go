@@ -26,7 +26,7 @@ func TestResolveAndMetrics(t *testing.T) {
 		t.Fatal("monospace is not fixed pitch")
 	}
 	t.Logf("sans-serif -> %s, serif -> %s, monospace -> %s",
-		Lookup("sans-serif", Style{400, false}).Family, Lookup("serif", Style{400, false}).Family, Lookup("monospace", Style{400, false}).Family)
+		Lookup("sans-serif", Style{Weight: 400, Italic: false}).Family, Lookup("serif", Style{Weight: 400, Italic: false}).Family, Lookup("monospace", Style{Weight: 400, Italic: false}).Family)
 }
 
 func TestEmbeddedFallbackWorks(t *testing.T) {

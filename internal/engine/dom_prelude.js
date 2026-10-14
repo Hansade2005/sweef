@@ -56,6 +56,9 @@
   function getters(proto, map) { for (var k in map) if (hasOwn.call(map, k)) def(proto, k, { get: map[k].get, set: map[k].set, enumerable: true }); }
   function constant(obj, name, v) { Object.defineProperty(obj, name, { value: v, enumerable: true }); }
   function toStr(v) { return v === undefined ? 'undefined' : v === null ? 'null' : String(v); }
+  // cssStr escapes a value for a double-quoted CSS string in a selector: backslash first, then the quote,
+  // and line breaks as hex escapes (a raw newline ends a CSS string).
+  function cssStr(v) { return String(v).replace(/[\\"]/g, '\\$&').replace(/\n/g, '\\a ').replace(/\r/g, '\\d ').replace(/\f/g, '\\c '); }
   function illegal() { throw new TypeError('Illegal constructor'); }
   function setTag(cls, name) { def(cls.prototype, Symbol.toStringTag, { value: name, enumerable: false }); }
   function extend(sub, sup) { Object.setPrototypeOf(sub.prototype, sup.prototype); Object.setPrototypeOf(sub, sup); }
@@ -361,6 +364,21 @@
     }
     return path;
   }
+  // Inline event handler attributes (onclick="..."): compiled on first use and again when the attribute changes.
+  // The scope is the element, then the document, as in browsers (the form owner is left out).
+  var attrHandlers = new WeakMap();
+  function attributeHandler(el, type) {
+    var src = el.getAttribute('on' + type);
+    if (src === null || src === undefined) return undefined;
+    var per = attrHandlers.get(el);
+    if (!per) { per = Object.create(null); attrHandlers.set(el, per); }
+    var c = per[type];
+    if (c && c.src === src) return c.fn;
+    var fn = null;
+    try { fn = new Function('event', 'with (document) { with (this) { ' + src + '\n } }'); } catch (e) { reportError(e); }
+    per[type] = { src: src, fn: fn };
+    return fn;
+  }
   function invokeListeners(target, ev, phase) {
     var m = target[LISTENERS];
     var list = m && m[ev.type];
@@ -386,6 +404,7 @@
     // legacy on* handler runs with the bubble/target listeners
     if (phase !== 1 && !ev._stopNow) {
       var h = target[HANDLERS] && target[HANDLERS][ev.type];
+      if (h === undefined && target !== global && typeof target.getAttribute === 'function') h = attributeHandler(target, ev.type);
       if (typeof h === 'function') {
         try {
           var r = target === global && ev.type === 'error' && ev instanceof global.ErrorEvent ? h.call(target, ev.message, ev.filename, ev.lineno, ev.colno, ev.error) : h.call(target, ev);
@@ -421,6 +440,7 @@
     try {
       var ev = new global.ErrorEvent('error', { message: e && e.message !== undefined ? String(e.message) : String(e), error: e, filename: (e && e.fileName) || '', lineno: (e && e.lineNumber) || 0, cancelable: true });
       dispatch(global, ev);
+      if (typeof global.__swUncaught === 'function' && !ev.defaultPrevented) global.__swUncaught(ev); // a worker forwards what it did not handle to its owner
     } catch (e2) { /* ignore */ } finally { reportingError = false; }
   }
 
@@ -792,7 +812,17 @@
   function scheduleLoadEvent(node) {
     if (slots(node).loadScheduled) return;
     slots(node).loadScheduled = true;
-    setTimeoutImpl(function () { slots(node).loadScheduled = false; if (node.localName !== 'img' || node.getAttribute('src')) fire(node, 'load', { bubbles: false, cancelable: false }); }, [], 0, false);
+    setTimeoutImpl(function () {
+      slots(node).loadScheduled = false;
+      if (node.localName === 'img') {
+        var src = node.getAttribute('src');
+        if (!src) return;
+        // A real request decides load or error and the natural size (imgload_prelude.js). Without it,
+        // every image in the document reported load, so onerror fallbacks never ran.
+        if (typeof global.__swImgStart === 'function' && global.__swImgStart(node, src)) return;
+      }
+      fire(node, 'load', { bubbles: false, cancelable: false });
+    }, [], 0, false);
   }
   function toNodes(args) {
     var out = [];
@@ -1103,7 +1133,7 @@
     isContentEditable: { get: function () { var v = this.getAttribute('contenteditable'); return v === '' || v === 'true' || v === 'plaintext-only'; } },
     nonce: { get: function () { return this.getAttribute('nonce') || ''; }, set: function (v) { this.setAttribute('nonce', toStr(v)); } },
     form: { get: function () { return this.closest('form'); } },
-    labels: { get: function () { var id = this.id; return nodeListOf(id ? queryAll(documentWrapper, 'label[for="' + id.replace(/"/g, '\\"') + '"]') : []); } },
+    labels: { get: function () { var id = this.id; return nodeListOf(id ? queryAll(documentWrapper, 'label[for="' + cssStr(id) + '"]') : []); } },
     validity: { get: function () { return { valid: true, valueMissing: false, typeMismatch: false, patternMismatch: false, tooLong: false, tooShort: false, rangeUnderflow: false, rangeOverflow: false, stepMismatch: false, badInput: false, customError: false }; } },
     validationMessage: { get: function () { return ''; } },
     willValidate: { get: function () { return true; } }
@@ -1141,7 +1171,7 @@
   function radioGroup(el) {
     var name = el.getAttribute('name'); if (!name) return [el];
     var root = el.form || documentWrapper;
-    return queryAll(root, 'input[type="radio"][name="' + name.replace(/"/g, '\\"') + '"]');
+    return queryAll(root, 'input[type="radio"][name="' + cssStr(name) + '"]');
   }
   function defaultAction(el) {
     if (!el || el.nodeType !== 1) return;
@@ -1218,6 +1248,17 @@
   methods(SVGElement.prototype, { focus: HTMLElement.prototype.focus, blur: HTMLElement.prototype.blur, getBBox: function () { return this.getBoundingClientRect(); }, getScreenCTM: function () { return null; }, getCTM: function () { return null; }, createSVGPoint: function () { return { x: 0, y: 0, matrixTransform: function () { return this; } }; } });
   global.SVGSVGElement = makeClass('SVGSVGElement', SVGElement); TAG_CLASS.svg = global.SVGSVGElement;
   global.SVGGraphicsElement = SVGElement;
+  // SVG element interfaces by tag (pages test nodes with instanceof SVGPathElement and the like)
+  var SVG_CLASS = {};
+  var SVG_CLASSES = { SVGPathElement: 'path', SVGCircleElement: 'circle', SVGRectElement: 'rect', SVGEllipseElement: 'ellipse', SVGLineElement: 'line',
+    SVGPolylineElement: 'polyline', SVGPolygonElement: 'polygon', SVGGElement: 'g', SVGDefsElement: 'defs', SVGUseElement: 'use',
+    SVGSymbolElement: 'symbol', SVGTextElement: 'text', SVGTSpanElement: 'tspan', SVGImageElement: 'image', SVGClipPathElement: 'clippath',
+    SVGMaskElement: 'mask', SVGPatternElement: 'pattern', SVGLinearGradientElement: 'lineargradient', SVGRadialGradientElement: 'radialgradient',
+    SVGStopElement: 'stop', SVGMarkerElement: 'marker', SVGForeignObjectElement: 'foreignobject', SVGFilterElement: 'filter' };
+  Object.keys(SVG_CLASSES).forEach(function (name) {
+    var tag = SVG_CLASSES[name], C = makeClass(name, SVGElement);
+    global[name] = C; SVG_CLASS[tag] = C; if (!TAG_CLASS[tag]) TAG_CLASS[tag] = C;
+  });
 
   // ---- form controls: live value/checked accessors live on the SPECIFIC prototypes
   function liveValue(proto) {
@@ -1449,7 +1490,7 @@
   getters(DocumentFragment.prototype, ParentNodeGetters);
   methods(DocumentFragment.prototype, ParentNodeMethods);
   methods(DocumentFragment.prototype, {
-    getElementById: function (id) { return queryAll(this, '[id="' + String(id).replace(/"/g, '\\"') + '"]')[0] || null; },
+    getElementById: function (id) { return queryAll(this, '[id="' + cssStr(String(id)) + '"]')[0] || null; },
     getElementsByTagName: function (tag) { tag = String(tag).toLowerCase(); return collectionOf(queryAll(this, tag === '*' ? '*' : tag)); },
     getElementsByClassName: function (cls) { return collectionOf(queryAll(this, '.' + String(cls).trim().split(/\s+/).join('.'))); }
   });
@@ -1496,7 +1537,7 @@
     cookie: { get: function () { return sw.cookie() || ''; }, set: function (v) { sw.setCookie(toStr(v)); } },
     lastModified: { get: function () { return new Date().toLocaleString(); } },
     characterSet: { get: function () { return 'UTF-8'; } }, charset: { get: function () { return 'UTF-8'; } }, inputEncoding: { get: function () { return 'UTF-8'; } },
-    contentType: { get: function () { return 'text/html'; } }, compatMode: { get: function () { return 'CSS1Compat'; } },
+    contentType: { get: function () { return 'text/html'; } }, compatMode: { get: function () { var q = false; try { q = !!sw.quirks(); } catch (e) { /* ignore */ } return q ? 'BackCompat' : 'CSS1Compat'; } },
     hidden: { get: function () { return false; } }, visibilityState: { get: function () { return 'visible'; } },
     designMode: { get: function () { return 'off'; }, set: function () { } },
     dir: { get: function () { var h = this.documentElement; return h ? h.getAttribute('dir') || '' : ''; }, set: function (v) { var h = this.documentElement; if (h) h.setAttribute('dir', toStr(v)); } },
@@ -1541,7 +1582,7 @@
       var local = qname.indexOf(':') >= 0 ? qname.split(':')[1] : qname;
       if (ns === XHTML_NS || ns === null || ns === '') return this.createElement(local, options);
       var id = sw.createElement(local.toLowerCase());
-      var C = ns === SVG_NS ? (local.toLowerCase() === 'svg' ? global.SVGSVGElement : SVGElement) : Element;
+      var C = ns === SVG_NS ? (local.toLowerCase() === 'svg' ? global.SVGSVGElement : SVG_CLASS[local.toLowerCase()] || SVGElement) : Element;
       var w = makeWrapper(id, C);
       w[NS] = ns; w[ORIG_TAG] = local;
       hostMutation('create', id);
@@ -1566,8 +1607,8 @@
     createRange: function () { return new global.Range(); },
     createTreeWalker: function (root, whatToShow, filter) { return new global.TreeWalker(root, whatToShow, filter); },
     createNodeIterator: function (root, whatToShow, filter) { return new global.NodeIterator(root, whatToShow, filter); },
-    getElementById: function (id) { id = toStr(id); if (this._detachedRoot || this !== documentWrapper) return queryAll(this, '[id="' + id.replace(/"/g, '\\"') + '"]')[0] || null; return wrap(sw.getElementById(id)); },
-    getElementsByName: function (name) { name = toStr(name); var self = this; return liveList(NodeList, genCached(function () { return self === documentWrapper ? wrapAll(sw.elementsByName(name)) : queryAll(self, '[name="' + name.replace(/"/g, '\\"') + '"]'); })); },
+    getElementById: function (id) { id = toStr(id); if (this._detachedRoot || this !== documentWrapper) return queryAll(this, '[id="' + cssStr(id) + '"]')[0] || null; return wrap(sw.getElementById(id)); },
+    getElementsByName: function (name) { name = toStr(name); var self = this; return liveList(NodeList, genCached(function () { return self === documentWrapper ? wrapAll(sw.elementsByName(name)) : queryAll(self, '[name="' + cssStr(name) + '"]'); })); },
     importNode: function (node, deep) { requireNode(node, 'importNode'); return node.cloneNode(!!deep); },
     adoptNode: function (node) { requireNode(node, 'adoptNode'); if (node.parentNode) node.parentNode.removeChild(node); return node; },
     hasFocus: function () { return true; },
@@ -1911,11 +1952,7 @@
   setTag(MessagePort, 'MessagePort'); global.MessagePort = MessagePort;
   function MessageChannel() { if (!(this instanceof MessageChannel)) throw new TypeError("Constructor MessageChannel requires 'new'"); this.port1 = new MessagePort(); this.port2 = new MessagePort(); this.port1._other = this.port2; this.port2._other = this.port1; }
   setTag(MessageChannel, 'MessageChannel'); global.MessageChannel = MessageChannel;
-  global.BroadcastChannel = function BroadcastChannel(name) { EventTarget.call(this); this.name = name; };
-  extend(global.BroadcastChannel, EventTarget);
-  methods(global.BroadcastChannel.prototype, { postMessage: function () { }, close: function () { } });
-  defineHandlerProps(global.BroadcastChannel.prototype, ['message', 'messageerror']);
-  global.postMessage = function postMessage(data) { setTimeoutImpl(function () { dispatch(global, new global.MessageEvent('message', { data: data, origin: originOf(currentURL()), source: global })); }, [], 0, false); };
+  global.postMessage = function postMessage(data) { setTimeoutImpl(function () { dispatch(global, new global.MessageEvent('message', { data: data, origin: docOriginStr(), source: global })); }, [], 0, false); };
 
   // ==== 9. Platform ========================================================
   // ---- window identity
@@ -1926,8 +1963,8 @@
   def(global, 'length', { value: 0, writable: true });
   def(global, 'closed', { value: false, writable: true });
   def(global, 'name', { value: '', writable: true });
-  def(global, 'origin', { get: function () { return originOf(currentURL()); } });
-  def(global, 'isSecureContext', { get: function () { return /^https:/.test(currentURL()); } });
+  def(global, 'origin', { get: function () { return docOriginStr(); } });
+  def(global, 'isSecureContext', { get: function () { var u = currentURL(); return /^(https|sweef):/.test(u) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]|[^/:]*\.localhost)(:|\/|$)/.test(u); } });
   def(global, 'crossOriginIsolated', { value: false });
   function Window() { illegal(); } setTag(Window, 'Window'); global.Window = Window;
   Object.setPrototypeOf(Window.prototype, EventTarget.prototype);
@@ -1970,7 +2007,11 @@
     var computed = Object.create(proto);
     Object.defineProperty(computed, '_el', { value: null }); Object.defineProperty(computed, '_text', { value: text, writable: true });
     var origGPV = proto.getPropertyValue;
-    Object.defineProperty(computed, 'getPropertyValue', { value: function (name) { var v = origGPV.call(this, name); if (v === '') { name = String(name).toLowerCase(); if (defaults[name] !== undefined) return defaults[name]; if (/^(margin|padding|border|top|left|right|bottom|inset)/.test(name)) return name.indexOf('color') >= 0 ? 'rgb(0, 0, 0)' : name.indexOf('style') >= 0 ? 'none' : '0px'; } return v; } });
+    // Values from the real cascade (computedstyle.go) come first; the inline style and the tag
+    // defaults only answer properties the engine does not serialise yet.
+    var real = null;
+    try { real = typeof sw.computedStyle === 'function' ? sw.computedStyle(el[ID]) : null; } catch (e) { real = null; }
+    Object.defineProperty(computed, 'getPropertyValue', { value: function (name) { var kn = String(name).toLowerCase(); if (real && real[kn] !== undefined && real[kn] !== null) return String(real[kn]); var v = origGPV.call(this, name); if (v === '') { name = String(name).toLowerCase(); if (defaults[name] !== undefined) return defaults[name]; if (/^(margin|padding|border|top|left|right|bottom|inset)/.test(name)) return name.indexOf('color') >= 0 ? 'rgb(0, 0, 0)' : name.indexOf('style') >= 0 ? 'none' : '0px'; } return v; } });
     Object.defineProperty(computed, 'setProperty', { value: function () { throw DOMException("Failed to execute 'setProperty' on 'CSSStyleDeclaration': These styles are computed, and therefore the 'display' property is read-only.", 'NoModificationAllowedError'); } });
     return new Proxy(computed, { get: function (t, k) { if (typeof k === 'string' && !(k in t) && /^[a-zA-Z-]+$/.test(k)) return t.getPropertyValue(k.indexOf('-') >= 0 ? k : kebab(k)); return t[k]; } });
   };
@@ -1996,12 +2037,14 @@
   var urlOverride = null; // set by history.pushState/replaceState (no reload)
   function currentURL() { if (urlOverride) return urlOverride; var u = ''; try { u = sw.url() || ''; } catch (e) { /* ignore */ } return u || 'about:blank'; }
   function originOf(u) { try { return new global.URL(u).origin; } catch (e) { return 'null'; } }
+  // the origin of this document: the host knows about inherited (about:blank, srcdoc) and opaque (sandboxed, data:) origins
+  function docOriginStr() { try { if (typeof sw.docOrigin === 'function') { var o = sw.docOrigin(); if (typeof o === 'string' && o) return o; } } catch (e) { /* fall through */ } return originOf(currentURL()); }
   function Location() { illegal(); }
   var LOC_PARTS = ['protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash', 'origin'];
   LOC_PARTS.forEach(function (part) {
     def(Location.prototype, part, {
-      get: function () { try { return new global.URL(currentURL())[part]; } catch (e) { return ''; } },
-      set: function (v) { if (part === 'origin') return; var u = new global.URL(currentURL()); u[part] = v; if (part === 'hash') { var old = currentURL(); urlOverride = u.href; fire(global, 'hashchange', { oldURL: old, newURL: u.href }); fire(global, 'popstate', { state: historyState }); } else sw.navigate(u.href); },
+      get: function () { if (part === 'origin') return docOriginStr(); try { return new global.URL(currentURL())[part]; } catch (e) { return ''; } },
+      set: function (v) { if (part === 'origin') return; var u = new global.URL(currentURL()); u[part] = v; if (part === 'hash') { var old = currentURL(); if (u.href === old) return; urlOverride = u.href; histRecord('push', u.href, null); historyState = null; fire(global, 'hashchange', { oldURL: old, newURL: u.href }); fire(global, 'popstate', { state: null }); } else sw.navigate(u.href); },
       enumerable: true
     });
   });
@@ -2019,26 +2062,74 @@
   def(global, 'location', { get: function () { return locationObj; }, set: function (v) { locationObj.assign(String(v)); }, enumerable: true });
 
   // ---- History
-  var historyState = null, historyLength = 1;
+  // Session history of this document: pushState/replaceState/hash changes add or replace entries,
+  // back/forward/go move between them (asynchronously, as in a browser) and fire popstate/hashchange.
+  // Entries before the first or after the last one belong to other documents (Go owns those).
+  var historyState = null, histEntries = [], histIdx = 0, histSeq = 0, histHooks = [];
+  function hist() {
+    if (!histEntries.length) histEntries.push({ url: currentURL(), state: null, key: 'k' + (++histSeq), id: 'i' + histSeq });
+    return histEntries;
+  }
+  function histNotify(kind, entry, prev, info) { histHooks.slice().forEach(function (h) { try { h(kind, entry, prev, info); } catch (e) { /* observers must not break history */ } }); }
+  function histRecord(kind, url, state) {
+    var es = hist(), prev = es[histIdx];
+    if (kind === 'push') {
+      es.length = histIdx + 1;
+      var e = { url: url, state: state, key: 'k' + (++histSeq), id: 'i' + histSeq };
+      es.push(e); histIdx = es.length - 1;
+      histNotify('push', e, prev);
+    } else {
+      prev.url = url; prev.state = state;
+      histNotify('replace', prev, prev);
+    }
+  }
+  function histTraverse(delta, then) {
+    var es = hist(), target = histIdx + delta;
+    if (target < 0 || target >= es.length || delta === 0) return false;
+    setTimeoutImpl(function () {
+      var cur = hist(), from = cur[histIdx], to = cur[target];
+      if (!to || target >= cur.length) return;
+      histIdx = target;
+      historyState = to.state;
+      urlOverride = to.url;
+      if (host('setUrl')) { try { sw.setUrl(to.url); } catch (e) { /* ignore */ } }
+      histNotify('traverse', to, from, { delta: delta });
+      fire(global, 'popstate', { state: to.state });
+      var fa = from.url.split('#'), ta = to.url.split('#');
+      if (fa[0] === ta[0] && from.url !== to.url) fire(global, 'hashchange', { oldURL: from.url, newURL: to.url });
+      if (then) then();
+    }, [], 0, false);
+    return true;
+  }
+  Object.defineProperty(global, '__swHistory', { value: {
+    entries: function () { return hist(); }, index: function () { hist(); return histIdx; }, hooks: histHooks,
+    record: histRecord, traverse: histTraverse, get state() { return historyState; }
+  } });
   function History() { illegal(); }
-  getters(History.prototype, { length: { get: function () { return historyLength; } }, state: { get: function () { return historyState; } }, scrollRestoration: { get: function () { return 'auto'; }, set: function () { } } });
+  getters(History.prototype, { length: { get: function () { return hist().length; } }, state: { get: function () { return historyState; } }, scrollRestoration: { get: function () { return 'auto'; }, set: function () { } } });
   function historyUpdate(state, url, push) {
-    historyState = state === undefined ? null : state;
+    var target = null;
     if (url !== undefined && url !== null) {
       var u = new global.URL(String(url), currentURL());
       if (u.origin !== originOf(currentURL())) throw DOMException("Failed to execute '" + (push ? 'pushState' : 'replaceState') + "' on 'History': A history state object with URL '" + u.href + "' cannot be created in a document with origin '" + originOf(currentURL()) + "'.", 'SecurityError');
-      urlOverride = u.href;
-      if (host('setUrl')) { try { sw.setUrl(u.href); } catch (e) { /* ignore */ } }
+      target = u.href;
+    }
+    state = state === undefined ? null : state;
+    if (target === null) target = currentURL();
+    historyState = state;
+    if (target !== currentURL() || url !== undefined && url !== null) {
+      urlOverride = target;
+      if (host('setUrl')) { try { sw.setUrl(target); } catch (e) { /* ignore */ } }
       hostMutation(push ? 'pushState' : 'replaceState', 0);
     }
-    if (push) historyLength++;
+    histRecord(push ? 'push' : 'replace', target, state);
   }
   methods(History.prototype, {
     pushState: function (state, title, url) { historyUpdate(state, url, true); },
     replaceState: function (state, title, url) { historyUpdate(state, url, false); },
-    back: function () { fire(global, 'popstate', { state: null }); },
-    forward: function () { fire(global, 'popstate', { state: null }); },
-    go: function (n) { if (!n) { sw.navigate(currentURL()); return; } fire(global, 'popstate', { state: null }); }
+    back: function () { if (!histTraverse(-1)) fire(global, 'popstate', { state: null }); },
+    forward: function () { if (!histTraverse(1)) fire(global, 'popstate', { state: null }); },
+    go: function (n) { n = Math.trunc(+n) || 0; if (!n) { sw.navigate(currentURL()); return; } if (!histTraverse(n)) fire(global, 'popstate', { state: null }); }
   });
   setTag(History, 'History'); global.History = History;
   var historyObj = Object.create(History.prototype);
@@ -2052,7 +2143,7 @@
     userAgent: { get: ua }, appVersion: { get: function () { return ua().replace(/^Mozilla\//, ''); } }, appName: { get: function () { return 'Netscape'; } }, appCodeName: { get: function () { return 'Mozilla'; } }, product: { get: function () { return 'Gecko'; } }, productSub: { get: function () { return '20030107'; } }, vendor: { get: function () { return ''; } }, vendorSub: { get: function () { return ''; } },
     language: { get: function () { return 'en-US'; } }, languages: { get: function () { return Object.freeze(['en-US', 'en']); } },
     platform: { get: function () { return viewport().mobile ? 'Linux armv8l' : 'Linux x86_64'; } },
-    onLine: { get: function () { return true; } }, cookieEnabled: { get: function () { return true; } }, doNotTrack: { get: function () { return null; } }, globalPrivacyControl: { get: function () { return false; } },
+    onLine: { get: function () { try { return sw.pwaOnline ? sw.pwaOnline() : true; } catch (e) { return true; } } }, cookieEnabled: { get: function () { return true; } }, doNotTrack: { get: function () { return null; } }, globalPrivacyControl: { get: function () { return false; } },
     hardwareConcurrency: { get: function () { return 1; } }, deviceMemory: { get: function () { return 1; } }, maxTouchPoints: { get: function () { return viewport().mobile ? 5 : 0; } },
     userAgentData: { get: function () { return undefined; } }, webdriver: { get: function () { return false; } }, pdfViewerEnabled: { get: function () { return false; } },
     plugins: { get: function () { var p = []; p.item = function () { return null; }; p.namedItem = function () { return null; }; p.refresh = function () { }; return p; } }, mimeTypes: { get: function () { var p = []; p.item = function () { return null; }; p.namedItem = function () { return null; }; return p; } },
@@ -2081,14 +2172,22 @@
 
   // ---- Storage
   function Storage() { illegal(); }
+  // a document without an origin of its own (sandboxed frame, data: URL) gets a SecurityError from the host
+  function storageHost(fn) {
+    try { return fn(); } catch (e) {
+      var m = e && typeof e.message === 'string' ? /^(SecurityError|QuotaExceededError): ([\s\S]*)$/.exec(e.message) : null;
+      if (m) throw DOMException(m[2], m[1]);
+      throw e;
+    }
+  }
   methods(Storage.prototype, {
-    getItem: function (k) { var v = sw.storageGet(this._kind, toStr(k)); return v === undefined || v === null ? null : String(v); },
-    setItem: function (k, v) { var key = toStr(k), val = toStr(v); var old = this.getItem(key); sw.storageSet(this._kind, key, val); storageEvent(this, key, old, val); },
-    removeItem: function (k) { var key = toStr(k); var old = this.getItem(key); sw.storageRemove(this._kind, key); if (old !== null) storageEvent(this, key, old, null); },
-    clear: function () { sw.storageClear(this._kind); storageEvent(this, null, null, null); },
-    key: function (i) { var keys = sw.storageKeys(this._kind) || []; return i >= 0 && i < keys.length ? keys[i] : null; }
+    getItem: function (k) { var key = toStr(k); var v = storageHost(function () { return sw.storageGet(this._kind, key); }.bind(this)); return v === undefined || v === null ? null : String(v); },
+    setItem: function (k, v) { var key = toStr(k), val = toStr(v); var old = this.getItem(key); var kind = this._kind; storageHost(function () { sw.storageSet(kind, key, val); }); storageEvent(this, key, old, val); },
+    removeItem: function (k) { var key = toStr(k); var old = this.getItem(key); var kind = this._kind; storageHost(function () { sw.storageRemove(kind, key); }); if (old !== null) storageEvent(this, key, old, null); },
+    clear: function () { var kind = this._kind; storageHost(function () { sw.storageClear(kind); }); storageEvent(this, null, null, null); },
+    key: function (i) { var kind = this._kind; var keys = storageHost(function () { return sw.storageKeys(kind); }) || []; return i >= 0 && i < keys.length ? keys[i] : null; }
   });
-  getter(Storage.prototype, 'length', function () { return (sw.storageKeys(this._kind) || []).length; });
+  getter(Storage.prototype, 'length', function () { var kind = this._kind; return (storageHost(function () { return sw.storageKeys(kind); }) || []).length; });
   setTag(Storage, 'Storage'); global.Storage = Storage;
   function storageEvent(area, key, oldValue, newValue) { /* same-document writes do not fire 'storage' in browsers; kept as a hook */ }
   function makeStorage(kind) {
@@ -2417,21 +2516,14 @@
   setTag(WebSocket, 'WebSocket'); global.WebSocket = WebSocket;
   global.EventSource = function EventSource(url) { EventTarget.call(this); this.url = String(url); this.readyState = 2; var self = this; setTimeoutImpl(function () { fire(self, 'error', {}); }, [], 0, false); };
   extend(global.EventSource, EventTarget); methods(global.EventSource.prototype, { close: function () { } }); defineHandlerProps(global.EventSource.prototype, ['open', 'message', 'error']);
-  global.Worker = function Worker() { throw DOMException('Web Workers are not available in Sweef', 'NotSupportedError'); };
-  global.SharedWorker = global.Worker;
-  function Notification(title, opts) { if (!(this instanceof Notification)) throw new TypeError("Constructor Notification requires 'new'"); EventTarget.call(this); this.title = String(title); Object.assign(this, { body: '', icon: '', tag: '', data: null, dir: 'auto', lang: '', silent: null }, opts || {}); }
-  extend(Notification, EventTarget);
-  methods(Notification.prototype, { close: function () { } });
-  defineHandlerProps(Notification.prototype, ['click', 'close', 'error', 'show']);
-  def(Notification, 'permission', { get: function () { return 'denied'; } });
-  Notification.requestPermission = function (cb) { if (cb) setTimeoutImpl(function () { cb('denied'); }, [], 0, false); return Promise.resolve('denied'); };
-  Notification.maxActions = 0;
-  setTag(Notification, 'Notification'); global.Notification = Notification;
+  // Notification: platformjs/pwa.js
   global.speechSynthesis = { speak: function () { }, cancel: function () { }, pause: function () { }, resume: function () { }, getVoices: function () { return []; }, speaking: false, pending: false, paused: false, addEventListener: function () { }, removeEventListener: function () { }, onvoiceschanged: null };
   global.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) { this.text = text; };
   global.CSS = { supports: function () { return false; }, escape: function (s) { return String(s).replace(/([\0-\x1f\x7f]|^-?\d)|^-$|[^\x80-￿\w-]/g, function (ch, asCode) { return asCode ? (ch === '\0' ? '�' : ch.slice(0, -1) + '\\' + ch.slice(-1).charCodeAt(0).toString(16) + ' ') : '\\' + ch; }); }, registerProperty: function () { }, px: function (v) { return v + 'px'; }, highlights: new Map() };
   global.CSSStyleSheet = function CSSStyleSheet() { this.cssRules = []; this.rules = this.cssRules; this.disabled = false; this.href = null; this.media = { mediaText: '' }; this.ownerNode = null; this.title = null; this.type = 'text/css'; };
-  global.CSSStyleSheet.prototype = { insertRule: function (r, i) { this.cssRules.splice(i || 0, 0, { cssText: String(r), type: 1, selectorText: String(r).split('{')[0].trim(), style: styleDecl(null, (String(r).split('{')[1] || '').replace('}', '')) }); return i || 0; }, deleteRule: function (i) { this.cssRules.splice(i, 1); }, addRule: function (sel, style, i) { return this.insertRule(sel + ' {' + style + '}', i === undefined ? this.cssRules.length : i); }, removeRule: function (i) { this.deleteRule(i); }, replace: function (text) { this.replaceSync(text); return Promise.resolve(this); }, replaceSync: function (text) { this.cssRules.length = 0; var self = this; String(text).replace(/[^{}]+\{[^{}]*\}/g, function (rule) { self.insertRule(rule.trim(), self.cssRules.length); }); } };
+  // ruleBody is the declaration block of a rule text: everything between the first '{' and the last '}'.
+  function ruleBody(r) { var t = String(r), b = t.indexOf('{'), e = t.lastIndexOf('}'); return b < 0 ? '' : t.slice(b + 1, e > b ? e : t.length); }
+  global.CSSStyleSheet.prototype = { insertRule: function (r, i) { this.cssRules.splice(i || 0, 0, { cssText: String(r), type: 1, selectorText: String(r).split('{')[0].trim(), style: styleDecl(null, ruleBody(r)) }); return i || 0; }, deleteRule: function (i) { this.cssRules.splice(i, 1); }, addRule: function (sel, style, i) { return this.insertRule(sel + ' {' + style + '}', i === undefined ? this.cssRules.length : i); }, removeRule: function (i) { this.deleteRule(i); }, replace: function (text) { this.replaceSync(text); return Promise.resolve(this); }, replaceSync: function (text) { this.cssRules.length = 0; var self = this; String(text).replace(/[^{}]+\{[^{}]*\}/g, function (rule) { self.insertRule(rule.trim(), self.cssRules.length); }); } };
   getters(Document.prototype, { adoptedStyleSheets: { get: function () { return slots(this).adopted || (slots(this).adopted = []); }, set: function (v) { slots(this).adopted = Array.from(v); } } });
   global.ResizeObserverEntry = function ResizeObserverEntry() { illegal(); };
   global.FontFace = function FontFace(family, source, desc) { this.family = family; this.status = 'loaded'; this.loaded = Promise.resolve(this); Object.assign(this, desc || {}); };
@@ -2535,6 +2627,11 @@
   function parseURL(input, base) {
     input = String(input).trim().replace(/[\t\n\r]/g, '');
     var m = /^([a-zA-Z][a-zA-Z0-9+.-]*):(.*)$/.exec(input);
+    if (m && base !== undefined && SPECIAL[m[1].toLowerCase() + ':'] && !/^[\/\\]{2}/.test(m[2])) {
+      // "https:../x" against an https base is a relative reference (special relative or authority state)
+      var sb = null; try { sb = parseURL(base); } catch (e) { /* not a valid base */ }
+      if (sb && sb.protocol === m[1].toLowerCase() + ':') { input = m[2]; m = null; }
+    }
     var rec = { protocol: '', username: '', password: '', hostname: '', port: '', pathname: '', search: '', hash: '', opaque: false };
     var rest;
     if (m) { rec.protocol = m[1].toLowerCase() + ':'; rest = m[2]; }
@@ -2627,7 +2724,7 @@
   URL.canParse = function (u, b) { try { parseURL(u, b === undefined ? undefined : String(b)); return true; } catch (e) { return false; } };
   URL.parse = function (u, b) { try { return new URL(u, b); } catch (e) { return null; } };
   var blobURLs = new Map(), blobSeq = 0;
-  URL.createObjectURL = function (blob) { var u = 'blob:' + originOf(currentURL()) + '/' + (++blobSeq) + '-' + cryptoObj.randomUUID(); blobURLs.set(u, blob); return u; };
+  URL.createObjectURL = function (blob) { var u = 'blob:' + docOriginStr() + '/' + (++blobSeq) + '-' + cryptoObj.randomUUID(); blobURLs.set(u, blob); return u; };
   URL.revokeObjectURL = function (u) { blobURLs.delete(String(u)); };
   setTag(URL, 'URL'); global.URL = URL; global.webkitURL = URL;
 
@@ -2671,8 +2768,8 @@
     (parts || []).forEach(function (p) { var b = p instanceof Blob ? p._bytes : toBytes(typeof p === 'string' || p instanceof ArrayBuffer || ArrayBuffer.isView(p) ? p : String(p)); chunks.push(b); total += b.length; });
     var bytes = new Uint8Array(total), off = 0;
     chunks.forEach(function (c) { bytes.set(c, off); off += c.length; });
-    Object.defineProperty(this, '_bytes', { value: bytes });
-    Object.defineProperty(this, 'size', { value: total, enumerable: true });
+    Object.defineProperty(this, '_bytes', { value: bytes, configurable: true });
+    Object.defineProperty(this, 'size', { value: total, enumerable: true, configurable: true });
     Object.defineProperty(this, 'type', { value: String((opts && opts.type) || '').toLowerCase(), enumerable: true });
   }
   Blob.prototype = {
@@ -2699,16 +2796,13 @@
   defineHandlerProps(FileReader.prototype, ['load', 'loadstart', 'loadend', 'progress', 'error', 'abort']);
   constant(FileReader, 'EMPTY', 0); constant(FileReader, 'LOADING', 1); constant(FileReader, 'DONE', 2);
   setTag(FileReader, 'FileReader'); global.FileReader = FileReader;
-  function bytesStream(bytes) {
-    var done = false;
-    var reader = { read: function () { if (done) return Promise.resolve({ done: true, value: undefined }); done = true; return Promise.resolve({ done: false, value: bytes }); }, cancel: function () { done = true; return Promise.resolve(); }, releaseLock: function () { }, closed: Promise.resolve() };
-    return { locked: false, getReader: function () { return reader; }, cancel: function () { done = true; return Promise.resolve(); }, pipeTo: function () { return Promise.resolve(); }, tee: function () { return [bytesStream(bytes), bytesStream(bytes)]; }, [Symbol.asyncIterator]: function () { return { next: function () { return reader.read(); } }; } };
-  }
-  global.ReadableStream = function ReadableStream(src) { var chunks = []; var ctrl = { enqueue: function (c) { chunks.push(c); }, close: function () { }, error: function () { } }; if (src && src.start) src.start(ctrl); var i = 0; this.locked = false; this.getReader = function () { return { read: function () { if (src && src.pull && i >= chunks.length) src.pull(ctrl); return Promise.resolve(i < chunks.length ? { done: false, value: chunks[i++] } : { done: true, value: undefined }); }, cancel: function () { return Promise.resolve(); }, releaseLock: function () { }, closed: Promise.resolve() }; }; this.cancel = function () { return Promise.resolve(); }; };
-  global.WritableStream = function WritableStream(sink) { this.locked = false; this.getWriter = function () { return { write: function (c) { if (sink && sink.write) sink.write(c); return Promise.resolve(); }, close: function () { if (sink && sink.close) sink.close(); return Promise.resolve(); }, abort: function () { return Promise.resolve(); }, releaseLock: function () { }, ready: Promise.resolve(), closed: Promise.resolve() }; }; };
-  global.TransformStream = function TransformStream() { var chunks = []; this.readable = new global.ReadableStream({ start: function (c) { chunks.push(c); } }); this.writable = new global.WritableStream({ write: function (v) { chunks[0].enqueue(v); } }); };
+  // Real streams live in platformjs/streams.js and load on first use.
+  function bytesStream(bytes) { return new global.ReadableStream({ start: function (c) { if (bytes.length) c.enqueue(bytes); c.close(); } }); }
 
   // ---- FormData
+  // Extension hooks for the platform layer (platformjs/*.js).
+  var swHooks = {};
+  Object.defineProperty(global, '__swHooks', { value: swHooks });
   function FormData(form) {
     if (!(this instanceof FormData)) throw new TypeError("Failed to construct 'FormData': Please use the 'new' operator");
     Object.defineProperty(this, '_list', { value: [], writable: true });
@@ -2721,6 +2815,7 @@
         else if (tag === 'select') { itemsOf(c.options).forEach(function (o) { if (o.selected) self._list.push([name, o.value]); }); }
         else if (tag === 'textarea') self._list.push([name, c.value]);
       });
+      if (swHooks.formData) swHooks.formData(form, self._list);
     }
   }
   function fdValue(v, filename) { if (v instanceof Blob) { if (v instanceof File && filename === undefined) return v; return new File([v], filename === undefined ? 'blob' : String(filename), { type: v.type }); } return String(v); }
@@ -2796,15 +2891,30 @@
     return null;
   }
   function defineBody(proto) {
-    getters(proto, { bodyUsed: { get: function () { return !!this._used; } }, body: { get: function () { if (this._body === null || this._body === undefined) return null; return bytesStream(utf8Encode(this._text())); } } });
+    getters(proto, { bodyUsed: { get: function () { return !!this._used; } }, body: { get: function () { if (this._body === null || this._body === undefined) return null; if (typeof this._body.getReader === 'function') return this._body; return bytesStream(this._rawBytes ? this._rawBytes.slice() : utf8Encode(this._text())); } } });
     methods(proto, {
       _text: function () { return bodyToString(this._body); },
-      _consume: function () { if (this._used) return Promise.reject(new TypeError('Failed to execute \'text\' on \'' + this.constructor.name + '\': body stream already read')); this._used = true; return Promise.resolve(this._text()); },
+      _consume: function () {
+        if (this._used) return Promise.reject(new TypeError('Failed to execute \'text\' on \'' + this.constructor.name + '\': body stream already read'));
+        this._used = true;
+        var self = this, b = this._body;
+        if (b && typeof b.getReader === 'function') {
+          var rd = b.getReader(), parts = [], total = 0;
+          var pump = function () { return rd.read().then(function (r) {
+            if (r.done) { var all = new Uint8Array(total), o = 0; parts.forEach(function (p) { all.set(p, o); o += p.length; }); self._rawBytes = all; return utf8Decode(all); }
+            var v = r.value, u = typeof v === 'string' ? utf8Encode(v) : v instanceof ArrayBuffer ? new Uint8Array(v) : ArrayBuffer.isView(v) ? new Uint8Array(v.buffer, v.byteOffset, v.byteLength) : null;
+            if (!u) throw new TypeError('Received non-Uint8Array chunk');
+            parts.push(u); total += u.length; return pump();
+          }); };
+          return pump();
+        }
+        return Promise.resolve(this._text());
+      },
       text: function () { return this._consume(); },
       json: function () { return this._consume().then(function (t) { return JSON.parse(t); }); },
-      arrayBuffer: function () { var raw = this._rawBytes; return this._consume().then(function (t) { return raw ? raw.slice().buffer : utf8Encode(t).buffer; }); },
-      bytes: function () { var raw = this._rawBytes; return this._consume().then(function (t) { return raw ? raw.slice() : utf8Encode(t); }); },
-      blob: function () { var type = this.headers.get('content-type') || '', raw = this._rawBytes; return this._consume().then(function (t) { return new Blob([raw || t], { type: type }); }); },
+      arrayBuffer: function () { var self = this; return this._consume().then(function (t) { var raw = self._rawBytes; return raw ? raw.slice().buffer : utf8Encode(t).buffer; }); },
+      bytes: function () { var self = this; return this._consume().then(function (t) { var raw = self._rawBytes; return raw ? raw.slice() : utf8Encode(t); }); },
+      blob: function () { var type = this.headers.get('content-type') || '', self = this; return this._consume().then(function (t) { var raw = self._rawBytes; return new Blob([raw || t], { type: type }); }); },
       formData: function () { var type = this.headers.get('content-type') || ''; return this._consume().then(function (t) { var fd = new FormData(); if (/urlencoded/.test(type)) new URLSearchParams(t).forEach(function (v, k) { fd.append(k, v); }); return fd; }); }
     });
   }
@@ -2812,7 +2922,7 @@
     if (!(this instanceof Request)) throw new TypeError("Failed to construct 'Request': Please use the 'new' operator");
     init = init || {};
     var url, method = 'GET', headers = null, body = null, extra = {};
-    if (input instanceof Request) { url = input.url; method = input.method; headers = new Headers(input.headers); body = input._body; extra = { mode: input.mode, credentials: input.credentials, cache: input.cache, redirect: input.redirect, referrer: input.referrer, integrity: input.integrity, signal: input.signal }; }
+    if (input instanceof Request) { url = input.url; method = input.method; headers = new Headers(input.headers); body = input._body; extra = { mode: input.mode, credentials: input.credentials, cache: input.cache, redirect: input.redirect, referrer: input.referrer, integrity: input.integrity, signal: input.signal, destination: input.destination }; }
     else url = new URL(String(input), currentURL()).href;
     if (init.method !== undefined) method = String(init.method).toUpperCase() === String(init.method).toUpperCase() && /^(get|post|put|delete|head|options|patch)$/i.test(init.method) ? String(init.method).toUpperCase() : String(init.method);
     if (init.headers !== undefined) headers = new Headers(init.headers);
@@ -2827,7 +2937,7 @@
     var self = this;
     ['mode', 'credentials', 'cache', 'redirect', 'referrer', 'integrity', 'keepalive', 'priority'].forEach(function (k) { var dflt = { mode: 'cors', credentials: 'same-origin', cache: 'default', redirect: 'follow', referrer: 'about:client', integrity: '', keepalive: false, priority: 'auto' }[k]; Object.defineProperty(self, k, { value: init[k] !== undefined ? init[k] : extra[k] !== undefined ? extra[k] : dflt, enumerable: true }); });
     Object.defineProperty(this, 'signal', { value: init.signal || extra.signal || new AbortSignal(), enumerable: true });
-    Object.defineProperty(this, 'destination', { value: '', enumerable: true });
+    Object.defineProperty(this, 'destination', { value: init.__destination !== undefined ? String(init.__destination) : extra.destination || '', enumerable: true }); // __destination: set by the service worker host for the requests it hands to fetch events
     Object.defineProperty(this, 'referrerPolicy', { value: init.referrerPolicy || '', enumerable: true });
   }
   defineBody(Request.prototype);
@@ -2851,17 +2961,35 @@
   }
   defineBody(Response.prototype);
   getters(Response.prototype, { ok: { get: function () { return this.status >= 200 && this.status < 300; } } });
-  methods(Response.prototype, { clone: function () { if (this._used) throw new TypeError("Failed to execute 'clone' on 'Response': Response body is already used"); var r = new Response(this._body, { status: this.status, statusText: this.statusText, headers: this.headers, url: this.url, type: this.type, redirected: this.redirected }); return r; } });
+  methods(Response.prototype, { clone: function () { if (this._used) throw new TypeError("Failed to execute 'clone' on 'Response': Response body is already used"); var r = new Response(this._body, { status: this.status, statusText: this.statusText, headers: this.headers, url: this.url, type: this.type, redirected: this.redirected }); if (this._rawBytes) Object.defineProperty(r, '_rawBytes', { value: this._rawBytes, writable: true, configurable: true }); return r; } });
   Response.error = function () { var r = new Response(null, { status: 200, type: 'error' }); Object.defineProperty(r, 'status', { value: 0 }); return r; };
   Response.redirect = function (url, status) { return new Response(null, { status: status || 302, headers: { location: new URL(url, currentURL()).href } }); };
   Response.json = function (data, init) { init = Object.assign({}, init || {}); var h = new Headers(init.headers); if (!h.has('content-type')) h.set('content-type', 'application/json'); init.headers = h; return new Response(JSON.stringify(data), init); };
   setTag(Response, 'Response'); global.Response = Response;
 
   // ---- fetch: an asynchronous request behind a Promise, started on a microtask
+  // The request body as the host takes it: text as a string, bytes (ArrayBuffer, typed array, Blob) as
+  // {bin: Uint8Array} so that they are not mangled by a trip through UTF-8.
+  function sendBody(body) {
+    if (body === null || body === undefined) return null;
+    if (body instanceof ArrayBuffer) return { bin: new Uint8Array(body) };
+    if (ArrayBuffer.isView(body)) return { bin: new Uint8Array(body.buffer, body.byteOffset, body.byteLength) };
+    if (body instanceof Blob) return { bin: body._bytes };
+    return bodyToString(body);
+  }
+  function bodyWire(body) {
+    if (body && typeof body === 'object' && body.bin) {
+      var u = body.bin, s = '';
+      for (var i = 0; i < u.length; i += 0x6000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x6000));
+      return [global.btoa(s), true];
+    }
+    return [body, false];
+  }
   function doHttp(method, url, headers, body) {
     var hobj = {};
     if (headers) headers.forEach(function (v, k) { hobj[k] = v; });
-    var r = sw.http(method, url, hobj, body);
+    var w = bodyWire(body);
+    var r = sw.http(method, url, hobj, w[0], w[1]);
     if (!r || typeof r !== 'object') throw new TypeError('Failed to fetch');
     return r;
   }
@@ -2872,7 +3000,8 @@
     var hobj = {};
     if (headers) headers.forEach(function (v, k) { hobj[k] = v; });
     var t;
-    try { t = sw.httpAsync(method, url, hobj, body, false); } catch (e) { cb(null, e); return; }
+    var w = bodyWire(body);
+    try { t = sw.httpAsync(method, url, hobj, w[0], false, w[1]); } catch (e) { cb(null, e); return; }
     if (t && typeof t === 'object') { cb(t); return; }
     httpCbs.set(t, cb);
   }
@@ -2887,7 +3016,7 @@
     var status = r.status | 0;
     var resp = new Response(r.body === undefined || r.body === null ? '' : r.body, { status: status >= 200 && status <= 599 ? status : 200, statusText: r.statusText || '', headers: r.headers || {} });
     if (status < 200 || status > 599) Object.defineProperty(resp, 'status', { value: status });
-    if (r.b64) Object.defineProperty(resp, '_rawBytes', { value: b64ToBytes(String(r.b64)), writable: true });
+    if (r.b64) Object.defineProperty(resp, '_rawBytes', { value: b64ToBytes(String(r.b64)), writable: true, configurable: true });
     resp.url = r.url || url;
     resp.redirected = !!r.url && r.url !== url;
     resp.type = 'basic';
@@ -2902,7 +3031,7 @@
       if (req.signal) req.signal.addEventListener('abort', function () { aborted = true; reject(req.signal.reason); });
       queueMicrotaskImpl(function () {
         if (aborted) return;
-        doHttpAsync(req.method, req.url, req.headers, req._body === null ? null : bodyToString(req._body), function (r, e) {
+        doHttpAsync(req.method, req.url, req.headers, sendBody(req._body), function (r, e) {
           if (aborted) return;
           if (e) { reject(e instanceof Error ? new TypeError('Failed to fetch: ' + (e.message || e)) : new TypeError('Failed to fetch')); return; }
           if (!r || (!r.status && !r.body)) { reject(new TypeError('Failed to fetch')); return; }
@@ -2962,7 +3091,7 @@
         }
       }
     },
-    responseXML: { get: function () { if (this.readyState !== 4 || !/html|xml/.test(this._resHeaders.get('content-type') || '') && this.responseType !== 'document') return null; try { return new DOMParser().parseFromString(this._responseText, 'text/html'); } catch (e) { return null; } } }
+    responseXML: { get: function () { if (this.readyState !== 4 || !/html|xml/.test(this._resHeaders.get('content-type') || '') && this.responseType !== 'document') return null; try { var ct = this._resHeaders.get('content-type') || ''; return new DOMParser().parseFromString(this._responseText, /xml/.test(ct) && !/html/.test(ct) ? 'text/xml' : 'text/html'); } catch (e) { return null; } } }
   });
   methods(XMLHttpRequest.prototype, {
     open: function (method, url, async, user, password) {
@@ -2979,7 +3108,8 @@
       if (this.readyState !== 1 || this._sent) throw DOMException("Failed to execute 'send' on 'XMLHttpRequest': The object's state must be OPENED.", 'InvalidStateError');
       this._sent = true;
       if (this._method === 'GET' || this._method === 'HEAD') body = null;
-      var bodyStr = body === undefined || body === null ? null : bodyToString(body);
+      var bodyStr = body === undefined || body === null ? null : sendBody(body);
+      var bodyLen = bodyStr === null ? 0 : typeof bodyStr === 'string' ? bodyStr.length : bodyStr.bin.length;
       if (bodyStr !== null && !this._reqHeaders.has('content-type')) { var ct = bodyContentType(body); if (ct) this._reqHeaders.set('content-type', ct); }
       var self = this, url = this._url, method = this._method, headers = this._reqHeaders;
       fire(this, 'loadstart', {});
@@ -2987,7 +3117,7 @@
       var done = function (r, e) {
         if (self._aborted || self.readyState === 4) return;
         if (e) { xhrFail(self, 'error'); return; }
-        if (bodyStr !== null) { fire(self.upload, 'progress', { lengthComputable: true, loaded: bodyStr.length, total: bodyStr.length }); fire(self.upload, 'load', {}); fire(self.upload, 'loadend', {}); }
+        if (bodyStr !== null) { fire(self.upload, 'progress', { lengthComputable: true, loaded: bodyLen, total: bodyLen }); fire(self.upload, 'load', {}); fire(self.upload, 'loadend', {}); }
         if (!r || (!r.status && !r.body)) { xhrFail(self, 'error'); return; }
         xhrFinish(self, r, url);
       };
@@ -3177,7 +3307,7 @@
     // reset everything per-navigation: wrappers, timers, listeners, observers, focus, history override
     timers.length = 0; runningTimer = null;
     observers.length = 0; pendingObservers.length = 0; moFlushScheduled = false;
-    activeElement = null; currentScript = null; urlOverride = null; historyState = null;
+    activeElement = null; currentScript = null; urlOverride = null; historyState = null; histEntries.length = 0; histIdx = 0;
     perfMarks = []; perfMeasures = []; timeOrigin = Date.now();
     ceDefinitions.clear(); ceWhenDefined.clear();
     blobURLs.clear();

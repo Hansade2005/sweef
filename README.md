@@ -266,7 +266,7 @@ Refs are small integers from a per-document table, so they stay valid while scri
 
 Each tab owns a QuickJS VM with a 64 MB heap cap and a 5 s per-script timeout. The Go DOM is the source of truth; a prelude implements `window`, `document`, elements, events, timers, `fetch`, `XMLHttpRequest`, `localStorage`, `MutationObserver` and the rest of the browser API on top of a small host bridge (see `internal/engine/jsbridge.md`). Scripts load the way browsers load them: inline and `src` scripts in order, `async` and `defer` after, `type=module` with relative imports, scripts inserted by page code (webpack chunks, tag managers) when they connect. After `load`, the event loop pumps until the page is idle or the settle budget (`--settle-ms`, default 1500) is spent, and again briefly after every action, so a click that triggers a fetch and a re-render is reflected in the next snapshot.
 
-VMs come from a pre-warmed pool, and the prelude and large scripts are cached as bytecode in memory and on disk, so a React page installs in about 10 ms. WebSockets are real connections, and Web Workers run in their own VM. What this means in practice: server-rendered sites, documentation, forms, dashboards, and React, Preact or jQuery apps run. example.com renders its script-injected paragraphs, react.dev renders its navigation and content, GitHub login and Wikipedia snapshot cleanly. Pages that need exact pixel geometry, WebGL, canvas painting or media playback do not, and Sweef reports script errors in the console log rather than pretending.
+VMs come from a pre-warmed pool, and the prelude and large scripts are cached as bytecode in memory and on disk, so a React page installs in about 10 ms. WebSockets are real connections, and Web Workers run in their own VM. What this means in practice: server-rendered sites, documentation, forms, dashboards, and React, Preact or jQuery apps run. example.com renders its script-injected paragraphs, react.dev renders its navigation and content, GitHub login and Wikipedia snapshot cleanly. Layout, canvas, WebGL and media playback work as described in the feature map below, and Sweef reports script errors in the console log rather than pretending.
 
 ## Feature map
 
@@ -375,7 +375,6 @@ Requires Go 1.26 (the `go` toolchain downloads it automatically when `GOTOOLCHAI
 
 ## Roadmap
 
-- CSS box model (margin, padding, width/height, positioning) in the shared layout, for libraries that measure elements
 - `sweef watch` live event stream
 - Playwright trace format subset for the trace viewer
 - Faster first execution of large framework bundles

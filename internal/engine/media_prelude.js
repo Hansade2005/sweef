@@ -39,14 +39,21 @@
   }
   // Agent actions reach the page through these Go-called entry points; page
   // code calling el.click() does not.
-  ['__swDispatch', '__swDispatchKey', '__swMouse', '__swTouch', '__swDrag', '__swWheel', '__swSetValueFromGo'].forEach(function (n) {
+  // Only real gestures count: button press/release/click, key presses and touches. Moving the pointer, scrolling
+  // and script-dispatched events do not activate the page.
+  var GESTURE = /^(click|mousedown|mouseup|pointerdown|pointerup|keydown|keyup|touchstart|touchend|dblclick|contextmenu)$/;
+  ['__swDispatch', '__swDispatchKey', '__swMouse', '__swTouch', '__swDrag', '__swSetValueFromGo'].forEach(function (n) {
     var orig = global[n];
     if (typeof orig !== 'function') return;
     try {
       Object.defineProperty(global, n, {
         value: function (a, b) {
-          var t = (n === '__swDispatch') ? b : (n === '__swMouse' ? a : n);
-          if (n !== '__swWheel' && (n !== '__swDispatch' || /^(click|mousedown|mouseup|pointerdown|pointerup|keydown|keyup|touchstart|touchend|dblclick|contextmenu)$/.test(String(t)))) grantActivation();
+          var gesture;
+          if (n === '__swDispatch') gesture = GESTURE.test(String(b));
+          else if (n === '__swMouse') gesture = GESTURE.test(String(a));
+          else if (n === '__swTouch') gesture = GESTURE.test(String(b));
+          else gesture = true; // key presses, drags, values typed by the agent
+          if (gesture) grantActivation();
           return orig.apply(this, arguments);
         }, writable: true, configurable: true, enumerable: false
       });
@@ -103,7 +110,8 @@
         lastTU: 0, defaultStart: 0, started: false, preloadDone: false, loadedOnce: false,
         sinkId: '', rvfc: [], rvfcSeq: 0, frameSeq: 0, lastFrameReq: -1, lastFrameAt: 0,
         tracks: null, activeCuesDirty: true, played: [], lastRun: 0, pip: false, resumeLoad: null,
-        capture: [], node: 0, presented: 0
+        capture: [], node: 0, presented: 0,
+        pl: null, plOn: false, plRate: 1, plT: 0, plAt: -1e9, seekPending: null
       };
       STATE.set(el, s);
     }
@@ -136,8 +144,25 @@
 
   // ---- time keeping ----------------------------------------------------------------------
   function playing(s) { return !s.paused && !s.ended && s.ready >= 3 && !s.seekingBlock; }
+  // The native player (audio device clock) is the master clock while it runs; the wall clock stands in
+  // for elements it does not drive (undecodable tracks, MediaStream, ffmpeg-only codecs).
+  function plClock(s) {
+    var now = _now();
+    if (now - s.plAt >= 1) {
+      s.plAt = now;
+      var c = null;
+      try { c = sw.playerClock(s.pl.node); } catch (e) { c = null; }
+      if (c && typeof c.t === 'number') { if (c.t >= s.pos || s.plFirst) s.plT = c.t; s.plFirst = false; }
+    }
+    return s.plT;
+  }
   function curTime(s) {
     if (!playing(s)) return s.pos;
+    if (s.pl && s.plOn) {
+      var t0 = plClock(s), d0 = s.duration;
+      if (isFinite(d0) && t0 > d0) t0 = d0;
+      return t0;
+    }
     var el0 = _now() - s.wall; if (el0 < 0) el0 = 0;
     var t = s.pos + el0 / 1000 * s.rate;
     var d = s.duration;
@@ -189,27 +214,37 @@
   };
   PROPS.volume = {
     get: function () { return st(this).vol; },
-    set: function (v) { v = +v; if (!(v >= 0 && v <= 1)) throw dex("Failed to set the 'volume' property on 'HTMLMediaElement': The volume provided (" + v + ") is outside the range [0, 1].", 'IndexSizeError'); var s = st(this); if (s.vol !== v) { s.vol = v; qevAny(this, 'volumechange'); } }
+    set: function (v) { v = +v; if (!(v >= 0 && v <= 1)) throw dex("Failed to set the 'volume' property on 'HTMLMediaElement': The volume provided (" + v + ") is outside the range [0, 1].", 'IndexSizeError'); var s = st(this); if (s.vol !== v) { s.vol = v; plVolume(this); qevAny(this, 'volumechange'); } }
   };
   PROPS.muted = {
     get: function () { var s = st(this); return s.muted === null ? this.hasAttribute('muted') : s.muted; },
-    set: function (v) { var s = st(this), old = this.muted; s.muted = !!v; if (old !== !!v) qevAny(this, 'volumechange'); }
+    set: function (v) { var s = st(this), old = this.muted; s.muted = !!v; plVolume(this); if (old !== !!v) qevAny(this, 'volumechange'); }
   };
   function rateCheck(v) { v = +v; if (!isFinite(v)) throw new TypeError('The provided double value is non-finite.'); return v; }
   PROPS.playbackRate = {
     get: function () { return st(this).rate; },
     set: function (v) {
-      v = rateCheck(v); if (v < 0.0625 || v > 16) throw dex("Failed to set the 'playbackRate' property on 'HTMLMediaElement': The provided playback rate (" + v + ") is not in the supported playback range.", 'NotSupportedError');
+      v = rateCheck(v); if (v !== 0 && (v < 0.0625 || v > 16)) throw dex("Failed to set the 'playbackRate' property on 'HTMLMediaElement': The provided playback rate (" + v + ") is not in the supported playback range.", 'NotSupportedError');
       var s = st(this); if (s.rate !== v) { anchor(s); s.rate = v; qevAny(this, 'ratechange'); reschedule(this); }
     }
   };
   PROPS.defaultPlaybackRate = {
     get: function () { return st(this).defRate; },
-    set: function (v) { v = rateCheck(v); if (v < 0.0625 || v > 16) throw dex("Failed to set the 'defaultPlaybackRate' property on 'HTMLMediaElement': The provided playback rate (" + v + ") is not in the supported playback range.", 'NotSupportedError'); var s = st(this); if (s.defRate !== v) { s.defRate = v; qevAny(this, 'ratechange'); } }
+    set: function (v) { v = rateCheck(v); if (v !== 0 && (v < 0.0625 || v > 16)) throw dex("Failed to set the 'defaultPlaybackRate' property on 'HTMLMediaElement': The provided playback rate (" + v + ") is not in the supported playback range.", 'NotSupportedError'); var s = st(this); if (s.defRate !== v) { s.defRate = v; qevAny(this, 'ratechange'); } }
   };
   PROPS.preservesPitch = { get: function () { var s = st(this); return s.pp === undefined ? true : s.pp; }, set: function (v) { st(this).pp = !!v; } };
   PROPS.buffered = { get: function () { return makeRanges(bufferedList(st(this))); } };
-  PROPS.seekable = { get: function () { var s = st(this); if (s.ready === 0 || !isFinite(s.duration) && !s.mse) return makeRanges([]); if (s.live) return makeRanges([[0, s.duration]]); return makeRanges([[0, s.duration]]); } };
+  PROPS.seekable = { get: function () {
+    var s = st(this);
+    if (s.ready === 0) return makeRanges([]);
+    if (s.mse) { // live streams: the live seekable range plus what is buffered
+      if (isFinite(s.duration)) return makeRanges([[0, s.duration]]);
+      var lv = msr(s.mse.ms).live;
+      return makeRanges(mergeRanges((lv ? [lv] : []).concat(s.mse.bufferedUnion())));
+    }
+    if (!isFinite(s.duration)) return makeRanges([]);
+    return makeRanges([[0, s.duration]]);
+  } };
   PROPS.played = { get: function () { var s = st(this), l = s.played.slice(); if (!s.paused && s.ready >= 3 && s.playStart !== undefined) l.push([s.playStart, curTime(s)]); return makeRanges(mergeRanges(l)); } };
   PROPS.sinkId = { get: function () { return st(this).sinkId; } };
   PROPS.mediaKeys = { get: function () { return null; } };
@@ -272,9 +307,12 @@
   // ---- playback policy ------------------------------------------------------------------------
   function hasAudioTrack(s) { return !s.info || s.info.tracks.some(function (t) { return t.kind === 'audio'; }); }
   function liteMedia() { try { return !!sw.mediaLite(); } catch (e) { return false; } }
+  // Autoplay policy (Chromium's default): playback may start when the page has had a user gesture, when the
+  // element is a muted video, or when it is a video without an audio track. Otherwise play() rejects with NotAllowedError
+  // and the autoplay attribute does nothing until the user interacts.
   function playAllowed(el) {
     if (activation.has) return true;
-    if (isVideo(el) && el.muted) return true;
+    if (isVideo(el) && (el.muted || el.volume === 0)) return true;
     var s = st(el);
     if (isVideo(el) && s.info && !hasAudioTrack(s)) return true;
     return false;
@@ -287,7 +325,58 @@
     for (var c = el.firstChild; c; c = c.nextSibling) if (c.nodeType === 1 && c.localName === 'source') return true;
     return false;
   }
+  function nodeOf(el) { var s = st(el); if (!s.node) { try { s.node = global.__swIdOf(el); } catch (e) { s.node = 0; } } return s.node; }
+  // ---- native player glue ---------------------------------------------------------------------
+  function plVolume(el) {
+    var s = st(el);
+    if (s.pl) { try { sw.playerVolume(s.pl.node, s.vol, !!el.muted); } catch (e) { /* ignore */ } }
+  }
+  // Mirrors the element's wish (playing or not, rate) onto the player. Called whenever playback state may
+  // have changed; the player is only told about transitions.
+  function plSync(el) {
+    var s = st(el);
+    if (!s.pl) return;
+    var want = playing(s) && !s.seekBlock && !s.mseStalled;
+    try {
+      if (want && !s.plOn) {
+        s.plOn = true; s.plRate = s.rate; s.plT = s.pos; s.plAt = _now(); s.plFirst = true;
+        sw.playerHold(s.pl.node, false);
+        sw.playerPlay(s.pl.node, s.pos, s.rate);
+      } else if (!want && s.plOn) {
+        s.plOn = false;
+        var t = sw.playerPause(s.pl.node);
+        if (typeof t === 'number' && isFinite(t)) { s.pos = Math.max(s.pos, t); s.plT = s.pos; }
+      } else if (want && s.plOn && s.plRate !== s.rate) {
+        s.plRate = s.rate; sw.playerRate(s.pl.node, s.rate);
+      }
+    } catch (e) { reportErr(e); }
+  }
+  function plStop(el) {
+    var s = st(el);
+    if (s.pl && s.plOn) { s.plOn = false; try { var t = sw.playerPause(s.pl.node); if (typeof t === 'number' && isFinite(t)) s.pos = t; } catch (e) { /* ignore */ } }
+  }
+  function plOpen(el, s) {
+    if (s.pl || !s.h) return;
+    var node = nodeOf(el), r = null;
+    try { r = sw.playerOpen(node, s.h, isVideo(el)); } catch (e) { r = null; }
+    if (!r || !r.ok) return;
+    s.pl = { node: node, video: !!r.video, audio: !!r.audio, mse: false };
+    if (isVideo(el) && r.video) {
+      s.frameMode = 'player';
+      // a poster stays up until playback or a seek asks for the first frame
+      try { sw.playerHold(node, el.hasAttribute('poster') && !s.started && !s.seekId); } catch (e) { /* ignore */ }
+    }
+    plVolume(el);
+    if (el.__swSourceNode) { try { sw.playerRoute(node, true); } catch (e) { /* ignore */ } }
+  }
+  function plClose(el, s) {
+    if (s.pl) { try { sw.playerClose(s.pl.node); } catch (e) { /* ignore */ } }
+    s.pl = null; s.plOn = false;
+  }
+
   function closeRes(s) {
+    if (s.pl) { plClose(s.el, s); }
+    if (s.rtcDetach) { try { s.rtcDetach(); } catch (e) { /* ignore */ } } // WebRTC stream playback (webrtc_prelude.js)
     if (s.h) { try { sw.mediaClose(s.h); } catch (e) { /* ignore */ } }
     s.h = 0; s.info = null; s.bufCache = null;
     if (s.mse) { s.mse.detach(); s.mse = null; }
@@ -306,6 +395,7 @@
     s.loadId++;
     s.evGen = (s.evGen || 0) + 1;
     var id = s.loadId;
+    if (s.capPrev) { s.capPrev = false; try { sw.capUnbindPreview(s.node); } catch (e) { /* ignore */ } }
     s.adopted = true;
     if (s.timer) { _clearTimeout(s.timer); s.timer = null; }
     if (s.net === 1 || s.net === 2) ev(el, 'abort');
@@ -420,6 +510,17 @@
       if (res.ok) { s.h = res.h; s.info = res.info; s.streamLike = false; s.frameMode = res.frameMode; return onMetadata(el, s, id); }
       s.error = makeError(4, 'MEDIA_ELEMENT_ERROR: Format error'); s.net = 3; ev(el, 'error'); return;
     }
+    // WebRTC (webrtc_prelude.js): a stream with received video becomes ready with its first frame
+    var rtcDeferred = false;
+    try { rtcDeferred = !!(global.__swStreamAttach && global.__swStreamAttach(el, ms, { state: s, setReady: setReady, ev: ev })); } catch (e) { reportErr(e); }
+    if (rtcDeferred) { s.net = 1; return; }
+    if (ms instanceof global.MediaStream && isVideo(el)) { // a live camera or screen track: show its frames
+      var vt = ms.getVideoTracks().filter(function (t) { return t._t.cap && t._t.ready === 'live'; })[0];
+      if (vt) {
+        s.videoW = vt._t.settings.width || 0; s.videoH = vt._t.settings.height || 0; s.fps = vt._t.settings.frameRate || 30;
+        try { bindFrames(el, 0); s.capPrev = !!sw.capBindPreview(s.node, vt._t.id); } catch (e) { /* ignore */ }
+      }
+    }
     ev(el, 'durationchange');
     s.ready = 1; ev(el, 'loadedmetadata');
     s.net = 1;
@@ -442,6 +543,7 @@
       s.ready = 1;
       populateTracks(el, s);
       if (v) bindFrames(el, s.h);
+      plOpen(el, s);
       if (v) fire(el, 'resize');
       fire(el, 'loadedmetadata');
       if (s.defaultStart > 0) { s.pos = Math.min(s.defaultStart, isFinite(s.duration) ? s.duration : s.defaultStart); }
@@ -562,8 +664,11 @@
     if (isFinite(d) && t > d) t = d;
     if (s.resumeLoad) { var r = s.resumeLoad; s.resumeLoad = null; r(); }
     var run = playing(s), wasPlaying = !s.paused;
+    s.seekPending = null;
+    plStop(el);
     s.pos = t; s.wall = _now();
     s.seekBlock = true;
+    if (s.pl) { s.plT = t; s.plAt = _now(); try { sw.playerHold(s.pl.node, false); sw.playerSeek(s.pl.node, t); } catch (e) { /* ignore */ } }
     s.seeking = true; s.ended = false;
     if (s.ready > 1) { s.pos = t; s.ready = 1; }
     s.seekId = (s.seekId || 0) + 1;
@@ -577,29 +682,40 @@
       if (s.seekId !== sid || s.loadId !== lid) return;
       if (s.h) { try { sw.mediaFetch(s.h, t, 10); s.bufCache = null; } catch (e) { /* ignore */ } }
       s.seekBlock = false; s.seeking = false; s.wall = _now() + LAT;
-      s.ready = 4;
+      s.ready = s.mse ? 1 : 4; // MSE: the buffered data decides (msUpdate)
       requestFrame(el, s, true);
       cuesSeek(el);
       fire(el, 'timeupdate');
       fire(el, 'seeked');
       s.lastTU = _now();
+      if (s.mse) { msUpdate(el); return; }
       qevAny(el, 'canplay');
       if (!s.paused) qevAny(el, 'playing');
       qevAny(el, 'canplaythrough');
       reschedule(el);
     };
-    task(function () { _setTimeout(function () { task(finishSeek); }, 0); });
+    task(function () {
+      _setTimeout(function () {
+        task(function () {
+          if (s.seekId !== sid || s.loadId !== lid) return;
+          // inside the buffered data a seek completes at once; outside it waits for the page to append there
+          if (s.mse && !inRanges(s.mse.bufferedUnion(), t)) { s.seekPending = finishSeek; msUpdate(el); } else finishSeek();
+        });
+      }, 0);
+    });
     void run;
   }
 
   // ---- scheduler: timeupdate, ended/loop, cues, rVFC -------------------------------------------------------
   function reschedule(el) {
     var s = st(el);
+    plSync(el);
     if (s.timer) { _clearTimeout(s.timer); s.timer = null; }
     var now = _now(), wake = Infinity;
     var run = playing(s) && !s.seekBlock;
     if (run) {
       wake = Math.min(wake, s.lastTU + 250 - now);
+      if (s.pl) wake = Math.min(wake, 50); // follow the device clock: the end of the media, buffering, cues
       if (isFinite(s.duration) && s.rate > 0) wake = Math.min(wake, (s.duration - curTime(s)) / s.rate * 1000);
       var cb = nextCueBoundary(el, s);
       if (cb < Infinity) wake = Math.min(wake, cb / s.rate * 1000);
@@ -663,7 +779,7 @@
     } catch (e) { /* ignore */ }
   }
   function requestFrame(el, s, force) {
-    if (s.mseFrameBuf && s.video) { s.lastFrameAt = _now(); try { sw.mseFrame(s.mseFrameBuf, curTime(s)); } catch (e) { /* ignore */ } return; }
+    if (s.pl) { s.lastFrameAt = _now(); return; } // the player's video loop owns the picture
     if (!s.h || !s.video || !s.frameMode) return;
     if (el.hasAttribute('poster') && !s.started && !s.seekId && !force) return;
     if (el.hasAttribute('poster') && !s.started && !s.seekId) return;
@@ -699,12 +815,18 @@
   defGetter(VP, 'videoWidth', function () { return st(this).ready >= 1 ? (st(this).videoW || 0) : 0; });
   defGetter(VP, 'videoHeight', function () { return st(this).ready >= 1 ? (st(this).videoH || 0) : 0; });
   defGetter(VP, 'poster', function () { var v = this.getAttribute('poster'); if (v === null) return ''; try { return new global.URL(v, global.document.baseURI || global.location.href).href; } catch (e) { return v; } }, function (v) { this.setAttribute('poster', String(v)); });
-  defGetter(VP, 'webkitDecodedFrameCount', function () { return st(this).presented; });
-  defGetter(VP, 'webkitDroppedFrameCount', function () { return 0; });
+  function plStats(el) {
+    var s = st(el);
+    if (s.pl) { try { var q = sw.playerStats(s.pl.node); if (q) return q; } catch (e) { /* ignore */ } }
+    return null;
+  }
+  defGetter(VP, 'webkitDecodedFrameCount', function () { var q = plStats(this); return q ? q.total : st(this).presented; });
+  defGetter(VP, 'webkitDroppedFrameCount', function () { var q = plStats(this); return q ? q.dropped : 0; });
   defGetter(VP, 'webkitDisplayingFullscreen', function () { return false; });
   defGetter(VP, 'webkitSupportsFullscreen', function () { return true; });
   defMethod(VP, 'getVideoPlaybackQuality', function () {
-    var s = st(this);
+    var s = st(this), q = plStats(this);
+    if (q) return { creationTime: _now(), totalVideoFrames: q.total, droppedVideoFrames: q.dropped, corruptedVideoFrames: q.corrupted, totalFrameDelay: 0 };
     var total = s.ready >= 2 && s.video ? Math.floor(curTime(s) * s.fps) : 0;
     return { creationTime: _now(), totalVideoFrames: total, droppedVideoFrames: 0, corruptedVideoFrames: 0, totalFrameDelay: 0 };
   });
@@ -1073,26 +1195,61 @@
   function uuid() { try { return global.crypto.randomUUID(); } catch (e) { return String(Math.random()).slice(2) + String(Date.now()); } }
   function MediaStreamTrack() { illegal(); }
   derive(MediaStreamTrack, EventTarget); tag(MediaStreamTrack, 'MediaStreamTrack');
+  // Tracks made by getUserMedia / getDisplayMedia carry _t.cap = true and live in Go (capture_host.go): their
+  // settings and capabilities are what the device really delivers, and stop()/enabled/applyConstraints reach it.
+  var capTracks = {};
   global.__swMakeTrack = function (kind, label, extra) {
     var t = Object.create(MediaStreamTrack.prototype); EventTarget.call(t);
-    Object.defineProperty(t, '_t', { value: { kind: kind, label: label || '', id: uuid(), enabled: true, ready: 'live', extra: extra || {}, hint: '' } });
+    Object.defineProperty(t, '_t', { value: { kind: kind, label: label || '', id: uuid(), enabled: true, ready: 'live', extra: extra || {}, hint: '', cons: {} } });
     return t;
   };
+  function capTrack(info, cons) {
+    var t = Object.create(MediaStreamTrack.prototype); EventTarget.call(t);
+    Object.defineProperty(t, '_t', { value: { kind: info.kind, label: info.label || '', id: info.id, enabled: true, ready: 'live', cap: true, settings: info.settings || {}, caps: info.capabilities || {}, extra: {}, hint: '', cons: cons || {}, source: info.source } });
+    capTracks[info.id] = t;
+    return t;
+  }
+  function endTrack(t, fire) {
+    if (t._t.ready === 'ended') return;
+    t._t.ready = 'ended'; delete capTracks[t._t.id];
+    if (fire) { var ev = new Event('ended'); t.dispatchEvent(ev); }
+  }
+  function copyJSON(o) { try { return JSON.parse(JSON.stringify(o)); } catch (e) { return {}; } }
   [['kind', 'kind'], ['label', 'label'], ['id', 'id'], ['readyState', 'ready']].forEach(function (p) { defGetter(MediaStreamTrack.prototype, p[0], function () { return this._t[p[1]]; }); });
-  defGetter(MediaStreamTrack.prototype, 'enabled', function () { return this._t.enabled; }, function (v) { this._t.enabled = !!v; });
+  defGetter(MediaStreamTrack.prototype, 'enabled', function () { return this._t.enabled; }, function (v) { v = !!v; this._t.enabled = v; if (this._t.cap && this._t.ready === 'live') { try { sw.capEnable(this._t.id, v); } catch (e) { /* ignore */ } } });
   defGetter(MediaStreamTrack.prototype, 'muted', function () { return false; });
   defGetter(MediaStreamTrack.prototype, 'contentHint', function () { return this._t.hint; }, function (v) { this._t.hint = String(v); });
   defGetter(MediaStreamTrack.prototype, 'isolated', function () { return false; });
-  defMethod(MediaStreamTrack.prototype, 'stop', function () { this._t.ready = 'ended'; });
-  defMethod(MediaStreamTrack.prototype, 'clone', function () { var c = global.__swMakeTrack(this._t.kind, this._t.label, this._t.extra); c._t.enabled = this._t.enabled; return c; });
+  defMethod(MediaStreamTrack.prototype, 'stop', function () {
+    var t = this._t; if (t.ready === 'ended') return;
+    t.ready = 'ended';
+    if (t.cap) { delete capTracks[t.id]; try { sw.capStop(t.id); } catch (e) { /* ignore */ } }
+  });
+  defMethod(MediaStreamTrack.prototype, 'clone', function () {
+    var t = this._t;
+    if (t.cap) {
+      var info = t.ready === 'live' ? sw.capClone(t.id) : null;
+      if (!info) { var dead = global.__swMakeTrack(t.kind, t.label, {}); dead._t.ready = 'ended'; return dead; }
+      var c = capTrack(info, copyJSON(t.cons)); c._t.enabled = t.enabled; return c;
+    }
+    var c2 = global.__swMakeTrack(t.kind, t.label, t.extra); c2._t.enabled = t.enabled; return c2;
+  });
   defMethod(MediaStreamTrack.prototype, 'getSettings', function () {
     var t = this._t;
+    if (t.cap) return copyJSON(t.settings);
     if (t.kind === 'audio') return { deviceId: t.extra.deviceId || '', groupId: '', sampleRate: 48000, channelCount: 1, echoCancellation: true, autoGainControl: true, noiseSuppression: true, latency: 0.01, sampleSize: 16 };
     return { deviceId: t.extra.deviceId || '', groupId: '', width: t.extra.width || 640, height: t.extra.height || 480, frameRate: t.extra.frameRate || 30, aspectRatio: (t.extra.width || 640) / (t.extra.height || 480), facingMode: 'user', resizeMode: 'none' };
   });
-  defMethod(MediaStreamTrack.prototype, 'getCapabilities', function () { return {}; });
-  defMethod(MediaStreamTrack.prototype, 'getConstraints', function () { return {}; });
-  defMethod(MediaStreamTrack.prototype, 'applyConstraints', function () { return Promise.resolve(); });
+  defMethod(MediaStreamTrack.prototype, 'getCapabilities', function () { return this._t.cap ? copyJSON(this._t.caps) : {}; });
+  defMethod(MediaStreamTrack.prototype, 'getConstraints', function () { return copyJSON(this._t.cons); });
+  defMethod(MediaStreamTrack.prototype, 'applyConstraints', function (c) {
+    var t = this._t, self = this;
+    if (c !== undefined && (c === null || typeof c !== 'object')) return Promise.reject(new TypeError("Failed to execute 'applyConstraints' on 'MediaStreamTrack': The provided value is not of type 'MediaTrackConstraints'."));
+    c = c || {};
+    if (!t.cap) { t.cons = copyJSON(c); return Promise.resolve(); }
+    if (t.ready !== 'live') return Promise.reject(dex('The track has ended', 'InvalidStateError'));
+    return capCall('apply', { id: t.id, constraints: c }).then(function (r) { t.settings = r.settings; t.cons = copyJSON(c); });
+  });
   ['ended', 'mute', 'unmute'].forEach(function (n) { defGetter(MediaStreamTrack.prototype, 'on' + n, function () { return (this._h || {})[n] || null; }, function (v) { if (!this._h) Object.defineProperty(this, '_h', { value: {} }); var self = this; if (!this._h['r' + n]) { this._h['r' + n] = 1; this.addEventListener(n, function (e) { var f = self._h[n]; if (typeof f === 'function') f.call(self, e); }); } this._h[n] = v; }); });
   global.MediaStreamTrack = MediaStreamTrack;
 
@@ -1118,29 +1275,97 @@
   ['addtrack', 'removetrack', 'active', 'inactive'].forEach(function (n) { defGetter(MediaStream.prototype, 'on' + n, function () { return (this._h || {})[n] || null; }, function (v) { if (!this._h) Object.defineProperty(this, '_h', { value: {} }); var self = this; if (!this._h['r' + n]) { this._h['r' + n] = 1; this.addEventListener(n, function (e) { var f = self._h[n]; if (typeof f === 'function') f.call(self, e); }); } this._h[n] = v; }); });
   global.MediaStream = MediaStream;
 
-  // ======================= mediaDevices / EME / recorder / speech ================================
-  var fake = false; try { fake = !!sw.mediaFakeDevices(); } catch (e) { fake = false; }
-  function fakeMode() { return fake || global.__swFakeMediaDevices === true; }
-  var devices = (function () {
+  // ======================= mediaDevices / permissions / EME / recorder / speech ==================
+  // Requests go to Go (capture_host.go) and come back as __swCapEvent. Promises wait in capWait.
+  var capSeq = 0, capWait = {};
+  function capCall(kind, payload) {
+    return new Promise(function (resolve, reject) {
+      var tok = ++capSeq; capWait[tok] = { resolve: resolve, reject: reject };
+      try { sw.capRequest(tok, kind, JSON.stringify(payload)); } catch (e) { delete capWait[tok]; reject(dex(String(e && e.message || e), 'NotReadableError')); }
+    });
+  }
+  function OverconstrainedError(constraint, message) {
+    if (!(this instanceof OverconstrainedError)) throw new TypeError("Failed to construct 'OverconstrainedError': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
+    var e = dex(message === undefined ? '' : String(message), 'OverconstrainedError');
+    Object.setPrototypeOf(e, OverconstrainedError.prototype);
+    Object.defineProperty(e, 'constraint', { value: String(constraint), enumerable: true, configurable: true });
+    return e;
+  }
+  OverconstrainedError.prototype = Object.create(global.DOMException.prototype, { constructor: { value: OverconstrainedError, writable: true, configurable: true } });
+  tag(OverconstrainedError, 'OverconstrainedError');
+  global.OverconstrainedError = OverconstrainedError;
+  function capError(d) {
+    if (d.name === 'OverconstrainedError') return new OverconstrainedError(d.constraint, d.message);
+    if (d.name === 'TypeError') return new TypeError(d.message);
+    return dex(d.message, d.name);
+  }
+  var devices;
+  global.__swCapEvent = function (id, type, data) {
+    var d = data ? JSON.parse(data) : null;
+    if (type === 'ok' || type === 'err') {
+      var w = capWait[id]; delete capWait[id]; if (!w) return;
+      if (type === 'ok') w.resolve(d); else w.reject(capError(d));
+    } else if (type === 'end') {
+      var t = capTracks[d.id]; if (t) endTrack(t, d.reason !== 'stopped');
+    } else if (type === 'devicechange') {
+      if (devices) devices.dispatchEvent(new Event('devicechange'));
+    } else if (type === 'perm') {
+      permRefresh();
+    }
+  };
+
+  function MediaDeviceInfo() { illegal(); } tag(MediaDeviceInfo, 'MediaDeviceInfo');
+  ['deviceId', 'kind', 'label', 'groupId'].forEach(function (n) { defGetter(MediaDeviceInfo.prototype, n, function () { return this._d[n]; }); });
+  defMethod(MediaDeviceInfo.prototype, 'toJSON', function () { return { deviceId: this.deviceId, kind: this.kind, label: this.label, groupId: this.groupId }; });
+  function InputDeviceInfo() { illegal(); } derive(InputDeviceInfo, MediaDeviceInfo); tag(InputDeviceInfo, 'InputDeviceInfo');
+  defMethod(InputDeviceInfo.prototype, 'getCapabilities', function () { return {}; });
+  global.MediaDeviceInfo = MediaDeviceInfo; global.InputDeviceInfo = InputDeviceInfo;
+  function deviceInfo(d) {
+    var o = Object.create(d.kind === 'audiooutput' ? MediaDeviceInfo.prototype : InputDeviceInfo.prototype);
+    Object.defineProperty(o, '_d', { value: d });
+    return o;
+  }
+
+  function streamOf(r) {
+    var ms = new MediaStream();
+    r.tracks.forEach(function (info) { ms.addTrack(capTrack(info, {})); });
+    return ms;
+  }
+  function wantsAny(c) { return c && (c.audio || c.video); }
+  function constraintsArg(c, fn) {
+    if (c === undefined || c === null || typeof c !== 'object') throw new TypeError("Failed to execute '" + fn + "' on 'MediaDevices': The provided value is not of type 'MediaStreamConstraints'.");
+  }
+  function surfaceHint(v) {
+    if (!v || typeof v !== 'object') return '';
+    var s = v.displaySurface; if (s && typeof s === 'object') s = s.exact || s.ideal;
+    if (Array.isArray(s)) s = s[0];
+    return typeof s === 'string' ? s : '';
+  }
+  devices = (function () {
     var d = Object.create(EventTarget.prototype); EventTarget.call(d);
     defMethod(d, 'enumerateDevices', function () {
-      if (!fakeMode()) return Promise.resolve([]);
-      return Promise.resolve([
-        { deviceId: 'fake-mic', kind: 'audioinput', label: 'Fake Microphone', groupId: 'fake', toJSON: function () { return this; } },
-        { deviceId: 'fake-cam', kind: 'videoinput', label: 'Fake Camera', groupId: 'fake', toJSON: function () { return this; } },
-        { deviceId: 'default', kind: 'audiooutput', label: 'Fake Speaker', groupId: 'fake', toJSON: function () { return this; } }]);
+      try { return Promise.resolve(JSON.parse(sw.capEnumerate()).map(deviceInfo)); } catch (e) { return Promise.resolve([]); }
     });
-    defMethod(d, 'getSupportedConstraints', function () { return { aspectRatio: true, autoGainControl: true, channelCount: true, deviceId: true, echoCancellation: true, facingMode: true, frameRate: true, groupId: true, height: true, noiseSuppression: true, sampleRate: true, sampleSize: true, width: true }; });
+    defMethod(d, 'getSupportedConstraints', function () { return { aspectRatio: true, autoGainControl: true, channelCount: true, deviceId: true, displaySurface: true, echoCancellation: true, facingMode: true, frameRate: true, groupId: true, height: true, latency: true, noiseSuppression: true, resizeMode: true, sampleRate: true, sampleSize: true, width: true }; });
     defMethod(d, 'getUserMedia', function (c) {
-      if (!c || (!c.audio && !c.video)) return Promise.reject(new TypeError("Failed to execute 'getUserMedia' on 'MediaDevices': At least one of audio and video must be requested"));
-      if (!fakeMode()) return Promise.reject(dex('Requested device not found', 'NotFoundError'));
-      var ms = new MediaStream();
-      if (c.audio) ms.addTrack(global.__swMakeTrack('audio', 'Fake Microphone', { deviceId: 'fake-mic' }));
-      if (c.video) { var vc = typeof c.video === 'object' ? c.video : {}; var num = function (v, d2) { return typeof v === 'number' ? v : (v && (v.ideal || v.exact)) || d2; }; ms.addTrack(global.__swMakeTrack('video', 'Fake Camera', { deviceId: 'fake-cam', width: num(vc.width, 640), height: num(vc.height, 480), frameRate: num(vc.frameRate, 30) })); }
-      return Promise.resolve(ms);
+      try { constraintsArg(c, 'getUserMedia'); } catch (e) { return Promise.reject(e); }
+      if (!wantsAny(c)) return Promise.reject(new TypeError("Failed to execute 'getUserMedia' on 'MediaDevices': At least one of audio and video must be requested"));
+      return capCall('gum', { audio: c.audio === undefined ? false : c.audio, video: c.video === undefined ? false : c.video }).then(streamOf);
     });
-    defMethod(d, 'getDisplayMedia', function () { return Promise.reject(dex('Permission denied', 'NotAllowedError')); });
-    defGetter(d, 'ondevicechange', function () { return null; }, function () { });
+    defMethod(d, 'getDisplayMedia', function (c) {
+      c = c === undefined ? { video: true } : c;
+      try { constraintsArg(c, 'getDisplayMedia'); } catch (e) { return Promise.reject(e); }
+      var v = c.video === undefined ? true : c.video;
+      if (v === false || v === null) return Promise.reject(new TypeError("Failed to execute 'getDisplayMedia' on 'MediaDevices': Audio only requests are not supported"));
+      return capCall('gdm', { video: v, audio: c.audio === undefined ? false : c.audio, preferCurrentTab: !!c.preferCurrentTab, surface: surfaceHint(v) }).then(streamOf);
+    });
+    var handler = null, wired = false;
+    defGetter(d, 'ondevicechange', function () { return handler; }, function (f) {
+      handler = typeof f === 'function' ? f : null;
+      if (!wired) { wired = true; d.addEventListener('devicechange', function (e) { if (handler) handler.call(d, e); }); }
+    });
+    var add = d.addEventListener;
+    defMethod(d, 'addEventListener', function (type) { add.apply(this, arguments); if (type === 'devicechange') { try { sw.capWatch(true); } catch (e) { /* ignore */ } } });
     return d;
   })();
   function MediaDevices() { illegal(); }
@@ -1148,9 +1373,31 @@
   Object.setPrototypeOf(MediaDevices.prototype, EventTarget.prototype);
   ['enumerateDevices', 'getSupportedConstraints', 'getUserMedia', 'getDisplayMedia'].forEach(function (n) { Object.defineProperty(MediaDevices.prototype, n, { value: devices[n], writable: true, configurable: true, enumerable: true }); delete devices[n]; });
   global.MediaDevices = MediaDevices;
+
+  // ---- Permissions API for camera, microphone and display-capture ----------------------------------------------
+  // navigator.permissions itself lives in the platform layer (platformjs/pwa.js, which also answers notifications,
+  // push and sync); this file answers for its own names through __permHandlers and asks it to refresh live
+  // PermissionStatus objects when the user changes a decision.
+  var PERM = { camera: 1, microphone: 1, 'display-capture': 1 };
+  function permState(name) { if (!PERM[name]) return 'prompt'; try { return sw.capPerm(name) || 'prompt'; } catch (e) { return 'prompt'; } }
+  (function () {
+    if (!global.__permHandlers) Object.defineProperty(global, '__permHandlers', { value: {}, configurable: true });
+    ['camera', 'microphone', 'display-capture'].forEach(function (n) { global.__permHandlers[n] = function () { return permState(n); }; });
+  })();
+  function permRefresh() { if (typeof global.__swPermRefresh === 'function') global.__swPermRefresh(); }
   if (global.Navigator) {
     Object.defineProperty(global.Navigator.prototype, 'mediaDevices', { get: function () { return devices; }, configurable: true, enumerable: true });
     defMethod(global.Navigator.prototype, 'requestMediaKeySystemAccess', function () { return Promise.reject(dex('Unsupported keySystem or supportedConfigurations.', 'NotSupportedError')); });
+    // EME is not supported (docs/media-streaming.md), but the interfaces exist so that players which patch their
+    // prototypes (Shaka's polyfills) or test instanceof do not fail with a ReferenceError before they can ask
+    // for a key system and be refused.
+    ['MediaKeySystemAccess', 'MediaKeys', 'MediaKeyStatusMap'].forEach(function (name) {
+      var C = { [name]: function () { illegal(); } }[name]; tag(C, name); global[name] = C;
+    });
+    var MKS = function MediaKeySession() { illegal(); };
+    derive(MKS, EventTarget); tag(MKS, 'MediaKeySession'); global.MediaKeySession = MKS;
+    var MKME = function MediaKeyMessageEvent(type, init) { if (!(this instanceof MKME)) throw new TypeError("Failed to construct 'MediaKeyMessageEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."); return Reflect.construct(global.Event, [type, init], MKME); };
+    derive(MKME, global.Event); tag(MKME, 'MediaKeyMessageEvent'); global.MediaKeyMessageEvent = MKME;
     defMethod(global.Navigator.prototype, 'getUserMedia', function (c, ok, err) { devices.getUserMedia(c).then(ok, err); });
     defMethod(global.Navigator.prototype, 'webkitGetUserMedia', global.Navigator.prototype.getUserMedia);
   }
@@ -1196,15 +1443,17 @@
   })();
 
   // ======================= MediaSource Extensions =====================================================
+  // Byte-stream parsing, coded frame processing, buffered ranges, eviction and the quota live in Go
+  // (internal/media/mse.go). This is the API surface with its events and the element's readyState logic.
+  // Not implemented: ManagedMediaSource, MediaSource in workers (canConstructInDedicatedWorker is false),
+  // MediaSourceHandle, SourceBuffer.audioTracks/videoTracks/textTracks, appendBufferAsync.
   var MS_STATE = new WeakMap();
   function MediaSource() {
     if (!(this instanceof MediaSource)) throw new TypeError("Failed to construct 'MediaSource': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
     EventTarget.call(this);
-    MS_STATE.set(this, { ready: 'closed', dur: NaN, bufs: [], el: null, s: null, id: 0, seekable: null });
-    var self = this;
+    MS_STATE.set(this, { ready: 'closed', dur: NaN, bufs: [], el: null, s: null, live: null });
     Object.defineProperty(this, 'sourceBuffers', { value: makeSBList(this, false), enumerable: true });
     Object.defineProperty(this, 'activeSourceBuffers', { value: makeSBList(this, true), enumerable: true });
-    void self;
   }
   derive(MediaSource, EventTarget); tag(MediaSource, 'MediaSource');
   function msr(ms) { return MS_STATE.get(ms); }
@@ -1223,64 +1472,107 @@
     for (var j = a.length; j < l._n; j++) delete l[j];
     l._n = a.length;
   }
-  ['addsourcebuffer', 'removesourcebuffer'].forEach(function (n) { defGetter(SourceBufferList.prototype, 'on' + n, function () { return (this._h || {})[n] || null; }, function (v) { if (!this._h) Object.defineProperty(this, '_h', { value: {} }); var self = this; if (!this._h['r' + n]) { this._h['r' + n] = 1; this.addEventListener(n, function (e) { var f = self._h[n]; if (typeof f === 'function') f.call(self, e); }); } this._h[n] = v; }); });
-  ['sourceopen', 'sourceended', 'sourceclose'].forEach(function (n) { defGetter(MediaSource.prototype, 'on' + n, function () { return (this._h || {})[n] || null; }, function (v) { if (!this._h) Object.defineProperty(this, '_h', { value: {} }); var self = this; if (!this._h['r' + n]) { this._h['r' + n] = 1; this.addEventListener(n, function (e) { var f = self._h[n]; if (typeof f === 'function') f.call(self, e); }); } this._h[n] = v; }); });
+  function evHandlers(C, names) {
+    names.forEach(function (n) {
+      defGetter(C.prototype, 'on' + n, function () { return (this._h || {})[n] || null; }, function (v) {
+        if (!this._h) Object.defineProperty(this, '_h', { value: {} });
+        var self = this;
+        if (!this._h['r' + n]) { this._h['r' + n] = 1; this.addEventListener(n, function (e) { var f = self._h[n]; if (typeof f === 'function') f.call(self, e); }); }
+        this._h[n] = v;
+      });
+    });
+  }
+  evHandlers(SourceBufferList, ['addsourcebuffer', 'removesourcebuffer']);
+  evHandlers(MediaSource, ['sourceopen', 'sourceended', 'sourceclose']);
   defGetter(MediaSource.prototype, 'readyState', function () { return msr(this).ready; });
+
+  function copyRanges(l) { var o = []; if (l) for (var i = 0; i < l.length; i++) o.push([+l[i][0], +l[i][1]]); return o; }
+  function highestEnd(r) { var mx = 0; r.bufs.forEach(function (b) { var l = b._r.ranges; if (l.length && l[l.length - 1][1] > mx) mx = l[l.length - 1][1]; }); return mx; }
+  function anyUpdating(r) { return r.bufs.some(function (b) { return b._r.updating; }); }
+
   defGetter(MediaSource.prototype, 'duration', function () { return msr(this).dur; }, function (v) {
     v = +v; var r = msr(this);
     if (isNaN(v)) throw new TypeError("Failed to set the 'duration' property on 'MediaSource': The provided double value is non-finite.");
     if (v < 0) throw new TypeError("Failed to set the 'duration' property on 'MediaSource': The value provided (" + v + ") is less than zero.");
     if (r.ready !== 'open') throw dex("Failed to set the 'duration' property on 'MediaSource': The MediaSource's readyState is not 'open'.", 'InvalidStateError');
-    if (r.bufs.some(function (b) { return b._r.updating; })) throw dex("Failed to set the 'duration' property on 'MediaSource': One or more SourceBuffers are still processing an append or remove operation.", 'InvalidStateError');
+    if (anyUpdating(r)) throw dex("Failed to set the 'duration' property on 'MediaSource': One or more SourceBuffers are still processing an append or remove operation.", 'InvalidStateError');
+    if (v < highestEnd(r) - 1e-6) throw dex("Failed to set the 'duration' property on 'MediaSource': Setting duration below the highest presentation timestamp of any buffered coded frames is disallowed. Instead, first do asynchronous remove(newDuration, oldDuration) on all sourceBuffers, where newDuration < oldDuration.", 'InvalidStateError');
     setMSDuration(this, v);
   });
+  // the duration change algorithm
   function setMSDuration(ms, v) {
-    var r = msr(ms); if (r.dur === v) return; r.dur = v;
-    r.bufs.forEach(function (b) { b._truncate(v); });
-    if (r.el) { var s = r.s; if (s.ready >= 1) { s.duration = v; task(function () { fire(r.el, 'durationchange'); }); } msUpdate(r.el); }
+    var r = msr(ms); if (r.dur === v || (isNaN(v) && isNaN(r.dur))) return;
+    r.dur = v;
+    if (r.el) {
+      var s = r.s;
+      if (s.ready >= 1) {
+        s.duration = v; task(function () { fire(r.el, 'durationchange'); });
+        if (isFinite(v) && curTime(s) > v) seekTo(r.el, v, false);
+      }
+      msUpdate(r.el);
+    }
   }
-  defMethod(MediaSource, 'isTypeSupported', function (t) { if (arguments.length < 1) throw new TypeError("Failed to execute 'isTypeSupported' on 'MediaSource': 1 argument required, but only 0 present."); return sw.mediaIsTypeSupported(String(t)); });
-  Object.defineProperty(MediaSource, 'canConstructInDedicatedWorker', { value: true, enumerable: true });
+  defMethod(MediaSource, 'isTypeSupported', function (t) { if (arguments.length < 1) throw new TypeError("Failed to execute 'isTypeSupported' on 'MediaSource': 1 argument required, but only 0 present."); return !!sw.mediaIsTypeSupported(String(t)); });
+  Object.defineProperty(MediaSource, 'canConstructInDedicatedWorker', { value: false, enumerable: true });
   defMethod(MediaSource.prototype, 'addSourceBuffer', function (type) {
     var r = msr(this); type = String(type);
+    if (arguments.length < 1) throw new TypeError("Failed to execute 'addSourceBuffer' on 'MediaSource': 1 argument required, but only 0 present.");
     if (type === '') throw new TypeError("Failed to execute 'addSourceBuffer' on 'MediaSource': The type provided ('') is empty.");
     if (!sw.mediaIsTypeSupported(type)) throw dex("Failed to execute 'addSourceBuffer' on 'MediaSource': The type provided ('" + type + "') is unsupported.", 'NotSupportedError');
     if (r.ready !== 'open') throw dex("Failed to execute 'addSourceBuffer' on 'MediaSource': The MediaSource's readyState is not 'open'.", 'InvalidStateError');
+    if (r.bufs.length >= 8) throw dex("Failed to execute 'addSourceBuffer' on 'MediaSource': This MediaSource has reached the limit of SourceBuffer objects it can handle. No additional SourceBuffer objects may be added.", 'QuotaExceededError');
     var sb = newSourceBuffer(this, type);
     r.bufs.push(sb); sbSync(this.sourceBuffers); sbSync(this.activeSourceBuffers);
-    task(function () { fire(sb._ms.sourceBuffers, 'addsourcebuffer'); });
+    var self = this;
+    task(function () { fire(self.sourceBuffers, 'addsourcebuffer'); });
+    if (r.el) plMSE(r.el, r.s);
     return sb;
   });
   defMethod(MediaSource.prototype, 'removeSourceBuffer', function (sb) {
     var r = msr(this), i = r.bufs.indexOf(sb);
+    if (arguments.length < 1) throw new TypeError("Failed to execute 'removeSourceBuffer' on 'MediaSource': 1 argument required, but only 0 present.");
     if (i < 0) throw dex("Failed to execute 'removeSourceBuffer' on 'MediaSource': The SourceBuffer provided is not contained in this MediaSource.", 'NotFoundError');
-    r.bufs.splice(i, 1); sb._r.removed = true; sb._r.updating = false; try { sw.mseClose(sb._r.id); } catch (e) { /* ignore */ }
+    var rr = sb._r;
+    if (rr.updating) { rr.updating = false; rr.token++; task(function () { fire(sb, 'abort'); fire(sb, 'updateend'); }); }
+    r.bufs.splice(i, 1); rr.removed = true; try { sw.mseClose(rr.id); } catch (e) { /* ignore */ }
     sbSync(this.sourceBuffers); sbSync(this.activeSourceBuffers);
     var self = this; task(function () { fire(self.sourceBuffers, 'removesourcebuffer'); });
-    if (r.el) msUpdate(r.el);
+    if (r.el) { plMSE(r.el, r.s); msUpdate(r.el); }
   });
   defMethod(MediaSource.prototype, 'endOfStream', function (err) {
     var r = msr(this);
     if (r.ready !== 'open') throw dex("Failed to execute 'endOfStream' on 'MediaSource': The MediaSource's readyState is not 'open'.", 'InvalidStateError');
-    if (r.bufs.some(function (b) { return b._r.updating; })) throw dex("Failed to execute 'endOfStream' on 'MediaSource': The MediaSource's SourceBuffers are still updating.", 'InvalidStateError');
+    if (anyUpdating(r)) throw dex("Failed to execute 'endOfStream' on 'MediaSource': The MediaSource's SourceBuffers are still updating.", 'InvalidStateError');
     if (err !== undefined && err !== 'network' && err !== 'decode') throw new TypeError("Failed to execute 'endOfStream' on 'MediaSource': The provided value '" + err + "' is not a valid enum value of type EndOfStreamError.");
     endStream(this, err);
   });
   function endStream(ms, err) {
     var r = msr(ms);
     r.ready = 'ended';
+    if (r.s && r.s.pl) { try { sw.playerEOS(r.s.pl.node, true); } catch (e) { /* ignore */ } }
     task(function () { fire(ms, 'sourceended'); });
     if (!err) {
-      var mx = 0; r.bufs.forEach(function (b) { b._ranges().forEach(function (x) { if (x[1] > mx) mx = x[1]; }); });
-      if (isNaN(r.dur) || r.dur < mx) setMSDuration(ms, mx);
+      var mx = highestEnd(r);
+      if (mx > 0) setMSDuration(ms, mx);
     } else if (r.el) {
       var s = r.s; s.error = makeError(err === 'network' ? 2 : 3, 'MEDIA_ELEMENT_ERROR: ' + (err === 'network' ? 'Network error' : 'Decode error')); task(function () { fire(r.el, 'error'); });
     }
     if (r.el) msUpdate(r.el);
   }
-  defMethod(MediaSource.prototype, 'setLiveSeekableRange', function (a, b) { var r = msr(this); if (r.ready !== 'open') throw dex("Failed to execute 'setLiveSeekableRange' on 'MediaSource': The MediaSource's readyState is not 'open'.", 'InvalidStateError'); r.seekable = [+a, +b]; });
-  defMethod(MediaSource.prototype, 'clearLiveSeekableRange', function () { msr(this).seekable = null; });
-  defGetter(MediaSource.prototype, 'handle', function () { return undefined; });
+  defMethod(MediaSource.prototype, 'setLiveSeekableRange', function (a, b) {
+    var r = msr(this);
+    if (arguments.length < 2) throw new TypeError("Failed to execute 'setLiveSeekableRange' on 'MediaSource': 2 arguments required, but only " + arguments.length + " present.");
+    if (r.ready !== 'open') throw dex("Failed to execute 'setLiveSeekableRange' on 'MediaSource': The MediaSource's readyState is not 'open'.", 'InvalidStateError');
+    a = +a; b = +b;
+    if (a < 0 || a > b) throw new TypeError("Failed to execute 'setLiveSeekableRange' on 'MediaSource': The provided start (" + a + ") is negative or greater than end (" + b + ").");
+    r.live = [a, b];
+  });
+  defMethod(MediaSource.prototype, 'clearLiveSeekableRange', function () {
+    var r = msr(this);
+    if (r.ready !== 'open') throw dex("Failed to execute 'clearLiveSeekableRange' on 'MediaSource': The MediaSource's readyState is not 'open'.", 'InvalidStateError');
+    r.live = null;
+  });
+  // MediaSource.handle exists only in dedicated workers (not supported)
   MediaSource.prototype._attach = function (el, s) {
     var r = msr(this);
     if (r.ready !== 'closed') return false;
@@ -1291,17 +1583,19 @@
   };
   MediaSource.prototype._detach = function () {
     var r = msr(this), self = this; if (r.ready === 'closed') return;
-    r.ready = 'closed'; r.el = null; r.s = null; r.dur = NaN;
-    r.bufs.forEach(function (b) { b._r.removed = true; try { sw.mseClose(b._r.id); } catch (e) { /* ignore */ } });
+    r.ready = 'closed'; r.el = null; r.s = null; r.dur = NaN; r.live = null;
+    r.bufs.forEach(function (b) { b._r.removed = true; b._r.token++; b._r.updating = false; try { sw.mseClose(b._r.id); } catch (e) { /* ignore */ } });
     r.bufs.length = 0; sbSync(this.sourceBuffers); sbSync(this.activeSourceBuffers);
     task(function () { fire(self, 'sourceclose'); });
   };
+  // the element's buffered ranges: the intersection over the SourceBuffers; at the end of the stream the last
+  // range reaches the highest end time of any of them
   MediaSource.prototype._buffered = function () {
-    var r = msr(this), lists = r.bufs.map(function (b) { return b._ranges(); }).filter(function (l) { return l.length; });
-    if (!lists.length) return [];
-    var out = lists[0];
+    var r = msr(this), lists = r.bufs.map(function (b) { return b._r.ranges; });
+    if (!lists.length || lists.some(function (l) { return !l.length; })) return [];
+    var out = lists[0].map(function (x) { return [x[0], x[1]]; });
     for (var i = 1; i < lists.length; i++) out = intersect(out, lists[i]);
-    if (r.ready === 'ended' && out.length) { var last = out[out.length - 1]; var mx = 0; lists.forEach(function (l) { mx = Math.max(mx, l[l.length - 1][1]); }); last[1] = Math.max(last[1], mx); }
+    if (r.ready === 'ended' && out.length) { var mx = 0; lists.forEach(function (l) { mx = Math.max(mx, l[l.length - 1][1]); }); out[out.length - 1][1] = Math.max(out[out.length - 1][1], mx); }
     return out;
   };
   function intersect(a, b) {
@@ -1319,55 +1613,83 @@
   function newSourceBuffer(ms, type) {
     var sb = Object.create(SourceBuffer.prototype); EventTarget.call(sb);
     var id = sw.mseNew(type);
-    Object.defineProperty(sb, '_r', { value: { id: id, type: type, updating: false, removed: false, mode: /webm/.test(type) ? 'segments' : 'segments', tso: 0, tracks: {}, init: false, ws: 0, we: Infinity, queue: [] } });
+    Object.defineProperty(sb, '_r', { value: { id: id, type: type, updating: false, removed: false, mode: 'segments', tso: 0, ranges: [], init: false, initInfo: null, ws: 0, we: Infinity, token: 0 } });
     Object.defineProperty(sb, '_ms', { value: ms });
     return sb;
   }
-  SourceBuffer.prototype._ranges = function () {
-    var r = this._r, lists = Object.keys(r.tracks).map(function (k) { return r.tracks[k]; }).filter(function (l) { return l.length; });
-    if (!lists.length) return [];
-    var out = lists[0].map(function (x) { return [x[0], x[1]]; });
-    for (var i = 1; i < lists.length; i++) out = intersect(out, lists[i]);
-    return out;
-  };
-  SourceBuffer.prototype._truncate = function (d) { var r = this._r; Object.keys(r.tracks).forEach(function (k) { r.tracks[k] = subtract(r.tracks[k], d, Infinity); }); };
-  function subtract(list, s, e) {
-    var o = [];
-    list.forEach(function (x) {
-      if (x[1] <= s || x[0] >= e) { o.push(x); return; }
-      if (x[0] < s) o.push([x[0], s]);
-      if (x[1] > e) o.push([e, x[1]]);
-    });
-    return o;
+  evHandlers(SourceBuffer, ['updatestart', 'update', 'updateend', 'error', 'abort']);
+  function sbCheck(sb, op, attr) {
+    var r = sb._r, w = attr ? "Failed to set the '" + op + "' property on 'SourceBuffer': " : "Failed to execute '" + op + "' on 'SourceBuffer': ";
+    if (r.removed) throw dex(w + "This SourceBuffer has been removed from the parent media source.", 'InvalidStateError');
+    if (r.updating) throw dex(w + "This SourceBuffer is still processing an 'appendBuffer' or 'remove' operation.", 'InvalidStateError');
   }
-  function addRange(list, s, e) { return mergeRanges(list.concat([[s, e]])); }
-  ['updatestart', 'update', 'updateend', 'error', 'abort'].forEach(function (n) { defGetter(SourceBuffer.prototype, 'on' + n, function () { return (this._h || {})[n] || null; }, function (v) { if (!this._h) Object.defineProperty(this, '_h', { value: {} }); var self = this; if (!this._h['r' + n]) { this._h['r' + n] = 1; this.addEventListener(n, function (e) { var f = self._h[n]; if (typeof f === 'function') f.call(self, e); }); } this._h[n] = v; }); });
-  function sbCheck(sb, op) {
-    var r = sb._r;
-    if (r.removed) throw dex("Failed to execute '" + op + "' on 'SourceBuffer': This SourceBuffer has been removed from the parent media source.", 'InvalidStateError');
-    if (r.updating) throw dex("Failed to execute '" + op + "' on 'SourceBuffer': This SourceBuffer is still processing an 'appendBuffer' or 'remove' operation.", 'InvalidStateError');
-  }
+  // an ended MediaSource reopens when a SourceBuffer is changed
+  function reopen(ms) { var mr = msr(ms); if (mr.ready === 'ended') { mr.ready = 'open'; if (mr.s && mr.s.pl) { try { sw.playerEOS(mr.s.pl.node, false); } catch (e) { /* ignore */ } } task(function () { fire(ms, 'sourceopen'); }); } }
   defGetter(SourceBuffer.prototype, 'updating', function () { return this._r.updating; });
   defGetter(SourceBuffer.prototype, 'buffered', function () {
     if (this._r.removed) throw dex("Failed to read the 'buffered' property from 'SourceBuffer': This SourceBuffer has been removed from the parent media source.", 'InvalidStateError');
-    return makeRanges(this._ranges());
+    return makeRanges(this._r.ranges);
   });
-  defGetter(SourceBuffer.prototype, 'mode', function () { return this._r.mode; }, function (v) { sbCheck(this, 'mode'); if (v === 'segments' || v === 'sequence') this._r.mode = v; });
-  defGetter(SourceBuffer.prototype, 'timestampOffset', function () { return this._r.tso; }, function (v) { sbCheck(this, 'timestampOffset'); this._r.tso = +v; });
-  defGetter(SourceBuffer.prototype, 'appendWindowStart', function () { return this._r.ws; }, function (v) { sbCheck(this, 'appendWindowStart'); v = +v; if (v < 0 || v >= this._r.we) throw new TypeError("Failed to set the 'appendWindowStart' property on 'SourceBuffer': The value provided (" + v + ") is outside the range."); this._r.ws = v; });
-  defGetter(SourceBuffer.prototype, 'appendWindowEnd', function () { return this._r.we; }, function (v) { sbCheck(this, 'appendWindowEnd'); v = +v; if (!(v > this._r.ws)) throw new TypeError("Failed to set the 'appendWindowEnd' property on 'SourceBuffer': The value provided (" + v + ") must be greater than appendWindowStart."); this._r.we = v; });
+  defGetter(SourceBuffer.prototype, 'mode', function () { return this._r.mode; }, function (v) {
+    v = String(v);
+    if (v !== 'segments' && v !== 'sequence') return;
+    sbCheck(this, 'mode', true);
+    var mr = msr(this._ms);
+    if (mr.ready === 'closed') throw dex("Failed to set the 'mode' property on 'SourceBuffer': The parent media source's readyState is not 'open' or 'ended'.", 'InvalidStateError');
+    reopen(this._ms);
+    this._r.mode = v; try { sw.mseConfig(this._r.id, 'mode', v); } catch (e) { /* ignore */ }
+  });
+  defGetter(SourceBuffer.prototype, 'timestampOffset', function () { return this._r.tso; }, function (v) {
+    v = +v;
+    if (!isFinite(v)) throw new TypeError("Failed to set the 'timestampOffset' property on 'SourceBuffer': The provided double value is non-finite.");
+    sbCheck(this, 'timestampOffset', true);
+    var mr = msr(this._ms);
+    if (mr.ready === 'closed') throw dex("Failed to set the 'timestampOffset' property on 'SourceBuffer': The parent media source's readyState is not 'open' or 'ended'.", 'InvalidStateError');
+    reopen(this._ms);
+    this._r.tso = v; try { sw.mseConfig(this._r.id, 'tso', v); } catch (e) { /* ignore */ }
+  });
+  defGetter(SourceBuffer.prototype, 'appendWindowStart', function () { return this._r.ws; }, function (v) {
+    v = +v;
+    if (isNaN(v)) throw new TypeError("Failed to set the 'appendWindowStart' property on 'SourceBuffer': The provided double value is non-finite.");
+    sbCheck(this, 'appendWindowStart', true);
+    if (v < 0 || v >= this._r.we) throw new TypeError("Failed to set the 'appendWindowStart' property on 'SourceBuffer': The value provided (" + v + ") is outside the range (0, " + this._r.we + ").");
+    this._r.ws = v; try { sw.mseConfig(this._r.id, 'window', v, this._r.we); } catch (e) { /* ignore */ }
+  });
+  defGetter(SourceBuffer.prototype, 'appendWindowEnd', function () { return this._r.we; }, function (v) {
+    v = +v;
+    if (isNaN(v)) throw new TypeError("Failed to set the 'appendWindowEnd' property on 'SourceBuffer': The provided double value is non-finite.");
+    sbCheck(this, 'appendWindowEnd', true);
+    if (v <= this._r.ws) throw new TypeError("Failed to set the 'appendWindowEnd' property on 'SourceBuffer': The value provided (" + v + ") must be greater than appendWindowStart (" + this._r.ws + ").");
+    this._r.we = v; try { sw.mseConfig(this._r.id, 'window', this._r.ws, v); } catch (e) { /* ignore */ }
+  });
   defGetter(SourceBuffer.prototype, 'audioTracks', function () { return undefined; });
   defGetter(SourceBuffer.prototype, 'videoTracks', function () { return undefined; });
   defGetter(SourceBuffer.prototype, 'textTracks', function () { return undefined; });
   defMethod(SourceBuffer.prototype, 'changeType', function (type) {
+    if (arguments.length < 1) throw new TypeError("Failed to execute 'changeType' on 'SourceBuffer': 1 argument required, but only 0 present.");
+    type = String(type);
+    if (type === '') throw new TypeError("Failed to execute 'changeType' on 'SourceBuffer': The type provided ('') is empty.");
     sbCheck(this, 'changeType');
-    if (!sw.mediaIsTypeSupported(String(type))) throw dex("Failed to execute 'changeType' on 'SourceBuffer': The type provided ('" + type + "') is not supported.", 'NotSupportedError');
-    var r = this._r; try { sw.mseClose(r.id); } catch (e) { /* ignore */ } r.id = sw.mseNew(String(type)); r.type = String(type); r.init = false;
+    if (!sw.mediaIsTypeSupported(type)) throw dex("Failed to execute 'changeType' on 'SourceBuffer': The type provided ('" + type + "') is not supported.", 'NotSupportedError');
+    var mr = msr(this._ms);
+    if (mr.ready === 'closed') throw dex("Failed to execute 'changeType' on 'SourceBuffer': The MediaSource's readyState is not 'open' or 'ended'.", 'InvalidStateError');
+    reopen(this._ms);
+    var r = this._r; r.type = type; r.init = false;
+    try { sw.mseConfig(r.id, 'type', type); } catch (e) { /* ignore */ }
   });
   function bytesOf(d) {
     if (d instanceof ArrayBuffer) return new Uint8Array(d);
     if (ArrayBuffer.isView(d)) return new Uint8Array(d.buffer, d.byteOffset, d.byteLength);
     throw new TypeError("Failed to execute 'appendBuffer' on 'SourceBuffer': The provided value is not of type '(ArrayBuffer or ArrayBufferView)'.");
+  }
+  // the first initialization segment after addSourceBuffer / changeType, or a new one with other dimensions
+  function sbInit(sb, init) {
+    var r = sb._r, mr = msr(sb._ms);
+    r.init = true; r.initInfo = init;
+    if (init.first || isNaN(mr.dur)) {
+      if (init.duration > 0 && (isNaN(mr.dur) || init.duration > mr.dur)) setMSDuration(sb._ms, init.duration);
+      else if (isNaN(mr.dur)) setMSDuration(sb._ms, Infinity);
+    }
   }
   defMethod(SourceBuffer.prototype, 'appendBuffer', function (data) {
     var sb = this, r = sb._r, ms = sb._ms, mr = msr(ms);
@@ -1375,64 +1697,87 @@
     var bytes = bytesOf(data);
     sbCheck(sb, 'appendBuffer');
     if (mr.ready === 'closed') throw dex("Failed to execute 'appendBuffer' on 'SourceBuffer': The MediaSource's readyState is not 'open' or 'ended'.", 'InvalidStateError');
-    if (mr.ready === 'ended') { mr.ready = 'open'; task(function () { fire(ms, 'sourceopen'); }); }
+    reopen(ms);
+    var res;
+    try { res = sw.mseAppend(r.id, b64OfBytes(bytes), mr.s ? curTime(mr.s) : 0); } catch (e) { res = { ok: false, error: 'decode', message: String(e && e.message || e) }; }
+    if (!res.ok && res.error === 'quota') {
+      throw dex("Failed to execute 'appendBuffer' on 'SourceBuffer': The SourceBuffer is full, and cannot free space to append additional buffers.", 'QuotaExceededError');
+    }
     r.updating = true;
-    var payload = b64OfBytes(bytes);
-    task(function () { fire(sb, 'updatestart'); });
-    task(function () { _setTimeout(function () { task(processAppend); }, 0); });
-    var processAppend = function () {
-      if (r.removed) return;
-      var res;
-      try { res = sw.mseAppend(r.id, payload); } catch (e) { res = { ok: false, error: String(e && e.message || e) }; }
+    var tok = ++r.token;
+    task(function () { if (r.token === tok && !r.removed) fire(sb, 'updatestart'); });
+    task(function () { _setTimeout(function () { task(finish); }, 0); });
+    function finish() {
+      if (r.removed || r.token !== tok) return; // aborted or removed meanwhile
       r.updating = false;
-      if (!res.ok) {
-        fire(sb, 'error'); fire(sb, 'updateend');
-        if (mr.ready === 'open') endStream(ms, 'decode');
+      if (!res.ok) { // the append error algorithm: the events are queued, the end of stream algorithm runs at once
+        task(function () { fire(sb, 'error'); fire(sb, 'updateend'); });
+        if (mr.ready === 'open' || mr.ready === 'ended') { mr.ready = 'open'; endStream(ms, 'decode'); }
         return;
       }
-      if (res.init) {
-        r.init = true;
-        res.init.tracks.forEach(function (t) { if (!r.tracks[t.id]) r.tracks[t.id] = []; });
-        if (mr.s && !mr.s.mseInit) { mr.s.mseInit = res.init; }
-        if (isNaN(mr.dur) && res.init.duration > 0) { mr.dur = res.init.duration; }
-        else if (isNaN(mr.dur)) mr.dur = Infinity;
-        r.initInfo = res.init;
-      }
-      (res.spans || []).forEach(function (sp) {
-        var s0 = sp[1] + r.tso, e0 = sp[2] + r.tso;
-        if (e0 <= r.ws || s0 >= r.we) return;
-        r.tracks[sp[0]] = addRange(r.tracks[sp[0]] || [], Math.max(s0, r.ws), Math.min(e0, r.we));
-      });
-      if (!isNaN(mr.dur) && isFinite(mr.dur)) { var mx = 0; sb._ranges().forEach(function (x) { mx = Math.max(mx, x[1]); }); if (mx > mr.dur && mr.ready === 'open') setMSDuration(ms, mx); }
+      if (res.init) sbInit(sb, res.init);
+      if (res.buffered) r.ranges = copyRanges(res.buffered);
+      var mx = highestEnd(mr);
+      if (isFinite(mr.dur) && mx > mr.dur && mr.ready === 'open') setMSDuration(ms, mx);
       fire(sb, 'update'); fire(sb, 'updateend');
-      if (mr.el) msUpdate(mr.el);
-    };
+      if (mr.el) { msUpdate(mr.el); progressSoon(mr.el); }
+    }
   });
-  defMethod(SourceBuffer.prototype, 'appendBufferAsync', undefined); delete SourceBuffer.prototype.appendBufferAsync;
   defMethod(SourceBuffer.prototype, 'abort', function () {
     var r = this._r, mr = msr(this._ms), sb = this;
     if (r.removed) throw dex("Failed to execute 'abort' on 'SourceBuffer': This SourceBuffer has been removed from the parent media source.", 'InvalidStateError');
     if (mr.ready !== 'open') throw dex("Failed to execute 'abort' on 'SourceBuffer': The parent media source's readyState is not 'open'.", 'InvalidStateError');
-    if (r.updating) { r.updating = false; task(function () { fire(sb, 'abort'); fire(sb, 'updateend'); }); }
+    if (r.updating) { r.updating = false; r.token++; task(function () { fire(sb, 'abort'); fire(sb, 'updateend'); }); }
+    try { sw.mseAbort(r.id); } catch (e) { /* ignore */ }
     r.ws = 0; r.we = Infinity;
   });
   defMethod(SourceBuffer.prototype, 'remove', function (start, end) {
     var sb = this, r = sb._r, mr = msr(sb._ms);
+    if (arguments.length < 2) throw new TypeError("Failed to execute 'remove' on 'SourceBuffer': 2 arguments required, but only " + arguments.length + " present.");
     start = +start; end = +end;
     sbCheck(sb, 'remove');
     if (mr.ready === 'closed') throw dex("Failed to execute 'remove' on 'SourceBuffer': The MediaSource's readyState is not 'open' or 'ended'.", 'InvalidStateError');
-    if (isNaN(start) || start < 0 || start === Infinity) throw new TypeError("Failed to execute 'remove' on 'SourceBuffer': The start provided (" + start + ") is either negative or greater than the current duration (" + mr.dur + ").");
+    if (isNaN(mr.dur)) throw new TypeError("Failed to execute 'remove' on 'SourceBuffer': The MediaSource's duration is NaN.");
+    if (isNaN(start) || start < 0 || start > mr.dur) throw new TypeError("Failed to execute 'remove' on 'SourceBuffer': The start provided (" + start + ") is either negative or greater than the current duration (" + mr.dur + ").");
     if (isNaN(end) || end <= start) throw new TypeError("Failed to execute 'remove' on 'SourceBuffer': The end provided (" + end + ") is less than or equal to the start (" + start + ").");
+    reopen(sb._ms);
     r.updating = true;
-    task(function () { fire(sb, 'updatestart'); });
+    var tok = ++r.token;
+    task(function () { if (r.token === tok && !r.removed) fire(sb, 'updatestart'); });
     task(function () {
-      if (r.removed) return;
-      Object.keys(r.tracks).forEach(function (k) { r.tracks[k] = subtract(r.tracks[k], start, end); });
-      r.updating = false; fire(sb, 'update'); fire(sb, 'updateend');
-      if (mr.el) msUpdate(mr.el);
+      _setTimeout(function () {
+        task(function () {
+          if (r.removed || r.token !== tok) return;
+          try { r.ranges = copyRanges(sw.mseRemove(r.id, start, end)); } catch (e) { /* ignore */ }
+          r.updating = false; fire(sb, 'update'); fire(sb, 'updateend');
+          if (mr.el) msUpdate(mr.el);
+        });
+      }, 0);
     });
   });
+  // 'progress' when the buffered data changed, at most every 100 ms
+  function progressSoon(el) {
+    var s = st(el);
+    if (s.progQueued) return;
+    s.progQueued = true;
+    _setTimeout(function () { s.progQueued = false; if (s.mse) fire(el, 'progress'); }, 0);
+  }
 
+  // a player over the SourceBuffers of the element's MediaSource
+  function plMSE(el, s) {
+    var ms = s.mse && s.mse.ms; if (!ms) return;
+    var r = msr(ms), ids = r.bufs.map(function (b) { return b._r.id; });
+    var node = nodeOf(el);
+    try {
+      var res = sw.playerMSE(node, JSON.stringify(ids), isVideo(el), s.videoW || 0, s.videoH || 0);
+      if (res && res.ok && !s.pl) {
+        s.pl = { node: node, video: isVideo(el), audio: true, mse: true };
+        s.frameMode = 'player';
+        plVolume(el);
+        if (r.ready === 'ended') sw.playerEOS(node, true);
+      }
+    } catch (e) { reportErr(e); }
+  }
   function attachMSE(el, s, id, ms) {
     var ok = ms._attach(el, s);
     if (!ok) { s.error = makeError(4, 'MEDIA_ELEMENT_ERROR: Format error'); s.net = 3; ev(el, 'error'); return; }
@@ -1440,43 +1785,114 @@
     s.info = { container: 'mse', duration: NaN, tracks: [] };
     s.net = 2; s.frameMode = '';
   }
-  // recompute duration/readyState from buffered data
+  function inRanges(b, t) {
+    for (var i = 0; i < b.length; i++) if (t >= b[i][0] - 0.0001 && t < b[i][1] + 1e-6) return b[i];
+    return null;
+  }
+  // recompute metadata, readyState and seeking from the buffered data
   function msUpdate(el) {
     var s = st(el), ms = s.mse && s.mse.ms; if (!ms) return;
     var r = msr(ms);
     if (s.ready === 0) {
-      var init = null; r.bufs.forEach(function (b) { if (b._r.initInfo && !init) init = b._r.initInfo; });
       var allInit = r.bufs.length > 0 && r.bufs.every(function (b) { return b._r.init; });
       if (!allInit) return;
       var tracks = []; r.bufs.forEach(function (b) { tracks = tracks.concat(b._r.initInfo.tracks); });
       s.info = { container: 'mse', duration: r.dur, tracks: tracks };
-      s.duration = isNaN(r.dur) ? Infinity : r.dur;
+      s.duration = r.dur;
       var v = null; tracks.forEach(function (t) { if (t.kind === 'video' && !v) v = t; });
       s.video = v; s.videoW = v ? v.width : 0; s.videoH = v ? v.height : 0; s.fps = v && v.frameRate > 0 ? v.frameRate : 30;
       s.net = 1; if (s.mseMetaPending) return; s.mseMetaPending = true;
-      var vbuf = null; r.bufs.forEach(function (b) { if (!vbuf && b._r.initInfo && b._r.initInfo.tracks.some(function (t) { return t.kind === 'video'; })) vbuf = b; });
-      if (v && vbuf && isVideo(el)) { try { s.node = global.__swIdOf(el); sw.mseBind(s.node, vbuf._r.id, s.videoW, s.videoH); s.mseFrameBuf = vbuf._r.id; } catch (e) { /* ignore */ } }
-      task(function () { fire(el, 'durationchange'); s.ready = 1; populateTracks(el, s); if (v) fire(el, 'resize'); fire(el, 'loadedmetadata'); msUpdate(el); });
+      plMSE(el, s);
+      // Chromium reports the metadata a task or two after the append that carried the init segment
+      task(function () { task(function () { if (!s.mse) return; fire(el, 'durationchange'); s.ready = 1; populateTracks(el, s); if (v) fire(el, 'resize'); fire(el, 'loadedmetadata'); msUpdate(el); }); });
       return;
     }
     if (s.ready < 1) return;
-    var b = ms._buffered(), t = curTime(s), target = 1, i;
-    for (i = 0; i < b.length; i++) {
-      if (t >= b[i][0] - 0.1 && t <= b[i][1] + 1e-6) {
-        var ahead = b[i][1] - t;
-        var atEnd = r.ready === 'ended' && isFinite(s.duration) && b[i][1] >= s.duration - 0.01;
-        if (atEnd || ahead >= 3) target = 4; else if (ahead > 0.1) target = 3; else target = 2;
-        if (atEnd && ahead <= 0) target = 4;
-        break;
-      }
+    // a new initialization segment with another picture size (quality switch)
+    var nv = null; r.bufs.forEach(function (b) { if (b._r.initInfo) b._r.initInfo.tracks.forEach(function (t) { if (t.kind === 'video') nv = t; }); });
+    if (nv && (nv.width !== s.videoW || nv.height !== s.videoH) && nv.width > 0) { s.videoW = nv.width; s.videoH = nv.height; s.video = nv; task(function () { fire(el, 'resize'); }); }
+    var b = ms._buffered(), t = playing(s) ? curTime(s) : s.pos, target = 1;
+    var rg = inRanges(b, t);
+    // Chromium treats the start of the stream as buffered when the first range begins within a second of 0
+    // (streams rarely start exactly at 0): playback begins at the start of that range
+    if (!rg && b.length && t <= 0.001 && b[0][0] <= 1 && !playing(s)) { rg = b[0]; s.pos = rg[0]; t = s.pos; }
+    if (rg) {
+      var ahead = rg[1] - t;
+      var atEnd = r.ready === 'ended' && isFinite(s.duration) && rg[1] >= s.duration - 0.01;
+      if (atEnd || ahead >= 3) target = 4; else if (ahead > 0.1) target = 3; else target = 2;
+      if (atEnd && ahead <= 0) target = 4;
     }
+    // a seek waiting for data completes as soon as the data is there
+    if (s.seekPending) {
+      if (rg) { var f = s.seekPending; s.seekPending = null; f(); b = ms._buffered(); }
+      else return reschedule(el);
+    }
+    if (s.seeking) return;
     if (target < 2 && s.loadedData) target = Math.min(target, 1);
-    if (target >= 2 && s.ready < 2) { s.ready = 2; qevAny(el, 'loadeddata'); s.loadedData = true; requestFrame(el, s, true); }
+    if (target >= 2 && s.ready < 2) { s.ready = 2; qevAny(el, 'loadeddata'); s.loadedData = true; }
     if (target !== s.ready) setReady(el, Math.max(1, target)); else reschedule(el);
   }
   // starvation check on tick for MSE playback
   var origTick = tick;
   tick = function (el) { var s = st(el); if (s.mse && s.ready >= 2) { msUpdate(el); } origTick(el); };
+
+  // ======================= navigator.mediaCapabilities =================================================
+  // Players (YouTube, Shaka, dash.js, hls.js) pick formats with decodingInfo(). Support follows the codec
+  // tables of internal/media/canplay.go; "smooth" is a pixel-rate budget measured on the pure-Go decoders
+  // (docs/media-streaming.md), power efficiency is always false (software decoding).
+  (function () {
+    if (!global.navigator || 'mediaCapabilities' in global.navigator) return;
+    // Megapixels per second the decoder sustains with dropped frames under about 2% on a 4-core machine, per codec
+    // (measured with TestPlaybackQuality, see docs/media-streaming.md): H.264 720p30 = 27.6, VP9 1080p30 = 62.2;
+    // AV1 and HEVC are held at 480p30-and-a-bit because their key frames cost several frame times (AV1 720p30
+    // decodes at 33 fps with a 147 ms 95th percentile) or were not measured (HEVC, VP8).
+    function smoothMpx(ct) {
+      ct = String(ct).toLowerCase();
+      if (/avc[13]|h264/.test(ct)) return 28;
+      if (/vp09|vp9/.test(ct)) return 63;
+      if (/av01|av1/.test(ct)) return 14;
+      if (/hev1|hvc1|hevc/.test(ct)) return 14;
+      return 28;
+    }
+    function MediaCapabilities() { illegal(); } tag(MediaCapabilities, 'MediaCapabilities');
+    var mc = Object.create(MediaCapabilities.prototype);
+    function typeErr(m) { return Promise.reject(new TypeError("Failed to execute 'decodingInfo' on 'MediaCapabilities': " + m)); }
+    function badMime(t) { return typeof t !== 'string' || !/^[a-z]+\/[a-z0-9.+-]+/i.test(t.trim()); }
+    defMethod(MediaCapabilities.prototype, 'decodingInfo', function (cfg) {
+      if (!cfg || typeof cfg !== 'object') return typeErr('The provided value is not of type \'MediaDecodingConfiguration\'.');
+      var type = cfg.type;
+      if (type !== 'file' && type !== 'media-source' && type !== 'webrtc') return typeErr("The provided value '" + type + "' is not a valid enum value of type MediaDecodingType.");
+      if (!cfg.video && !cfg.audio) return typeErr('The configuration object has neither "video" nor "audio" field.');
+      var supported = true, smooth = true;
+      var check = function (ct) {
+        if (badMime(ct)) return false;
+        if (type === 'media-source') return !!sw.mediaIsTypeSupported(ct);
+        return sw.mediaCanPlay(ct) !== '';
+      };
+      if (cfg.video) {
+        var v = cfg.video;
+        if (badMime(v.contentType)) return typeErr('Failed to parse video contentType: ' + v.contentType);
+        if (!(v.width > 0) || !(v.height > 0) || !(v.framerate > 0) || !(v.bitrate >= 0)) return typeErr('The video configuration dictionary is missing a valid width, height, bitrate or framerate.');
+        supported = supported && check(v.contentType);
+        var mpx = v.width * v.height * v.framerate / 1e6;
+        smooth = smooth && mpx <= smoothMpx(v.contentType);
+      }
+      if (cfg.audio) {
+        if (badMime(cfg.audio.contentType)) return typeErr('Failed to parse audio contentType: ' + cfg.audio.contentType);
+        supported = supported && check(cfg.audio.contentType);
+      }
+      if (cfg.keySystemConfiguration) { supported = false; smooth = false; }
+      var info = { supported: supported, smooth: supported && smooth, powerEfficient: false };
+      if (cfg.keySystemConfiguration) info.keySystemAccess = null;
+      return Promise.resolve(info);
+    });
+    defMethod(MediaCapabilities.prototype, 'encodingInfo', function (cfg) {
+      if (!cfg || typeof cfg !== 'object') return Promise.reject(new TypeError("Failed to execute 'encodingInfo' on 'MediaCapabilities': The provided value is not of type 'MediaEncodingConfiguration'."));
+      return Promise.resolve({ supported: false, smooth: false, powerEfficient: false });
+    });
+    global.MediaCapabilities = MediaCapabilities;
+    try { Object.defineProperty(global.Navigator.prototype, 'mediaCapabilities', { get: function () { return mc; }, configurable: true, enumerable: true }); } catch (e) { /* ignore */ }
+  })();
 
   // ======================= adoption of parser-created elements ===============================================
   function adopt(el) {
@@ -1561,6 +1977,8 @@
   (function () {
     var BIN = /\.(mp3|wav|ogg|oga|ogv|opus|m4a|m4v|m4s|mp4|webm|aac|flac|ts|mkv|mov|bin|wasm|png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|pdf|zip|gz|mid|midi)(\?|#|$)/i;
     var TEXTY = /(^text\/|json|xml|javascript|ecmascript|html|x-www-form|svg)/i;
+    // segment URLs without a telling extension (YouTube's videoplayback, ?range= byte ranges)
+    var BINQ = /(\/videoplayback|[?&]range=\d|\/(seg|segment|chunk|frag)[-_]?\d)/i;
     function bytesOfB64(s) { var bin = global.atob(s), u = new Uint8Array(bin.length); for (var i = 0; i < u.length; i++) u[i] = bin.charCodeAt(i); return u; }
     function headersOf(h) {
       var o = {};
@@ -1581,7 +1999,9 @@
         var url = typeof input === 'string' ? input : (input && input.url) || String(input);
         var hasBody = !!(init && init.body) || (input && typeof input === 'object' && input.body);
         var abs = url; try { abs = new global.URL(url, global.document.baseURI || global.location.href).href; } catch (e) { /* keep */ }
-        if (method === 'GET' && !hasBody && !(init && init.signal && init.signal.aborted) && BIN.test(abs)) {
+        var binReq = BIN.test(abs) || BINQ.test(abs);
+        if (!binReq && method === 'GET') { var h0 = Object.assign({}, headersOf(input && typeof input === 'object' ? input.headers : null), headersOf(init && init.headers)); binReq = Object.keys(h0).some(function (k) { return k.toLowerCase() === 'range'; }); }
+        if (method === 'GET' && !hasBody && !(init && init.signal && init.signal.aborted) && binReq) {
           return new Promise(function (res, rej) {
             _setTimeout(function () {
               try {

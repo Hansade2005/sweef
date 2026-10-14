@@ -676,12 +676,48 @@ func (c *ctx) layoutFlexContent(b *lbox, cw, cbh float64, in layoutIn) float64 {
 	for _, k := range b.kids {
 		if k.oof {
 			c.registerOOF(b, k, 0, 0, strut{}, true, cw)
+			// static position as if k were the sole flex item: justify-content on the main
+			// axis, align-self (or align-items) on the cross axis
+			mainF := flexStaticFrac(b.st.JustifyContent, true)
+			crossF := flexStaticFrac(k.st.AlignSelf, false)
+			if k.st.AlignSelf == "auto" || k.st.AlignSelf == "" {
+				crossF = flexStaticFrac(b.st.AlignItems, false)
+			}
+			if reverse {
+				mainF = 1 - mainF
+			}
+			if b.st.FlexWrap == "wrap-reverse" {
+				crossF = 1 - crossF
+			}
+			k.sAlign = mainF != 0 || crossF != 0
+			if column {
+				k.sAlignX, k.sAlignY, k.sAlignW, k.sAlignH = crossF, mainF, innerCross, innerMain
+			} else {
+				k.sAlignX, k.sAlignY, k.sAlignW, k.sAlignH = mainF, crossF, innerMain, innerCross
+			}
 		}
 	}
 	if column {
 		return innerMain
 	}
 	return innerCross
+}
+
+// flexStaticFrac maps a justify-content (main) or align-items / align-self (cross) value
+// to where a sole item sits in the free space: 0 start, 0.5 center, 1 end. Distributed
+// values place a sole item like their fallback alignment (space-around/evenly: center).
+func flexStaticFrac(v string, main bool) float64 {
+	switch strings.TrimPrefix(strings.TrimPrefix(v, "safe "), "unsafe ") {
+	case "center", "space-around", "space-evenly":
+		return 0.5
+	case "flex-end", "end":
+		return 1
+	case "self-end":
+		if !main {
+			return 1
+		}
+	}
+	return 0
 }
 
 func innerMainOr(def bool, v float64) float64 {

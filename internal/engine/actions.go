@@ -30,6 +30,12 @@ func (t *Tab) withDoc(fn func(*fnet.Doc) error) error {
 // default action may proceed (false when a listener called preventDefault).
 // With JS disabled every event is "not prevented".
 func (t *Tab) fire(bid int64, typ string, init map[string]any) bool {
+	switch typ {
+	case "click", "mousedown", "pointerdown", "keydown", "touchstart", "input":
+		if t.bc == nil { // the person used this top-level page (a page without scripts has no VM to see it)
+			t.Context().noteInteraction(schemefulSite(t.URL()))
+		}
+	}
 	t.mu.RLock()
 	j := t.js
 	t.mu.RUnlock()
@@ -144,6 +150,7 @@ func attrKeysOf(d *fnet.Doc, backendID int64) []string {
 // semantics: <a href> navigates, submit buttons post their form, labels focus
 // their control.
 func (t *Tab) Click(sel string) error {
+	t.pw.activate()
 	l := t.Locator(sel)
 	// A ref that resolves to something that can never be clicked fails at
 	// once instead of waiting for it to become visible.
@@ -200,7 +207,7 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 		} else {
 			href = info.Href
 		}
-		if dl, isDL, _ := t.GetAttributeByBackend(bid, "download"); isDL && href != "" && !strings.HasPrefix(href, "javascript:") {
+		if dl, isDL, _ := t.GetAttributeByBackend(bid, "download"); isDL && href != "" && !isScriptURL(href) {
 			t.mu.RLock()
 			hasJS := t.js != nil
 			t.mu.RUnlock()
@@ -210,7 +217,8 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 			}
 			return nil // blob: downloads are saved by the page's default action in JS
 		}
-		if href != "" && !strings.HasPrefix(href, "javascript:") {
+		if href != "" && !isScriptURL(href) && !hasScheme(href, "data") {
+			// as in Chromium, a page cannot navigate the top level to a data: URL
 			u, err := resolveURL(t.URL(), href)
 			if err != nil {
 				return err
@@ -279,6 +287,7 @@ func (t *Tab) Focus(sel string) error {
 
 // Type simulates per-character keystrokes into an input target.
 func (t *Tab) Type(sel, text string, delay time.Duration) error {
+	t.pw.activate()
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -317,6 +326,7 @@ func (t *Tab) appendValue(bid int64, s string) error {
 // Press sends one or more key presses ("Enter", "Control+a", "Tab"). Enter on
 // a form field submits the enclosing form like real browsers do.
 func (t *Tab) Press(sel, keys string) error {
+	t.pw.activate()
 	bid, err := t.Locator(sel).BackendID()
 	if err != nil {
 		return err
@@ -338,6 +348,7 @@ func (t *Tab) Press(sel, keys string) error {
 
 // Keyboard sends a raw key sequence to the focused element/body.
 func (t *Tab) Keyboard(keys string) error {
+	t.pw.activate()
 	t.jsCall("__swDispatchKey", 0, keys)
 	t.afterAction()
 	return nil
@@ -432,12 +443,13 @@ func (t *Tab) SetValueRaw(sel, value string) error {
 // ---- mouse / touch / drag / scroll ------------------------------------------
 
 func (t *Tab) MouseMove(x, y int) { t.jsCall("__swMouse", "mousemove", x, y) }
-func (t *Tab) MouseDown(x, y int) { t.jsCall("__swMouse", "mousedown", x, y) }
+func (t *Tab) MouseDown(x, y int) { t.pw.activate(); t.jsCall("__swMouse", "mousedown", x, y) }
 func (t *Tab) MouseUp(x, y int)   { t.jsCall("__swMouse", "mouseup", x, y) }
 
 // MouseClick hit-tests coordinates against deterministic bounding boxes and
 // clicks whatever element covers the point.
 func (t *Tab) MouseClick(x, y int) error {
+	t.pw.activate()
 	bid, err := t.hitTest(x, y)
 	if err != nil {
 		t.jsCall("__swMouse", "click", x, y)
@@ -669,4 +681,16 @@ func (t *Tab) GetStorageValue(key string) (string, bool) {
 		return c.GetStorageValue(t.URL(), key)
 	}
 	return "", false
+}
+
+// isScriptURL reports whether href runs script instead of loading a document (javascript:, vbscript:),
+// ignoring case and leading whitespace as URL parsing does.
+func isScriptURL(href string) bool {
+	return hasScheme(href, "javascript") || hasScheme(href, "vbscript")
+}
+
+// hasScheme reports whether href starts with scheme ":" ignoring case and leading C0 controls or spaces.
+func hasScheme(href, scheme string) bool {
+	h := strings.TrimLeft(href, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\v\f\r ")
+	return len(h) > len(scheme) && h[len(scheme)] == ':' && strings.EqualFold(h[:len(scheme)], scheme)
 }

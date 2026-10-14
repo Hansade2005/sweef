@@ -33,6 +33,9 @@ if command -v appstreamcli >/dev/null; then check "appstreamcli validate" appstr
 if command -v lintian >/dev/null; then
   if lintian --tag-display-limit 0 "$DEB" 2>&1 | grep -E '^[EW]:' ; then bad "lintian"; else ok "lintian clean"; fi
 fi
+if command -v readelf >/dev/null; then
+  if readelf -lW "$scratch/deb/usr/bin/sweef" | grep -q 'INTERP' || readelf -dW "$scratch/deb/usr/bin/sweef" | grep -q 'NEEDED'; then bad "packaged binary is dynamically linked (must be static)"; else ok "packaged binary is statically linked (no INTERP, no NEEDED)"; fi
+fi
 if [ "$ARCH" = "$HOSTARCH" ]; then
   out="$("$scratch/deb/usr/bin/sweef" version)"; case "$out" in *"$VERSION"*) ok "installed binary runs: $out";; *) bad "binary reports '$out' (expected $VERSION)";; esac
 fi

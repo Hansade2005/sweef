@@ -46,3 +46,12 @@ chromium and chromium-savedata). Not worked around.
 
 On some Vite/Rolldown sites (lonelyplanet.com seen) a `import("./chunk.js")` inside a module is requested relative to
 the page URL instead of the module, which answers `404` (a handful of small requests per page). Not fixed here: it is module-resolution behaviour in `jsvm.go`, outside the network layer.
+
+### WebAssembly: supported, with limits
+
+The `WebAssembly` global exists (`Module`, `Instance`, `Memory`, `Table`, `Global`, `validate`, `compile`, `instantiate`,
+the streaming variants and the three error classes) in pages and Web Workers, running modules as native code through
+wazero. Sites that only need the core API work; sites that need threads/`SharedArrayBuffer`, `WebAssembly.Tag` or
+`externref` at the JS boundary do not, and a module that crosses into JS tens of thousands of times per frame is slow
+because each crossing costs microseconds. Full list, design and measured costs: [webassembly.md](webassembly.md).
+No real site was run for this entry; the evidence is the hand-assembled modules in `internal/engine/wasm_test.go`.

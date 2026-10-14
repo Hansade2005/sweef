@@ -67,10 +67,18 @@
     if (!rows.length) rows.push(h("div.srow", h("div.st", h("div.d", { text: TS.sitesNone }))));
     return h("div.group", h("div.gh", { text: TS.gSites }), rows);
   }
+  function storage(H) {
+    var st = d().storage || {}, rows = [];
+    (st.sites || []).forEach(function (x) {
+      rows.push(H.row(SW.host(x.origin), SW.fmtBytes(x.bytes) + (x.persisted ? " · " + TS.kept : ""), H.btn(TS.clearSite, function () { x.bytes = 0; post("data.storageClear", { origin: x.origin }); SW.render(); })));
+    });
+    if (!rows.length) rows.push(h("div.srow", h("div.st", h("div.d", { text: TS.storageNone }))));
+    return h("div.group", h("div.gh", { text: TS.gStorage }), h("div.srow", h("div.st", h("div.d", { text: S.f(TS.storageD, { used: SW.fmtBytes(st.used || 0), budget: SW.fmtBytes(st.budget || 0) }) }))), rows);
+  }
   SW.dataSet = function (H) {
     var out = [h("h2", { text: TS.nav }), h("p.lead", { text: S.f(TS.lead) })];
     if (d().available === false) out.push(h("div.dnote", icon("info", 16), h("span", { text: TS.unavailable })));
-    out.push(levels(), budget(H), usage(), h("div.group", h("div.gh", { text: TS.gMore }), H.row(S.f(TS.agentLite), TS.agentLiteD, H.toggle("data.agentLite", true)), H.row(TS.showMeter, TS.showMeterD, H.toggle("data.showMeter", true))), sites(H),
+    out.push(levels(), budget(H), usage(), h("div.group", h("div.gh", { text: TS.gMore }), H.row(S.f(TS.agentLite), TS.agentLiteD, H.toggle("data.agentLite", true)), H.row(TS.showMeter, TS.showMeterD, H.toggle("data.showMeter", true))), sites(H), storage(H),
       h("div.dnote.soft", icon("info", 16), h("span", { text: S.f(TS.countD) })));
     return out;
   };

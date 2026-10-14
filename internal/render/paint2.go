@@ -231,7 +231,8 @@ func (p *painter) paintReplaced(b *lbox) {
 		return
 	}
 	if r.bitmap || r.kind == "canvas" || r.kind == "video" {
-		if r.img != nil || r.bitmap {
+		// a <video> always emits its bitmap op: the picture arrives after layout and is read when painting
+		if r.img != nil || r.bitmap || r.kind == "video" {
 			fit := b.st.ObjectFit
 			p.emit(Bitmap{Node: b.n, Dst: cr, Fit: fit, Pos: [2]float64{b.st.ObjectPos[0].Resolve(1), b.st.ObjectPos[1].Resolve(1)}, Radii: rad})
 		}

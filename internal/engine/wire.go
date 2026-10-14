@@ -112,7 +112,7 @@ func proxyFunc(explicit string) func(*http.Request) (*url.URL, error) {
 func countedDial(w *wireCounters) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	d := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		c, err := d.DialContext(ctx, network, addr)
+		c, err := d.DialContext(ctx, network, mapDialAddr(addr))
 		if err != nil {
 			return nil, err
 		}
@@ -166,6 +166,7 @@ type meterInfo struct {
 	pol  DataPolicy
 
 	// final hop, written by meterRT
+	noCreds  bool         // the request carries no cookies and keeps none (CORS without credentials)
 	maxBody  int64        // transfer-size cap of the request (0 = none), set before the request is made
 	declared atomic.Int64 // Content-Length as received (transfer size), -1 unknown
 	hdrBytes atomic.Int64

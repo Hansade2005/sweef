@@ -4,7 +4,7 @@
 #   scripts/release/build.sh [--targets "linux/amd64 ..."] [--check-repro] [--skip-launchers]
 #
 # Env: VERSION, COMMIT, SOURCE_DATE_EPOCH, DIST (default ./dist),
-#      SWEEF_MAIN_PKG (default ./cmd/sweef), SWEEF_MAX_BINARY_BYTES (default 33554432),
+#      SWEEF_MAIN_PKG (default ./cmd/sweef), SWEEF_MAX_BINARY_BYTES (default 41943040),
 #      STRICT_VERSION=1 (fail if the built binary does not report $VERSION)
 #
 # Output layout:
@@ -30,7 +30,9 @@ done
 need go
 resolve_all
 MAIN_PKG="${SWEEF_MAIN_PKG:-./cmd/sweef}"
-MAX_BYTES="${SWEEF_MAX_BINARY_BYTES:-33554432}"
+# 40 MiB: the binary carries WebRTC (pion, about +4.5 MiB), WebAssembly (wazero, about +3.7 MiB), the media codecs and
+# the web platform layer; it was 32 MiB before those. Raise it deliberately, with a line in CHANGELOG.md.
+MAX_BYTES="${SWEEF_MAX_BINARY_BYTES:-41943040}"
 export CGO_ENABLED=0
 export GOFLAGS="${GOFLAGS:-} -mod=readonly"
 export SOURCE_DATE_EPOCH
@@ -80,6 +82,13 @@ build_one() { # os arch outdir
     [ "$os" = windows ] && lf="$lf -H=windowsgui"
     ( cd "$ROOT" && GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags "$lf" -o "$out/Sweef$ext" ./packaging/tools/launcher ) \
       || die "launcher build failed for $os/$arch"
+  fi
+  # Sweef is one static binary: no libc, no dynamic loader (it must run on Alpine/musl and in scratch containers).
+  # A dependency that loads libraries with dlopen (purego's Linux shim) would add NEEDED entries and an INTERP.
+  if [ "$os" = linux ] && command -v readelf >/dev/null 2>&1; then
+    if readelf -lW "$out/sweef$ext" 2>/dev/null | grep -q 'INTERP' || readelf -dW "$out/sweef$ext" 2>/dev/null | grep -q 'NEEDED'; then
+      die "$os/$arch binary is dynamically linked (INTERP/NEEDED present); Linux builds must be static"
+    fi
   fi
   local size; size="$(wc -c < "$out/sweef$ext" | tr -d ' ')"
   printf '    %-14s %10s bytes (%s MiB)\n' "$os/$arch" "$size" "$((size / 1048576))" >&2

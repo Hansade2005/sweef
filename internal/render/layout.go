@@ -685,14 +685,14 @@ func (c *ctx) buildBoxes() {
 	for n, st := range c.styles {
 		bs := c.byNode[n]
 		if st.Display == "none" {
-			res.Boxes[n] = &Box{Display: "none", Position: st.Position, Visible: false, Transform: [6]float64{1, 0, 0, 1, 0, 0}}
+			res.Boxes[n] = &Box{Display: "none", Position: st.Position, Visible: false, Transform: [6]float64{1, 0, 0, 1, 0, 0}, Style: st}
 			continue
 		}
 		if len(bs) == 0 {
-			res.Boxes[n] = &Box{Display: st.Display, Position: st.Position, Visible: st.Visibility == "visible", Transform: [6]float64{1, 0, 0, 1, 0, 0}}
+			res.Boxes[n] = &Box{Display: st.Display, Position: st.Position, Visible: st.Visibility == "visible", Transform: [6]float64{1, 0, 0, 1, 0, 0}, Style: st}
 			continue
 		}
-		bx := &Box{Display: st.Display, Position: st.Position, Visible: st.Visibility == "visible", Transform: [6]float64{1, 0, 0, 1, 0, 0}}
+		bx := &Box{Display: st.Display, Position: st.Position, Visible: st.Visibility == "visible", Transform: [6]float64{1, 0, 0, 1, 0, 0}, Style: st}
 		bx.ZIndex = 0
 		if !st.ZAuto {
 			bx.ZIndex = st.ZIndex
@@ -816,6 +816,9 @@ func sortedNodes(m map[*html.Node]*Box) []*html.Node {
 	sort.Slice(out, func(i, j int) bool { return false })
 	return out
 }
+
+// IsQuirks reports whether layout treats the document as quirks mode (document.compatMode).
+func IsQuirks(root *html.Node) bool { return isQuirks(root) }
 
 // isQuirks reports whether the document lacks a standards-mode doctype.
 func isQuirks(root *html.Node) bool {
