@@ -48,6 +48,11 @@ func (p *painter) paintLines(b *lbox) {
 	if len(b.lines) == 0 {
 		return
 	}
+	if b.scx != 0 || b.scy != 0 {
+		// the lines of a scrolled box were placed at its scrolled position
+		b.ax, b.ay = b.ax-b.scx, b.ay-b.scy
+		defer func() { b.ax, b.ay = b.ax+b.scx, b.ay+b.scy }()
+	}
 	for _, ln := range b.lines {
 		// inline box decorations first
 		for _, lb := range ln.boxes {
@@ -144,6 +149,7 @@ func (p *painter) paintTextFrag(b *lbox, ln *line, fr *frag) {
 	}
 	gl := fragGlyphs(fr, e)
 	w := fr.w
+	p.recordTextFrag(b, ln, fr, e, x, y, w, len(p.ops)) // before anything that skips drawing: blanks are selectable too
 	if len(gl) == 0 && st.TextDecorLine == 0 {
 		return
 	}
@@ -519,18 +525,23 @@ func (p *painter) paintControl(b *lbox) {
 		case "date", "datetime-local", "month", "week", "time":
 			p.paintDateTime(b, st, fs, cr, baseY, txtCol)
 		default:
-			txt := ci.text
-			col := txtCol
-			if txt == "" {
+			val := ci.text
+			shown, txt, col := val, val, txtCol
+			if val == "" {
 				if ph := attr(b.n, "placeholder"); ph != "" {
 					txt, col = ph, Color{117, 117, 117, 255}
 				}
 			} else if r.ctrl == "password" {
-				txt = strings.Repeat("•", len([]rune(txt)))
+				shown = strings.Repeat("•", len([]rune(val)))
+				txt = shown
 			}
+			scx, _ := p.ctlScroll(b)
+			p.pushClip(cr, Radii{}, nil)
+			p.recordCtlLine(b, st, fs, []rune(shown), 0, cr.X-scx, baseY, cr.Y, cr.H, cr, len(p.ops))
 			if txt != "" {
-				p.emitClippedText(st, fs, txt, cr, baseY, col)
+				p.emitSimpleText(st, fs, txt, cr.X-scx, baseY, col)
 			}
+			p.popClip(nil)
 		}
 	case "textarea":
 		txt := ci.text
@@ -541,12 +552,27 @@ func (p *painter) paintControl(b *lbox) {
 			}
 		}
 		txt = strings.TrimPrefix(txt, "\n")
-		y := cr.Y
 		half := math.Floor((lhOf(st, fs) - (fs.asc + fs.desc)) / 2)
-		for _, line := range strings.Split(txt, "\n") {
-			p.emitClippedText(st, fs, line, cr, y+half+fs.asc, col)
-			y += lhOf(st, fs)
+		lh := lhOf(st, fs)
+		scx, scy := p.ctlScroll(b)
+		y := cr.Y - scy
+		rs := []rune(txt)
+		isVal := ci.text != ""
+		nowrap := attr(b.n, "wrap") == "off" || st.WhiteSpace == "pre" || st.WhiteSpace == "nowrap"
+		p.pushClip(cr, Radii{}, nil)
+		for _, ln := range p.c.wrapControlText(fs, st, rs, cr.W, nowrap) {
+			if y+lh >= cr.Y && y <= cr.Y+cr.H {
+				if isVal {
+					p.recordCtlLine(b, st, fs, rs[ln[0]:ln[1]], ln[0], cr.X-scx, y+half+fs.asc, y, lh, cr, len(p.ops))
+				}
+				p.emitSimpleText(st, fs, string(rs[ln[0]:ln[1]]), cr.X-scx, y+half+fs.asc, col)
+			}
+			y += lh
 		}
+		if !isVal {
+			p.recordCtlLine(b, st, fs, nil, 0, cr.X-scx, cr.Y+half+fs.asc, cr.Y, lh, cr, len(p.ops))
+		}
+		p.popClip(nil)
 		if st.Resize == "both" || st.Resize == "horizontal" || st.Resize == "vertical" {
 			// resize grip: two 1px diagonals in the bottom-right corner
 			rr := p.snapRect(Rect{b.ax, b.ay, b.w, b.h})

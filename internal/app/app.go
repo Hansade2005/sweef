@@ -129,6 +129,8 @@ type App struct {
 	animOn              atomic.Bool
 	lastTick            time.Time
 	scrollbarT          time.Time // last scroll activity, for the fading scrollbar
+	wlatch              wheelLatch
+	escroll             *elemScroll // the inner scroller a wheel gesture is moving
 	sbAlpha             uint8
 	mouse               mouseState
 	cursorShown         shell.Cursor

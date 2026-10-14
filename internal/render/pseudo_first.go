@@ -45,6 +45,7 @@ func (c *ctx) applyFirstLetter(b *lbox, n *html.Node, st *style.Computed) {
 	fb.inlineLv = fb.kind == kInline && !fb.floated && !fb.oof
 	tb := newBox(t.n, pst, kText)
 	tb.text = letter
+	tb.srcOff = t.srcOff + utf8.RuneCountInString(pre)
 	tb.inlineLv = true
 	fb.addKid(tb)
 	c.fixupChildren(fb)
@@ -58,6 +59,7 @@ func (c *ctx) applyFirstLetter(b *lbox, n *html.Node, st *style.Computed) {
 	if rest != "" {
 		rb := *t
 		rb.text = rest
+		rb.srcOff = t.srcOff + utf8.RuneCountInString(pre) + utf8.RuneCountInString(letter)
 		repl = append(repl, &rb)
 	}
 	nk := make([]*lbox, 0, len(holder.kids)+2)

@@ -66,6 +66,7 @@ type lbox struct {
 	ifc           bool // block container whose children are inline-level (inline formatting context)
 	anon          bool
 	rep           *replacedInfo
+	srcOff        int  // text boxes: offset (in runes) of text within the DOM text node's data (::first-letter splits one node in three)
 	cont          int  // continuation index for split inlines (0 = first piece)
 	lastPart      bool // last piece of an inline that was split around blocks
 	split         bool
@@ -89,7 +90,8 @@ type lbox struct {
 	hasBase          bool
 	contentH         float64 // content height (auto height result)
 	scrollW, scrollH float64
-	vscroll, hscroll bool // scrollbars take space
+	scx, scy         float64 // scroll offset of a scroll container (see ctx.scrollOf)
+	vscroll, hscroll bool    // scrollbars take space
 	sbW, sbH         float64
 
 	// inline layout results

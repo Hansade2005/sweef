@@ -249,8 +249,7 @@ func (a *App) AgentReveal(tabID string, cssY int) {
 		}
 		a.scroll.ScrollTo(target, true)
 		a.scrollbarT = time.Now()
-		a.stepScroll(float64(frameInterval) / float64(time.Second))
-		a.startAnim()
+		a.kickScroll()
 	})
 }
 

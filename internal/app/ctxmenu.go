@@ -481,13 +481,10 @@ func (a *App) focusFor(e *etab) {
 	}
 }
 
-func (a *App) copySelection(e *etab) { a.focusFor(e); a.clipboardOp("copy") }
-func (a *App) cutSelection(e *etab)  { a.focusFor(e); a.clipboardOp("cut") }
 func (a *App) pasteClipboard(e *etab) {
 	a.focusFor(e)
-	a.clipboardOp("paste")
+	a.pasteInto(e)
 }
-func (a *App) selectAll(e *etab) { a.focusFor(e); a.clipboardOp("selectall") }
 
 // editOp runs undo, redo, delete (and the clipboard ops) in the document that has the keyboard.
 func (a *App) editOp(e *etab, op string) {

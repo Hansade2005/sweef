@@ -97,6 +97,7 @@ func (a *App) loadURL(tabID, target string, mode int32, typed bool) {
 	e.blocked.Store(0)
 	e.loadMode.Store(mode)
 	e.scrollCSS.Store(0)
+	e.wheelState.Store(wheelUnknown)
 	a.model.Update(tabID, func(t *state.Tab) {
 		t.Loading, t.Progress, t.URL, t.Blocked = true, 0.05, target, 0
 		t.Security = securityFor(target, false)
@@ -203,17 +204,33 @@ func (e *etab) requeue(f func()) {
 // newer one takes over (the older chain notices at its next step and ends without touching the tab).
 func (e *etab) driveLoad(seq int64, onLoad func()) {
 	if e.driveSeq.Load() == seq {
-		return // already driven
+		// already driven (the pump may have started the load of a page-initiated navigation before the
+		// navigation was reported): the one that waits for the load still needs its answer
+		if onLoad != nil {
+			e.driveCb = onLoad
+		}
+		return
 	}
 	e.driveSeq.Store(seq)
+	e.driveCb = nil
 	loaded := false
+	runLoad := func() {
+		f := onLoad
+		if e.driveCb != nil {
+			f = e.driveCb
+		}
+		if f != nil {
+			f()
+		}
+	}
 	last := time.Now()
 	gap := loadPaintGap
 	gen := e.t.Generation()
 	var step func()
 	finish := func() {
-		if !loaded && onLoad != nil {
-			onLoad()
+		if !loaded {
+			loaded = true
+			runLoad()
 		}
 		if e.navSeq.Load() == seq {
 			e.paint(false)
@@ -234,9 +251,7 @@ func (e *etab) driveLoad(seq int64, onLoad func()) {
 		e.drainBindings()
 		if !loaded && (!more || e.t.LoadLoaded()) {
 			loaded = true
-			if onLoad != nil {
-				onLoad()
-			}
+			runLoad()
 		}
 		if g := e.t.Generation(); g != gen && time.Since(last) >= gap {
 			t0 := time.Now()

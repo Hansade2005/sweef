@@ -17,18 +17,22 @@ const helperJS = `(function(G){
   }
   function mods(m){ m=m|0; return {shiftKey:!!(m&1),ctrlKey:!!(m&2),altKey:!!(m&4),metaKey:!!(m&8)}; }
   // pointer: kind = move|down|up|click|context ; m = shift1|ctrl2|alt4|meta8
-  G.__sweefPtr = function(kind, x, y, b, m){
-    var init = mods(m); init.button = b|0;
-    var el = D.elementFromPoint(x, y);
+  G.__sweefPtr = function(kind, x, y, b, m, detail){
+    var init = mods(m); init.button = b|0; init.detail = detail|0 || 1;
+    var el = G.__swElAtPage(x, y);
     if (kind === 'move') { G.__swMouse('mousemove', x, y, init); return null; }
     if (kind === 'down') {
-      var kept = G.__swMouse('mousedown', x, y, init);
-      if ((b|0) === 0 && kept !== false) { // a page that cancels mousedown keeps the focus where it was (menus rely on it)
+      // preventDefault on mousedown keeps the focus where it is and starts no selection
+      var ok = G.__swMouse('mousedown', x, y, init) !== false;
+      var res = {prevented: !ok};
+      if (ok && (b|0) === 0) {
         var f = focusable(el);
         if (f) { try { f.focus(); } catch(e){} }
         else { var ae = D.activeElement; if (ae && ae !== D.body && ae.blur) { try { ae.blur(); } catch(e){} } }
+        // the page can refuse the selection in selectstart
+        try { var tgt = el || D.body; if (!tgt.dispatchEvent(new G.Event('selectstart', {bubbles: true, cancelable: true}))) res.prevented = true; } catch(e){}
       }
-      return null;
+      return res;
     }
     if (kind === 'up') { G.__swMouse('mouseup', x, y, init); return null; }
     if (kind === 'click') {
@@ -46,6 +50,7 @@ const helperJS = `(function(G){
       }
       if ((b|0) === 1) return null;
       G.__swMouse('click', x, y, init);
+      if ((detail|0) === 2 && (b|0) === 0) G.__swMouse('dblclick', x, y, init);
       return null;
     }
     if (kind === 'context') {
@@ -65,7 +70,7 @@ const helperJS = `(function(G){
     return null;
   };
   G.__sweefCursor = function(x, y){
-    var el = D.elementFromPoint(x, y);
+    var el = G.__swElAtPage(x, y);
     for (var e = el; e && e.nodeType === 1; e = e.parentElement) {
       var c = '';
       try { c = (e.style && e.style.cursor) || ''; } catch(x){}
@@ -83,6 +88,7 @@ const helperJS = `(function(G){
   G.__sweefSel = function(){
     var ae = D.activeElement;
     if (ae && (ae.localName === 'input' || ae.localName === 'textarea')) {
+      if ((ae.getAttribute('type') || '').toLowerCase() === 'password') return '';
       try { var s = ae.selectionStart, e = ae.selectionEnd; if (s > e) { var t = s; s = e; e = t; } return (ae.value||'').slice(s, e); } catch(x){}
     }
     try { return String(G.getSelection ? G.getSelection() : ''); } catch(x){ return ''; }
@@ -119,27 +125,7 @@ const helperJS = `(function(G){
     try { el.dispatchEvent(inputEvent('input', {bubbles:true, inputType: inputType || 'insertText', data: data === undefined ? null : data})); } catch(x){}
   }
   // insert text at the caret of the focused editable element; kind is the InputEvent inputType
-  G.__sweefInsert = function(text, kind){
-    var el = D.activeElement;
-    if (!el || !isEditable(el)) return false;
-    text = String(text); kind = kind || 'insertText';
-    if (el.localName === 'input' || el.localName === 'textarea') {
-      var v = el.value || '', s = el.selectionStart, e = el.selectionEnd;
-      if (s == null) { s = e = v.length; }
-      if (s > e) { var t = s; s = e; e = t; }
-      if (el.localName === 'input') text = text.replace(/[\r\n]+/g, ' ');
-      setVal(el, v.slice(0, s) + text + v.slice(e), s + text.length, kind, text);
-    } else {
-      // contenteditable: replace the selection when it is inside, else append
-      var sel = null; try { sel = G.getSelection(); } catch(x){}
-      var tn = D.createTextNode(text);
-      if (sel && sel.rangeCount && el.contains(sel.anchorNode)) {
-        var r = sel.getRangeAt(0); r.deleteContents(); r.insertNode(tn); r.setStartAfter(tn); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
-      } else el.appendChild(tn);
-      try { el.dispatchEvent(inputEvent('input', {bubbles:true, inputType: kind, data: text})); } catch(x){}
-    }
-    return true;
-  };
+  G.__sweefInsert = function(text, kind){ return G.__swInsertText ? G.__swInsertText(String(text), kind || 'insertText') : false; };
   function bytesOfB64(b64){ var bin = G.atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
   // Ctrl+V: entries are the clipboard's flavours [{type, text} | {type, b64}]. The page sees a cancelable paste event
   // with a read-only DataTransfer; when it does not cancel it, the text goes in (beforeinput, then input).
@@ -154,11 +140,9 @@ const helperJS = `(function(G){
     var dt = G.__swMakeDataTransfer(list, true), ev;
     try { ev = new G.ClipboardEvent('paste', {bubbles:true, cancelable:true, clipboardData: dt}); } catch(x){ return false; }
     if (!target.dispatchEvent(ev)) return true; // the page handled it
-    var text = dt.getData('text/plain');
-    if (!text || !isEditable(D.activeElement)) return false;
-    var bi = inputEvent('beforeinput', {bubbles:true, cancelable:true, inputType:'insertFromPaste', data:text});
-    if (!D.activeElement.dispatchEvent(bi)) return true;
-    return G.__sweefInsert(text, 'insertFromPaste');
+    var text = dt.getData('text/plain'), html = dt.getData('text/html');
+    if (!text && !html) return false;
+    return G.__swPasteInto(html, text || '');
   };
   function selectionHTML(){
     try {
@@ -169,7 +153,9 @@ const helperJS = `(function(G){
   // Ctrl+C / Ctrl+X: the page sees a cancelable copy or cut event with a writable DataTransfer; when it supplies data
   // or cancels, its data is what is copied, otherwise the selection (text and html)
   G.__sweefCopy = function(op){
-    var target = D.activeElement && D.activeElement !== D.documentElement ? D.activeElement : D.body;
+    var target = D.activeElement && D.activeElement !== D.documentElement && D.activeElement !== D.body ? D.activeElement : null;
+    if (!target) { var sn = null; try { sn = G.getSelection().anchorNode; } catch(x){} target = sn ? (sn.nodeType === 1 ? sn : sn.parentElement) : null; }
+    target = target || D.body;
     var dt = G.__swMakeDataTransfer([], false), prevented = false;
     if (target) { try { prevented = !target.dispatchEvent(new G.ClipboardEvent(op, {bubbles:true, cancelable:true, clipboardData: dt})); } catch(x){} }
     var set = G.__swDataTransferEntries(dt).filter(function(e){ return e.text !== undefined; });
@@ -177,43 +163,31 @@ const helperJS = `(function(G){
     var text = G.__sweefSel();
     return {handled: false, entries: text ? [{type:'text/plain', text: text}].concat((function(){ var h = selectionHTML(); return h ? [{type:'text/html', text:h}] : []; })()) : []};
   };
-  // edit: selectall | cut | delete
+  // edit: selectall | cut | undo | redo
   G.__sweefEdit = function(op){
-    var el = D.activeElement;
-    if (op === 'selectall') {
-      if (el && (el.localName === 'input' || el.localName === 'textarea')) { try { el.setSelectionRange(0, (el.value||'').length); } catch(x){} return true; }
-      try { var r = D.createRange(); r.selectNodeContents(D.body); var s = G.getSelection(); s.removeAllRanges(); s.addRange(r); } catch(x){}
-      return true;
-    }
-    if ((op === 'undo' || op === 'redo') && el && (el.localName === 'input' || el.localName === 'textarea')) {
-      var h = histOf(el), from = op === 'undo' ? h.u : h.r, to = op === 'undo' ? h.r : h.u;
-      if (!from.length) return false;
-      to.push(snap(el)); restore(el, from.pop(), op === 'undo' ? 'historyUndo' : 'historyRedo'); h.k = '';
-      return true;
-    }
-    if (op === 'delete' && el && el.isContentEditable) {
-      try { var sl = G.getSelection(); if (sl && !sl.isCollapsed && el.contains(sl.anchorNode)) { sl.deleteFromDocument(); el.dispatchEvent(inputEvent('input', {bubbles:true, inputType:'deleteContentBackward'})); return true; } } catch(x){}
-      return false;
-    }
-    if (op === 'cut' || op === 'delete') {
-      if (el && isEditable(el) && (el.localName === 'input' || el.localName === 'textarea')) {
-        var v = el.value||'', s = el.selectionStart, e = el.selectionEnd;
-        if (s > e) { var t = s; s = e; e = t; }
-        if (s === e) return false;
-        setVal(el, v.slice(0, s) + v.slice(e), s);
-        return true;
-      }
-    }
+    if (op === 'selectall') return G.__swSelectAll ? G.__swSelectAll() : false;
+    if (op === 'cut') return G.__swCutSelection ? G.__swCutSelection() : false;
+    if (op === 'undo') return G.__swUndo ? G.__swUndo(false) : false;
+    if (op === 'redo') return G.__swUndo ? G.__swUndo(true) : false;
     return false;
   };
+  // document.execCommand('copy' | 'cut'): the copy or cut event runs, then what it left (or the selection) goes to the clipboard
+  function b64OfText(t){ try { return G.btoa(unescape(encodeURIComponent(t))); } catch(x){ return ''; } }
+  G.__sweefCopyCommand = function(op){
+    var r = G.__sweefCopy(op);
+    if (!r.entries.length) return !!r.handled;
+    try { if (!G.__sw.execCopy(JSON.stringify(r.entries.map(function(e){ return {type: e.type, b64: b64OfText(e.text)}; })))) return false; } catch(x){ return false; }
+    if (op === 'cut' && !r.handled && G.__swCutSelection) G.__swCutSelection();
+    return true;
+  };
+  // a wheel turn: the page's wheel listeners run, and the answer says whether one cancelled it and whether the
+  // page has any listener that can
+  G.__sweefWheel = function(dx, dy, x, y, m){
+    var ok = G.__swWheel(dx, dy, x, y, m);
+    return {prevented: ok === false, np: !!G.__swWheelNP()};
+  };
   G.__sweefScrollTo = function(y){
-    try {
-      G.__sweefY = y|0;
-      Object.defineProperty(G, 'scrollY', {get:function(){return G.__sweefY;}, configurable:true});
-      Object.defineProperty(G, 'pageYOffset', {get:function(){return G.__sweefY;}, configurable:true});
-      D.dispatchEvent(new G.Event('scroll'));
-      G.dispatchEvent(new G.Event('scroll'));
-    } catch(x){}
+    try { G.__swScrollEvent('document'); } catch(x){}
   };
   G.__sweefDocH = function(){
     var de = D.documentElement, b = D.body;
@@ -305,6 +279,15 @@ const helperJS2 = `(function(G){
       else return false;
       return true;
     } catch(x2){ return false; }
+  // a key chord the window handles itself (copy, paste, undo...): the page sees keydown and keyup, and the answer is
+  // false when it cancelled the keydown
+  G.__sweefChord = function(key, m){
+    m = m|0;
+    var ae = D.activeElement, id = (ae && ae !== D.body && ae !== D.documentElement) ? G.__swIdOf(ae) : 0;
+    var init = {key: key, code: /^[a-z]$/i.test(key) ? 'Key' + key.toUpperCase() : key, bubbles: true, cancelable: true, shiftKey: !!(m&1), ctrlKey: !!(m&2), altKey: !!(m&4), metaKey: !!(m&8)};
+    var ok = G.__swDispatch(id, 'keydown', init);
+    G.__swDispatch(id, 'keyup', Object.assign({}, init, {cancelable: false}));
+    return ok !== false;
   };
   // true when something other than the viewport placeholder (or an ancestor of it) is at (x,y):
   // a scrim, modal or popover that must receive pointer events instead of the page

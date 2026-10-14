@@ -153,6 +153,9 @@ type Tab struct {
 
 	initScripts []*CompiledScript
 	bindings    []string
+	scrollHook  atomic.Pointer[func(ScrollRequest)] // who moves the viewport when page script scrolls it (scrollapi.go)
+	selHook     atomic.Pointer[func()]              // told when the selection changes (selection.go)
+	quiet       quietState                          // changes that repaint part of the page (quiet.go)
 
 	// Dialog response armed by the agent before the dialog fires
 	dialogAccept bool

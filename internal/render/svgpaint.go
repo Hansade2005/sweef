@@ -103,11 +103,17 @@ func (p *painter) paintScrollbars(b *lbox) {
 	if b.sbW > 0 {
 		r := Rect{x0 + pw - b.sbW, y0, b.sbW, ph - b.sbH}
 		off, ln := thumb(r.H, clientH, totalH, ph)
+		if ln > 0 && totalH > clientH {
+			off += (r.H - 36 - ln) * clamp01(b.scy/(totalH-clientH))
+		}
 		p.emit(Scrollbar{Rect: r, Vertical: true, ThumbOff: off, ThumbLen: ln, Dark: dark})
 	}
 	if b.sbH > 0 {
 		r := Rect{x0, y0 + ph - b.sbH, pw - b.sbW, b.sbH}
 		off, ln := thumb(r.W, clientW, totalW, pw)
+		if ln > 0 && totalW > clientW {
+			off += (r.W - 36 - ln) * clamp01(b.scx/(totalW-clientW))
+		}
 		p.emit(Scrollbar{Rect: r, Vertical: false, ThumbOff: off, ThumbLen: ln, Dark: dark})
 	}
 	if b.sbW > 0 && b.sbH > 0 {
@@ -191,3 +197,5 @@ func (p *painter) emitSVGTiles(b *lbox, doc *SVGDoc, clip Rect, rad Radii, t *Ti
 	}
 	p.emit(PopClip{})
 }
+
+func clamp01(v float64) float64 { return clampf(v, 0, 1) }

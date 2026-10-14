@@ -1267,7 +1267,7 @@ func (j *jsVM) registerHost() error {
 				}
 				return map[string]any{"x": g.Client[0], "y": g.Client[1], "width": g.Client[2], "height": g.Client[3],
 					"ox": g.Border[0], "oy": g.Border[1], "ow": g.Border[2], "oh": g.Border[3],
-					"cw": g.ClientW, "ch": g.ClientH, "sw": g.ScrollW, "sh": g.ScrollH, "frags": fr, "precise": true}, nil
+					"cw": g.ClientW, "ch": g.ClientH, "sw": g.ScrollW, "sh": g.ScrollH, "sl": g.ScrollLeft, "st": g.ScrollTop, "frags": fr, "precise": true}, nil
 			}
 			b, err := d.BoundingBox(argI(a, 0))
 			if err != nil {
@@ -1275,6 +1275,117 @@ func (j *jsVM) registerHost() error {
 			}
 			return map[string]any{"x": b[0], "y": b[1], "width": b[2], "height": b[3]}, nil
 		})},
+		// selection
+		{"selGet", func(a []any) (any, error) {
+			if j.tab == nil {
+				return nil, nil
+			}
+			s := j.tab.SelGet()
+			if !s.Has {
+				return nil, nil
+			}
+			return []any{s.AnchorID, int64(s.AnchorOff), s.FocusID, int64(s.FocusOff)}, nil
+		}},
+		{"selSet", func(a []any) (any, error) {
+			if j.tab != nil {
+				j.tab.SelSet(argI(a, 0), int(argI(a, 1)), argI(a, 2), int(argI(a, 3)))
+			}
+			return nil, nil
+		}},
+		{"selText", func(a []any) (any, error) {
+			if j.tab == nil {
+				return "", nil
+			}
+			return j.tab.SelText(), nil
+		}},
+		{"selAll", func(a []any) (any, error) {
+			if j.tab != nil {
+				j.tab.SelectAll()
+			}
+			return nil, nil
+		}},
+		{"ctlSelGet", func(a []any) (any, error) {
+			if j.tab == nil {
+				return nil, nil
+			}
+			s, e, dir, ok := j.tab.CtlSelGet(argI(a, 0))
+			if !ok {
+				return nil, nil
+			}
+			return []any{int64(s), int64(e), int64(dir)}, nil
+		}},
+		{"ctlSelSet", func(a []any) (any, error) {
+			if j.tab != nil {
+				j.tab.CtlSelSet(argI(a, 0), int(argI(a, 1)), int(argI(a, 2)), int(argI(a, 3)))
+			}
+			return nil, nil
+		}},
+		{"setFocus", func(a []any) (any, error) {
+			if j.tab != nil {
+				j.tab.SetFocusNode(argI(a, 0))
+			}
+			return nil, nil
+		}},
+		{"rangeRects", func(a []any) (any, error) {
+			if j.tab == nil {
+				return []any{}, nil
+			}
+			rs := j.tab.RangeRects(argI(a, 0), int(argI(a, 1)), argI(a, 2), int(argI(a, 3)))
+			out := make([]any, len(rs))
+			for i, r := range rs {
+				out[i] = []any{r[0], r[1], r[2], r[3]}
+			}
+			return out, nil
+		}},
+		{"caretMove", func(a []any) (any, error) {
+			if j.tab == nil {
+				return nil, nil
+			}
+			id, off, ok := j.tab.CaretMove(argI(a, 0), int(argI(a, 1)), argS(a, 2))
+			if !ok {
+				return nil, nil
+			}
+			return []any{id, int64(off)}, nil
+		}},
+		{"posAt", func(a []any) (any, error) {
+			if j.tab == nil {
+				return nil, nil
+			}
+			id, off, ok := j.tab.PosAtPoint(argF(a, 0), argF(a, 1))
+			if !ok {
+				return nil, nil
+			}
+			return []any{id, int64(off)}, nil
+		}},
+		{"caretRect", func(a []any) (any, error) {
+			if j.tab == nil {
+				return nil, nil
+			}
+			r, ok := j.tab.CaretRect(argI(a, 0), int(argI(a, 1)))
+			if !ok {
+				return nil, nil
+			}
+			return []any{r[0], r[1], r[2], r[3]}, nil
+		}},
+		{"scrollPos", func(a []any) (any, error) {
+			if j.tab == nil {
+				return nil, nil
+			}
+			return []any{float64(0), float64(j.tab.ScrollY())}, nil
+		}},
+		{"scrollSet", func(a []any) (any, error) {
+			if j.tab == nil {
+				return nil, nil
+			}
+			cx, cy, changed := j.tab.SetElementScroll(argI(a, 0), argF(a, 1), argF(a, 2))
+			return []any{cx, cy, changed}, nil
+		}},
+		{"scrollWindow", func(a []any) (any, error) {
+			if j.tab == nil || len(a) < 2 {
+				return false, nil
+			}
+			return j.tab.scrollWindow(argF(a, 0), argF(a, 1), argS(a, 2)), nil
+		}},
 		{"elementFromPoint", func(a []any) (any, error) {
 			id, err := j.tab.hitTest(int(argI(a, 0)), int(argI(a, 1)))
 			if err != nil {

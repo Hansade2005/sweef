@@ -194,6 +194,9 @@ type Inherited struct {
 	FontVariantNum          string
 	FontLigOff              bool // font-variant-ligatures: none / font-feature-settings "liga" 0 (render text shaping)
 	UserSelect              string
+	ScrollBehavior          string // auto | smooth
+	OverscrollX             string // auto | contain | none
+	OverscrollY             string
 	WritingMode             string
 	TextOrientation         string // mixed | upright | sideways
 	VertFrame               int8   // set on transposed copies: the vertical mode of the original box
@@ -390,6 +393,7 @@ func Initial() *Computed {
 	c.TextWrap = "wrap"
 	c.Hyphens = "manual"
 	c.UserSelect = "auto"
+	c.ScrollBehavior, c.OverscrollX, c.OverscrollY = "auto", "auto", "auto"
 	c.WritingMode = "horizontal-tb"
 	c.Quotes = [][2]string{{"“", "”"}, {"‘", "’"}}
 	c.ImageRendering = "auto"

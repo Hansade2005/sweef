@@ -16,10 +16,20 @@ import (
 )
 
 type mouseState struct {
-	captured    string // "chrome" | "page" while a button is down
-	downX       float64
-	downY       float64
-	downBtn     int
+	captured string // "chrome" | "page" while a button is down
+	downX    float64
+	downY    float64
+	downBtn  int
+	// multi-click counting (UI loop)
+	clickN  int
+	clickAt time.Time
+	clickX  float64
+	clickY  float64
+	// the text selection gesture in progress: the engine tab it started in (set and cleared on the tab's worker)
+	selecting   atomic.Bool
+	selTab      atomic.Pointer[engine.Tab]
+	lastX       float64 // last pointer position, logical px (UI loop), for scrolling while a selection is dragged out of the view
+	lastY       float64
 	moveBusy    atomic.Bool
 	moveMu      sync.Mutex
 	movePending *[4]int // latest position queued while a move was in flight
@@ -122,6 +132,10 @@ func modBits(m shell.Mods) int {
 }
 
 func (a *App) onMouseMove(ev shell.Event) {
+	a.mouse.lastX, a.mouse.lastY = ev.X, ev.Y
+	if a.dragHeldOutside() {
+		a.startAnim() // the view scrolls while the pointer is held outside it
+	}
 	tgt := a.target(ev.X, ev.Y)
 	e := a.targetTab(tgt)
 	if e == nil {
@@ -154,6 +168,11 @@ func (a *App) runMove(e *etab, tgt string, px, py, mods int, hover bool) {
 		tt, lx, ly := e.pointerTarget(tgt, px, py)
 		e.leaveHover(tt)
 		_, _ = tt.Evaluate("__sweefPtr('move'," + itoa(lx) + "," + itoa(ly) + ",0," + itoa(mods) + ")")
+		if a.mouse.selecting.Load() && !hover {
+			if st := a.mouse.selTab.Load(); st != nil && st == tt {
+				st.SelectMove(float64(lx), float64(ly))
+			}
+		}
 		cur := shell.CursorDefault
 		if hover {
 			var c string
@@ -239,6 +258,9 @@ func (a *App) targetTab(tgt string) *etab {
 func (a *App) onMouseButton(ev shell.Event, down bool) {
 	tgt := a.target(ev.X, ev.Y)
 	if down {
+		if tgt == "page" {
+			a.scroll.Stop() // touching the page stops a fling
+		}
 		a.mouse.captured, a.mouse.downX, a.mouse.downY, a.mouse.downBtn = tgt, ev.X, ev.Y, ev.Button
 		if tgt != "overlay" && a.ovl.visible() {
 			a.sendChrome("overlay.dismiss", map[string]any{})
@@ -267,6 +289,11 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 			e.w.do(func() { a.contextMenu(e, tgt, px, py, mods, ev.X, ev.Y) })
 			return
 		}
+		clicks := 1
+		if btn == 0 {
+			clicks = a.countClick(ev)
+		}
+		shift := ev.Mods&shell.ModShift != 0
 		e.w.do(func() {
 			tt, lx, ly := e.pointerTarget(tgt, px, py)
 			if tgt == "page" {
@@ -274,7 +301,18 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 				tt.NoteUserActivation()
 			}
 			e.t.MarkUserActivation() // a real click: sites may now ask for permissions
-			_, _ = tt.Evaluate("__sweefPtr('down'," + itoa(lx) + "," + itoa(ly) + "," + itoa(btn) + "," + itoa(mods) + ")")
+			var r struct {
+				Prevented bool `json:"prevented"`
+			}
+			_ = e.evalOn(tt, "__sweefPtr('down',"+itoa(lx)+","+itoa(ly)+","+itoa(btn)+","+itoa(mods)+","+itoa(clicks)+")", &r)
+			a.mouse.selecting.Store(false)
+			if btn == 0 && !r.Prevented && tgt != "overlay" {
+				// the default action of a press: put the caret there, or select the word or paragraph, or extend
+				if tt.SelectDown(float64(lx), float64(ly), clicks, shift) {
+					a.mouse.selTab.Store(tt)
+					a.mouse.selecting.Store(true)
+				}
+			}
 			e.afterOp()
 		})
 		return
@@ -283,6 +321,10 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 		return
 	}
 	clicked := math.Abs(ev.X-a.mouse.downX) < 6 && math.Abs(ev.Y-a.mouse.downY) < 6
+	clickN := a.mouse.clickN
+	if clickN < 1 {
+		clickN = 1
+	}
 	e.w.do(func() {
 		tt, lx, ly := e.pointerTarget(tgt, px, py)
 		if tt != e.t && !tt.ScriptsAllowed() {
@@ -294,14 +336,22 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 			a.post(func() { a.afterPageInput(e) })
 			return
 		}
-		_, _ = tt.Evaluate("__sweefPtr('up'," + itoa(lx) + "," + itoa(ly) + "," + itoa(btn) + "," + itoa(mods) + ")")
+		_, _ = tt.Evaluate("__sweefPtr('up'," + itoa(lx) + "," + itoa(ly) + "," + itoa(btn) + "," + itoa(mods) + "," + itoa(clickN) + ")")
+		if a.mouse.selecting.Swap(false) {
+			if st := a.mouse.selTab.Load(); st != nil {
+				if st == tt {
+					st.SelectMove(float64(lx), float64(ly)) // the release point is the last place of the drag
+				}
+				st.SelectUp()
+			}
+		}
 		if clicked {
 			var res struct {
 				Open string `json:"open"`
 				BG   bool   `json:"bg"`
 				Lite *int   `json:"lite"` // index of a tapped Data Saver placeholder
 			}
-			_ = e.evalOn(tt, "__sweefPtr('click',"+itoa(lx)+","+itoa(ly)+","+itoa(btn)+","+itoa(mods)+")", &res)
+			_ = e.evalOn(tt, "__sweefPtr('click',"+itoa(lx)+","+itoa(ly)+","+itoa(btn)+","+itoa(mods)+","+itoa(clickN)+")", &res)
 			if res.Lite != nil && tt == e.t {
 				a.dataTapAt(e, *res.Lite)
 			}
@@ -313,6 +363,74 @@ func (a *App) onMouseButton(ev shell.Event, down bool) {
 		e.afterOp()
 		a.post(func() { a.afterPageInput(e) })
 	})
+}
+
+// doubleClickTime and doubleClickDist decide whether a press continues the previous clicks.
+const (
+	doubleClickTime = 500 * time.Millisecond
+	doubleClickDist = 5.0
+)
+
+// countClick numbers the presses of the left button: 1 for a single click, 2 for the second of a double click, 3
+// and beyond for further presses of a run. UI loop only.
+func (a *App) countClick(ev shell.Event) int {
+	m := &a.mouse
+	now := time.Now()
+	if m.clickN > 0 && now.Sub(m.clickAt) <= doubleClickTime && math.Abs(ev.X-m.clickX) <= doubleClickDist && math.Abs(ev.Y-m.clickY) <= doubleClickDist {
+		m.clickN++
+	} else {
+		m.clickN = 1
+	}
+	m.clickAt, m.clickX, m.clickY = now, ev.X, ev.Y
+	return m.clickN
+}
+
+// dragHeldOutside reports whether a button is held on the page with the pointer beyond the top or bottom of the
+// view.
+func (a *App) dragHeldOutside() bool {
+	m := &a.mouse
+	return m.captured == "page" && !a.vpLog.empty() && (m.lastY < a.vpLog.Y || m.lastY > a.vpLog.Y+a.vpLog.H)
+}
+
+// dragScroll scrolls the page while a text selection is being dragged beyond the top or bottom of the view, and
+// extends the selection to the edge. It reports whether it scrolled. UI loop, once per frame.
+func (a *App) dragScroll() bool {
+	m := &a.mouse
+	if !m.selecting.Load() || m.captured != "page" || a.vpLog.empty() {
+		return false
+	}
+	top, bot := a.vpLog.Y, a.vpLog.Y+a.vpLog.H
+	var d float64
+	switch {
+	case m.lastY < top:
+		d = m.lastY - top
+	case m.lastY > bot:
+		d = m.lastY - bot
+	default:
+		return false
+	}
+	v := d * 0.35 // logical px per frame, faster the further the pointer is out
+	if v > 0 && v < 2 {
+		v = 2
+	} else if v < 0 && v > -2 {
+		v = -2
+	}
+	v = math.Max(-48, math.Min(48, v))
+	a.scroll.Stop()
+	a.scroll.ScrollTo(a.scroll.Pos+v*a.scale, true)
+	a.stepScroll()
+	e := a.activePage()
+	st := m.selTab.Load()
+	if e == nil || st == nil {
+		return true
+	}
+	cy := math.Max(top, math.Min(bot-1, m.lastY))
+	px, py := a.pageCoords(m.lastX, cy)
+	e.w.tryDo(func() {
+		st.SelectMove(float64(px), float64(py))
+		e.paint(false)
+	})
+	return true
 }
 
 // afterPageInput notices navigation that page code started in response to input.
@@ -329,54 +447,6 @@ func (a *App) afterPageInput(e *etab) {
 }
 
 // contextMenu (right button) lives in ctxmenu.go.
-
-func (a *App) onWheel(ev shell.Event) {
-	a.ctxDismiss() // a menu closes when the page scrolls
-	if a.mouse.captured == "" && !a.inViewport(ev.X, ev.Y) {
-		if c := a.targetTab("chrome"); c != nil {
-			x, y, dx, dy := int(ev.X), int(ev.Y), int(ev.DX), int(ev.DY)
-			c.w.do(func() {
-				_, _ = c.t.Evaluate("__swWheel(" + itoa(dx) + "," + itoa(dy) + "," + itoa(x) + "," + itoa(y) + ")")
-				c.afterOp()
-			})
-		}
-		return
-	}
-	if ev.Mods&(shell.ModCtrl|shell.ModMeta) != 0 { // ctrl+wheel zooms
-		if ev.DY < 0 {
-			a.zoom(10)
-		} else if ev.DY > 0 {
-			a.zoom(-10)
-		}
-		return
-	}
-	e := a.activePage()
-	if e == nil {
-		return
-	}
-	e.lastInput.Store(time.Now().UnixNano())
-	// a frame under the pointer that can still scroll takes the wheel; otherwise the page scrolls
-	wx, wy := a.pageCoords(ev.X, ev.Y)
-	if e.t.WheelAt(wx, wy, int(ev.DX/a.zoomF()), int(ev.DY/a.zoomF())) {
-		return
-	}
-	if ev.Precise { // trackpad: pixel-accurate deltas already feel smooth, do not add easing
-		a.scroll.ScrollTo(a.scroll.Target+ev.DY*a.scale, true)
-		a.stepScroll(0)
-	} else {
-		a.scroll.Wheel(ev.DY * a.scale)
-	}
-	a.scrollbarT = time.Now()
-	a.stepScroll(float64(frameInterval) / float64(time.Second)) // first frame now, not 16 ms from now
-	a.startAnim()
-	x, y := a.pageCoords(ev.X, ev.Y)
-	dx, dy := int(ev.DX), int(ev.DY)
-	e.w.tryDo(func() { // let page script see the wheel (lazy loaders listen to it)
-		tt, lx, ly := e.t.FrameHit(x, y)
-		_, _ = tt.Evaluate("__swWheel(" + itoa(dx) + "," + itoa(dy) + "," + itoa(lx) + "," + itoa(ly) + ")")
-		e.drainBindings()
-	})
-}
 
 // ---- keyboard -------------------------------------------------------------------------------------
 
@@ -397,21 +467,9 @@ func (a *App) onKeyDown(ev shell.Event) {
 	}
 	key := ev.Key
 	ctrl := a.ctrlMod(ev.Mods)
-	if ctrl && ev.Mods&(shell.ModShift|shell.ModAlt) == 0 && len(key) == 1 {
-		switch strings.ToLower(key) {
-		case "c":
-			a.clipboardOp("copy")
-			return
-		case "x":
-			a.clipboardOp("cut")
-			return
-		case "v":
-			a.clipboardOp("paste")
-			return
-		case "a":
-			a.clipboardOp("selectall")
-			return
-		}
+	if op := clipboardChord(ev, ctrl); op != "" {
+		a.clipboardOp(op, &ev)
+		return
 	}
 	// printable characters arrive as EvText; do not type them twice
 	if len([]rune(key)) == 1 && ev.Mods&(shell.ModCtrl|shell.ModAlt|shell.ModMeta) == 0 && key != " " {
@@ -426,6 +484,7 @@ func (a *App) onKeyDown(ev shell.Event) {
 	isPage := e.kind == "page"
 	if key == "Escape" && a.model.Find.Open {
 		a.model.Find = state.Find{}
+		a.findClear()
 		a.markState()
 		return
 	}
@@ -470,37 +529,41 @@ func (a *App) onKeyDown(ev shell.Event) {
 	})
 }
 
+// scrollKey scrolls the page for a key that does so: arrows move by a line (a spring, so a held key keeps
+// accelerating into a steady speed), PageUp/PageDown/Space by most of a screen, Home/End to the ends (an eased
+// move whose duration follows the distance; repeated page keys add up).
 func (a *App) scrollKey(key string, shift bool) {
 	_, max := a.comp.Scroll()
 	if max == 0 && a.scroll.Max == 0 {
 		return
 	}
 	vh := float64(a.vpDevice().Dy())
-	line := 48 * a.scale
+	line := 40 * a.pageDSF()
+	page := vh * 0.875
 	switch key {
 	case "ArrowDown":
 		a.scroll.Wheel(line)
 	case "ArrowUp":
 		a.scroll.Wheel(-line)
 	case "PageDown":
-		a.scroll.Wheel(vh * 0.875)
+		a.scroll.EaseBy(page)
 	case "PageUp":
-		a.scroll.Wheel(-vh * 0.875)
+		a.scroll.EaseBy(-page)
 	case " ":
 		if shift {
-			a.scroll.Wheel(-vh * 0.875)
+			a.scroll.EaseBy(-page)
 		} else {
-			a.scroll.Wheel(vh * 0.875)
+			a.scroll.EaseBy(page)
 		}
 	case "Home":
-		a.scroll.ScrollTo(0, false)
+		a.scroll.EaseTo(0)
 	case "End":
-		a.scroll.ScrollTo(a.scroll.Max, false)
+		a.scroll.EaseTo(a.scroll.Max)
 	default:
 		return
 	}
 	a.scrollbarT = time.Now()
-	a.startAnim()
+	a.kickScroll()
 }
 
 func (a *App) focusTab() *etab {
@@ -560,18 +623,68 @@ func (a *App) onText(text string) {
 	})
 }
 
-// clipboardOp implements copy/cut/paste/select-all for the focused tab.
-func (a *App) clipboardOp(op string) {
-	e := a.focusTab()
-	if e == nil {
-		return
+// clipboardChord names the editing command a key press stands for, or "".
+func clipboardChord(ev shell.Event, ctrl bool) string {
+	key := ev.Key
+	if len(key) == 1 {
+		key = strings.ToLower(key)
 	}
+	shift, alt := ev.Mods&shell.ModShift != 0, ev.Mods&shell.ModAlt != 0
+	switch {
+	case ctrl && !alt && !shift && key == "c", ctrl && !alt && !shift && key == "Insert":
+		return "copy"
+	case ctrl && !alt && !shift && key == "x", !ctrl && !alt && shift && key == "Delete":
+		return "cut"
+	case ctrl && !alt && !shift && key == "v", !ctrl && !alt && shift && key == "Insert":
+		return "paste"
+	case ctrl && !alt && !shift && key == "a":
+		return "selectall"
+	case ctrl && !alt && !shift && key == "z":
+		return "undo"
+	case ctrl && !alt && !shift && key == "y", ctrl && !alt && shift && key == "z":
+		return "redo"
+	}
+	return ""
+}
+
+// clipboardOp runs copy, cut, paste, select all, undo or redo on the focused tab. A key press that stands for it
+// reaches the page first as a keydown; a page that cancels it keeps the command from running.
+func (a *App) clipboardOp(op string, ev *shell.Event) {
+	if e := a.focusTab(); e != nil {
+		a.clipboardOpOn(e, op, ev)
+	}
+}
+
+// copySelection copies the selection of the tab (the page sees the copy event first).
+func (a *App) copySelection(e *etab) { a.clipboardOpOn(e, "copy", nil) }
+
+// cutSelection cuts the selection of the tab out of the editable place it is in.
+func (a *App) cutSelection(e *etab) { a.clipboardOpOn(e, "cut", nil) }
+
+// pasteInto pastes the clipboard into the tab's focused editable place.
+func (a *App) pasteInto(e *etab) { a.clipboardOpOn(e, "paste", nil) }
+
+// selectAll selects everything in the tab's focused editable place, or the whole page.
+func (a *App) selectAll(e *etab) { a.clipboardOpOn(e, "selectall", nil) }
+
+func (a *App) clipboardOpOn(e *etab, op string, ev *shell.Event) {
 	var flavours []engine.ClipboardEntry
 	if op == "paste" {
 		flavours = a.clip.readNow()
 	}
+	chord := ""
+	if ev != nil {
+		chord = "__sweefChord(" + jsString(ev.Key) + "," + itoa(modBits(ev.Mods)) + ")"
+	}
 	e.w.do(func() {
 		tt := e.inputTab()
+		if chord != "" {
+			var ok bool
+			if e.evalOn(tt, chord, &ok) == nil && !ok {
+				e.afterOp()
+				return // the page cancelled the key press
+			}
+		}
 		switch op {
 		case "copy", "cut":
 			var r struct {
@@ -613,6 +726,8 @@ func (a *App) clipboardOp(op string) {
 			}
 		case "selectall":
 			_, _ = tt.Evaluate("__sweefEdit('selectall')")
+		case "undo", "redo":
+			_, _ = tt.Evaluate("__sweefEdit(" + jsString(op) + ")")
 		}
 		e.afterOp()
 	})

@@ -264,6 +264,9 @@ func (a *App) activateTab(id string) {
 		a.comp.SetPage(nil)
 		a.resetScroll()
 		a.paintedDocH = 0
+		if pe := a.page(prev); pe != nil {
+			pe.w.do(func() { pe.t.FindClear() })
+		}
 		a.model.Find = state.Find{}
 	}
 	e.vpW.Store(int32(a.vpLogW()))

@@ -51,6 +51,7 @@ type painter struct {
 	// while painting a foreignObject
 	hitExt  []func(x, y float64) bool
 	hits    []hitRec
+	texts   []TextBox // where the text is (see textrec.go)
 	outl    []*lbox
 	active  map[*lbox]bool
 	svgdocs map[string]*SVGDoc
@@ -68,6 +69,7 @@ func (c *ctx) paintAll(rb *lbox) {
 	p.paintSC(rb, true)
 	p.paintViewportScrollbars()
 	c.res.List = p.ops
+	c.res.Text = p.texts
 	c.painter = p
 }
 

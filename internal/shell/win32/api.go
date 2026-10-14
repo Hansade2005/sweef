@@ -61,6 +61,7 @@ var (
 	pSetClipboardData              = user32.NewProc("SetClipboardData")
 	pGetClipboardData              = user32.NewProc("GetClipboardData")
 	pIsClipboardFormatAvail        = user32.NewProc("IsClipboardFormatAvailable")
+	pRegisterClipboardFormatW      = user32.NewProc("RegisterClipboardFormatW")
 	pSystemParametersInfoW         = user32.NewProc("SystemParametersInfoW")
 	pMonitorFromWindow             = user32.NewProc("MonitorFromWindow")
 	pGetMonitorInfoW               = user32.NewProc("GetMonitorInfoW")

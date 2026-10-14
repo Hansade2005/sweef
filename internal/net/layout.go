@@ -45,11 +45,12 @@ type Layout struct {
 
 // Geometry is the CSSOM View geometry of one element, in CSS px.
 type Geometry struct {
-	Client           [4]float64 // getBoundingClientRect: x, y, w, h (transforms applied)
-	Border           [4]float64 // untransformed border box (offsetLeft/Top/Width/Height basis)
-	ClientW, ClientH float64
-	ScrollW, ScrollH float64
-	Frags            [][4]float64 // getClientRects
+	Client                [4]float64 // getBoundingClientRect: x, y, w, h (transforms applied)
+	Border                [4]float64 // untransformed border box (offsetLeft/Top/Width/Height basis)
+	ClientW, ClientH      float64
+	ScrollW, ScrollH      float64
+	ScrollLeft, ScrollTop float64
+	Frags                 [][4]float64 // getClientRects
 }
 
 type lctx struct {

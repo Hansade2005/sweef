@@ -111,6 +111,38 @@ func init() {
 				b, _ := json.Marshal(out)
 				return string(b), nil
 			},
+			// execCopy is document.execCommand("copy"/"cut"): the same write, allowed in any context while the page
+			// has a user gesture, as browsers do.
+			"execCopy": func(a []any) (any, error) {
+				t := j.tab
+				if !visible() || !t.HasTransientActivation() {
+					return false, nil
+				}
+				var in []struct {
+					Type string `json:"type"`
+					B64  string `json:"b64"`
+				}
+				if err := json.Unmarshal([]byte(argS(a, 0)), &in); err != nil {
+					return false, nil
+				}
+				es := make([]ClipboardEntry, 0, len(in))
+				total := 0
+				for _, it := range in {
+					b, err := base64.StdEncoding.DecodeString(it.B64)
+					if err != nil {
+						return false, nil
+					}
+					if total += len(b); total > clipMaxBytes {
+						return false, nil
+					}
+					es = append(es, ClipboardEntry{strings.ToLower(it.Type), b})
+				}
+				if err := t.Context().Clipboard().Write(es); err != nil {
+					return false, nil
+				}
+				t.emit(EvClipboard, ClipboardWrite{Origin: (&pwaHost{j: j}).origin()})
+				return true, nil
+			},
 			// clipWrite takes JSON [{type, b64}].
 			"clipWrite": func(a []any) (any, error) {
 				t := j.tab

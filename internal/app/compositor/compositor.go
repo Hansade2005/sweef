@@ -48,6 +48,7 @@ type Compositor struct {
 	inkChanges int
 	page       *image.RGBA
 	pageH      int // valid rows in page (texture may be taller than needed)
+	pageY      int // document row (device px) of the texture's first row: the texture is a band of the page
 	vp         image.Rectangle
 	scroll     int   // device px offset of the visible window into page
 	docH       int   // full document height in device px (>= pageH); sets the scroll range
@@ -60,6 +61,9 @@ type Compositor struct {
 	bg     color.RGBA // page background below the end of the texture
 	damage image.Rectangle
 	frames int
+	// blank counts composed frames in which part of the view lay inside the document but outside the painted band
+	blank    int
+	hitBlank bool
 
 	composeTimes ring
 	paintTimes   map[string]*ring
@@ -253,33 +257,55 @@ func (c *Compositor) scanInk() {
 // SetPage installs new page pixels (the whole document or a prefix). The
 // compositor takes ownership and returns the previous texture for reuse.
 // Damage is the changed part of the visible window.
-func (c *Compositor) SetPage(src *image.RGBA) (spare *image.RGBA) {
+func (c *Compositor) SetPage(src *image.RGBA) (spare *image.RGBA) { return c.SetPageAt(src, 0) }
+
+// SetPageAt installs src as the band of the document that starts at document row originY (device px). Rows
+// outside the band show the background until a band that covers them is installed; scrolling never needs the
+// band to start at the top of the page.
+func (c *Compositor) SetPageAt(src *image.RGBA, originY int) (spare *image.RGBA) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	old := c.page
-	c.page = src
+	old, oldY := c.page, c.pageY
+	c.page, c.pageY = src, originY
 	if src == nil {
-		c.pageH = 0
+		c.pageH, c.pageY = 0, 0
 		c.damage = c.damage.Union(c.vp)
 		return old
 	}
 	c.pageH = src.Bounds().Dy()
 	c.clampScroll()
-	if old == nil || old.Bounds() != src.Bounds() {
+	if old == nil || old.Bounds() != src.Bounds() || oldY != originY {
 		c.damage = c.damage.Union(c.vp)
 		return old
 	}
 	// diff only the visible window
-	win := image.Rect(0, c.scroll, src.Bounds().Dx(), c.scroll+c.vp.Dy())
+	win := image.Rect(0, c.scroll-originY, src.Bounds().Dx(), c.scroll-originY+c.vp.Dy()).Intersect(src.Bounds())
 	if d := diff(old, src, win); !d.Empty() {
-		d = d.Sub(image.Pt(0, c.scroll)).Add(c.vp.Min)
+		d = d.Add(image.Pt(0, originY-c.scroll)).Add(c.vp.Min)
 		c.damage = c.damage.Union(d.Intersect(c.vp))
 	}
 	return old
 }
 
-// PageHeight is the texture height in device px (0 without a page).
-func (c *Compositor) PageHeight() int { c.mu.Lock(); defer c.mu.Unlock(); return c.pageH }
+// PageHeight is the document row just below the last painted row, in device px (0 without a page).
+func (c *Compositor) PageHeight() int { c.mu.Lock(); defer c.mu.Unlock(); return c.pageEnd() }
+
+// PageBand returns the document rows (device px) the page texture covers: [y0, y1).
+func (c *Compositor) PageBand() (y0, y1 int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.page == nil {
+		return 0, 0
+	}
+	return c.pageY, c.pageY + c.pageH
+}
+
+func (c *Compositor) pageEnd() int {
+	if c.pageH == 0 {
+		return 0
+	}
+	return c.pageY + c.pageH
+}
 
 // SetDocHeight tells the compositor the full document height (device px).
 // The page texture may be shorter (it is painted ahead of the scroll
@@ -324,8 +350,8 @@ func (c *Compositor) sbWidth() int {
 // sbThumb returns the scrollbar thumb rectangle, empty if nothing scrolls.
 func (c *Compositor) sbThumb() image.Rectangle {
 	total := c.docH
-	if c.pageH > total {
-		total = c.pageH
+	if c.pageEnd() > total {
+		total = c.pageEnd()
 	}
 	vh := c.vp.Dy()
 	if total <= vh || vh <= 0 {
@@ -345,8 +371,8 @@ func (c *Compositor) sbThumb() image.Rectangle {
 
 func (c *Compositor) maxScroll() int {
 	total := c.docH
-	if c.pageH > total {
-		total = c.pageH
+	if c.pageEnd() > total {
+		total = c.pageEnd()
 	}
 	m := total - c.vp.Dy()
 	if m < 0 {
@@ -483,6 +509,10 @@ func (c *Compositor) Compose() (*image.RGBA, image.Rectangle) {
 		}
 	}
 	c.frames++
+	if c.hitBlank {
+		c.blank++
+		c.hitBlank = false
+	}
 	c.composeTimes.add(time.Since(t0))
 	return c.frame, d
 }
@@ -495,9 +525,12 @@ func (c *Compositor) blitPage(r image.Rectangle) {
 	}
 	pw := c.page.Bounds().Dx()
 	for y := r.Min.Y; y < r.Max.Y; y++ {
-		py := y - c.vp.Min.Y + c.scroll
+		py := y - c.vp.Min.Y + c.scroll - c.pageY
 		dst := c.frame.Pix[c.frame.PixOffset(r.Min.X, y):c.frame.PixOffset(r.Max.X, y)]
 		if py >= c.pageH || py < 0 {
+			if c.scroll+y-c.vp.Min.Y < c.docH {
+				c.hitBlank = true
+			}
 			fillRow(dst, c.bg)
 			continue
 		}
@@ -583,6 +616,7 @@ func (c *Compositor) RecordPaint(kind string, d time.Duration) {
 // Stats is the frame timing report (`sweef gui --stats`).
 type Stats struct {
 	Frames  int
+	Blank   int // frames that showed document rows the page texture did not cover yet
 	Compose Percentiles
 	Paint   map[string]Percentiles
 }
@@ -591,7 +625,7 @@ type Stats struct {
 func (c *Compositor) Stats() Stats {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	s := Stats{Frames: c.frames, Compose: percentiles(c.composeTimes.snapshot()), Paint: map[string]Percentiles{}}
+	s := Stats{Frames: c.frames, Blank: c.blank, Compose: percentiles(c.composeTimes.snapshot()), Paint: map[string]Percentiles{}}
 	for k, r := range c.paintTimes {
 		s.Paint[k] = percentiles(r.snapshot())
 	}

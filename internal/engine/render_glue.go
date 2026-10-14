@@ -43,6 +43,15 @@ type tabEnv struct {
 	sty *render.Session
 	// fonts is the document's @font-face state (webfonts.go)
 	fonts *webFonts
+	// scroll holds the scroll offsets of overflow containers (scroll.go)
+	scroll scrollOffsets
+	// sel is the selection of the document (selection.go); tix the text index of the layout computed last
+	sel selState
+	tix struct {
+		sync.Mutex
+		res *render.Result
+		ix  *render.TextIndex
+	}
 }
 
 func (e *tabEnv) source(n *html.Node) BitmapSource {
@@ -415,7 +424,7 @@ func layoutFromRender(res *render.Result, env *tabEnv) *fnet.Layout {
 		if b == nil || b.Display == "none" {
 			return fnet.Geometry{}, false
 		}
-		g := fnet.Geometry{ClientW: b.ClientW, ClientH: b.ClientH, ScrollW: b.ScrollW, ScrollH: b.ScrollH}
+		g := fnet.Geometry{ClientW: b.ClientW, ClientH: b.ClientH, ScrollW: b.ScrollW, ScrollH: b.ScrollH, ScrollLeft: b.ScrollLeft, ScrollTop: b.ScrollTop}
 		g.Border = [4]float64{b.Border.X, b.Border.Y, b.Border.W, b.Border.H}
 		if rc, ok := res.ClientRect(n); ok {
 			g.Client = [4]float64{rc.X, rc.Y, rc.W, rc.H}

@@ -49,6 +49,30 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - An uncaught error raised from a listener, timer or microtask is logged with its name and message, not only its stack.
 - The app no longer evaluates its UI messages (state patches, which now include the Developer Tools binding) in a tab whose
   document is a web page, which could have defined `window.sweef` while the tab was still on the internal-page list.
+- Scrolling: the page texture is a window (band) around the view instead of the whole prefix of the page, which removes the
+  80 ms to 1.7 s repaints on deep pages and the blank frames of a fast flick (long text page, headless 1920x1080: repaint p50
+  80-150 ms to 17-23 ms, blank frames 348/425 to 0). Wheel notches and arrows use a critically damped spring, precision
+  touchpad deltas follow the finger and then fling with exponential decay, PageUp/PageDown/Space/Home/End ease. Scrolling
+  chains inner scroller, frame, viewport and honours `overflow` and `overscroll-behavior`. `scroll` / `scrollend`,
+  `scroll-behavior: smooth`, `scrollTo/By/IntoView` and fragment navigation work. Wheel events reach the page first
+  (`preventDefault` cancels; window/document/body wheel listeners are passive by default).
+- Text selection: drag with autoscroll, double click (word), triple click (paragraph), shift+click, shift/ctrl+shift+arrows,
+  Ctrl/Cmd+A, a highlight painted from the layout (so it matches `getSelection()` / `Range`), `user-select: none`, text controls
+  with `selectionStart/End`, `setSelectionRange`, `setRangeText`, find-in-page highlights with the active match scrolled in.
+- Clipboard: copy (Ctrl+C, Ctrl+Insert) puts `text/plain` and `text/html` on the system clipboard, cut (Ctrl+X, Shift+Delete),
+  paste (Ctrl+V, Shift+Insert) with cancelable `copy`/`cut`/`paste` events, a paste sanitiser for `contenteditable`, undo/redo
+  (Ctrl+Z, Ctrl+Y). `shell.RichClipboard`: CF_HTML on Windows, `text/html` on X11, `public.html` on macOS.
+  The Windows and macOS clipboard code is UNVERIFIED: it builds (GOOS=windows/darwin) and the CF_HTML framing is unit tested,
+  but it was not run on those systems.
+
+### Fixed
+- A page-initiated navigation whose load was started by the page pump before it was reported to the app could stay "loading"
+  forever.
+
+### Known gaps
+- `::selection` colours (the default colours are used), caret blink, wheel scrolling of a textarea, horizontal viewport scroll,
+  `position: fixed` elements inside the scrolled page texture, selection painting inside frames, smooth programmatic scrolling
+  of inner elements (instant).
 
 ## [0.1.0-alpha] - 2026-10-14
 

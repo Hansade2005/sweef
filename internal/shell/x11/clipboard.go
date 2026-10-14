@@ -2,7 +2,11 @@
 
 package x11
 
-import "time"
+import (
+	"strings"
+	"time"
+	"unicode/utf16"
+)
 
 // Clipboard support: the CLIPBOARD selection, as owner (SetClipboard) and as
 // requestor (Clipboard), including INCR for transfers larger than one
@@ -32,12 +36,49 @@ func (w *Window) incrThreshold() int {
 }
 
 // SetClipboard takes ownership of CLIPBOARD and serves s.
-func (w *Window) SetClipboard(s string) {
+func (w *Window) SetClipboard(s string) { w.setClipboard(s, "") }
+
+// SetClipboardRich serves text and its HTML form (the text/html target) (shell.RichClipboard).
+func (w *Window) SetClipboardRich(text, html string) { w.setClipboard(text, html) }
+
+// ClipboardHTML returns the text/html on CLIPBOARD ("" if there is none).
+func (w *Window) ClipboardHTML() string {
+	if w.closed.Load() {
+		return ""
+	}
+	w.ownMu.Lock()
+	owning, h := w.owning, w.clipHTML
+	w.ownMu.Unlock()
+	if owning {
+		return h
+	}
+	w.clipMu.Lock()
+	defer w.clipMu.Unlock()
+	sel := w.atoms["CLIPBOARD"]
+	if owner, err := w.c.getSelectionOwner(sel); err != nil || owner == 0 {
+		return ""
+	}
+	s, ok := w.requestSelection(sel, w.atoms["text/html"], w.atoms["_SWEEF_CLIP"], w.win)
+	if !ok {
+		return ""
+	}
+	if strings.HasPrefix(s, "\xff\xfe") && len(s)%2 == 0 { // some applications offer UTF-16
+		u := make([]uint16, 0, len(s)/2)
+		for i := 2; i+1 < len(s); i += 2 {
+			u = append(u, uint16(s[i])|uint16(s[i+1])<<8)
+		}
+		return string(utf16.Decode(u))
+	}
+	return s
+}
+
+func (w *Window) setClipboard(s, html string) {
 	if w.closed.Load() {
 		return
 	}
 	w.ownMu.Lock()
 	w.clipText = s
+	w.clipHTML = html
 	w.owning = true
 	w.ownMu.Unlock()
 	w.c.setSelectionOwner(w.win, w.atoms["CLIPBOARD"], 0)
@@ -193,7 +234,7 @@ func (w *Window) onSelectionRequest(ev []byte) {
 
 	refuse := func() { w.sendSelectionNotify(requestor, selection, target, 0, timeStamp) }
 	w.ownMu.Lock()
-	text, owning := w.clipText, w.owning
+	text, html, owning := w.clipText, w.clipHTML, w.owning
 	w.ownMu.Unlock()
 	if selection != a["CLIPBOARD"] || !owning {
 		refuse()
@@ -204,8 +245,22 @@ func (w *Window) onSelectionRequest(ev []byte) {
 	}
 	switch target {
 	case a["TARGETS"]:
-		w.c.changeProperty(0, requestor, prop, atomAtom, 32,
-			u32s(a["TARGETS"], a["UTF8_STRING"], atomString, a["TEXT"], a["text/plain;charset=utf-8"], a["text/plain"]))
+		targets := []uint32{a["TARGETS"], a["UTF8_STRING"], atomString, a["TEXT"], a["text/plain;charset=utf-8"], a["text/plain"]}
+		if html != "" {
+			targets = append(targets, a["text/html"])
+		}
+		w.c.changeProperty(0, requestor, prop, atomAtom, 32, u32s(targets...))
+	case a["text/html"]:
+		if html == "" {
+			refuse()
+			return
+		}
+		data := []byte(html)
+		if len(data) > w.incrThreshold() {
+			w.startIncr(requestor, prop, target, data)
+		} else {
+			w.c.changeProperty(0, requestor, prop, target, 8, data)
+		}
 	case a["UTF8_STRING"], a["text/plain;charset=utf-8"], a["text/plain"], a["TEXT"], atomString:
 		var data []byte
 		typ := target

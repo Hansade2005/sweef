@@ -41,6 +41,9 @@ type PaintOptions struct {
 	// documents, which scroll inside their box; the GUI scrolls top-level pages
 	// by moving a taller texture).
 	ScrollY int
+	// Cull drops the ops that cannot put ink in the rows [ScrollY, ScrollY+Height) before rasterising, so painting a
+	// band of a very tall page does not cost more than painting the top of it.
+	Cull bool
 }
 
 // PaintRGBA rasterises the page straight to an RGBA image (no PNG round
@@ -92,6 +95,12 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 		}
 	}
 	list := ext.res.List
+	if env := t.ds.env.Load(); env != nil {
+		// the selection, find results and the caret are drawn into a copy of the list, so changing them needs no new layout
+		if hl, carets := t.highlights(ext.res, env.indexFor(ext.res), doc); len(hl)+len(carets) > 0 {
+			list = render.ApplyHighlights(list, env.indexFor(ext.res), hl, carets)
+		}
+	}
 	if !o.KeepScrollbars {
 		kept := make([]render.Op, 0, len(list))
 		for _, op := range list {
@@ -108,6 +117,9 @@ func (t *Tab) PaintRGBAOpts(o PaintOptions) (*image.RGBA, bool) {
 	}
 	if hl := t.highlightOps(ext.res, doc); len(hl) > 0 { // Developer Tools: the selected element's box model
 		list = append(list[:len(list):len(list)], hl...)
+	}
+	if o.Cull {
+		list = render.CullOps(list, float64(o.ScrollY), float64(o.ScrollY+height))
 	}
 	if o.ScrollY > 0 {
 		moved := make([]render.Op, 0, len(list)+2)

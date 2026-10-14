@@ -27,6 +27,7 @@ type ctx struct {
 	svgUDone    bool
 	svgNoSess   bool // the session's scene cache is off for this pass (duplicate ids)
 	env         Env
+	scrollEnv   ScrollEnv // env's scroll offsets, when it keeps any
 	eng         *style.Engine
 	vw, vh      float64
 	sbViewport  float64
@@ -132,6 +133,7 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 	if c.env == nil {
 		c.env = nilEnv{}
 	}
+	c.scrollEnv, _ = c.env.(ScrollEnv)
 	c.docEl = findDocEl(root)
 	res := &Result{Boxes: map[*html.Node]*Box{}}
 	c.res = res
@@ -316,6 +318,11 @@ func (c *ctx) place(b *lbox, ox, oy float64) {
 	c.all = append(c.all, b)
 	b.relX, b.relY = c.relativeOffset(b)
 	b.ax, b.ay = ox+b.relX, oy+b.relY
+	// A scroll container places its content as if the box sat at its scrolled position, so every box, line and
+	// hit record of the content comes out where it appears on screen; the box itself is put back below.
+	scx, scy := c.scrollOf(b)
+	b.scx, b.scy = scx, scy
+	b.ax, b.ay = b.ax-scx, b.ay-scy
 	b.ovRight, b.ovBottom = b.ax+b.w, b.ay+b.h
 	b.ovLeft, b.ovTop = b.ax, b.ay
 	cx, cy := b.ax+b.bor[3]+b.pad[3], b.ay+b.bor[0]+b.pad[0]
@@ -398,13 +405,16 @@ func (c *ctx) place(b *lbox, ox, oy float64) {
 			acc(k)
 		}
 	}
+	// scroll sizes
+	b.scrollW = math.Max(b.ovRight, b.ax+b.w) - b.ax
+	b.scrollH = math.Max(b.ovBottom, b.ay+b.h) - b.ay
+	// the box goes back to where it is; what its content overflows by is measured from there
+	b.ax, b.ay = b.ax+scx, b.ay+scy
+	b.ovRight, b.ovBottom, b.ovLeft, b.ovTop = b.ovRight+scx, b.ovBottom+scy, b.ovLeft+scx, b.ovTop+scy
 	// sticky positioning at scroll offset 0
 	if b.st.Position == "sticky" {
 		c.applySticky(b)
 	}
-	// scroll sizes
-	b.scrollW = math.Max(b.ovRight, b.ax+b.w) - b.ax
-	b.scrollH = math.Max(b.ovBottom, b.ay+b.h) - b.ay
 	if b.clips() {
 		// content overflow of a scroll container does not propagate
 		myR, myB := b.ax+b.w, b.ay+b.h
@@ -412,6 +422,22 @@ func (c *ctx) place(b *lbox, ox, oy float64) {
 		b.ovRight, b.ovBottom = myR, myB
 		b.ovLeft, b.ovTop = b.ax, b.ay
 	}
+}
+
+// scrollOf is the scroll offset of b when it is a scroll container with a scrolled position (the document's
+// scroll offsets are kept by the embedder, see ScrollEnv).
+func (c *ctx) scrollOf(b *lbox) (float64, float64) {
+	if c.scrollEnv == nil || b.n == nil || b.pseudo != "" || b.rep != nil || b == c.rootBox || (b.kind != kBlock && b.kind != kAtomic) || !b.clips() {
+		return 0, 0
+	}
+	x, y := c.scrollEnv.ScrollOffset(b.n)
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	return math.Round(x), math.Round(y)
 }
 
 func (b *lbox) hidden() bool { return false }
@@ -742,6 +768,7 @@ func (c *ctx) buildBoxes() {
 			bx.Content = Rect{bx.Padding.X + main.pad[3], bx.Padding.Y + main.pad[0], bx.Padding.W - main.pad[1] - main.pad[3] - main.sbW, bx.Padding.H - main.pad[0] - main.pad[2] - main.sbH}
 			bx.ClientW, bx.ClientH = bx.Padding.W-main.sbW, bx.Padding.H-main.sbH
 			bx.ScrollW, bx.ScrollH = math.Max(main.scrollW, bx.ClientW), math.Max(main.scrollH, bx.ClientH)
+			bx.ScrollLeft, bx.ScrollTop = main.scx, main.scy
 			if main.clips() {
 				sw := main.scrollR - main.ax - main.bor[3]
 				sh := main.scrollB - main.ay - main.bor[0]

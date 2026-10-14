@@ -239,6 +239,7 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 		a.find(a.model.Find.Query, d)
 	case "find.close":
 		a.model.Find = state.Find{}
+		a.findClear()
 		a.markState()
 	case "clipboard.write":
 		_ = a.clip.writeNow([]engine.ClipboardEntry{{Type: "text/plain", Data: []byte(decode[struct {
