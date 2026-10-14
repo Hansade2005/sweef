@@ -111,10 +111,10 @@ var ErrFrameTooLarge = errors.New("cdm: protocol frame too large")
 
 // WriteFrame writes f with a single Write call (so concurrent writers that hold a lock never interleave).
 func WriteFrame(w io.Writer, f Frame) error {
-	n := frameHeader + len(f.Payload)
-	if n > MaxFrameSize {
+	if len(f.Payload) > MaxFrameSize-frameHeader {
 		return ErrFrameTooLarge
 	}
+	n := frameHeader + len(f.Payload)
 	buf := make([]byte, 4+n)
 	binary.BigEndian.PutUint32(buf, uint32(n))
 	buf[4] = byte(f.Type)
@@ -152,6 +152,9 @@ func packHeaderData(hdr any, data []byte) ([]byte, error) {
 	h, err := json.Marshal(hdr)
 	if err != nil {
 		return nil, err
+	}
+	if len(h) > MaxFrameSize || len(data) > MaxFrameSize-len(h) {
+		return nil, ErrFrameTooLarge
 	}
 	out := make([]byte, 4, 4+len(h)+len(data))
 	binary.BigEndian.PutUint32(out, uint32(len(h)))

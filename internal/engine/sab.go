@@ -21,6 +21,7 @@ package engine
 
 import (
 	_ "embed"
+	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -412,6 +413,9 @@ func (j *jsVM) sabRegisterNatives() {
 			return "invalid"
 		}
 		e, _ := strconv.ParseInt(anyString(exp), 10, 64)
+		if sz == 4 && (e < math.MinInt32 || e > math.MaxInt32) {
+			e = toInt32Range(e)
+		}
 		return j.sabWait(rg, p, sz, e, sabTimeout(toFloat(timeoutMs)))
 	})
 	reg("notify", func(v quickjs.Value, off, size, count any) any {
@@ -433,6 +437,9 @@ func (j *jsVM) sabRegisterNatives() {
 			return []any{"invalid", 0}
 		}
 		e, _ := strconv.ParseInt(anyString(exp), 10, 64)
+		if sz == 4 && (e < math.MinInt32 || e > math.MaxInt32) {
+			e = toInt32Range(e)
+		}
 		return j.sabWaitAsync(rg, p, sz, e, sabTimeout(toFloat(timeoutMs)))
 	})
 }
@@ -558,4 +565,17 @@ func init() {
 		}
 		j.jobs()
 	})
+}
+
+// toInt32Range applies ECMAScript ToInt32 wrapping to an int64 arithmetically (no narrowing conversion), so a
+// 32-bit wait compares against the same value JS would store in an Int32Array.
+func toInt32Range(e int64) int64 {
+	e %= 1 << 32
+	if e < 0 {
+		e += 1 << 32
+	}
+	if e >= 1<<31 {
+		e -= 1 << 32
+	}
+	return e
 }
