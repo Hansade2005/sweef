@@ -9,6 +9,8 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ## [Unreleased]
 
+## [0.1.0-alpha] - 2026-10-14
+
 ### Security
 - State is partitioned by top-level site: cookies, `localStorage`, IndexedDB, Cache Storage, the Origin Private File System, service
   worker registrations, `BroadcastChannel`/`SharedWorker`/Web Locks namespaces and the HTTP cache are keyed by (origin, top-level site)
@@ -251,7 +253,7 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - The append-only log format of IndexedDB and Cache Storage. It never shipped; leftover `idb/` and `caches/` directories are deleted when found, and a store in an unknown or unrecoverable format is kept as `kv.bak` while a new one starts.
 - A 32 MB `appbench` binary that had been committed by mistake (it stays in git history).
 
-## [0.1.0-alpha] - 2026-10-13 (not yet tagged)
+## Pre-release history (first alpha baseline, included in 0.1.0-alpha)
 
 First public alpha of the desktop browser. Everything below is measured or marked as not verified in the README.
 
@@ -286,9 +288,9 @@ First public alpha of the desktop browser. Everything below is measured or marke
 
 ### Known limits
 - Chromium is still ahead on JavaScript-heavy page loads (no JIT), on the first key that opens the omnibox dropdown, and
-  on compatibility (no DRM, extensions, WebRTC or WebAssembly yet).
+  on compatibility (no extensions; DRM is Clear Key plus a Widevine helper that needs a user-installed CDM, see docs/drm.md).
 - Windows and macOS windows and installers have never been run; CI only builds and unit-tests them.
 - Data Saver percentages were measured before web fonts landed and may move by a few points.
 
 [Unreleased]: https://github.com/sweefbrowser/sweef/compare/v0.1.0-alpha...HEAD
-[0.1.0-alpha]: https://github.com/sweefbrowser/sweef/commits/main  <!-- becomes the tag link once v0.1.0-alpha is cut -->
+[0.1.0-alpha]: https://github.com/sweefbrowser/sweef/releases/tag/v0.1.0-alpha
