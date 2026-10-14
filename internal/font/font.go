@@ -17,14 +17,6 @@ import (
 	"sync"
 
 	xfont "golang.org/x/image/font"
-	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/gofont/gobolditalic"
-	"golang.org/x/image/font/gofont/goitalic"
-	"golang.org/x/image/font/gofont/gomono"
-	"golang.org/x/image/font/gofont/gomonobold"
-	"golang.org/x/image/font/gofont/gomonobolditalic"
-	"golang.org/x/image/font/gofont/gomonoitalic"
-	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
 )
@@ -414,7 +406,7 @@ type entry struct {
 	path   string
 	face   *Face
 	mono   bool
-	embed  []byte
+	embed  string // name of an embedded Go font in gofont.zar ("" for a file on disk)
 	idx    int    // font index within a .ttc, -1 otherwise
 	full   string // lower-case full font name and PostScript name (for local())
 	ps     string
@@ -429,14 +421,14 @@ var (
 
 func embedded() []*entry {
 	return []*entry{
-		{family: "go", style: Style{Weight: 400, Italic: false}, embed: goregular.TTF, idx: -1},
-		{family: "go", style: Style{Weight: 700, Italic: false}, embed: gobold.TTF, idx: -1},
-		{family: "go", style: Style{Weight: 400, Italic: true}, embed: goitalic.TTF, idx: -1},
-		{family: "go", style: Style{Weight: 700, Italic: true}, embed: gobolditalic.TTF, idx: -1},
-		{family: "go mono", style: Style{Weight: 400, Italic: false}, embed: gomono.TTF, mono: true, idx: -1},
-		{family: "go mono", style: Style{Weight: 700, Italic: false}, embed: gomonobold.TTF, mono: true, idx: -1},
-		{family: "go mono", style: Style{Weight: 400, Italic: true}, embed: gomonoitalic.TTF, mono: true, idx: -1},
-		{family: "go mono", style: Style{Weight: 700, Italic: true}, embed: gomonobolditalic.TTF, mono: true, idx: -1},
+		{family: "go", style: Style{Weight: 400, Italic: false}, embed: "goregular", idx: -1},
+		{family: "go", style: Style{Weight: 700, Italic: false}, embed: "gobold", idx: -1},
+		{family: "go", style: Style{Weight: 400, Italic: true}, embed: "goitalic", idx: -1},
+		{family: "go", style: Style{Weight: 700, Italic: true}, embed: "gobolditalic", idx: -1},
+		{family: "go mono", style: Style{Weight: 400, Italic: false}, embed: "gomono", mono: true, idx: -1},
+		{family: "go mono", style: Style{Weight: 700, Italic: false}, embed: "gomonobold", mono: true, idx: -1},
+		{family: "go mono", style: Style{Weight: 400, Italic: true}, embed: "gomonoitalic", mono: true, idx: -1},
+		{family: "go mono", style: Style{Weight: 700, Italic: true}, embed: "gomonobolditalic", mono: true, idx: -1},
 	}
 }
 
@@ -475,7 +467,7 @@ func load() {
 	}
 	entries = append(entries, embedded()...)
 	// stable order: system first (as discovered), embedded last
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].embed == nil && entries[j].embed != nil })
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].embed == "" && entries[j].embed != "" })
 }
 
 // probeAll lists the fonts of a file (several for a .ttc collection).
@@ -564,8 +556,11 @@ func (e *entry) get() *Face {
 		return e.face
 	}
 	var data []byte
-	if e.embed != nil {
-		data = e.embed
+	if e.embed != "" {
+		data = goFont(e.embed)
+		if data == nil {
+			return nil
+		}
 	} else {
 		var err error
 		if data, err = os.ReadFile(e.path); err != nil {
@@ -801,18 +796,18 @@ func Local(name string, st Style) *Face {
 		return nil
 	}
 	for _, e := range entries {
-		if e.embed == nil && (e.full == key || e.ps == key) {
+		if e.embed == "" && (e.full == key || e.ps == key) {
 			return e.get()
 		}
 	}
 	if st.Weight == 0 {
 		st.Weight = 400
 	}
-	if e := match(entries, key, st); e != nil && e.embed == nil {
+	if e := match(entries, key, st); e != nil && e.embed == "" {
 		return e.get()
 	}
 	if a, ok := aliases[key]; ok {
-		if e := match(entries, a, st); e != nil && e.embed == nil {
+		if e := match(entries, a, st); e != nil && e.embed == "" {
 			return e.get()
 		}
 	}

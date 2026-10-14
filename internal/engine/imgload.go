@@ -14,11 +14,11 @@ import (
 	"sync/atomic"
 )
 
-//go:embed imgload_prelude.js
-var imgloadPreludeJS string
+//go:embed imgload_prelude.js.z
+var imgloadPreludeJSZ string
 
 func init() {
-	registerPrelude("imgload", imgloadPreludeJS)
+	registerPreludeZ("imgload", imgloadPreludeJSZ)
 	registerHostExtension("imgload", func(j *jsVM) map[string]hostFn {
 		return map[string]hostFn{"imageLoad": j.hostImageLoad}
 	})

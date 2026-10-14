@@ -38,6 +38,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/sweefbrowser/sweef/internal/zpack"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/experimental"
@@ -45,8 +46,10 @@ import (
 	"modernc.org/quickjs"
 )
 
-//go:embed wasm_prelude.js
-var wasmPreludeJS string
+//go:embed wasm_prelude.js.z
+var wasmPreludeJSZ string
+
+var wasmPreludeLazy zpack.Lazy
 
 const (
 	// wasmMemLimitPages caps every linear memory (also the ones a module declares larger): 8192 pages = 512 MiB.
@@ -1391,7 +1394,7 @@ func (h *wasmHost) install() (string, error) {
 			return "", err
 		}
 	}
-	return wasmPreludeJS, nil
+	return wasmPreludeLazy.Get(wasmPreludeJSZ), nil
 }
 
 // wasmPageStub is evaluated with every page prelude: a `WebAssembly` accessor that loads the real API on first

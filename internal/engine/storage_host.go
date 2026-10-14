@@ -24,11 +24,11 @@ import (
 	"github.com/sweefbrowser/sweef/internal/sitestore"
 )
 
-//go:embed idb_prelude.js
-var idbPreludeJS string
+//go:embed idb_prelude.js.z
+var idbPreludeJSZ string
 
 func init() {
-	registerPrelude("storage_idb", idbPreludeJS)
+	registerPreludeZ("storage_idb", idbPreludeJSZ)
 	registerHostExtension("storage_idb", func(j *jsVM) map[string]hostFn { return (&storageHost{j: j}).fns() })
 	registerAsyncHandler("storage", func(j *jsVM, e asyncEvent) {
 		if e.typ != "task" {

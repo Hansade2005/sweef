@@ -2,7 +2,7 @@
 GO ?= go
 export CGO_ENABLED = 0
 
-.PHONY: all build vet fmt fmt-check test test-all check bench-gui run clean help
+.PHONY: all build vet fmt fmt-check embeds size test test-all check bench-gui run clean help
 
 all: check
 
@@ -21,6 +21,12 @@ fmt: ## format our code (third_party is left alone)
 fmt-check: ## fail if our code is not gofmt-clean
 	@out=$$(gofmt -l $$(git ls-files '*.go' | grep -v '^third_party/')); \
 	  if [ -n "$$out" ]; then echo "not gofmt-clean:"; echo "$$out"; exit 1; fi
+
+embeds: ## rebuild the compressed embeds (.js.z, web.zar, gofont.zar, zoneinfo.zar) after editing JS, UI assets or fonts
+	$(GO) generate ./internal/engine ./internal/ui ./internal/font ./internal/intl
+
+size: ## release-flags linux/amd64 build: size, headroom to the budget, and where the bytes are (per package and section)
+	SWEEF_SIZE_TABLE=1 DIST=$${TMPDIR:-/tmp}/sweef-size scripts/release/build.sh --targets linux/amd64 --skip-launchers --skip-cdm-host
 
 test: ## short tests (what CI runs on Linux)
 	$(GO) test -short -count=1 ./...

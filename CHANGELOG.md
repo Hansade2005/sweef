@@ -137,6 +137,11 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
   only**, off unless `SWEEF_PLAYREADY=1` / `SWEEF_FAIRPLAY=1`; license exchange only, playback through the platform renderer
   is not implemented.
 - `scripts/release/build.sh` also builds `sweef-cdm` next to `sweef` (`--skip-cdm-host` to omit); packages do not install it yet.
+- Binary-size tooling ([docs/development.md](docs/development.md), "Binary size budget"): `tools/sizeprof` (sections, bytes per
+  package, largest symbols of a build), `tools/startbench` (start-up, first page, first frame, peak RSS and CPU time of two
+  binaries, run alternately), `go test ./cmd/sweef -run BinarySizeBudget` (fails over the budget or when the binary grows
+  more than 1 MiB past `scripts/release/size-baseline.txt`), headroom and the per-package table in
+  `scripts/release/build.sh`, `make size` and `make embeds`. `internal/zpack` is the deflated-embed format.
 
 ### Changed
 - A page that embeds a third-party frame now makes real requests for it, unless the Data Saver's click-to-load frames are on.
@@ -146,6 +151,24 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - `window.open` from page script is no longer "open a tab from the chrome, return null": it goes through the engine
   (popup blocker, opener link, named windows).
 - The release binary-size budget is 40 MiB (was 32 MiB): WebRTC (pion), WebAssembly (wazero) and the web platform layer add about 12 MiB. The stripped linux/amd64 build is about 34.7 MiB.
+- Embedded data is deflated and inflated on first use (`internal/zpack`, standard-library `compress/flate`): the JavaScript
+  preludes and platform modules (`NAME.js.z`), the chrome UI (`internal/ui/web.zar`), the eight Go fonts
+  (`internal/font/gofont.zar`) and the IANA time zone database (`internal/intl/zoneinfo.zar`, which replaces the
+  `time/tzdata` import; the operating system's database is still looked at first). **After editing a `.js` file under
+  `internal/engine` or a file under `internal/ui/web`, run `make embeds` and commit the generated files**; the tests fail
+  with that instruction when they are stale. The prelude bytecode cache is now keyed by the deflated bytes, so its file
+  names changed once.
+- The embedded Go fonts no longer carry their TrueType hinting program (`fpgm`, `prep`, `cvt ` and the glyph instructions,
+  more than half of the glyph data); Sweef uses unhinted outlines everywhere and every glyph, advance, mapping and name is
+  compared with the x/image originals by tests.
+- Sidekick's HTTP/2 health check uses `http.Transport.HTTP2` (`SendPingTimeout`, `PingTimeout`) instead of importing
+  `golang.org/x/net/http2`, which linked a second HTTP/2 stack.
+- `keymap.ComposeDead` (X11 dead keys) answers from a generated table of the NFC compositions of the dead keys' accents
+  instead of linking `golang.org/x/text/unicode/norm`; checked against NFC for every code point of the first three
+  planes. It returns "" for a combining mark that is not a dead key's (the package never passed one).
+- The Opus theta tables in `third_party/gopus` are `int16` (every value fits; the compiler checks).
+- The release build compiles the connection set-up and control-plane packages without inlining
+  (`scripts/release/noinline-packages.txt`) and links with `-funcalign=16`. A plain `go build` is unchanged.
 - IndexedDB, Cache Storage and the origin private file system are stored in one disk-resident ordered key-value store per origin (goleveldb) instead of an append-only log replayed into memory: memory no longer depends on database size (a 1 GB database opens in 44 ms and reads at about 30 MB resident), cursors stream, transactions commit as one atomic batch, `clear()` and `deleteDatabase` are O(1), values and cache bodies above 64 KiB are files, and a crash or kill leaves each transaction whole or absent. The origin private file system now persists across restarts and is no longer limited to 256 MiB of memory.
 - `navigator.storage.persist()` no longer always succeeds in a persistent context: it asks the application's policy and answers no without one. `StorageQuotaMiB` is now a cap per origin that overrides the derived one (0 = derived), not a fixed 1 GiB.
 - README shows the real browser UI (first-run setup with the real browser logos, Sidekick, Data Saver, new tab, omnibox), rendered by `uipreview`.
@@ -165,6 +188,20 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 - A download name cannot leave the downloads directory (`../x`, `..\x`), clicking a link never navigates the top level to `data:` or runs `vbscript:`, and the settings page ignores section names it does not define.
 
 ### Performance
+- **The stripped linux/amd64 release binary is 4.11 MiB smaller**: 36,921,470 bytes (35.21 MiB) against 41,234,558
+  (39.32 MiB), so 4.79 MiB of the 40 MiB budget are left instead of 0.68 MiB, with every feature and the same output. Each
+  step, measured on its own build in this order: JavaScript preludes and platform modules deflated 1,105,920 bytes; chrome
+  UI and time zone database deflated 491,520; Opus theta tables as `int16` 196,608; Go fonts deflated 729,088; no
+  `x/net/http2` 376,832; Go fonts without hinting programs 266,240; no `x/text/norm` 102,400; control-plane packages
+  built without inlining 757,760; `-funcalign=16` 286,720. The other release targets save 3.88 MiB (linux/arm64), 3.92
+  (darwin/arm64), 3.89 (windows/arm64), 4.15 (darwin/amd64) and 4.11 (windows/amd64); the tightest target is now darwin/amd64
+  with 4.34 MiB left (0.19 MiB before). Start-up did not get slower (medians of alternating runs, old and new binary):
+  `sweef version` 7.5 to 7.4 ms; first page with an empty bytecode cache 343.1 to 341.2 ms; the same page with a warm cache
+  177.5 to 165.4 ms (it no longer hashes 1.2 MB of script); headless start to first UI frame 1173.4 to 1174.5 ms; peak RSS
+  0.8% to 7% lower in every case. The in-process benchmarks of the packages built without inlining stayed within noise
+  (`BenchmarkChromeKeystroke` 10.89 to 10.88 ms best of eight; net/http and crypto/tls microbenchmarks within 10% on
+  microsecond operations). Details, rejected ideas and the method are in
+  [docs/development.md](docs/development.md).
 - H.264 video decoding uses frame threads (up to one per core, at most four; `SWEEF_H264_THREADS` overrides, 0 turns them
   off), a faster deblocking filter, motion compensation, CABAC engine and display conversion. Measured on a shared
   4 vCPU VM, medians of five alternating runs of the old and the new build (frames per second of the whole decode /

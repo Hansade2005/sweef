@@ -17,16 +17,19 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"github.com/sweefbrowser/sweef/internal/zpack"
 	"strings"
 	"sync"
 	"sync/atomic"
 )
 
-//go:embed workers_prelude.js
-var workersPreludeJS string
+//go:embed workers_prelude.js.z
+var workersPreludeJSZ string
 
-//go:embed worker_scope.js
-var workerScopeJS string
+//go:embed worker_scope.js.z
+var workerScopeJSZ string
+
+var workerScopeLazy zpack.Lazy
 
 var winSeq atomic.Int64
 var wkSeq atomic.Int64
@@ -35,7 +38,7 @@ var wkSeq atomic.Int64
 const maxWorkersPerVM = 32
 
 func init() {
-	registerPrelude("workers", workersPreludeJS)
+	registerPreludeZ("workers", workersPreludeJSZ)
 	registerHostExtension("workers", func(j *jsVM) map[string]hostFn { return (&wkHost{j: j}).fns() })
 	registerAsyncHandler("wk", func(j *jsVM, e asyncEvent) {
 		if _, err := j.call("__swWkEvent", e.data); err != nil && j.tab != nil {
@@ -275,7 +278,7 @@ func (w *bgWorker) boot(src string) {
 		src = body
 	}
 	info, _ := json.Marshal(map[string]any{"scriptURL": w.scriptURL, "baseURL": docURL, "name": w.name, "kind": w.kind, "type": w.typ})
-	if _, err := rt.j.run(strings.Replace(workerScopeJS, "__WK_INFO__", string(info), 1), "worker scope"); err != nil {
+	if _, err := rt.j.run(strings.Replace(workerScopeLazy.Get(workerScopeJSZ), "__WK_INFO__", string(info), 1), "worker scope"); err != nil {
 		w.report(map[string]any{"net": true, "message": err.Error(), "filename": w.scriptURL})
 		w.kill()
 		return

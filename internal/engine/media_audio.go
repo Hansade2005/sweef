@@ -15,10 +15,10 @@ import (
 	"github.com/sweefbrowser/sweef/internal/media/webaudio"
 )
 
-//go:embed media_audio_prelude.js
-var mediaAudioPreludeJS string
+//go:embed media_audio_prelude.js.z
+var mediaAudioPreludeJSZ string
 
-func init() { registerPrelude("media_audio", mediaAudioPreludeJS) }
+func init() { registerPreludeZ("media_audio", mediaAudioPreludeJSZ) }
 
 type waState struct {
 	ctxs  map[int]*webaudio.Context

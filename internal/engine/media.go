@@ -28,11 +28,11 @@ import (
 	"github.com/sweefbrowser/sweef/internal/media"
 )
 
-//go:embed media_prelude.js
-var mediaPreludeJS string
+//go:embed media_prelude.js.z
+var mediaPreludeJSZ string
 
 func init() {
-	registerPrelude("media", mediaPreludeJS)
+	registerPreludeZ("media", mediaPreludeJSZ)
 	registerHostExtension("media", func(j *jsVM) map[string]hostFn { return newMediaHost(j).fns() })
 }
 

@@ -41,6 +41,8 @@ Useful commands:
 | `make test-all` | everything, including the slow FATE-gated tests |
 | `make fmt` / `make fmt-check` | format / verify formatting (`third_party/` is excluded) |
 | `make bench-gui` | the in-process GUI latency report |
+| `make embeds` | rebuild the compressed embeds after editing JavaScript under `internal/engine`, a file under `internal/ui/web`, or a font; the tests fail with this instruction when they are stale |
+| `make size` | size, headroom to the 40 MiB budget and bytes per package of the release binary (`docs/development.md`, "Binary size budget") |
 | `go run ./internal/app/cmd/appbench -open-profile out.prof` | CPU profile of the key that opens the omnibox dropdown |
 | `SWEEF_LAYOUT_CHECK=1`, `SWEEF_INCR_CHECK=1` | debug modes that compare cached/incremental layout and paint with a from-scratch one |
 

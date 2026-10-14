@@ -13,6 +13,7 @@ package engine
 // the VM (see Tab.SetDocument and actions.go, which release it first).
 
 import (
+	"crypto/sha256"
 	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
@@ -31,11 +32,12 @@ import (
 	"time"
 
 	fnet "github.com/sweefbrowser/sweef/internal/net"
+	"github.com/sweefbrowser/sweef/internal/zpack"
 	"modernc.org/quickjs"
 )
 
-//go:embed dom_prelude.js
-var domPrelude string
+//go:embed dom_prelude.js.z
+var domPreludeZ string
 
 // Extension points. Feature packages (canvas, WebGL, media, ...) add their
 // browser API in their own files without touching the shared lists:
@@ -50,7 +52,8 @@ type hostFn = func(a []any) (any, error)
 
 var (
 	extMu          sync.Mutex
-	preludeExtras  = map[string]string{}
+	preludeExtras  = map[string]string{} // name -> source
+	preludeZExtras = map[string]string{} // name -> deflated source (zpack blob), for the preludes embedded as .js.z
 	hostExtensions = map[string]func(j *jsVM) map[string]hostFn{}
 )
 
@@ -60,10 +63,34 @@ func registerPrelude(name, src string) {
 	extMu.Unlock()
 }
 
+// registerPreludeZ is registerPrelude for a prelude embedded deflated (the NAME.js.z files, see internal/zpack and
+// docs/development.md "Binary size budget"). It is inflated only when the prelude has to be compiled, which a warm
+// bytecode cache avoids.
+func registerPreludeZ(name, z string) {
+	extMu.Lock()
+	preludeZExtras[name] = z
+	extMu.Unlock()
+}
+
 func registerHostExtension(name string, f func(j *jsVM) map[string]hostFn) {
 	extMu.Lock()
 	hostExtensions[name] = f
 	extMu.Unlock()
+}
+
+// preludeNames is every registered extra in name order, so the bytecode cache key is stable. extMu is held.
+func preludeNames() []string {
+	names := make([]string, 0, len(preludeExtras)+len(preludeZExtras))
+	for n := range preludeExtras {
+		names = append(names, n)
+	}
+	for n := range preludeZExtras {
+		if _, dup := preludeExtras[n]; !dup {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // fullPrelude is the base prelude, the WebSocket/Worker layer and every
@@ -71,20 +98,44 @@ func registerHostExtension(name string, f func(j *jsVM) map[string]hostFn) {
 func fullPrelude() string {
 	extMu.Lock()
 	defer extMu.Unlock()
-	names := make([]string, 0, len(preludeExtras))
-	for n := range preludeExtras {
-		names = append(names, n)
-	}
-	sort.Strings(names)
 	var b strings.Builder
-	b.WriteString(domPrelude)
+	b.WriteString(zpack.String(domPreludeZ))
 	b.WriteString("\n")
-	b.WriteString(domPreludeExt)
-	for _, n := range names {
+	b.WriteString(zpack.String(domPreludeExtZ))
+	for _, n := range preludeNames() {
 		b.WriteString("\n;/* extension: " + n + " */\n")
-		b.WriteString(preludeExtras[n])
+		if src, ok := preludeExtras[n]; ok {
+			b.WriteString(src)
+		} else {
+			b.WriteString(zpack.String(preludeZExtras[n]))
+		}
 	}
 	return b.String()
+}
+
+// preludeKey names the prelude for the bytecode cache without inflating it: it hashes what is embedded (the
+// deflated blobs, which are committed files and only change when the source does) instead of the 1.2 MB of source,
+// so a warm start neither inflates nor hashes the text.
+func preludeKey() [32]byte {
+	extMu.Lock()
+	defer extMu.Unlock()
+	h := sha256.New()
+	part := func(tag, name, data string) {
+		fmt.Fprintf(h, "%s\x00%s\x00%d\x00", tag, name, len(data))
+		h.Write([]byte(data))
+	}
+	part("z", "dom", domPreludeZ)
+	part("z", "domext", domPreludeExtZ)
+	for _, n := range preludeNames() {
+		if src, ok := preludeExtras[n]; ok {
+			part("r", n, src)
+		} else {
+			part("z", n, preludeZExtras[n])
+		}
+	}
+	var k [32]byte
+	h.Sum(k[:0])
+	return k
 }
 
 // The prelude is compiled to QuickJS bytecode once per process; loading
@@ -108,13 +159,12 @@ func setPreludeCacheDir(dir string) {
 
 func compiledPrelude() []byte {
 	preludeOnce.Do(func() {
-		src := fullPrelude()
 		preludeDiskMu.Lock()
 		dir := preludeDiskDir
 		preludeDiskMu.Unlock()
 		var file string
 		if dir != "" {
-			key := codeKey(src)
+			key := preludeKey()
 			file = filepath.Join(dir, "prelude-"+hex.EncodeToString(key[:8])+".qjsbc")
 			if b, err := os.ReadFile(file); err == nil && len(b) > 0 {
 				preludeBytecode = b
@@ -126,7 +176,7 @@ func compiledPrelude() []byte {
 			return
 		}
 		defer vm.Close()
-		if bc, err := vm.Compile(src, quickjs.EvalGlobal); err == nil {
+		if bc, err := vm.Compile(fullPrelude(), quickjs.EvalGlobal); err == nil {
 			preludeBytecode = bc
 			if file != "" {
 				tmp := file + ".tmp"

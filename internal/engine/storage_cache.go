@@ -10,11 +10,11 @@ import (
 	"github.com/sweefbrowser/sweef/internal/sitestore"
 )
 
-//go:embed cache_prelude.js
-var cachePreludeJS string
+//go:embed cache_prelude.js.z
+var cachePreludeJSZ string
 
 func init() {
-	registerPrelude("storage_cache", cachePreludeJS)
+	registerPreludeZ("storage_cache", cachePreludeJSZ)
 	registerHostExtension("storage_cache", func(j *jsVM) map[string]hostFn { return (&storageHost{j: j}).cacheFns() })
 }
 

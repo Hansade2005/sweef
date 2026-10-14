@@ -4,8 +4,6 @@ import (
 	"sort"
 	"strconv"
 	"unicode"
-
-	"golang.org/x/text/unicode/norm"
 )
 
 // KeysymToRune converts an X11 keysym to the Unicode character it types.
@@ -112,13 +110,23 @@ func DeadKeysym(ks uint32) (comb, spacing rune, ok bool) {
 // ComposeDead combines a dead key's combining mark with a base character.
 // It returns the precomposed string, or "" when no single-rune composition
 // exists (the caller then emits the spacing accent followed by base).
+//
+// comb must be the combining mark of a dead keysym (DeadKeysym); any other mark composes to "". The compositions are
+// NFC's, tabulated by gen_compose.go (go generate), so the browser does not carry the whole normalization tables;
+// TestComposeDeadMatchesNFC checks every code point against golang.org/x/text/unicode/norm.
 func ComposeDead(comb, base rune) string {
-	s := norm.NFC.String(string([]rune{base, comb}))
-	if r := []rune(s); len(r) == 1 {
-		return s
+	if comb < 0 || comb > 0xffff || base < 0 || base > 0xffff {
+		return ""
+	}
+	key := uint32(comb)<<16 | uint32(base)
+	i := sort.Search(len(composeKeys), func(i int) bool { return composeKeys[i] >= key })
+	if i < len(composeKeys) && composeKeys[i] == key {
+		return string(rune(composeOut[i]))
 	}
 	return ""
 }
+
+//go:generate go run gen_compose.go
 
 // Printable reports whether r should be delivered as text input.
 func Printable(r rune) bool {

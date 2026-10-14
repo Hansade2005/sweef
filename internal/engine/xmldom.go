@@ -4,9 +4,9 @@ package engine
 
 import _ "embed"
 
-//go:embed xml_prelude.js
-var xmlPreludeJS string
+//go:embed xml_prelude.js.z
+var xmlPreludeJSZ string
 
 func init() {
-	registerPrelude("xmldom", xmlPreludeJS)
+	registerPreludeZ("xmldom", xmlPreludeJSZ)
 }

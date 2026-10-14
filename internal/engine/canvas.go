@@ -32,8 +32,8 @@ import (
 	"github.com/sweefbrowser/sweef/internal/render"
 )
 
-//go:embed canvas_prelude.js
-var canvasPreludeJS string
+//go:embed canvas_prelude.js.z
+var canvasPreludeJSZ string
 
 const (
 	cvMaxDim    = 16384
@@ -41,7 +41,7 @@ const (
 )
 
 func init() {
-	registerPrelude("canvas", canvasPreludeJS)
+	registerPreludeZ("canvas", canvasPreludeJSZ)
 	registerHostExtension("canvas", func(j *jsVM) map[string]hostFn {
 		h := newCanvasHost(j)
 		j.cvh = h

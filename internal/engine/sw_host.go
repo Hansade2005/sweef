@@ -12,11 +12,11 @@ import (
 	"time"
 )
 
-//go:embed sw_page_prelude.js
-var swPagePreludeJS string
+//go:embed sw_page_prelude.js.z
+var swPagePreludeJSZ string
 
 func init() {
-	registerPrelude("sw_page", swPagePreludeJS)
+	registerPreludeZ("sw_page", swPagePreludeJSZ)
 	registerHostExtension("sw", func(j *jsVM) map[string]hostFn { return (&swHost{j: j}).fns() })
 	registerAsyncHandler("sw", func(j *jsVM, e asyncEvent) {
 		if _, err := j.call("__swSwEvent", e.data); err != nil && j.tab != nil {

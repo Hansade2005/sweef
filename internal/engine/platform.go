@@ -15,28 +15,33 @@ import (
 	"embed"
 	"fmt"
 	"strings"
+
+	"github.com/sweefbrowser/sweef/internal/zpack"
 )
 
-//go:embed platformjs/*.js
+// The platform modules are embedded deflated (platformjs/NAME.js.z, made by `go generate`, see internal/zpack) and
+// inflated when a page asks for one.
+//
+//go:embed platformjs/*.js.z
 var platformFS embed.FS
 
 func platformModule(name string) string {
 	if strings.ContainsAny(name, "/.\\") {
 		return ""
 	}
-	b, err := platformFS.ReadFile("platformjs/" + name + ".js")
+	b, err := platformFS.ReadFile("platformjs/" + name + ".js.z")
 	if err != nil {
 		return ""
 	}
-	return string(b)
+	return zpack.String(string(b))
 }
 
 func init() {
-	b, err := platformFS.ReadFile("platformjs/boot.js")
+	b, err := platformFS.ReadFile("platformjs/boot.js.z")
 	if err != nil {
 		panic(fmt.Sprintf("platform: %v", err))
 	}
-	registerPrelude("platform", string(b))
+	registerPreludeZ("platform", string(b))
 	registerHostExtension("platform", func(j *jsVM) map[string]hostFn {
 		f := map[string]hostFn{
 			"platformSrc": func(a []any) (any, error) { return platformModule(argS(a, 0)), nil },
