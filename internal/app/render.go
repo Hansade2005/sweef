@@ -27,6 +27,7 @@ func (a *App) pageCSS(v int) int { return int(float64(v)/a.zoomF() + 0.5) }
 
 // resize applies a new window size / device scale.
 func (a *App) resize(w, h int, scale float64) {
+	a.ctxDismiss()
 	if scale <= 0 {
 		scale = 1
 	}

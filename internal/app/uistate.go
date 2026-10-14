@@ -57,21 +57,52 @@ func (a *App) bookmarksBar() []map[string]any {
 		if b.Folder {
 			continue
 		}
-		out = append(out, map[string]any{"title": b.Title, "url": b.URL, "favicon": a.iconFor(b.URL)})
+		out = append(out, map[string]any{"id": b.ID, "title": b.Title, "url": b.URL, "favicon": a.iconFor(b.URL)})
 	}
 	return out
 }
 
 func (a *App) topSites(n int) []map[string]any {
 	out := []map[string]any{}
-	for _, h := range a.prof.History.TopSites(n) {
-		t := h.Title
+	over, _ := a.prof.Settings.Get("newtab.sites").(map[string]any)
+	for _, h := range a.prof.History.TopSites(n + len(over)) {
+		t, u := h.Title, h.URL
 		if t == "" {
 			t = displayTitle(h.URL)
 		}
-		out = append(out, map[string]any{"title": t, "url": h.URL, "favicon": a.iconFor(h.URL)})
+		if o, ok := over[h.URL].(map[string]any); ok {
+			if hide, _ := o["hide"].(bool); hide {
+				continue
+			}
+			if s, _ := o["title"].(string); s != "" {
+				t = s
+			}
+			if s, _ := o["url"].(string); s != "" {
+				u = s
+			}
+		}
+		if len(out) >= n {
+			break
+		}
+		out = append(out, map[string]any{"title": t, "url": u, "key": h.URL, "favicon": a.iconFor(u)})
 	}
 	return out
+}
+
+// setTopSite hides or edits a tile of the new tab page (key is the address history knows it by).
+func (a *App) setTopSite(key string, hide bool, title, rawurl string) {
+	if key == "" {
+		return
+	}
+	cur, _ := a.prof.Settings.Get("newtab.sites").(map[string]any)
+	next := map[string]any{}
+	for k, v := range cur {
+		next[k] = v
+	}
+	next[key] = map[string]any{"hide": hide, "title": strings.TrimSpace(title), "url": strings.TrimSpace(rawurl)}
+	if err := a.prof.Settings.Set("newtab.sites", next); err == nil {
+		a.markState()
+	}
 }
 
 // iconFor returns the cached favicon (a data: URL) for a page's host, or "".

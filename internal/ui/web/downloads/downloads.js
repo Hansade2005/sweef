@@ -13,7 +13,16 @@
       var prog = d.state === "progress" || d.state === "inprogress", pct = d.total ? Math.min(1, d.received / d.total) : 0;
       var sub = prog ? SW.fmtBytes(d.received) + (d.total ? " " + S.dl.of + " " + SW.fmtBytes(d.total) : "") + (d.speed ? " · " + SW.fmtBytes(d.speed) + "/s" : "") : d.state === "failed" ? S.dl.failed : d.state === "paused" ? S.dl.paused : SW.fmtBytes(d.total || d.received);
       var acts = prog ? [btn(S.dl.cancel, function () { post("downloads.cancel", { id: d.id }); })] : d.state === "failed" ? [btn(S.dl.retry, function () { post("downloads.retry", { id: d.id }); })] : [btn(S.dl.open, function () { post("downloads.open", { id: d.id }); }), btn(S.dl.openFolder, function () { post("downloads.show", { id: d.id }); })];
-      g.appendChild(h("div.dl2", h("span.fi", icon("download", 20)), h("div.tx", h("div.nm.trunc", { text: d.name }), h("div.sb", { text: (d.url ? SW.host(d.url) + " · " : "") + sub }), prog ? h("div.bar", h("i", { style: { width: Math.round(pct * 100) + "%" } })) : null), acts, h("button.ibtn.sm", { "aria-label": S.page.remove, onclick: function () { post("downloads.remove", { id: d.id }); } }, icon("close", 14))));
+      var menu = function (e) {
+        var done = !prog && d.state !== "failed" && d.state !== "paused", it = [];
+        if (done) it.push({ label: S.ctx.open, on: function () { post("downloads.open", { id: d.id }); } }, { label: S.dl.openFolder, on: function () { post("downloads.show", { id: d.id }); } });
+        if (prog) it.push({ label: S.ctx.cancelDl, on: function () { post("downloads.cancel", { id: d.id }); } });
+        if (d.state === "failed") it.push({ label: S.ctx.retry, on: function () { post("downloads.retry", { id: d.id }); } });
+        if (d.url) it.push({ label: S.ctx.copyLink, on: function () { post("clipboard.write", { text: d.url }); } });
+        it.push({ sep: true }, { label: S.ctx.removeList, danger: true, on: function () { post("downloads.remove", { id: d.id }); } });
+        SW.ctxMenu(e, it);
+      };
+      g.appendChild(h("div.dl2", { oncontextmenu: menu }, h("span.fi", icon("download", 20)), h("div.tx", h("div.nm.trunc", { text: d.name }), h("div.sb", { text: (d.url ? SW.host(d.url) + " · " : "") + sub }), prog ? h("div.bar", h("i", { style: { width: Math.round(pct * 100) + "%" } })) : null), acts, h("button.ibtn.sm", { "aria-label": S.page.remove, onclick: function () { post("downloads.remove", { id: d.id }); } }, icon("close", 14))));
     });
     col.appendChild(g); sc.refresh();
   }

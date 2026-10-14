@@ -22,8 +22,8 @@ const helperJS = `(function(G){
     var el = D.elementFromPoint(x, y);
     if (kind === 'move') { G.__swMouse('mousemove', x, y, init); return null; }
     if (kind === 'down') {
-      G.__swMouse('mousedown', x, y, init);
-      if ((b|0) === 0) {
+      var kept = G.__swMouse('mousedown', x, y, init);
+      if ((b|0) === 0 && kept !== false) { // a page that cancels mousedown keeps the focus where it was (menus rely on it)
         var f = focusable(el);
         if (f) { try { f.focus(); } catch(e){} }
         else { var ae = D.activeElement; if (ae && ae !== D.body && ae.blur) { try { ae.blur(); } catch(e){} } }
@@ -50,9 +50,17 @@ const helperJS = `(function(G){
     }
     if (kind === 'context') {
       var ok = G.__swMouse('contextmenu', x, y, init);
-      var l = closest(el, 'a[href]'), im = closest(el, 'img');
-      return {prevented: ok === false, link: l ? l.href : '', image: im ? (im.currentSrc || im.src || '') : '',
-              selection: G.__sweefSel(), editable: isEditable(el) || isEditable(D.activeElement)};
+      var l = closest(el, 'a[href]'), im = closest(el, 'img'), md = closest(el, 'video,audio');
+      var ed = isEditable(el) ? el : null;
+      if (ed && ok !== false && D.activeElement !== ed) { try { ed.focus(); } catch(e){} }
+      var r = {prevented: ok === false, link: l ? l.href : '', linkText: l ? String(l.textContent || '').trim().slice(0, 200) : '',
+              image: im ? (im.currentSrc || im.src || '') : '', selection: G.__sweefSel(), editable: !!ed,
+              edit: ed ? G.__sweefEditState(ed) : null, media: null, frame: String(G.location && G.location.href || '')};
+      if (md) {
+        r.media = {kind: md.localName, src: md.currentSrc || md.src || '', paused: !!md.paused, muted: !!md.muted, loop: !!md.loop,
+                   rate: +md.playbackRate || 1, controls: !!md.controls, pip: typeof md.requestPictureInPicture === 'function' && D.pictureInPictureEnabled !== false && md.localName === 'video'};
+      }
+      return r;
     }
     return null;
   };
@@ -82,7 +90,30 @@ const helperJS = `(function(G){
   function inputEvent(type, init){
     try { return new G.InputEvent(type, init); } catch(x){ return new G.Event(type, init); }
   }
+  // undo/redo for text fields: snapshots of the value before each edit (consecutive typing within a second is one step)
+  var hist = new G.WeakMap();
+  function histOf(el){ var h = hist.get(el); if (!h) { h = {u: [], r: [], k: '', t: 0}; hist.set(el, h); } return h; }
+  function snap(el){ var s = 0; try { s = el.selectionStart; } catch(x){} return {v: el.value || '', s: s == null ? 0 : s}; }
+  function record(el, kind){
+    var h = histOf(el), now = Date.now();
+    if (!(kind === 'insertText' && h.k === 'insertText' && now - h.t < 1000 && h.u.length)) { h.u.push(snap(el)); if (h.u.length > 200) h.u.shift(); }
+    h.r.length = 0; h.k = kind; h.t = now;
+  }
+  function restore(el, sn, inputType){
+    el.value = sn.v;
+    try { el.setSelectionRange(sn.s, sn.s); } catch(x){}
+    try { el.dispatchEvent(inputEvent('input', {bubbles:true, inputType: inputType, data: null})); } catch(x){}
+  }
+  G.__sweefEditState = function(el){
+    var h = hist.get(el) || {u: [], r: []}, hasSel = false, tag = el.localName;
+    if (tag === 'input' || tag === 'textarea') { try { hasSel = el.selectionStart !== el.selectionEnd; } catch(x){} }
+    else { try { var s = G.getSelection(); hasSel = !!s && !s.isCollapsed; } catch(x){} }
+    var empty = (tag === 'input' || tag === 'textarea') ? !(el.value || '').length : !(el.textContent || '').length;
+    return {readOnly: !!(el.readOnly || el.disabled), password: tag === 'input' && String(el.type).toLowerCase() === 'password',
+            hasSel: hasSel, empty: empty, canUndo: h.u.length > 0, canRedo: h.r.length > 0};
+  };
   function setVal(el, v, caret, inputType, data){
+    record(el, inputType || 'insertText');
     el.value = v;
     try { el.setSelectionRange(caret, caret); } catch(x){}
     try { el.dispatchEvent(inputEvent('input', {bubbles:true, inputType: inputType || 'insertText', data: data === undefined ? null : data})); } catch(x){}
@@ -153,6 +184,16 @@ const helperJS = `(function(G){
       if (el && (el.localName === 'input' || el.localName === 'textarea')) { try { el.setSelectionRange(0, (el.value||'').length); } catch(x){} return true; }
       try { var r = D.createRange(); r.selectNodeContents(D.body); var s = G.getSelection(); s.removeAllRanges(); s.addRange(r); } catch(x){}
       return true;
+    }
+    if ((op === 'undo' || op === 'redo') && el && (el.localName === 'input' || el.localName === 'textarea')) {
+      var h = histOf(el), from = op === 'undo' ? h.u : h.r, to = op === 'undo' ? h.r : h.u;
+      if (!from.length) return false;
+      to.push(snap(el)); restore(el, from.pop(), op === 'undo' ? 'historyUndo' : 'historyRedo'); h.k = '';
+      return true;
+    }
+    if (op === 'delete' && el && el.isContentEditable) {
+      try { var sl = G.getSelection(); if (sl && !sl.isCollapsed && el.contains(sl.anchorNode)) { sl.deleteFromDocument(); el.dispatchEvent(inputEvent('input', {bubbles:true, inputType:'deleteContentBackward'})); return true; } } catch(x){}
+      return false;
     }
     if (op === 'cut' || op === 'delete') {
       if (el && isEditable(el) && (el.localName === 'input' || el.localName === 'textarea')) {
@@ -249,6 +290,20 @@ const helperJS2 = `(function(G){
       return ok;
     }
     return G.__swDispatchKey(id, key, mods);
+  };
+  // context-menu actions on the media element under (x,y): toggle | mute | loop | rate | pip
+  G.__sweefCtxAct = function(op, x, y, arg){
+    try {
+      var el = D.elementFromPoint(x, y), m = el && el.closest ? el.closest('video,audio') : null;
+      if (!m) return false;
+      if (op === 'toggle') { if (m.paused) { var p = m.play(); if (p && p.catch) p.catch(function(){}); } else m.pause(); }
+      else if (op === 'mute') m.muted = !m.muted;
+      else if (op === 'loop') m.loop = !m.loop;
+      else if (op === 'rate') m.playbackRate = +arg || 1;
+      else if (op === 'pip') { var q = m.requestPictureInPicture(); if (q && q.catch) q.catch(function(){}); }
+      else return false;
+      return true;
+    } catch(x2){ return false; }
   };
   // true when something other than the viewport placeholder (or an ancestor of it) is at (x,y):
   // a scrim, modal or popover that must receive pointer events instead of the page

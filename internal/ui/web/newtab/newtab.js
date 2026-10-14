@@ -36,8 +36,26 @@
   }
   function sites() {
     var box = $("sites"), list = (SW.state.topSites || []).slice(0, 8), k = JSON.stringify(list); if (box._k === k) return; box._k = k; SW.clear(box);
-    list.forEach(function (s) { box.appendChild(h("button.site", { role: "listitem", title: s.url, onclick: function () { post("nav.go", { tab: "", input: s.url }); } }, h("span.tile", SW.favicon(s.url, s.favicon, s.title)), h("span.nm", { text: s.title || SW.host(s.url) }))); });
+    list.forEach(function (s) { box.appendChild(h("button.site", { role: "listitem", title: s.url, oncontextmenu: function (e) { tileMenu(e, s); }, onclick: function () { post("nav.go", { tab: "", input: s.url }); } }, h("span.tile", SW.favicon(s.url, s.favicon, s.title)), h("span.nm", { text: s.title || SW.host(s.url) }))); });
   }
+  /* context menus: a tile (open, edit, remove) and the page itself (customize, reload) */
+  function tileMenu(e, s) {
+    SW.ctxMenu(e, [{ label: S.ctx.open, on: function () { post("nav.go", { tab: "", input: s.url }); } }, { label: S.ctx.openNew, on: function () { post("tab.new", { url: s.url }); } }, { sep: true },
+      { label: S.ctx.editShortcut, on: function () { editTile(s); } }, { label: S.ctx.remove, danger: true, on: function () { post("newtab.site", { key: s.key || s.url, hide: true }); } }]);
+  }
+  function editTile(s) {
+    var name = h("input.field", { value: s.title || "", "aria-label": S.ctx.name }), url = h("input.field", { value: s.url || "", "aria-label": S.ctx.url }), m;
+    var done = function () { if (m.parentNode) m.parentNode.removeChild(m); };
+    var save = function () { post("newtab.site", { key: s.key || s.url, hide: false, title: name.value, url: url.value }); done(); };
+    m = h("div.ntmodal", { role: "dialog", "aria-label": S.ctx.editShortcut, onkeydown: function (e) { if (e.key === "Escape") done(); else if (e.key === "Enter") save(); } },
+      h("div.card", h("h3", { text: S.ctx.editShortcut }), h("label", { text: S.ctx.name }), name, h("label", { text: S.ctx.url }), url,
+        h("div.btns", h("button.btn.sm", { text: S.ctx.cancel, onclick: done }), h("button.btn.sm.primary", { text: S.ctx.save, onclick: save }))));
+    document.body.appendChild(m); name.focus();
+  }
+  document.addEventListener("contextmenu", function (e) {
+    var t = e.target; if (e.defaultPrevented || (t.closest && t.closest(".ntmodal")) || (t.localName === "input" || t.localName === "textarea")) return;
+    SW.ctxMenu(e, [{ label: S.ctx.customize, on: function () { post("tab.new", { url: "sweef://settings#appearance" }); } }, { label: S.ctx.reload, kbd: SW.mod + "+R", on: function () { post("nav.reload"); } }]);
+  });
   function stats() {
     var st = SW.state.stats, el = $("stats"); if (!st || st.memMB == null || st.tabs == null || SW.state.incognito || forceInc) { el.classList.add("hide"); return; }
     el.classList.remove("hide"); SW.clear(el); el.appendChild(icon("bolt", 14));

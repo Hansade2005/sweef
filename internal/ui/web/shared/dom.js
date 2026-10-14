@@ -113,6 +113,15 @@
       SW.state.downloads = ord.map(function (k) { return by[k]; }); SW.emit("downloads.update", p); ping();
     } else SW.emit(type, p);
   };
+  /* context menus load on first use (shared/ctxpage.js for internal pages, the chrome sets SW.ctxFiles for its own).
+     SW.ctxMenu(event, [{label, kbd, danger, disabled, checked, sep, on}]) shows a menu the chrome draws; inputs get the edit menu. */
+  var ctxOn = false, ctxBusy = false;
+  SW.ctxReady = function (cb) { if (ctxOn) return cb(); if (ctxBusy) return; ctxBusy = true; SW.lazy(SW.ctxFiles || ["/shared/ctxpage.js"], function () { ctxOn = true; cb(); }); };
+  SW.ctxMenu = function (e, items) { if (e && e.preventDefault) e.preventDefault(); var x = e && e.clientX, y = e && e.clientY; SW.ctxReady(function () { SW.ctxMenu({ clientX: x, clientY: y }, items); }); };
+  document.addEventListener("contextmenu", function (e) {
+    var t = e.target; if (e.defaultPrevented || !t || (t.localName !== "input" && t.localName !== "textarea")) return;
+    e.preventDefault(); var x = e.clientX, y = e.clientY; SW.ctxReady(function () { SW.ctxInput(t, { clientX: x, clientY: y }); });
+  });
   /* lazy loading of rarely-needed code (sidebar, palette): keeps the always-parsed startup set small */
   var lz = {};
   SW.lazy = function (files, cb) {

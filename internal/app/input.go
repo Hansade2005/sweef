@@ -36,6 +36,9 @@ func (a *App) handleEvent(ev shell.Event) bool {
 	case shell.EvScale:
 		a.resize(a.wLog, a.hLog, ev.Scale)
 	case shell.EvFocus:
+		if !ev.Focus {
+			a.ctxDismiss()
+		}
 		a.model.SetFocused(a.winID, ev.Focus)
 		a.markState()
 	case shell.EvMouseMove:
@@ -325,28 +328,10 @@ func (a *App) afterPageInput(e *etab) {
 	})
 }
 
-func (a *App) contextMenu(e *etab, tgt string, px, py, mods int, wx, wy float64) {
-	var res struct {
-		Prevented bool   `json:"prevented"`
-		Link      string `json:"link"`
-		Image     string `json:"image"`
-		Selection string `json:"selection"`
-		Editable  bool   `json:"editable"`
-	}
-	tt, lx, ly := e.pointerTarget(tgt, px, py)
-	_ = e.evalOn(tt, "__sweefPtr('context',"+itoa(lx)+","+itoa(ly)+",2,"+itoa(mods)+")", &res)
-	e.afterOp()
-	if res.Prevented {
-		return
-	}
-	id := e.id
-	a.post(func() {
-		a.sendChrome("context", map[string]any{"x": wx, "y": wy, "tab": id, "target": tgt,
-			"link": res.Link, "image": res.Image, "selection": res.Selection, "editable": res.Editable})
-	})
-}
+// contextMenu (right button) lives in ctxmenu.go.
 
 func (a *App) onWheel(ev shell.Event) {
+	a.ctxDismiss() // a menu closes when the page scrolls
 	if a.mouse.captured == "" && !a.inViewport(ev.X, ev.Y) {
 		if c := a.targetTab("chrome"); c != nil {
 			x, y, dx, dy := int(ev.X), int(ev.Y), int(ev.DX), int(ev.DY)

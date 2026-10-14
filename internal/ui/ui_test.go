@@ -29,8 +29,9 @@ const (
 	// which about 9 KB are copy in strings.js). The chrome page's eager set went from about 122 KB to
 	// about 134 KB: the meter chip is eager (tiny), the popover is lazy, and the copy deck is shared.
 	// +1.5 KB (152 KB + 256 B): the now-playing button and its icons are eager, the controls are lazy (media.js); +256 B: the popup mark in the tab strip.
-	budgetPage  = 152*1024 + 256
-	budgetTotal = 342 * 1024 // raised from 334 (+4 KB: the now-playing control of the page's Media Session, lazy with the capture popover; +4 KB merged from the popup/frames work); earlier: from 324 (+10 KB: notification permission prompt, site-info entry, DND, Settings > Notifications; mostly lazy)
+	// +2 KB (154 KB + 256 B): the lazy-load stub for context menus (shared/dom.js, chrome.js); the menus themselves are lazy.
+	budgetPage  = 154*1024 + 256
+	budgetTotal = 364 * 1024 // raised from 342 (+22 KB: context menus: chrome/ctx.js, ctx.css, ctxmenus.js, shared/ctxpage.js, the menus of the new tab, history, bookmarks, downloads, settings and the Sidekick; all lazy); earlier: from 334 (+4 KB: the now-playing control of the page's Media Session, lazy with the capture popover; +4 KB merged from the popup/frames work); earlier: from 324 (+10 KB: notification permission prompt, site-info entry, DND, Settings > Notifications; mostly lazy)
 )
 
 // pageWeight sums the JS and CSS an HTML page loads eagerly.

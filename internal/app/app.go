@@ -163,6 +163,7 @@ type App struct {
 	tabSeq              int
 	fullscreen          bool
 	ovl                 overlayState
+	ctx                 ctxState // the open context menu (ctxmenu.go)
 	dat                 dataSaver
 	media               *appMedia // camera, microphone and screen-share permissions (media.go)
 	clip                *appClip  // the clipboard: text from the window plus the flavours pages put on it (clipboard.go)

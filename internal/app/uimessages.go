@@ -74,8 +74,36 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 		p := decode[struct {
 			URL       string `json:"url"`
 			Incognito bool   `json:"incognito"`
+			After     string `json:"after"`
 		}](raw)
+		if p.After != "" {
+			if st, ok := a.model.Tab(p.After); ok {
+				a.openTab(openOpts{URL: p.URL, Incognito: p.Incognito || st.Incognito, Activate: true, After: p.After})
+				return
+			}
+		}
 		a.newTab(p.URL, p.Incognito, true)
+	case "tab.duplicate":
+		a.duplicateTab(tabFor(decode[idArg](raw).ID))
+	case "tab.closeOthers":
+		a.closeOtherTabs(tabFor(decode[idArg](raw).ID))
+	case "tab.closeRight":
+		a.closeTabsRight(tabFor(decode[idArg](raw).ID))
+	case "tab.muteSite":
+		a.muteSite(tabFor(decode[idArg](raw).ID))
+	case "bookmark.update":
+		p := decode[struct{ ID, Title, URL string }](raw)
+		if a.prof.Bookmarks.Edit(p.ID, p.Title, p.URL) {
+			a.markState()
+		}
+	case "newtab.site":
+		p := decode[struct {
+			Key   string `json:"key"`
+			Hide  bool   `json:"hide"`
+			Title string `json:"title"`
+			URL   string `json:"url"`
+		}](raw)
+		a.setTopSite(p.Key, p.Hide, p.Title, p.URL)
 	case "incognito.new":
 		a.newTab("", true, true)
 	case "tab.close":
@@ -349,6 +377,9 @@ func (a *App) onUIMessage(src *etab, typ string, raw json.RawMessage) {
 			Delta int `json:"delta"`
 		}](raw).Delta)
 	default:
+		if (strings.HasPrefix(typ, "ctx.") || typ == "edit.op" || typ == "omni.pasteAndGo") && a.onCtxMessage(src, typ, raw) {
+			return
+		}
 		if strings.HasPrefix(typ, "data.") && a.onDataMessage(typ, raw, tabFor("")) {
 			return
 		}

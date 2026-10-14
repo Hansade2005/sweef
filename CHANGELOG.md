@@ -9,6 +9,18 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ## [Unreleased]
 
+### Added
+- **Right-click menus everywhere.** One themed menu (light, dark, incognito) drawn by the chrome above the page, so it can extend
+  outside the page area and looks the same on every OS. Arrow keys, Enter, Esc, submenus; it closes on an outside click, scroll,
+  resize, window blur and tab change, and a right click elsewhere opens the menu for that spot. Web pages get link, image,
+  selection, editable-field, video/audio and plain-page menus (the page sees `contextmenu` first and can cancel it); the tab strip,
+  the empty strip, the omnibox, the bookmarks bar, the new tab page (tiles, background), History, Bookmarks, Downloads, Settings
+  site rows and the Sidekick (messages, input, conversation) have their own. See [docs/context-menus.md](docs/context-menus.md).
+- Tab actions: Duplicate (keeps history), Close other tabs, Close tabs to the right, Mute site, New tab to the right.
+- New tab page: Edit shortcut and Remove on top-site tiles (`newtab.sites` setting); bookmarks can be edited from the bar.
+- Undo and Redo in text fields; a page that cancels `mousedown` keeps the focus where it was.
+- `Inspect` calls `App.openDevTools`, which uses the `DevToolsOpener` hook (a toast until developer tools are installed).
+
 ### Fixed
 - **Windows: the Start-menu and desktop shortcut started a console that closed at once.** The GUI launcher (`Sweef.exe`) and the
   command-line binary (`sweef.exe`) differ only in case, so on Windows (and on macOS inside `Sweef.app`) one overwrote the other.

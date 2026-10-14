@@ -84,6 +84,18 @@
   }
   SW.chrome = { toast: toast, openPop: openPop, closePop: closePop, mi: mi };
 
+  /* context menus load on first use (ctx.js: the component, ctxmenus.js: tab, strip, omnibox and bookmarks bar menus).
+     The first right click on the chrome is held until they are loaded, then replayed at the same spot. */
+  SW.ctxFiles = ["/chrome/ctx.css", "/chrome/ctx.js", "/chrome/ctxmenus.js"];
+  SW.ctx = { show: function (spec) { SW.ctxReady(function () { SW.ctx.show(spec); }); }, close: function () {}, isOpen: function () { return false; } };
+  SW.on("ctx.menu", function (p) { SW.ctx.show(p); });
+  SW.on("ctx.close", function () { SW.ctx.close(true); });
+  document.addEventListener("contextmenu", function (e) {
+    if (SW.ctxLoaded) return;
+    var t = e.target, x = e.clientX, y = e.clientY; e.preventDefault(); e.stopPropagation();
+    SW.ctxReady(function () { try { t.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 2 })); } catch (err) {} });
+  }, true);
+
   /* lazily loaded modules: the sidebar (and its markdown renderer) and the palette are only parsed when used */
   var skq = [], skBuf = [], skState = 0;
   function withSk(cb) {
@@ -191,17 +203,7 @@
       post("tab.move", { id: d.id, to: d.to }); renderTabs();
     }
   }
-  E.tabs.addEventListener("contextmenu", function (e) {
-    var t = e.target.closest ? e.target.closest(".tab") : null; if (!t) return; e.preventDefault();
-    var id = t.getAttribute("data-id"), tab = (st().tabs || []).find(function (x) { return x.id === id; }) || {};
-    var m = h("div", mi("reload", S.tab.reload, { on: function () { post("tab.activate", { id: id }); post("nav.reload"); } }),
-      mi("pin", tab.pinned ? S.tab.unpin : S.tab.pin, { on: function () { post("tab.pin", { id: id }); } }),
-      mi(tab.muted ? "speaker" : "speakeroff", tab.muted ? S.tab.unmute : S.tab.mute, { on: function () { post("tab.mute", { id: id }); } }),
-      mi("copy", S.tab.duplicate, { on: function () { post("tab.new", { url: tab.url }); } }), h("div.sep"),
-      mi("close", S.tab.close, { danger: true, on: function () { post("tab.close", { id: id }); } }),
-      mi(null, S.tab.closeOthers, { on: function () { (st().tabs || []).forEach(function (x) { if (x.id !== id && !x.pinned) post("tab.close", { id: x.id }); }); } }));
-    openPop(null, m, { at: { x: e.clientX, y: e.clientY }, role: "menu" });
-  });
+  /* tab, strip, omnibox and bookmarks bar context menus: ctxmenus.js */
   E.tabs.addEventListener("keydown", function (e) {
     var t = e.target.closest ? e.target.closest(".tab") : null; if (!t) return; var k = e.key, tabs = st().tabs || [], i = tabs.findIndex(function (x) { return x.id === t.getAttribute("data-id"); });
     var go = function (j) { var x = tabs[SW.clamp(j, 0, tabs.length - 1)]; if (x) { e.preventDefault(); post("tab.activate", { id: x.id }); if (tabEls[x.id]) tabEls[x.id].focus(); } };
@@ -339,7 +341,7 @@
   function renderBmBar() {
     var on = SW.setting("bookmarks.bar", false) && (st().bookmarksBar || []).length, bar = E.bm;
     bar.classList.toggle("hide", !on); var k = on ? JSON.stringify(st().bookmarksBar) : ""; if (bar._k === k) return; bar._k = k; SW.clear(bar);
-    (st().bookmarksBar || []).slice(0, 14).forEach(function (b) { bar.appendChild(h("button", { title: b.url, onclick: function () { post("nav.go", { tab: st().active, input: b.url }); } }, SW.favicon(b.url, b.favicon, b.title), h("span.trunc", { text: b.title || SW.host(b.url) }))); });
+    (st().bookmarksBar || []).slice(0, 14).forEach(function (b) { bar.appendChild(h("button", { "data-id": b.id, title: b.url, onclick: function () { post("nav.go", { tab: st().active, input: b.url }); } }, SW.favicon(b.url, b.favicon, b.title), h("span.trunc", { text: b.title || SW.host(b.url) }))); });
   }
 
   function renderPerm() { if ((st().perm || {}).prompt || SW.permPop) SW.lazy(["/chrome/perm.css", "/chrome/perm.js"], function () { SW.permPop.sync(); }); }

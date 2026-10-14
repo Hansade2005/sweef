@@ -115,7 +115,7 @@
   function newAssistant(runId) {
     if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
     var el = h("div.am"), a = { id: runId, el: el, parts: [], t0: performance.now(), pend: h("span.pend", h("i"), h("i"), h("i")), dirty: false, done: false, ttft: null, thoughtT: 0 };
-    el.appendChild(a.pend); E.msgs.appendChild(el); runs[runId] = a; curRun = a; stick = true; pin(); return a;
+    el._run = a; el.appendChild(a.pend); E.msgs.appendChild(el); runs[runId] = a; curRun = a; stick = true; pin(); return a;
   }
   function last(a, type) { var p = a.parts[a.parts.length - 1]; return p && p.type === type ? p : null; }
   function addPart(a, p) { if (a.pend && a.pend.parentNode) a.pend.parentNode.removeChild(a.pend); if (a.live) a.el.insertBefore(p.el, a.live); else a.el.appendChild(p.el); a.parts.push(p); return p; }
@@ -262,5 +262,25 @@
     var ph = ag.hasKey === false; E.input.disabled = false;
   });
   SW.sidekick = { focus: function () { setTimeout(function () { E.input.focus(); }, 0); }, ask: ask, newChat: newChat, send: send, onEvent: onEvent, loadChat: loadChat };
+  /* context menu: messages (copy, copy as markdown, select all), the input (edit group), the conversation (clear) */
+  function msgText(m) {
+    var md = "", plain = "";
+    if (m._run) { md = m._run.parts.filter(function (p) { return p.type === "text"; }).map(function (p) { return p.buf; }).join("\n\n"); plain = md; var tx = SW.$$(".md, .tx", m).map(function (n) { return n.textContent; }).join("\n\n"); if (tx) plain = tx; }
+    else { var b = m.querySelector(".bub"); md = plain = b ? b.textContent : ""; }
+    return { md: md, plain: plain };
+  }
+  function selectFeed() { try { var sel = window.getSelection(); if (sel && sel.selectAllChildren) sel.selectAllChildren(E.msgs); } catch (x) {} }
+  E.side.addEventListener("contextmenu", function (e) {
+    var t = e.target, T = S.ctx, items;
+    if (t === E.input) { e.preventDefault(); if (document.activeElement !== E.input) E.input.focus(); items = SW.ctxEditItems(E.input); }
+    else if (t.closest && t.closest("#skfeed")) {
+      var m = t.closest(".um,.am"); e.preventDefault();
+      var tx = m ? msgText(m) : null, has = !!E.msgs.querySelector(".um,.am");
+      items = [];
+      if (m) items.push({ label: T.copyMsg, disabled: !tx.plain, on: function () { post("clipboard.write", { text: tx.plain }); } }, { label: T.copyMd, disabled: !tx.md, on: function () { post("clipboard.write", { text: tx.md }); } }, { sep: true });
+      items.push({ label: T.selectAll, kbd: SW.mod + "+A", disabled: !has, on: selectFeed }, { sep: true }, { label: T.clearChat, danger: true, disabled: !has, on: newChat });
+    } else return;
+    SW.ctx.show({ x: e.clientX, y: e.clientY, items: items });
+  });
   renderEmpty(); renderComposer(); grow();
 })();

@@ -23,7 +23,12 @@
     function renderRow(r) {
       if (r.head) return h("div.dayh", { text: r.head });
       var it = r.it, x = h("button.ibtn.sm.x", { "aria-label": S.page.remove, title: S.page.remove, onclick: function (e) { e.stopPropagation(); post("data.remove", { kind: c.kind, id: it.id }); items = items.filter(function (z) { return z !== it; }); build(); } }, icon("close", 14));
-      return h("div.lrow", { role: "link", tabindex: "0", onclick: function () { post("nav.go", { tab: "", input: it.url }); }, onmousedown: function (e) { if (e.button === 1) { e.preventDefault(); post("tab.new", { url: it.url }); } }, onkeydown: function (e) { if (e.key === "Enter") post("nav.go", { tab: "", input: it.url }); } },
+      var rm = function () { post("data.remove", { kind: c.kind, id: it.id }); items = items.filter(function (z) { return z !== it; }); build(); };
+      return h("div.lrow", { role: "link", tabindex: "0", oncontextmenu: function (e) {
+        SW.ctxMenu(e, [{ label: S.ctx.open, on: function () { post("nav.go", { tab: "", input: it.url }); } }, { label: S.ctx.openNew, on: function () { post("tab.new", { url: it.url }); } },
+          { label: S.ctx.copyLink, on: function () { post("clipboard.write", { text: it.url }); } }, { sep: true },
+          { label: c.kind === "history" ? S.ctx.removeHist : S.ctx.del2, danger: true, on: rm }]);
+      }, onclick: function () { post("nav.go", { tab: "", input: it.url }); }, onmousedown: function (e) { if (e.button === 1) { e.preventDefault(); post("tab.new", { url: it.url }); } }, onkeydown: function (e) { if (e.key === "Enter") post("nav.go", { tab: "", input: it.url }); } },
         c.group ? h("span.tm", { text: it.ts ? hm(it.ts) : "" }) : null, SW.favicon(it.url, it.favicon, it.title), h("div.tt.trunc", h("b", { text: it.title || SW.host(it.url) }), h("span", { text: SW.host(it.url) })), x);
     }
     V = SW.vlist(box, renderRow);

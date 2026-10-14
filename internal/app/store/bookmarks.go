@@ -260,6 +260,26 @@ func (bm *Bookmarks) Rename(id, title string) bool {
 	return true
 }
 
+// Edit changes the title and, for a bookmark (not a folder), the address.
+func (bm *Bookmarks) Edit(id, title, rawurl string) bool {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	n := bm.nodes[id]
+	if n == nil || id == FolderRoot || id == FolderBar || id == FolderOther {
+		return false
+	}
+	if title != "" {
+		n.Title = title
+	}
+	if !n.Folder && rawurl != "" && rawurl != n.URL {
+		bm.byURL[n.URL]--
+		n.URL = rawurl
+		bm.byURL[n.URL]++
+	}
+	bm.log("upd", *n)
+	return true
+}
+
 // Children lists a folder in position order.
 func (bm *Bookmarks) Children(folder string) []Bookmark {
 	bm.mu.RLock()
