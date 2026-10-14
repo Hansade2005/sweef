@@ -29,7 +29,7 @@
   function add(el, c) {
     if (c == null || c === false) return;
     if (Array.isArray(c)) c.forEach(function (x) { add(el, x); });
-    else el.appendChild(c.nodeType ? c : document.createTextNode(String(c)));
+    else el.appendChild(c instanceof Node ? c : document.createTextNode(String(c)));
   }
   SW.add = add;
   SW.clear = function (el) { while (el.firstChild) el.removeChild(el.firstChild); return el; };
@@ -88,7 +88,10 @@
   function merge(t, p) {  // RFC 7386
     if (p === null || typeof p !== "object" || Array.isArray(p)) return p;
     if (t === null || typeof t !== "object" || Array.isArray(t)) t = {};
-    for (var k in p) { if (p[k] === null) delete t[k]; else t[k] = merge(t[k], p[k]); }
+    for (var k in p) {
+      if (!Object.prototype.hasOwnProperty.call(p, k) || k === "__proto__" || k === "constructor" || k === "prototype") continue;
+      if (p[k] === null) delete t[k]; else t[k] = merge(t[k], p[k]);
+    }
     return t;
   }
   SW.merge = merge;
