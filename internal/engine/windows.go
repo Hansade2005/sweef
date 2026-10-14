@@ -71,6 +71,8 @@ type winState struct {
 	frameDoc     *fnet.Doc // the document the frames belong to
 	scanGen      uint64
 	scanPending  atomic.Bool
+	mayFrames    atomic.Bool // the document has, or script may have inserted, an <iframe> (otherwise scans are rare)
+	lastScan     time.Time   // guarded by fmu
 	frameGen     atomic.Uint64
 	framesPaused atomic.Bool
 	focusFrame   atomic.Pointer[frame] // frame holding keyboard focus inside this document
@@ -150,6 +152,41 @@ func (e *Engine) SetWindowCloseHandler(f func(*Tab)) {
 	e.wm.mu.Unlock()
 }
 
+// SetFrameReadFilter sets a predicate that decides, per frame document URL, whether the
+// snapshot may include the frame and refs may act inside it. The desktop app uses it so
+// that an embedded page the person did not allow the agent to read stays unread even
+// when the page that embeds it is allowed. nil allows every frame.
+func (e *Engine) SetFrameReadFilter(f func(frameURL string) bool) {
+	if f == nil {
+		e.frameRead.Store(nil)
+		return
+	}
+	e.frameRead.Store(&f)
+}
+
+func (e *Engine) frameReadable(frameURL string) bool {
+	if f := e.frameRead.Load(); f != nil {
+		return (*f)(frameURL)
+	}
+	return true
+}
+
+// navSchemeAllowed: a web page cannot make a frame or window show the browser's own pages
+// or local files (a document may open its own kind: a sweef:// page another sweef:// page).
+func navSchemeAllowed(fromURL, target string) bool {
+	l := strings.ToLower(strings.TrimSpace(target))
+	from := strings.ToLower(fromURL)
+	switch {
+	case strings.HasPrefix(l, "sweef:"):
+		return strings.HasPrefix(from, "sweef:")
+	case strings.HasPrefix(l, "file:"):
+		return strings.HasPrefix(from, "file:")
+	case strings.HasPrefix(l, "view-source:"), strings.HasPrefix(l, "chrome:"), strings.HasPrefix(l, "chrome-extension:"):
+		return false
+	}
+	return true
+}
+
 // SetWindowFocusHandler registers what happens when script calls focus() on a popup.
 func (e *Engine) SetWindowFocusHandler(f func(*Tab)) {
 	e.wm.mu.Lock()
@@ -179,6 +216,9 @@ func (t *Tab) Top() *Tab {
 	}
 	return c
 }
+
+// IsClosed reports whether the tab has been closed.
+func (t *Tab) IsClosed() bool { return t.closed.Load() }
 
 // WindowName is window.name.
 func (t *Tab) WindowName() string {
@@ -319,7 +359,7 @@ func (t *Tab) BlockedPopups() []PopupEvent {
 func (t *Tab) recordPopup(pe PopupEvent) {
 	pe.Opener, pe.At = t.ID, time.Now()
 	ev := t.win.popups.Push(Event{Tab: t.ID, Kind: EvPopup, At: pe.At, Data: pe})
-	t.emit(EvPopup, ev.Data)
+	t.Top().emit(EvPopup, ev.Data) // the window that owns the frame tree is the one the embedder knows
 	if pe.Blocked {
 		t.LogConsole("warning", "Blocked a popup to "+pe.URL+": "+pe.Reason)
 	}
@@ -480,6 +520,10 @@ func (t *Tab) navigateTarget(s navSpec) *Tab {
 		abs = "about:blank"
 	} else if u, err := resolveURL(base, abs); err == nil {
 		abs = u
+	}
+	if !navSchemeAllowed(base, abs) {
+		t.recordPopup(PopupEvent{URL: abs, Name: s.target, Blocked: true, Reason: "scheme: not allowed from this page"})
+		return nil
 	}
 	key := strings.ToLower(strings.TrimSpace(s.target))
 	if key == "" {

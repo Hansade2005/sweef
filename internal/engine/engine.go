@@ -173,6 +173,9 @@ type Engine struct {
 	code       *codeCache
 
 	wm winRegistry // window ids and the embedder's popup / close / focus hooks (windows.go)
+	// frameRead decides whether the content of a frame document may be read through the
+	// snapshot and acted on through refs (the embedder's per-site rules for agents); nil = all
+	frameRead atomic.Pointer[func(url string) bool]
 
 	ctx    context.Context
 	cancel context.CancelFunc

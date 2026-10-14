@@ -1037,7 +1037,12 @@ func (j *jsVM) registerHost() error {
 		{"lastChild", doc(func(d *fnet.Doc, a []any) (any, error) { return d.LastChildID(argI(a, 0)), nil })},
 		{"nextSibling", doc(func(d *fnet.Doc, a []any) (any, error) { return d.NextSiblingID(argI(a, 0)), nil })},
 		{"prevSibling", doc(func(d *fnet.Doc, a []any) (any, error) { return d.PrevSiblingID(argI(a, 0)), nil })},
-		{"createElement", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CreateElement(argS(a, 0), argS(a, 1)), nil })},
+		{"createElement", doc(func(d *fnet.Doc, a []any) (any, error) {
+			if strings.EqualFold(argS(a, 0), "iframe") {
+				j.tab.win.mayFrames.Store(true)
+			}
+			return d.CreateElement(argS(a, 0), argS(a, 1)), nil
+		})},
 		{"createText", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CreateText(argS(a, 0)), nil })},
 		{"createComment", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CreateComment(argS(a, 0)), nil })},
 		{"createFragment", doc(func(d *fnet.Doc, a []any) (any, error) { return d.CreateFragment(), nil })},
@@ -1072,9 +1077,13 @@ func (j *jsVM) registerHost() error {
 			s, err := d.InnerHTML(argI(a, 0))
 			return s, err
 		})},
-		{"setInnerHTML", doc(func(d *fnet.Doc, a []any) (any, error) { return nil, d.SetInnerHTMLCtx(argI(a, 0), argS(a, 1)) })},
+		{"setInnerHTML", doc(func(d *fnet.Doc, a []any) (any, error) {
+			j.tab.noteMarkup(argS(a, 1))
+			return nil, d.SetInnerHTMLCtx(argI(a, 0), argS(a, 1))
+		})},
 		{"outerHTML", doc(func(d *fnet.Doc, a []any) (any, error) { return d.SerializeNode(argI(a, 0)), nil })},
 		{"insertAdjacentHTML", doc(func(d *fnet.Doc, a []any) (any, error) {
+			j.tab.noteMarkup(argS(a, 2))
 			return nil, d.InsertAdjacentHTML(argI(a, 0), argS(a, 1), argS(a, 2))
 		})},
 		// attributes

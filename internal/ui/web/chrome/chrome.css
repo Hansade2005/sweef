@@ -30,6 +30,7 @@ html, body { background: transparent; height: 100%; overflow: hidden; user-selec
 .tab.narrow[aria-selected="true"] .tx { display: inline-flex; }
 .tab.tiny .tt { display: none; }
 .tab.crashed .tt { color: var(--danger); }
+.tab.popup::before { content: ""; position: absolute; left: 3px; top: 9px; bottom: 9px; width: 3px; border-radius: 2px; background: var(--accent); opacity: .85; }
 .tab.dragging { z-index: 5; box-shadow: var(--sh-2), inset 0 0 0 1px var(--line-2); background: var(--tab-on); transition: none; }
 .tab.pinned .tt, .tab.pinned .tx { display: none; }
 .tab.pinned::after { content: ""; position: absolute; right: 7px; bottom: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); opacity: .0; }

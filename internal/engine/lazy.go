@@ -233,10 +233,10 @@ func (t *Tab) attachSkippedNode(u string, id int64) {
 	t.ds.mu.Unlock()
 }
 
-// markFrames turns third-party iframes into click-to-load placeholders. The engine
-// renders no frame documents at all (a frame is an empty box in every mode), so
-// the placeholder labels the embed and lets the person see where it comes from;
-// nothing is fetched or saved by it, and it is not counted in the stats.
+// markFrames turns third-party iframes into click-to-load placeholders. A marked
+// iframe gets no frame document (frames.go skips it), so nothing is fetched for it until
+// the person taps the placeholder; the placeholder labels the embed and shows where it
+// comes from. It is not counted in the stats.
 func (e *tabEnv) markFrames() bool {
 	base := e.doc.BaseURL()
 	changed := false
@@ -416,8 +416,8 @@ func (t *Tab) liteEnv() (*tabEnv, error) {
 
 // LoadSkipped fetches the resource behind a placeholder (an <img> or a frame
 // marked data-sweef-lite) at full size, ignoring the caps, and swaps it in. nodeID is
-// the backend node id of the placeholder element. A frame placeholder is only
-// uncovered: the engine renders no frame documents.
+// the backend node id of the placeholder element. Uncovering a frame placeholder starts
+// loading the frame document.
 func (t *Tab) LoadSkipped(nodeID int64) error {
 	env, err := t.liteEnv()
 	if err != nil {
@@ -437,6 +437,7 @@ func (t *Tab) LoadSkipped(nodeID int64) error {
 		env.lz.mu.Unlock()
 		env.doc.RemoveAttrQuiet(n, liteMark)
 		env.doc.Touch()
+		t.syncFrames(true) // the frame loads now
 		return nil
 	case "img":
 		u := imgURL(env.doc.BaseURL(), n)

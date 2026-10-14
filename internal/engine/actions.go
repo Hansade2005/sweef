@@ -147,6 +147,9 @@ func (t *Tab) Click(sel string) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.Click(in)
 	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	l := t.Locator(sel)
 	// A ref that resolves to something that can never be clicked fails at
 	// once instead of waiting for it to become visible.
@@ -265,6 +268,9 @@ func (t *Tab) Hover(sel string) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.Hover(in)
 	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).BackendID()
 	if err != nil {
 		return err
@@ -281,6 +287,9 @@ func (t *Tab) Focus(sel string) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.Focus(in)
 	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).BackendID()
 	if err != nil {
 		return err
@@ -296,6 +305,9 @@ func (t *Tab) Focus(sel string) error {
 func (t *Tab) Type(sel, text string, delay time.Duration) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.Type(in, text, delay)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
 	}
 	t.NoteUserActivation()
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
@@ -339,6 +351,9 @@ func (t *Tab) Press(sel, keys string) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.Press(in, keys)
 	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	t.NoteUserActivation()
 	bid, err := t.Locator(sel).BackendID()
 	if err != nil {
@@ -377,6 +392,9 @@ func (t *Tab) Fill2(sel, value string) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.Fill2(in, value)
 	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -411,6 +429,9 @@ func (t *Tab) setChecked(sel string, want bool) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.setChecked(in, want)
 	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -428,6 +449,9 @@ func (t *Tab) setChecked(sel string, want bool) error {
 func (t *Tab) SelectOption(sel, value string) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.SelectOption(in, value)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
 	}
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
@@ -506,6 +530,9 @@ func (t *Tab) Tap(sel string) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.Tap(in)
 	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
+	}
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -534,6 +561,9 @@ func (t *Tab) Drag(source, target string) error {
 func (t *Tab) ScrollIntoView(sel string) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.ScrollIntoView(in)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
 	}
 	bid, err := t.Locator(sel).WaitBackend("attached", 5*time.Second)
 	if err != nil {

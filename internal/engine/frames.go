@@ -19,6 +19,7 @@ package engine
 // Input is routed by hit testing through the parent's layout (see frames_input.go).
 
 import (
+	"fmt"
 	"image"
 	"math"
 	"regexp"
@@ -196,7 +197,22 @@ func (t *Tab) syncFrames(force bool) {
 		t.win.fmu.Unlock()
 		return
 	}
+	// A page that never mentioned an iframe is scanned at most once a second (a safety net for
+	// markup paths that are not watched); one that did is scanned whenever it changed.
+	if !force && !t.win.mayFrames.Load() && len(t.win.frames) == 0 && time.Since(t.win.lastScan) < time.Second {
+		t.win.fmu.Unlock()
+		return
+	}
+	t.win.lastScan = time.Now()
 	t.win.scanGen = gen
+	t.win.fmu.Unlock()
+	// Data Saver: third-party frames become tap-to-load placeholders before anything is fetched for
+	// them. This touches the document, so it runs without the frame lock (layout takes that lock
+	// while it holds the document's).
+	if env := t.ds.env.Load(); env != nil && env.doc == d && t.policy().ClickToLoad3PFrames && env.markFrames() {
+		d.Touch()
+	}
+	t.win.fmu.Lock()
 	var nodes []*html.Node
 	if d.Root != nil {
 		walkNodes(d.Root, func(n *html.Node) {
@@ -204,6 +220,9 @@ func (t *Tab) syncFrames(force bool) {
 				nodes = append(nodes, n)
 			}
 		})
+	}
+	if len(nodes) == 0 && len(t.win.frames) == 0 {
+		t.win.mayFrames.Store(false)
 	}
 	seen := make(map[*html.Node]bool, len(nodes))
 	created := false
@@ -285,6 +304,7 @@ func (t *Tab) newFrameLocked(d *fnet.Doc, n *html.Node, key string) *frame {
 	c.win.sbx = parseSandbox(attrVal(n, "sandbox"), hasAttrNode(n, "sandbox"), t.win.sbx)
 	c.win.actWindow.Store(t.win.actWindow.Load())
 	c.setWindowName(attrVal(n, "name"))
+	c.netRing = t.netRing // the frame's requests are the page's: the network log, HAR and the app's cookie rules see them
 	c.vpW, c.vpH = defaultFrameW, defaultFrameH
 	if w, ok := cssPx(attrVal(n, "width")); ok {
 		c.vpW = w
@@ -586,6 +606,10 @@ func (f *frame) doLoad(nv *frameNav) {
 	if nv != nil && nv.spec.noReferrer {
 		hdrs = map[string]string{"Referer": ""}
 	}
+	if !hasDoc && url != "" && !navSchemeAllowed(f.parent.URL(), url) {
+		c.LogConsole("error", "Not allowed to load "+url+" in a frame of "+f.parent.URL())
+		url = "about:blank"
+	}
 	switch {
 	case nv != nil && nv.spec.post != nil:
 		_ = nv.spec.post(c)
@@ -726,6 +750,9 @@ type FrameInfo struct {
 func (t *Tab) Frames() []FrameInfo {
 	var out []FrameInfo
 	for _, f := range t.frameList() {
+		if !t.eng.frameReadable(f.child.URL()) {
+			continue
+		}
 		out = append(out, FrameInfo{Ref: "f" + itoa(f.idx), Name: f.child.WindowName(), URL: f.child.URL(),
 			Origin: f.child.origin(), Sandbox: f.child.Sandboxed(), Tab: f.child})
 	}
@@ -754,7 +781,7 @@ func (t *Tab) FrameByRef(ref string) (*Tab, bool) {
 				next = f.child
 			}
 		}
-		if next == nil {
+		if next == nil || !t.eng.frameReadable(next.URL()) {
 			return nil, false
 		}
 		cur, ref = next, ref[i:]
@@ -831,6 +858,9 @@ func (t *Tab) snapshotFrame(n *html.Node, o fnet.SnapshotOptions) (string, []str
 	case <-ch:
 	case <-time.After(2 * time.Second):
 	}
+	if !t.eng.frameReadable(f.child.URL()) {
+		return "", nil // the embedder does not let this document be read
+	}
 	o.Selector = ""
 	c := f.child
 	c.syncFrames(false)
@@ -842,7 +872,7 @@ func (t *Tab) snapshotFrame(n *html.Node, o fnet.SnapshotOptions) (string, []str
 		return "", nil
 	}
 	y, err := d.AriaSnapshotV2(o)
-	if err != nil {
+	if err != nil || strings.HasPrefix(y, "- text: (no interactive elements") || strings.HasPrefix(y, "- text: (page has no visible content") {
 		return "", nil
 	}
 	prefix := "f" + itoa(f.idx)
@@ -863,4 +893,46 @@ var (
 func qualifyRefs(line, prefix string) string {
 	line = refAttrRE.ReplaceAllString(line, "ref="+prefix+"$1]")
 	return frameAttrRE.ReplaceAllString(line, "frame="+prefix+"$1]")
+}
+
+// noteMarkup remembers that script inserted markup that contains an iframe.
+func (t *Tab) noteMarkup(markup string) {
+	if containsFold(markup, "<iframe") {
+		t.win.mayFrames.Store(true)
+	}
+}
+
+// containsFold reports whether s contains the lower-case ASCII substring sub, ignoring case.
+func containsFold(s, sub string) bool {
+	n := len(sub)
+	for i := 0; i+n <= len(s); i++ {
+		if s[i] != sub[0] && s[i] != sub[0]-32 {
+			continue
+		}
+		ok := true
+		for j := 1; j < n; j++ {
+			c := s[i+j]
+			if c >= 'A' && c <= 'Z' {
+				c += 32
+			}
+			if c != sub[j] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
+// frameRefUnresolved is the error for a frame-qualified ref ("f1e5") that names no readable
+// frame: it is never a CSS selector, so the action fails at once instead of waiting for an
+// element that cannot appear.
+func frameRefUnresolved(sel string) error {
+	if _, _, ok := splitFrameRef(sel); ok {
+		return fmt.Errorf("ref %s names a frame that is not on this page (or may not be read); take a new snapshot", strings.TrimSpace(sel))
+	}
+	return nil
 }

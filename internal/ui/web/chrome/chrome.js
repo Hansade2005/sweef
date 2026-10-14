@@ -106,7 +106,7 @@
     var au = t.audible || t.muted ? (t.muted ? "m" : "a") : "";
     if (k.au !== au) { k.au = au; SW.clear(r.au); r.au.classList.toggle("hide", !au); if (au) { r.au.appendChild(icon(au === "m" ? "speakeroff" : "speaker", 14)); r.au.setAttribute("aria-label", au === "m" ? S.tab.unmute : S.tab.mute); r.au.setAttribute("title", au === "m" ? S.tab.unmute : S.tab.mute); } }
     r.tx.setAttribute("aria-label", S.tab.close); r.tx.setAttribute("title", S.tab.close);
-    el.classList.toggle("pinned", !!t.pinned); el.classList.toggle("crashed", !!t.crashed);
+    el.classList.toggle("pinned", !!t.pinned); el.classList.toggle("crashed", !!t.crashed); el.classList.toggle("popup", !!t.popup);
     el.setAttribute("aria-selected", active ? "true" : "false"); el.setAttribute("tabindex", active ? "0" : "-1");
   }
   function renderTabs() {

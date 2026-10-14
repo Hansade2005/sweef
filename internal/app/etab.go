@@ -43,6 +43,7 @@ type etab struct {
 	} // viewport last given to the engine (worker only): setting it again would drop the layout cache
 	lastURL    string
 	dataScript string
+	hoverLeaf  *engine.Tab // frame the pointer is in (worker only)
 
 	// UI loop only: the navigation whose URL and title were committed at its first frame
 	commitSeq int64
@@ -70,6 +71,7 @@ type etab struct {
 	driveSeq      atomic.Int64 // navigation whose progressive load a worker op chain is stepping (driveLoad), 0 = none
 	loadErr       atomic.Value // string: error of the last load started by loadURL ("" = ok); read by the agent host
 	restoreScroll atomic.Int32
+	navHdr        atomic.Value // map[string]string: headers for the next load (consumed once)
 
 	// Data Saver
 	agentLoad   atomic.Bool  // the agent drives this tab: loads use the agent mode
@@ -92,6 +94,7 @@ func (a *App) newEtab(kind, id string, t *engine.Tab, incog bool) *etab {
 		e.t.SetProgressiveNav(true)
 		e.t.SetUpdateHook(func() { e.requestPaint(false) })
 		e.t.SetWakeHook(e.wakePump)
+		e.t.SetActivationWindow(2 * time.Second) // a click or key press keeps allowing popups for 2 s (the engine default is 5 s)
 	}
 	return e
 }
@@ -101,7 +104,6 @@ func (e *etab) installHooks() {
 	e.t.AddInitScript(helperJS)
 	e.t.AddInitScript(helperJS2)
 	_ = e.t.ExposeBinding("__sweefPost")
-	_ = e.t.ExposeBinding("__sweefOpen")
 	e.t.Route("**", e.route)
 	if e.kind == "page" {
 		e.t.SetExtraHeaders(e.a.priv.Headers())
@@ -191,6 +193,56 @@ func (e *etab) eval(js string, out any) error {
 	return json.Unmarshal(raw, out)
 }
 
+// setNavHeaders sets request headers for the next document load of the tab (a popup's Referer).
+func (e *etab) setNavHeaders(h map[string]string) { e.navHdr.Store(h) }
+
+func (e *etab) takeNavHeaders() map[string]string {
+	h, _ := e.navHdr.Swap(map[string]string(nil)).(map[string]string)
+	return h
+}
+
+// evalOn is eval for another document of the page: a frame, or this tab itself.
+func (e *etab) evalOn(t *engine.Tab, js string, out any) error {
+	raw, err := t.Evaluate(js)
+	if err != nil {
+		return err
+	}
+	if out == nil || len(raw) == 0 {
+		return nil
+	}
+	return json.Unmarshal(raw, out)
+}
+
+// pointerTarget is the document that receives a pointer event at (px, py): for the page, the
+// frame under the point (with the point translated into it) or the page itself.
+func (e *etab) pointerTarget(tgt string, px, py int) (*engine.Tab, int, int) {
+	if tgt != "page" || e.kind != "page" {
+		return e.t, px, py
+	}
+	return e.t.FrameHit(px, py)
+}
+
+// inputTab is the document that receives keyboard input: the frame the person last clicked into, or the page.
+func (e *etab) inputTab() *engine.Tab {
+	if e.kind != "page" {
+		return e.t
+	}
+	return e.t.FocusedTab()
+}
+
+// leaveHover tells the frame the pointer just left that it did, when the pointer is now in another document.
+func (e *etab) leaveHover(now *engine.Tab) {
+	old := e.hoverLeaf
+	if now == e.t {
+		e.hoverLeaf = nil
+	} else {
+		e.hoverLeaf = now
+	}
+	if old != nil && old != now && !old.IsClosed() {
+		_, _ = old.Evaluate("__sweefPtr('move',-1,-1,0,0)")
+	}
+}
+
 // drainBindings forwards new binding calls to the UI loop. Worker only.
 func (e *etab) drainBindings() {
 	calls := e.t.BindingCalls(e.bindSID)
@@ -221,12 +273,6 @@ func (e *etab) drainBindings() {
 				continue
 			}
 			e.a.post(func() { e.a.onUIMessage(e, typ, payload) })
-		case "__sweefOpen":
-			var args []string
-			if json.Unmarshal(c.Args, &args) == nil && len(args) > 0 {
-				u := args[0]
-				e.a.post(func() { e.a.onPopup(e, u) })
-			}
 		}
 	}
 }
@@ -519,6 +565,13 @@ func (a *App) onEngineEvent(ev engine.Event) {
 	case engine.EvDownload:
 		if d, ok := ev.Data.(engine.Download); ok {
 			a.post(func() { a.onEngineDownload(e, d) })
+		}
+	case engine.EvPopup:
+		if pe, ok := ev.Data.(engine.PopupEvent); ok && pe.Blocked {
+			now := time.Now().UnixNano()
+			if now-e.popupAt.Swap(now) > int64(500*time.Millisecond) {
+				a.post(func() { a.sendChrome(mToast, map[string]any{"text": "A pop-up was blocked", "kind": "info"}) })
+			}
 		}
 	case engine.EvDialog:
 		a.post(func() {

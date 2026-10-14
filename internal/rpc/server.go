@@ -221,6 +221,23 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		}
 		return map[string]any{"url": t.URL()}, nil
 
+	case "Page.frames": // the frames of the page (recursively); a frame's refs in a snapshot start with its ref
+		t, err := s.tab(p)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"frames": frameTree(t, "")}, nil
+	case "Page.popups": // window.open / link-target decisions of the tab, allowed and blocked
+		t, err := s.tab(p)
+		if err != nil {
+			return nil, err
+		}
+		out := []any{}
+		for _, e := range t.PopupLog(0) {
+			out = append(out, e.Data)
+		}
+		return map[string]any{"popups": out}, nil
+
 	// ---- Content extraction ----
 	case "Page.content", "Page.getHTML":
 		t, err := s.tab(p)
@@ -512,4 +529,15 @@ func (s *Server) ServeTCP(ctx context.Context, addr string) error {
 		}
 		go s.ServePipe(ctx, c, true)
 	}
+}
+
+// frameTree lists the frames of t, each with the ref prefix its snapshot refs carry.
+func frameTree(t *engine.Tab, prefix string) []map[string]any {
+	out := []map[string]any{}
+	for _, f := range t.Frames() {
+		ref := prefix + f.Ref
+		out = append(out, map[string]any{"ref": ref, "name": f.Name, "url": f.URL, "origin": f.Origin,
+			"sandbox": f.Sandbox, "frames": frameTree(f.Tab, ref)})
+	}
+	return out
 }

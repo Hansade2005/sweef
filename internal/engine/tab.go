@@ -294,6 +294,11 @@ func (t *Tab) navigate(rawurl string, headers map[string]string, progressive boo
 		t.emit(EvFailure, map[string]any{"url": rawurl, "error": err.Error()})
 		return err
 	}
+	if why := t.frameRefusal(res.xfo, res.csp, res.finalURL); why != "" {
+		t.LogConsole("error", "Refused to display '"+res.finalURL+"' in a frame because "+why+".")
+		t.setDocument(frameRefusalDoc, "about:blank", progressive)
+		return nil
+	}
 	t.commitCOOP(res.coop, res.finalURL)
 	t.setDocument(res.body, res.finalURL, progressive)
 	if !progressive {
@@ -317,6 +322,7 @@ type fetchResult struct {
 	status   int
 	har      fnet.RequestRecord
 	coop     string // Cross-Origin-Opener-Policy response header
+	xfo, csp string // X-Frame-Options and Content-Security-Policy response headers (frame-ancestors)
 }
 
 func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error) {
@@ -428,7 +434,8 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
 	t.emit(EvResponse, rec)
 	status, text := res.StatusCode, string(body)
-	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec, coop: coopHeader(res.Header)}, nil
+	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec, coop: coopHeader(res.Header),
+		xfo: res.Header.Get("X-Frame-Options"), csp: strings.Join(res.Header.Values("Content-Security-Policy"), ",")}, nil
 }
 
 func flattenHeaders(h map[string][]string) map[string]string {
@@ -477,6 +484,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	old := t.js
 	t.js = nil
 	t.mu.Unlock()
+	t.win.mayFrames.Store(containsFold(htmlSrc, "<iframe"))
 	t.syncFrames(true) // <iframe>s of the new document start loading now, like in a browser
 	// Freeing every object the previous page allocated takes milliseconds;
 	// nothing can reach the old VM any more, so do it off the critical path.
@@ -702,6 +710,9 @@ func (t *Tab) Fill(sel, value string) error { return t.Fill2(sel, value) }
 func (t *Tab) SubmitFormFor(sel string) error {
 	if c, in, ok := t.routeFrameSel(sel); ok {
 		return c.SubmitFormFor(in)
+	}
+	if err := frameRefUnresolved(sel); err != nil {
+		return err
 	}
 	t.mu.RLock()
 	d := t.dom

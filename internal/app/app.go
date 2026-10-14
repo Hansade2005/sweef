@@ -248,6 +248,9 @@ func New(cfg Config) (*App, error) {
 		a.eng = engine.New(o)
 		a.ownE = true
 	}
+	a.eng.SetPopupHandler(a.onEnginePopup)
+	a.eng.SetWindowCloseHandler(a.onEngineWindowClose)
+	a.eng.SetWindowFocusHandler(a.onEngineWindowFocus)
 	a.initDataSaver()
 	// the app's own HTTP clients count toward "used" like page traffic
 	if ct := a.eng.DefaultContext().CountedTransport(); ct != nil {

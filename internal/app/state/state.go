@@ -54,7 +54,8 @@ type Tab struct {
 	Muted      bool     `json:"muted"`
 	Incognito  bool     `json:"incognito"`
 	Discarded  bool     `json:"discarded"`
-	Blocked    int      `json:"blocked"` // trackers blocked on this tab
+	Blocked    int      `json:"blocked"`         // trackers blocked on this tab
+	Popup      bool     `json:"popup,omitempty"` // opened by a page's window.open / link target (the tab strip marks it)
 
 	// not sent to the chrome page
 	Window  int       `json:"-"`
@@ -62,6 +63,7 @@ type Tab struct {
 	HIdx    int       `json:"-"`
 	Scroll  int       `json:"-"` // device-independent scroll offset, for session restore
 	Opened  time.Time `json:"-"`
+	Opener  string    `json:"-"` // id of the tab whose page opened this popup
 }
 
 // Window is a browser window.
@@ -302,7 +304,7 @@ func (m *Model) CloseTab(id string) (next string, ok bool) {
 			break
 		}
 	}
-	if !t.Incognito && t.URL != "" && t.URL != "about:blank" {
+	if !t.Incognito && !t.Popup && t.URL != "" && t.URL != "about:blank" {
 		m.closed = append(m.closed, ClosedTab{URL: t.URL, Title: t.Title, History: append([]string(nil), t.History...),
 			HIdx: t.HIdx, Scroll: t.Scroll, Pinned: t.Pinned, Index: idx, Window: t.Window, At: time.Now()})
 		if len(m.closed) > maxClosed {
@@ -318,6 +320,10 @@ func (m *Model) CloseTab(id string) (next string, ok bool) {
 				n = len(w.Order) - 1
 			}
 			w.Active = w.Order[n]
+			// closing a popup returns to the page that opened it
+			if o := t.Opener; o != "" && m.tabs[o] != nil && m.tabs[o].Window == t.Window {
+				w.Active = o
+			}
 		}
 	}
 	m.bump()

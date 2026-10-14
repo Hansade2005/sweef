@@ -127,6 +127,11 @@ func (a *App) makeEtab(id string, incog bool) *etab {
 		a.logf("new tab: %v", err)
 		return nil
 	}
+	return a.adoptEtab(id, t, incog)
+}
+
+// adoptEtab wraps an existing engine tab (a new tab, or a popup that page script created) in a worker and registers it as page id.
+func (a *App) adoptEtab(id string, t *engine.Tab, incog bool) *etab {
 	e := a.newEtab("page", id, t, incog)
 	e.vpW.Store(int32(a.vpLogW()))
 	e.vpH.Store(int32(a.vpLogH()))
@@ -234,8 +239,12 @@ func (a *App) activateTab(id string) {
 	if prev != id {
 		if prev != "" {
 			a.dataMarkBackground(prev, true) // hidden tabs get no timers or requests
+			if pe := a.page(prev); pe != nil {
+				pe.t.SetFramesPaused(true) // nor do the players embedded in them
+			}
 		}
 		a.dataMarkBackground(id, false)
+		e.t.SetFramesPaused(false)
 	}
 	e.lastActive.Store(time.Now().UnixNano())
 	if prev != id {
