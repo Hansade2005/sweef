@@ -176,7 +176,10 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 
 	// ---- Navigation ----
 	case "Page.navigate", "Page.goto":
-		t, err := s.tabOrNew(p)
+		// The first navigate opens a blank tab and then navigates it once. Creating the tab with
+		// the url and navigating again loaded every page twice (scripts, API calls and analytics
+		// all ran twice) and hid errors from the first load.
+		t, err := s.tabOrNew(Params{"tab": p["tab"], "url": "about:blank"})
 		if err != nil {
 			return nil, err
 		}
@@ -321,7 +324,9 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return val, nil
+		// Every client (session CLI, batch, Node and Python SDKs) reads .result; a bare value made
+		// `sweef eval` print null and SDK evaluate() return nothing (Python's .get crashed on it).
+		return map[string]any{"result": val}, nil
 
 	// ---- Logs (console / network / state) with cursor pagination ----
 	case "Log.getConsole":
@@ -329,13 +334,13 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return t.ConsoleLog(int64(num(p, "since"))), nil
+		return map[string]any{"messages": t.ConsoleLog(int64(num(p, "since")))}, nil
 	case "Network.getLogs":
 		t, err := s.tab(p)
 		if err != nil {
 			return nil, err
 		}
-		return t.NetworkLog(int64(num(p, "since"))), nil
+		return map[string]any{"entries": t.NetworkLog(int64(num(p, "since")))}, nil
 	case "Page.getStateLog":
 		t, err := s.tab(p)
 		if err != nil {

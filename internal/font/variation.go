@@ -13,8 +13,8 @@ import (
 // for untouched points, composite glyphs with component offset deltas) and
 // HVAR advance deltas (or, without HVAR, the phantom point deltas of gvar).
 // Not supported: CFF2 variable fonts and MVAR/VVAR/cvar (a CFF2 or gvar-less
-// font draws its default instance); optical size (opsz) stays at the
-// default because faces are instantiated per weight, not per font size.
+// font draws its default instance). Optical size (opsz) follows the font size
+// (font-optical-sizing: auto) when the caller passes Style.OpticalSize.
 //
 // A WebFace instantiates the font once per requested weight: the weight sets
 // the wght axis (clamped to the declared range and the axis), the stretch
@@ -151,6 +151,13 @@ func f2dot14(v int) float64 { return float64(v) / 16384 }
 
 func (v *variation) hasWght() bool { return v != nil && len(v.axes) > 0 }
 
+// Varied reports whether f is a variable font instance away from the default
+// (its outlines and advances differ from the raw glyf and hmtx tables).
+func (f *Face) Varied() bool { return f != nil && f.vi != nil && !f.vi.zero }
+
+// hasAxis reports whether the font has the axis (by tag).
+func (v *variation) hasAxis(tag string) bool { return v != nil && v.axisIndex(tag) >= 0 }
+
 // axisIndex returns the index of the axis with the tag, or -1.
 func (v *variation) axisIndex(tag string) int {
 	for i, a := range v.axes {
@@ -210,8 +217,11 @@ func avarMap(m [][2]float64, c float64) float64 {
 
 // userAxes is the axis assignment for a face drawn at the weight, with the
 // descriptor's font-variation-settings on top.
-func userAxes(d *FaceDesc, weight int) map[string]float64 {
+func userAxes(d *FaceDesc, weight int, opsz float64) map[string]float64 {
 	m := map[string]float64{"wght": float64(weight), "wdth": 100}
+	if opsz > 0 {
+		m["opsz"] = opsz // font-optical-sizing: auto; the descriptor's settings below still win
+	}
 	if d.Style == StyleItalic {
 		m["ital"] = 1
 	} else if d.Style == StyleOblique {
@@ -234,9 +244,9 @@ func userAxes(d *FaceDesc, weight int) map[string]float64 {
 }
 
 // instance returns the face drawn at weight w.
-func (v *variation) instance(wf *WebFace, w int) *Face {
+func (v *variation) instance(wf *WebFace, w int, opsz float64) *Face {
 	base := wf.base
-	coords := v.coords(userAxes(&wf.Desc, w))
+	coords := v.coords(userAxes(&wf.Desc, w, opsz))
 	zero := true
 	for _, c := range coords {
 		if c != 0 {

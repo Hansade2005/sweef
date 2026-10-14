@@ -1165,6 +1165,8 @@ func (j *jsVM) registerHost() error {
 			j.queueFormSubmit(argI(a, 0))
 			return nil, nil
 		}},
+		{"quirks", doc(func(d *fnet.Doc, a []any) (any, error) { return docQuirks(d), nil })},
+		{"computedStyle", doc(func(d *fnet.Doc, a []any) (any, error) { return computedStyleOf(d, argI(a, 0)), nil })},
 		{"box", doc(func(d *fnet.Doc, a []any) (any, error) {
 			if g, ok := d.GeometryOf(argI(a, 0)); ok {
 				fr := make([]any, 0, len(g.Frags))

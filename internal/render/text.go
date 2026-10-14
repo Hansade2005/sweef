@@ -46,7 +46,7 @@ func (c *ctx) spec(st *style.Computed) *fontSpec {
 		c.specPtr[st] = fs
 		return fs
 	}
-	fst := font.Style{Weight: st.FontWeight, Italic: st.FontStyle != 0}
+	fst := font.Style{Weight: st.FontWeight, Italic: st.FontStyle != 0, OpticalSize: st.FontSize}
 	fs := &fontSpec{size: st.FontSize, fam: st.FontFamily, st: fst, fallback: map[rune]*font.Face{}, web: font.HasScoped(st.FontFamily)}
 	for _, f := range st.FontFamily {
 		if fs.web {

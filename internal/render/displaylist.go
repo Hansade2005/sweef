@@ -242,6 +242,7 @@ type Box struct {
 	Xf3              *Xf3D // 3D transform data (nil without 3D involvement)
 	OffsetParent     *html.Node
 	ZIndex           int
+	Style            *style.Computed // the element's computed style (getComputedStyle)
 }
 
 // Result is the output of Layout.

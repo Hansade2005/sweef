@@ -56,6 +56,9 @@
   function getters(proto, map) { for (var k in map) if (hasOwn.call(map, k)) def(proto, k, { get: map[k].get, set: map[k].set, enumerable: true }); }
   function constant(obj, name, v) { Object.defineProperty(obj, name, { value: v, enumerable: true }); }
   function toStr(v) { return v === undefined ? 'undefined' : v === null ? 'null' : String(v); }
+  // cssStr escapes a value for a double-quoted CSS string in a selector: backslash first, then the quote,
+  // and line breaks as hex escapes (a raw newline ends a CSS string).
+  function cssStr(v) { return String(v).replace(/[\\"]/g, '\\$&').replace(/\n/g, '\\a ').replace(/\r/g, '\\d ').replace(/\f/g, '\\c '); }
   function illegal() { throw new TypeError('Illegal constructor'); }
   function setTag(cls, name) { def(cls.prototype, Symbol.toStringTag, { value: name, enumerable: false }); }
   function extend(sub, sup) { Object.setPrototypeOf(sub.prototype, sup.prototype); Object.setPrototypeOf(sub, sup); }
@@ -1130,7 +1133,7 @@
     isContentEditable: { get: function () { var v = this.getAttribute('contenteditable'); return v === '' || v === 'true' || v === 'plaintext-only'; } },
     nonce: { get: function () { return this.getAttribute('nonce') || ''; }, set: function (v) { this.setAttribute('nonce', toStr(v)); } },
     form: { get: function () { return this.closest('form'); } },
-    labels: { get: function () { var id = this.id; return nodeListOf(id ? queryAll(documentWrapper, 'label[for="' + id.replace(/"/g, '\\"') + '"]') : []); } },
+    labels: { get: function () { var id = this.id; return nodeListOf(id ? queryAll(documentWrapper, 'label[for="' + cssStr(id) + '"]') : []); } },
     validity: { get: function () { return { valid: true, valueMissing: false, typeMismatch: false, patternMismatch: false, tooLong: false, tooShort: false, rangeUnderflow: false, rangeOverflow: false, stepMismatch: false, badInput: false, customError: false }; } },
     validationMessage: { get: function () { return ''; } },
     willValidate: { get: function () { return true; } }
@@ -1168,7 +1171,7 @@
   function radioGroup(el) {
     var name = el.getAttribute('name'); if (!name) return [el];
     var root = el.form || documentWrapper;
-    return queryAll(root, 'input[type="radio"][name="' + name.replace(/"/g, '\\"') + '"]');
+    return queryAll(root, 'input[type="radio"][name="' + cssStr(name) + '"]');
   }
   function defaultAction(el) {
     if (!el || el.nodeType !== 1) return;
@@ -1487,7 +1490,7 @@
   getters(DocumentFragment.prototype, ParentNodeGetters);
   methods(DocumentFragment.prototype, ParentNodeMethods);
   methods(DocumentFragment.prototype, {
-    getElementById: function (id) { return queryAll(this, '[id="' + String(id).replace(/"/g, '\\"') + '"]')[0] || null; },
+    getElementById: function (id) { return queryAll(this, '[id="' + cssStr(String(id)) + '"]')[0] || null; },
     getElementsByTagName: function (tag) { tag = String(tag).toLowerCase(); return collectionOf(queryAll(this, tag === '*' ? '*' : tag)); },
     getElementsByClassName: function (cls) { return collectionOf(queryAll(this, '.' + String(cls).trim().split(/\s+/).join('.'))); }
   });
@@ -1534,7 +1537,7 @@
     cookie: { get: function () { return sw.cookie() || ''; }, set: function (v) { sw.setCookie(toStr(v)); } },
     lastModified: { get: function () { return new Date().toLocaleString(); } },
     characterSet: { get: function () { return 'UTF-8'; } }, charset: { get: function () { return 'UTF-8'; } }, inputEncoding: { get: function () { return 'UTF-8'; } },
-    contentType: { get: function () { return 'text/html'; } }, compatMode: { get: function () { return 'CSS1Compat'; } },
+    contentType: { get: function () { return 'text/html'; } }, compatMode: { get: function () { var q = false; try { q = !!sw.quirks(); } catch (e) { /* ignore */ } return q ? 'BackCompat' : 'CSS1Compat'; } },
     hidden: { get: function () { return false; } }, visibilityState: { get: function () { return 'visible'; } },
     designMode: { get: function () { return 'off'; }, set: function () { } },
     dir: { get: function () { var h = this.documentElement; return h ? h.getAttribute('dir') || '' : ''; }, set: function (v) { var h = this.documentElement; if (h) h.setAttribute('dir', toStr(v)); } },
@@ -1604,8 +1607,8 @@
     createRange: function () { return new global.Range(); },
     createTreeWalker: function (root, whatToShow, filter) { return new global.TreeWalker(root, whatToShow, filter); },
     createNodeIterator: function (root, whatToShow, filter) { return new global.NodeIterator(root, whatToShow, filter); },
-    getElementById: function (id) { id = toStr(id); if (this._detachedRoot || this !== documentWrapper) return queryAll(this, '[id="' + id.replace(/"/g, '\\"') + '"]')[0] || null; return wrap(sw.getElementById(id)); },
-    getElementsByName: function (name) { name = toStr(name); var self = this; return liveList(NodeList, genCached(function () { return self === documentWrapper ? wrapAll(sw.elementsByName(name)) : queryAll(self, '[name="' + name.replace(/"/g, '\\"') + '"]'); })); },
+    getElementById: function (id) { id = toStr(id); if (this._detachedRoot || this !== documentWrapper) return queryAll(this, '[id="' + cssStr(id) + '"]')[0] || null; return wrap(sw.getElementById(id)); },
+    getElementsByName: function (name) { name = toStr(name); var self = this; return liveList(NodeList, genCached(function () { return self === documentWrapper ? wrapAll(sw.elementsByName(name)) : queryAll(self, '[name="' + cssStr(name) + '"]'); })); },
     importNode: function (node, deep) { requireNode(node, 'importNode'); return node.cloneNode(!!deep); },
     adoptNode: function (node) { requireNode(node, 'adoptNode'); if (node.parentNode) node.parentNode.removeChild(node); return node; },
     hasFocus: function () { return true; },
@@ -2004,7 +2007,11 @@
     var computed = Object.create(proto);
     Object.defineProperty(computed, '_el', { value: null }); Object.defineProperty(computed, '_text', { value: text, writable: true });
     var origGPV = proto.getPropertyValue;
-    Object.defineProperty(computed, 'getPropertyValue', { value: function (name) { var v = origGPV.call(this, name); if (v === '') { name = String(name).toLowerCase(); if (defaults[name] !== undefined) return defaults[name]; if (/^(margin|padding|border|top|left|right|bottom|inset)/.test(name)) return name.indexOf('color') >= 0 ? 'rgb(0, 0, 0)' : name.indexOf('style') >= 0 ? 'none' : '0px'; } return v; } });
+    // Values from the real cascade (computedstyle.go) come first; the inline style and the tag
+    // defaults only answer properties the engine does not serialise yet.
+    var real = null;
+    try { real = typeof sw.computedStyle === 'function' ? sw.computedStyle(el[ID]) : null; } catch (e) { real = null; }
+    Object.defineProperty(computed, 'getPropertyValue', { value: function (name) { var kn = String(name).toLowerCase(); if (real && real[kn] !== undefined && real[kn] !== null) return String(real[kn]); var v = origGPV.call(this, name); if (v === '') { name = String(name).toLowerCase(); if (defaults[name] !== undefined) return defaults[name]; if (/^(margin|padding|border|top|left|right|bottom|inset)/.test(name)) return name.indexOf('color') >= 0 ? 'rgb(0, 0, 0)' : name.indexOf('style') >= 0 ? 'none' : '0px'; } return v; } });
     Object.defineProperty(computed, 'setProperty', { value: function () { throw DOMException("Failed to execute 'setProperty' on 'CSSStyleDeclaration': These styles are computed, and therefore the 'display' property is read-only.", 'NoModificationAllowedError'); } });
     return new Proxy(computed, { get: function (t, k) { if (typeof k === 'string' && !(k in t) && /^[a-zA-Z-]+$/.test(k)) return t.getPropertyValue(k.indexOf('-') >= 0 ? k : kebab(k)); return t[k]; } });
   };
@@ -2514,7 +2521,9 @@
   global.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) { this.text = text; };
   global.CSS = { supports: function () { return false; }, escape: function (s) { return String(s).replace(/([\0-\x1f\x7f]|^-?\d)|^-$|[^\x80-￿\w-]/g, function (ch, asCode) { return asCode ? (ch === '\0' ? '�' : ch.slice(0, -1) + '\\' + ch.slice(-1).charCodeAt(0).toString(16) + ' ') : '\\' + ch; }); }, registerProperty: function () { }, px: function (v) { return v + 'px'; }, highlights: new Map() };
   global.CSSStyleSheet = function CSSStyleSheet() { this.cssRules = []; this.rules = this.cssRules; this.disabled = false; this.href = null; this.media = { mediaText: '' }; this.ownerNode = null; this.title = null; this.type = 'text/css'; };
-  global.CSSStyleSheet.prototype = { insertRule: function (r, i) { this.cssRules.splice(i || 0, 0, { cssText: String(r), type: 1, selectorText: String(r).split('{')[0].trim(), style: styleDecl(null, (String(r).split('{')[1] || '').replace('}', '')) }); return i || 0; }, deleteRule: function (i) { this.cssRules.splice(i, 1); }, addRule: function (sel, style, i) { return this.insertRule(sel + ' {' + style + '}', i === undefined ? this.cssRules.length : i); }, removeRule: function (i) { this.deleteRule(i); }, replace: function (text) { this.replaceSync(text); return Promise.resolve(this); }, replaceSync: function (text) { this.cssRules.length = 0; var self = this; String(text).replace(/[^{}]+\{[^{}]*\}/g, function (rule) { self.insertRule(rule.trim(), self.cssRules.length); }); } };
+  // ruleBody is the declaration block of a rule text: everything between the first '{' and the last '}'.
+  function ruleBody(r) { var t = String(r), b = t.indexOf('{'), e = t.lastIndexOf('}'); return b < 0 ? '' : t.slice(b + 1, e > b ? e : t.length); }
+  global.CSSStyleSheet.prototype = { insertRule: function (r, i) { this.cssRules.splice(i || 0, 0, { cssText: String(r), type: 1, selectorText: String(r).split('{')[0].trim(), style: styleDecl(null, ruleBody(r)) }); return i || 0; }, deleteRule: function (i) { this.cssRules.splice(i, 1); }, addRule: function (sel, style, i) { return this.insertRule(sel + ' {' + style + '}', i === undefined ? this.cssRules.length : i); }, removeRule: function (i) { this.deleteRule(i); }, replace: function (text) { this.replaceSync(text); return Promise.resolve(this); }, replaceSync: function (text) { this.cssRules.length = 0; var self = this; String(text).replace(/[^{}]+\{[^{}]*\}/g, function (rule) { self.insertRule(rule.trim(), self.cssRules.length); }); } };
   getters(Document.prototype, { adoptedStyleSheets: { get: function () { return slots(this).adopted || (slots(this).adopted = []); }, set: function (v) { slots(this).adopted = Array.from(v); } } });
   global.ResizeObserverEntry = function ResizeObserverEntry() { illegal(); };
   global.FontFace = function FontFace(family, source, desc) { this.family = family; this.status = 'loaded'; this.loaded = Promise.resolve(this); Object.assign(this, desc || {}); };
