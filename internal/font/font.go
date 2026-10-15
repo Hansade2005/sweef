@@ -466,8 +466,21 @@ func load() {
 				return nil
 			})
 		}
-		// Probing reads a few tables per file; do the files in parallel, keep discovery order.
+		// Files the font index knows (same size and mtime) need no probing; the rest are
+		// probed in parallel (a few tables each). Discovery order is kept.
+		ixPath := fontIndexPath()
+		ix := readFontIndex(ixPath)
 		found := make([][]*entry, len(paths))
+		infos := make([]os.FileInfo, len(paths))
+		var todo []int
+		for i, p := range paths {
+			infos[i], _ = os.Stat(p)
+			if es, ok := cachedEntries(ix, p, infos[i]); ok {
+				found[i] = es
+			} else {
+				todo = append(todo, i)
+			}
+		}
 		var wg sync.WaitGroup
 		next := make(chan int)
 		workers := runtime.GOMAXPROCS(0)
@@ -483,11 +496,20 @@ func load() {
 				}
 			}()
 		}
-		for i := range paths {
+		for _, i := range todo {
 			next <- i
 		}
 		close(next)
 		wg.Wait()
+		if len(todo) > 0 || len(ix) != len(paths) {
+			nix := make(map[string]indexFile, len(paths))
+			for i, p := range paths {
+				if infos[i] != nil {
+					nix[p] = indexEntry(infos[i], found[i])
+				}
+			}
+			writeFontIndex(ixPath, nix)
+		}
 		for _, es := range found {
 			entries = append(entries, es...)
 		}

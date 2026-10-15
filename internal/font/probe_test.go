@@ -43,3 +43,29 @@ func TestLazyProbeMatchesFullProbe(t *testing.T) {
 	}
 	t.Logf("%d faces compared", n)
 }
+
+// The font index gives a later process the same entries as probing.
+func TestFontIndexRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SWEEF_CACHE_DIR", dir)
+	var p string
+	var fi os.FileInfo
+	for _, d := range systemDirs() {
+		filepath.WalkDir(d, func(q string, de os.DirEntry, err error) error {
+			if p == "" && err == nil && !de.IsDir() && strings.EqualFold(filepath.Ext(q), ".ttf") {
+				p = q
+				fi, _ = os.Stat(q)
+			}
+			return nil
+		})
+	}
+	if p == "" {
+		t.Skip("no system .ttf")
+	}
+	es := probeAll(p, false)
+	writeFontIndex(fontIndexPath(), map[string]indexFile{p: indexEntry(fi, es)})
+	got, ok := cachedEntries(readFontIndex(fontIndexPath()), p, fi)
+	if !ok || len(got) != len(es) || got[0].family != es[0].family || got[0].style != es[0].style || got[0].full != es[0].full {
+		t.Fatalf("index round trip: ok=%v got %+v want %+v", ok, got, es)
+	}
+}
