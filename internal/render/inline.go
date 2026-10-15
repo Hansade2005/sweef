@@ -726,6 +726,12 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 	if b.hasFloat {
 		b.touchesBFC = true
 	}
+	// -webkit-line-clamp: a vertical -webkit-box shows its first N lines; the rest is not laid out or painted
+	if n := c.lineClamp(b); n > 0 && len(b.lines) > n {
+		b.lines = b.lines[:n]
+		last := b.lines[n-1]
+		y = last.y + last.h
+	}
 	// text-align and baseline of the block
 	if len(b.lines) > 0 {
 		b.hasBase = true
@@ -1518,4 +1524,20 @@ func (fr *frag) justSpaces() int {
 		}
 	}
 	return n
+}
+
+// lineClamp is the -webkit-line-clamp that applies to the lines of b: its own, or that of the vertical
+// -webkit-box whose anonymous block it is (Tailwind's line-clamp-N: display:-webkit-box,
+// -webkit-box-orient:vertical, -webkit-line-clamp:N, overflow:hidden). 0 = none.
+func (c *ctx) lineClamp(b *lbox) int {
+	box := func(x *lbox) bool {
+		return x != nil && x.st != nil && x.st.LineClamp > 0 && (x.st.Display == "-webkit-box" || x.st.Display == "-webkit-inline-box") && x.st.BoxOrient == "vertical"
+	}
+	if box(b) {
+		return b.st.LineClamp
+	}
+	if b.anon && box(b.parent) {
+		return b.parent.st.LineClamp
+	}
+	return 0
 }
