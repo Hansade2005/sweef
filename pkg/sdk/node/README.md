@@ -2,12 +2,34 @@
 
 Node.js SDK for [Sweef](https://github.com/sweefbrowser/sweef), a browser engine for AI agents written in Go. The API follows Playwright where it can (`page.goto`, `page.locator(...).click()`, `getByRole`, `page.keyboard`, `route`, `waitForURL`...), and pages are read as a YAML accessibility tree in which every control carries a `[ref=eN]` handle you can pass back as a selector.
 
-Zero dependencies, types included, Node 16+. The SDK talks to a `sweef` binary over a local socket, so you need the binary too:
+Zero dependencies, types included, Node 16+. The SDK talks to the `sweef` engine over a local socket; it installs the engine for you on first use, so this is all you need:
 
 ```bash
-go install github.com/sweefbrowser/sweef/cmd/sweef@latest   # or download a release; then put it on PATH or set SWEEF_BIN
 npm install @sweef/browser
 ```
+
+## The sweef engine: installed for you
+
+You do not download Sweef or edit PATH. The SDK finds the engine in this order:
+
+1. the `binary` option (`Sweef.launch({ binary })`)
+2. `$SWEEF_BIN`
+3. `sweef` on PATH
+4. the per-user cache: `$XDG_CACHE_HOME/sweef/<engine-version>/sweef` (default `~/.cache/...`), `~/Library/Caches/sweef/...` on macOS, `%LOCALAPPDATA%\sweef\cache\<engine-version>\sweef.exe` on Windows
+5. otherwise it downloads the pinned engine (`0.1.0-alpha.4`) from the [GitHub release](https://github.com/sweefbrowser/sweef/releases) into that cache, once, and prints one line to stderr. The archive's SHA-256 is checked before anything is executed; the SDK pins the expected hashes for its default version and falls back to the release's `SHA256SUMS` for other versions.
+
+`npm install -g @sweef/browser` also puts a `sweef` command on PATH (it runs the same engine, downloading it first if needed). `npx -p @sweef/browser sweef-install` downloads the engine ahead of time and prints where it is (`--print-path` only looks, never downloads). A best-effort `postinstall` step fetches the engine at `npm install`; it never fails the install and is skipped with `SWEEF_SKIP_DOWNLOAD=1` or `npm install --ignore-scripts` (the engine is then fetched on first use). In code, `await ensureBinary()` returns the engine path, downloading it if necessary.
+
+| Variable | Effect |
+|---|---|
+| `SWEEF_BIN` | use this binary, skip everything else |
+| `SWEEF_VERSION` | engine version to use/download instead of the pinned one |
+| `SWEEF_DOWNLOAD_BASE` | mirror root, layout `<base>/v<version>/<asset>` and `SHA256SUMS` (air-gapped or corporate mirrors; `http://` allowed) |
+| `SWEEF_ENGINE_CACHE` | cache root instead of the per-user default |
+| `SWEEF_SKIP_DOWNLOAD=1` | never download: behave as before and fail with the manual install instructions |
+| `HTTPS_PROXY`, `NO_PROXY` | standard proxy variables are honored |
+
+Air-gapped: mirror the release files under `$SWEEF_DOWNLOAD_BASE/v<version>/`, or put the engine on PATH / in `SWEEF_BIN` and set `SWEEF_SKIP_DOWNLOAD=1`. Uninstall: delete the cache directory (`<cache>/sweef/<engine-version>`); nothing else is written outside the package, and PATH is never modified.
 
 ## Quick start
 

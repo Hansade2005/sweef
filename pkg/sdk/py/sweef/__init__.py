@@ -27,9 +27,11 @@ import tempfile
 import time
 from typing import Any, Callable, Dict, List, Optional, Union
 
-__version__ = "0.2.0"
+from ._install import SweefInstallError, ensure_binary
+
+__version__ = "0.2.1"
 MAGIC = b"SWF1"
-__all__ = ["Sweef", "Page", "Locator", "BrowserContext", "Keyboard", "Mouse", "Connection", "RpcError", "__version__"]
+__all__ = ["ensure_binary", "SweefInstallError", "Sweef", "Page", "Locator", "BrowserContext", "Keyboard", "Mouse", "Connection", "RpcError", "__version__"]
 
 Step = Union[str, Dict[str, Any]]
 
@@ -449,10 +451,9 @@ def _session_dir() -> str:
 
 
 def _find_binary(binary: Optional[str]) -> str:
-    exe = binary or os.environ.get("SWEEF_BIN") or shutil.which("sweef")
-    if not exe:
-        raise FileNotFoundError("sweef binary not found: set SWEEF_BIN, put sweef on PATH, or pass binary=")
-    return exe
+    # explicit binary, SWEEF_BIN, sweef on PATH, per-user cache, then an automatic download into the cache
+    # (SWEEF_SKIP_DOWNLOAD=1 disables it). See sweef._install.
+    return ensure_binary(binary)
 
 
 def _dial(addr: Union[str, int], deadline: float, proc: Optional[subprocess.Popen] = None) -> Connection:

@@ -9,6 +9,11 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ## [Unreleased]
 
+### SDKs install the engine themselves (0.2.1)
+
+- `@sweef/browser` and `sweef-browser` 0.2.1 no longer require a manual download: the engine is resolved from `binary`, `SWEEF_BIN`, `sweef` on PATH, a per-user cache, and otherwise downloaded once from GitHub Releases (pinned `0.1.0-alpha.4`, SHA-256 verified before execution, no PATH changes, safe under concurrent first runs). Overrides: `SWEEF_VERSION`, `SWEEF_DOWNLOAD_BASE` (mirrors), `SWEEF_ENGINE_CACHE`, `SWEEF_SKIP_DOWNLOAD=1` (old behavior), standard proxy variables.
+- New: `ensureBinary()` / `ensure_binary()`, a `sweef` command from `npm i -g @sweef/browser` and `pip` / `pipx install sweef-browser`, `sweef-install` / `python -m sweef` to pre-fetch (`--print-path`), and a best-effort npm `postinstall` that never fails the install. Still zero dependencies; `import sweef` is side-effect free.
+
 ### Script-heavy pages, the agent loop and CLI start
 
 Measured 2026-10-15 on a 4 vCPU Xeon against Chromium 141 / Playwright 1.56 (`bench/realsites/results/*-gaps*`, `replay-2026-10-15.md`, `resources-2026-10-15-replay.md`, `bench/surfaces/results/2026-10-15-gaps/`):
