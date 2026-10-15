@@ -9,3 +9,11 @@ page.png
 /app.test
 *.prof
 /coverage.out
+
+# Python and Node SDK build artefacts
+__pycache__/
+*.pyc
+*.egg-info/
+pkg/sdk/py/build/
+pkg/sdk/py/dist/
+pkg/sdk/node/*.tgz
