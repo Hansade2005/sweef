@@ -66,7 +66,10 @@ func (j *jsVM) hostHTTPAsync(a []any) (any, error) {
 	}
 	token := httpToken.Add(1)
 	r := j.rt()
-	if !beacon {
+	// a speculative request (a router prefetch of the links on the page) is answered like any other, but the
+	// settle does not wait for it: nothing on the page changes until the user follows the link
+	counted := !beacon && !isPrefetchRequest(hdr)
+	if counted {
 		r.httpPending.Add(1)
 		r.mu.Lock()
 		if r.httpAt == nil {
@@ -92,10 +95,28 @@ func (j *jsVM) hostHTTPAsync(a []any) (any, error) {
 		delete(r.httpAt, token)
 		r.queue = append(r.queue, asyncEvent{kind: "http", id: token})
 		r.mu.Unlock()
-		r.httpPending.Add(-1)
+		if counted {
+			r.httpPending.Add(-1)
+		}
 		t.wake()
 	}()
 	return token, nil
+}
+
+// isPrefetchRequest reports whether page code marked a request as speculative: Next.js's router prefetch
+// (Next-Router-Prefetch), or a Purpose / Sec-Purpose of prefetch.
+func isPrefetchRequest(hdr map[string]string) bool {
+	for k, v := range hdr {
+		switch strings.ToLower(k) {
+		case "next-router-prefetch":
+			return strings.TrimSpace(v) != "" && strings.TrimSpace(v) != "0"
+		case "purpose", "sec-purpose", "x-purpose", "x-moz":
+			if strings.Contains(strings.ToLower(v), "prefetch") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func argAt(a []any, i int) any {

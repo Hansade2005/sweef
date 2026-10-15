@@ -1084,3 +1084,45 @@ func TestQueuedDynamicImportsDownloadTogether(t *testing.T) {
 		t.Fatalf("at most %d chunk downloads at once: queued import() calls loaded one by one", peak)
 	}
 }
+
+// A request page code marks as a prefetch (Next.js's router prefetch of every link on the page) does not hold
+// a headless load, but its answer still reaches the page when it arrives.
+func TestPrefetchRequestDoesNotHoldSettle(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><script>
+window.log = [];
+fetch('/slow?rsc=1', { headers: { 'Next-Router-Prefetch': '1', 'RSC': '1' } }).then(function (r) { return r.text(); }).then(function (v) { log.push('prefetch:' + v); });
+fetch('/slow?api=1').then(function (r) { return r.text(); }).then(function (v) { log.push('api:' + v); });
+</script>`)
+	})
+	mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("rsc") != "" {
+			time.Sleep(1500 * time.Millisecond)
+		} else {
+			time.Sleep(200 * time.Millisecond)
+		}
+		fmt.Fprint(w, "ok")
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	t0 := time.Now()
+	if err := tab.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d > 1200*time.Millisecond {
+		t.Errorf("headless Navigate took %v: it waited for the prefetch", d)
+	}
+	if v := mustEval(t, tab, `log.join()`); !strings.Contains(v, "api:ok") || strings.Contains(v, "prefetch") {
+		t.Errorf("after load: %q, want the API answer and not yet the prefetch", v)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && !strings.Contains(mustEval(t, tab, `log.join()`), "prefetch:ok") {
+		tab.Settle(50 * time.Millisecond)
+	}
+	if v := mustEval(t, tab, `log.join()`); !strings.Contains(v, "prefetch:ok") {
+		t.Errorf("the prefetch answer never reached the page: %q", v)
+	}
+}
