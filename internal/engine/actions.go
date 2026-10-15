@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -156,6 +157,7 @@ func (t *Tab) Click(sel string) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	l := t.Locator(sel)
 	// A ref that resolves to something that can never be clicked fails at
 	// once instead of waiting for it to become visible.
@@ -177,6 +179,27 @@ func (t *Tab) Click(sel string) error {
 		return err
 	}
 	return t.clickBackend(bid, sel)
+}
+
+// healRef maps a snapshot ref whose element was hidden or replaced since the snapshot to the control that took
+// its place (fnet.Doc.HealRef: same accessible name, compatible role, unambiguous); other selectors pass through.
+func (t *Tab) healRef(sel string) string {
+	s := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(sel), "@"), "ref=")
+	if len(s) < 2 || s[0] != 'e' {
+		return sel
+	}
+	id, err := strconv.ParseInt(s[1:], 10, 64)
+	if err != nil {
+		return sel
+	}
+	healed := sel
+	_ = t.withDoc(func(d *fnet.Doc) error {
+		if nr, ok := d.HealRef(id); ok {
+			healed = "e" + strconv.FormatInt(nr, 10)
+		}
+		return nil
+	})
+	return healed
 }
 
 var nonRenderable = map[string]bool{"script": true, "style": true, "head": true, "meta": true, "link": true, "title": true, "template": true, "noscript": true}
@@ -323,6 +346,7 @@ func (t *Tab) Type(sel, text string, delay time.Duration) error {
 		return err
 	}
 	t.NoteUserActivation()
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -368,6 +392,7 @@ func (t *Tab) Press(sel, keys string) error {
 		return err
 	}
 	t.NoteUserActivation()
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).BackendID()
 	if err != nil {
 		return err
@@ -408,6 +433,7 @@ func (t *Tab) Fill2(sel, value string) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -445,6 +471,7 @@ func (t *Tab) setChecked(sel string, want bool) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -466,6 +493,7 @@ func (t *Tab) SelectOption(sel, value string) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err

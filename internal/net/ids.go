@@ -1,6 +1,10 @@
 package net
 
-import "golang.org/x/net/html"
+import (
+	"strings"
+
+	"golang.org/x/net/html"
+)
 
 // idTable gives every node the Doc has ever touched a small, stable integer
 // id. Ids start at 1 per document, are never reused, and survive any tree
@@ -108,4 +112,51 @@ func (d *Doc) RefState(ref int64) string {
 	default:
 		return "detached"
 	}
+}
+
+// HealRef finds the control that took over from the element of snapshot ref (hidden or removed since the
+// snapshot): the one visible element with the same accessible name and a compatible role. Widgets that swap
+// their element when used do this all the time: Wikipedia's search box is replaced by a combobox when it is
+// clicked, and the agent's next "fill e3" otherwise failed on the hidden original. It returns the new ref
+// (assigned now) and true only for an unambiguous match.
+func (d *Doc) HealRef(ref int64) (int64, bool) {
+	n := d.nodeByRef(ref)
+	if n == nil || n.Type != html.ElementNode {
+		return 0, false
+	}
+	if d.Attached(n) {
+		if vis, _ := d.IsVisible(d.idOf(n)); vis {
+			return 0, false // nothing to heal
+		}
+	}
+	name := strings.ToLower(strings.TrimSpace(accessibleName(n)))
+	if name == "" {
+		return 0, false
+	}
+	role := computeRole(n)
+	editable := func(r string) bool { return r == "textbox" || r == "searchbox" || r == "combobox" }
+	var found *html.Node
+	for _, c := range d.queryAll("*") {
+		if c == n {
+			continue
+		}
+		r := computeRole(c)
+		if r != role && !(editable(role) && editable(r)) {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(accessibleName(c))) != name {
+			continue
+		}
+		if vis, _ := d.IsVisible(d.idOf(c)); !vis {
+			continue
+		}
+		if found != nil {
+			return 0, false // ambiguous
+		}
+		found = c
+	}
+	if found == nil {
+		return 0, false
+	}
+	return d.refOf(found), true
 }
