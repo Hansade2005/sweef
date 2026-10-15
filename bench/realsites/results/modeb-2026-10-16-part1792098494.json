@@ -1,0 +1,105 @@
+{
+ "meta": {
+  "started": "2026-10-15T21:08:15.458Z",
+  "mock": false,
+  "config": {
+   "model": "claude-haiku-5-5",
+   "runs": 3,
+   "max_turns": 40,
+   "max_tokens": 8192,
+   "effort": "low",
+   "thinking": "adaptive",
+   "max_cost_usd": 0.5,
+   "snapshot_max_tokens": 6000,
+   "task_timeout_s": 300,
+   "pw_observe": "snapshot",
+   "tools": [
+    "sweef-agent",
+    "playwright-agent"
+   ],
+   "tasks": 7,
+   "base_url": "https://api.anthropic.com"
+  },
+  "versions": {
+   "sweef": "sweef 0.1.0",
+   "node": "v22.22.0"
+  },
+  "prices": {
+   "_note": "USD per million tokens, first-party API list prices (claude-api model table cached 2026-10-06). Edit and verify against your invoice. Cost in Mode B results is computed from reported token usage with this one table for BOTH agents; the Sweef binary's own cost estimate is recorded separately.",
+   "cache_read_mult": 0.1,
+   "cache_write_mult": 1.25,
+   "models": {
+    "claude-haiku-5-5": {
+     "in": 0.1,
+     "out": 0.5,
+     "long_threshold": 100000,
+     "in_long": 0.5,
+     "out_long": 2.5
+    },
+    "claude-sonnet-5-5": {
+     "in": 2,
+     "out": 10
+    },
+    "claude-opus-5-5": {
+     "in": 4,
+     "out": 20
+    }
+   },
+   "_cache_note": "cache_read_mult and cache_write_mult multiply the model's input price: reads 0.1x, writes 1.25x for the 5-minute TTL both agents use (claude-api skill, prompt caching economics, cached 2026-10-06; the 1-hour TTL would be 2x). Haiku 5.5 caches prefixes from 512 tokens."
+  }
+ },
+ "runs": [
+  {
+   "tool": "sweef-agent",
+   "wall_ms": 13457.502014,
+   "exit": 0,
+   "stop": "done",
+   "answer": "The todo \"Buy milk\" was added. The item counter at the bottom shows \"1 item left!\" (TodoMVC React page, https://todomvc.com/examples/react/dist/).",
+   "turns": 2,
+   "requests": 2,
+   "retries": 0,
+   "tool_calls": 3,
+   "tool_ms": 10017,
+   "model_ms": null,
+   "snapshots": 2,
+   "delta_snapshots": 0,
+   "usage": {
+    "input_tokens": 55,
+    "output_tokens": 360,
+    "cache_read_input_tokens": 3524,
+    "cache_creation_input_tokens": 4867
+   },
+   "cost_usd": 0.0008291150000000001,
+   "cost_usd_sweef_estimate": 0.0008291150000000001,
+   "agent_elapsed_ms": 12334,
+   "task": "todomvc-react",
+   "run": 1,
+   "answer_ok": true
+  },
+  {
+   "tool": "playwright-agent",
+   "stop": "done",
+   "answer": "I added the todo \"Buy milk\". The item counter at the bottom reads: \"1 item left!\"",
+   "turns": 3,
+   "requests": 3,
+   "retries": 0,
+   "tool_calls": 4,
+   "snapshots": 3,
+   "usage": {
+    "input_tokens": 8,
+    "output_tokens": 277,
+    "cache_read_input_tokens": 4008,
+    "cache_creation_input_tokens": 6042
+   },
+   "model_ms": 2496.523952000003,
+   "tool_ms": 229.46424300000217,
+   "cost_usd": 0.0009346299999999999,
+   "error": null,
+   "success_flag": true,
+   "wall_ms": 5809.713578000001,
+   "task": "todomvc-react",
+   "run": 1,
+   "answer_ok": true
+  }
+ ]
+}
