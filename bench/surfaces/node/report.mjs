@@ -108,6 +108,7 @@ if (sdk) {
 
 function cliSection(cli, title) {
   const s = P(cli, 'sweef');
+  const sc = P(cli, 'sweef-cli');
   const ab = P(cli, 'agent-browser');
   w(title);
   w();
@@ -129,6 +130,18 @@ function cliSection(cli, title) {
       const a = s.steps[k];
       const c = ab.steps[k] || {};
       w(`| ${k} | ${f(a.medianMs)} | ${f(c.medianMs)} | ${faster(a.medianMs, c.medianMs)} | ${a.medianTokens} | ${c.medianTokens} |`);
+    }
+    if (sc && !sc.error) {
+      w();
+      w('`sweef-cli`, the session client without the engine linked in (same commands, same daemon):');
+      w();
+      w('| command | sweef-cli ms | sweef ms | agent-browser ms | sweef-cli vs agent-browser |');
+      w('|---|---:|---:|---:|---|');
+      w(`| whole flow | ${f(sc.flowTotalMs)} | ${f(s.flowTotalMs)} | ${f(ab.flowTotalMs)} | ${faster(sc.flowTotalMs, ab.flowTotalMs)} |`);
+      for (const k of Object.keys(sc.steps)) {
+        const c = ab.steps[k] || {};
+        w(`| ${k} | ${f(sc.steps[k].medianMs)} | ${f(s.steps[k]?.medianMs)} | ${f(c.medianMs)} | ${faster(sc.steps[k].medianMs, c.medianMs)} |`);
+      }
     }
   }
   w();

@@ -23,6 +23,7 @@ trap 'kill $SITE_PID 2>/dev/null || true; rm -rf "$WORK"' EXIT
 mkdir -p "$OUT"
 
 CGO_ENABLED=0 go build -ldflags='-s -w' -o "$WORK/sweef" ./cmd/sweef   # release flags: static, stripped
+CGO_ENABLED=0 go build -ldflags='-s -w' -o "$WORK/sweef-cli" ./cmd/sweef-cli   # the engine-free session client
 go build -o "$WORK/site" ./bench/site
 "$WORK/site" -addr 127.0.0.1:18080 >/dev/null 2>&1 &
 SITE_PID=$!
@@ -34,7 +35,7 @@ chmod +x node_modules/agent-browser/bin/agent-browser-linux-x64 2>/dev/null || t
 R="$(cd ../../.. && pwd)/$OUT"
 node mcp_bench.mjs --sweef "$WORK/sweef" "${BEFORE[@]}" --chrome "$CHROME" -n 9 --real 7 --out "$R/mcp.json"
 node sdk_bench.mjs --sweef "$WORK/sweef" -r 5 -n 9 --out "$R/sdk.json"
-node cli_bench.mjs --sweef "$WORK/sweef" --chrome "$CHROME" -r 7 --out "$R/cli-cold.json"
-node cli_bench.mjs --sweef "$WORK/sweef" --chrome "$CHROME" -r 7 --warm-cache --out "$R/cli-warm.json"
+node cli_bench.mjs --sweef "$WORK/sweef" --sweef-cli "$WORK/sweef-cli" --chrome "$CHROME" -r 7 --out "$R/cli-cold.json"
+node cli_bench.mjs --sweef "$WORK/sweef" --sweef-cli "$WORK/sweef-cli" --chrome "$CHROME" -r 7 --warm-cache --out "$R/cli-warm.json"
 node report.mjs --mcp "$R/mcp.json" --sdk "$R/sdk.json" --cli "$R/cli-cold.json" --cli-warm "$R/cli-warm.json" > "$R/report.md"
 echo "wrote $R/report.md"

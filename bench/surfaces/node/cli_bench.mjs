@@ -17,6 +17,7 @@ const HERE = path.dirname(new URL(import.meta.url).pathname);
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
 const SWEEF = opt('--sweef');
+const SWEEF_CLI = opt('--sweef-cli'); // the engine-free session client (cmd/sweef-cli); its daemon is SWEEF
 const AB = opt('--ab', path.join(HERE, 'node_modules/agent-browser/bin/agent-browser-linux-x64'));
 const BASE = opt('--base', 'http://127.0.0.1:18080');
 const R = +opt('-r', 7);
@@ -102,6 +103,12 @@ const products = {
       ['close', ['close']],
     ],
   },
+  'sweef-cli': {
+    env: (tmp) => ({ ...process.env, SWEEF_HOME: path.join(tmp, 'home'), SWEEF_CACHE_DIR: path.join(tmp, 'cache'), SWEEF_BIN: SWEEF }),
+    bin: SWEEF_CLI,
+    match: (tmp) => (cmd) => cmd.includes(' serve ') && cmd.includes(tmp),
+    flow: null, // the sweef flow, set below
+  },
   'agent-browser': {
     env: (tmp) => ({ ...process.env, AGENT_BROWSER_EXECUTABLE_PATH: CHROME, AGENT_BROWSER_SOCKET_DIR: path.join(tmp, 'ab'), HOME: path.join(tmp, 'abhome') }),
     bin: AB,
@@ -121,8 +128,9 @@ const products = {
   },
 };
 
+products['sweef-cli'].flow = products.sweef.flow;
 const results = { date: new Date().toISOString(), rounds: R, warmCache: WARM, products: [] };
-for (const name of (opt('--only', 'sweef,agent-browser')).split(',')) {
+for (const name of (opt('--only', SWEEF_CLI ? 'sweef,sweef-cli,agent-browser' : 'sweef,agent-browser')).split(',')) {
   const p = products[name];
   if (!p.bin || !fs.existsSync(p.bin)) { results.products.push({ product: name, error: `binary not found: ${p.bin}` }); continue; }
   process.stderr.write(`cli: ${name}...\n`);
