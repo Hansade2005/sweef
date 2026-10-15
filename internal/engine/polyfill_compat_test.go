@@ -171,7 +171,13 @@ func TestSandboxedFrameWindowIsReachable(t *testing.T) {
 	if r["blankHistory"] != "function/function" || r["blankErr"] != nil || r["borrowedErr"] != nil || r["borrowedState"] != true {
 		t.Fatalf("sandboxed about:blank frame: %v", r)
 	}
-	tab.Settle(500 * time.Millisecond)
+	// the frame loads on its own goroutine: a fixed 500 ms settle was not always enough on a loaded machine
+	// (the test failed about one run in ten under the full suite); wait for the frame load itself
+	tab.Settle(100 * time.Millisecond)
+	if !tab.WaitFrames(10 * time.Second) {
+		t.Fatal("the sandboxed frame did not finish loading")
+	}
+	tab.Settle(50 * time.Millisecond)
 	evalJSON(t, tab, `(function(){
 	  var w = document.getElementById('fr').contentWindow, out = {};
 	  try { out.ran = w.ran === undefined ? 'blocked' : 'ran'; out.text = w.document.getElementById('p').textContent; w.document.getElementById('p').click(); out.clicked = w.clicked === undefined ? 'blocked' : 'ran'; } catch (e) { out.err = e.name + ': ' + e.message; }

@@ -574,7 +574,14 @@ func (t *Tab) ensureFrameDeferred(elem int64) {
 	if !ok {
 		return
 	}
-	go t.ensureFrame(elem)
+	// counted as a load in progress from now: until the goroutine reaches beginFrameLoad (which counts the
+	// real load), framesBusy said no, and a settle or WaitFrames that ran meanwhile ended before the frame's
+	// load had even started (TestSandboxedFrameWindowIsReachable failed about one run in ten)
+	t.fr.pending.Add(1)
+	go func() {
+		defer t.fr.pending.Add(-1)
+		t.ensureFrame(elem)
+	}()
 }
 
 // frameMutation reacts to attribute changes of iframe elements: a new src or srcdoc navigates the frame.
@@ -592,15 +599,15 @@ func (t *Tab) frameMutation(m fnet.Mutation) {
 	if k == nil {
 		return
 	}
+	t.fr.pending.Add(1) // counted before the goroutine runs, as in ensureFrameDeferred
 	go func() {
+		defer t.fr.pending.Add(-1)
 		var a frameAttrs
 		var ok bool
 		_ = t.withDoc(func(d *fnet.Doc) error { a, ok = t.readFrameAttrs(d, m.BackendID); return nil })
 		if !ok || k.closed.Load() {
 			return
 		}
-		t.fr.pending.Add(1)
-		defer t.fr.pending.Add(-1)
 		frameSem <- struct{}{}
 		func() {
 			defer func() { <-frameSem }()
