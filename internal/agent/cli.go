@@ -81,6 +81,8 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	eng := engine.New(eo)
 	defer eng.Close()
 	be := NewRPCBackend(eng)
+	be.StartBackgroundPump()
+	defer be.Close()
 	inR := bufio.NewReader(in)
 	var outMu sync.Mutex
 	be.ConfirmFunc = func(ctx context.Context, r ConfirmRequest) (bool, error) {

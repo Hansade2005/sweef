@@ -28,11 +28,31 @@ type RPCBackend struct {
 	mu     sync.Mutex
 	active string
 	base   map[string]string // delta baselines for Snapshot(delta=true)
+
+	stopPump context.CancelFunc
 }
 
 // NewRPCBackend wraps e. The engine's existing tabs are visible to the agent.
 func NewRPCBackend(e *engine.Engine) *RPCBackend {
 	return &RPCBackend{eng: e, srv: rpc.NewServer(e), base: map[string]string{}}
+}
+
+// StartBackgroundPump keeps the pages running between calls for a while (rpc.Server.BackgroundPump), as the
+// CLI's daemon does: what a page still does after a load or an action (hydrating, rendering a route, answers
+// arriving) progresses while the model thinks instead of in the settle of the next action. For a headless
+// engine only (sweef agent): a window drives its own tabs. Close stops it.
+func (b *RPCBackend) StartBackgroundPump() {
+	ctx, cancel := context.WithCancel(context.Background())
+	b.stopPump = cancel
+	b.srv.BackgroundPump = true
+	b.srv.StartBackgroundPump(ctx)
+}
+
+// Close stops the background pump (the engine is the caller's to close).
+func (b *RPCBackend) Close() {
+	if b.stopPump != nil {
+		b.stopPump()
+	}
 }
 
 var _ Backend = (*RPCBackend)(nil)
