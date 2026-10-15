@@ -9,6 +9,20 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ## [Unreleased]
 
+### Script-heavy pages, the agent loop and CLI start
+
+Measured 2026-10-15 on a 4 vCPU Xeon against Chromium 141 / Playwright 1.56 (`bench/realsites/results/*-gaps*`, `replay-2026-10-15.md`, `resources-2026-10-15-replay.md`, `bench/surfaces/results/2026-10-15-gaps/`):
+
+- Mode A (47 tasks x 3 fresh runs, live network): median cold time to a usable snapshot 2939 -> 2188 ms on the 44 tasks both builds pass (Chromium 2029 ms on the 42 both pass); faster than Chromium on 25 tasks (was 16), slower on 17; runs passed 130/141 (Chromium 129/141). Through a local recording (5 runs): GitHub repo 7.7 -> 3.2 s (Chromium 1.2), GitHub issue 7.5 -> 3.3 s (1.5), Next.js docs 5.4 -> 1.9 s (0.7), the3rdacademy.com 4.0 -> 2.1 s (1.0), pipilot.dev 3.3 -> 1.6 s (1.1), Wikipedia 2.1 -> 1.3 s (1.1). Load CPU over ten pages 41 -> 28 s (Chromium 14 s). JavaScript-heavy pages stay slower than Chromium.
+- Loading: ancestor bloom filter for selector matching; an inline svg is built only when laid out, without building every other svg for an id union it does not need; inherited SVG properties from an index of only the rules that declare them; a parsed-stylesheet cache of 160 entries with order-shifted reuse; one layout pass where a container-query page needed two; images requested when the document is parsed; layouts forced by page script no longer wait for images, web fonts or script-inserted stylesheets; scripts and modules compiled on up to three worker runtimes as they arrive, read back by a new module loader; the module prefetcher skips non-module specifiers and no longer uses a regexp.
+- Readiness: a headless load settles for at most 600 ms (`--nav-settle-ms`, half before the load event) instead of the 1.5 s action budget; router prefetches (`Next-Router-Prefetch`, `Purpose: prefetch`) do not hold a settle; style-only mutations (animation loops) do not keep a settle from going quiet; fill, type, select, check and hover drain what they started instead of a full settle (330 -> ~15 ms per field).
+- Fixed: `history.pushState`/`replaceState` never moved the tab URL (the prelude called a host function that did not exist), so `wait --url`, `expect url` and the agent's `wait {url}` never matched after a client-side route change; batch steps ignored their timeouts (a `wait 500` slept 1 s, a `wait url|text` ran 30 s instead of 10 s); a frame about to load counted as idle (the race behind the flaky `TestSandboxedFrameWindowIsReachable`).
+- Agent (`sweef agent`): the starting page's snapshot comes with the task (`-no-initial-snapshot` turns it off), the system prompt is 2.8 kB instead of 18 kB and the tool schema 3.3 kB instead of 5.2 kB (Haiku 5.5 caches from 512 tokens), and pages keep running between model turns. The Mode B report shows uncached, cache-read and cache-write tokens for both agents. A new Mode B run is pending.
+- CLI: the compiled prelude is embedded (`make embeds`; first eval in a fresh session 155 -> 15 ms in the surfaces flow); new `sweef-cli`, the session client without the engine: `get title` 9.9 -> 4.3 ms (agent-browser 10.2 ms); the agent's regexps and the MCP tool table are built on first use.
+- Screenshots encode PNG with one row filter, RGB when opaque (35 -> 9 ms per 1280x800 encode).
+- Agent mode also blocks self-hosted analytics hosts (`analytics.`, `stats.`, Plausible, Matomo, Umami paths) and developer-site ad networks.
+- Bench: `bench/replay` (record pages once, serve them from localhost), `replay_table.mjs` (median and spread), `resources.mjs` over ten sites; the session CLI smoke test runs on Windows (AF_UNIX probe).
+
 ### Agent interfaces: MCP, SDKs and CLI brought up to date, tested and benchmarked
 
 Measured in [bench/surfaces](bench/surfaces/README.md) on 2026-10-15 (4 vCPU Xeon, local fixture unless noted):
