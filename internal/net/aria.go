@@ -2,7 +2,6 @@ package net
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -376,10 +375,13 @@ func optionsOf(sel *html.Node) []*html.Node {
 // ---- pruning ---------------------------------------------------------------
 
 // styleHidden reports whether the cascade (inline style plus stylesheets
-// installed with SetStylesheets) hides n: display:none, visibility
-// hidden/collapse, or opacity 0. visibility inherits, so a hidden ancestor
-// hides descendants that do not set visibility:visible themselves; the
-// snapshot walk stops at the first hidden element anyway.
+// installed with SetStylesheets) hides n: display:none or visibility
+// hidden/collapse. visibility inherits, so a hidden ancestor hides
+// descendants that do not set visibility:visible themselves; the snapshot
+// walk stops at the first hidden element anyway. opacity:0 does not hide: it
+// does not remove an element from the accessibility tree (Chromium,
+// Playwright's snapshot), and content that animates in from opacity 0 (GSAP,
+// Framer Motion, AOS) vanished from the snapshot until the animation ran.
 func (d *Doc) styleHidden(n *html.Node) bool {
 	d.cssMu.Lock()
 	cs := d.styleLocked(n)
@@ -389,11 +391,6 @@ func (d *Doc) styleHidden(n *html.Node) bool {
 	}
 	if cs.visibility == "hidden" || cs.visibility == "collapse" {
 		return true
-	}
-	if o := cs.vals[propOpacity]; o != "" {
-		if f, err := strconv.ParseFloat(strings.TrimSuffix(o, "%"), 64); err == nil && f == 0 {
-			return true
-		}
 	}
 	return false
 }
