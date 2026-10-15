@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/pprof"
 	"sort"
 	"strings"
@@ -38,6 +39,7 @@ func main() {
 	)
 	flag.IntVar(&consoleMax, "console-width", 400, "with -console: characters of each message to print")
 	prof := flag.String("cpuprofile", "", "write a CPU profile of the load here")
+	flag.StringVar(&memProf, "memprofile", "", "write a heap profile after the load (and -run-ms) here")
 	flag.StringVar(&initJS, "init", "", "file with JavaScript to run before the page's scripts (a debugging hook)")
 	flag.StringVar(&evalAfter, "eval", "", "JavaScript expression to evaluate and print after the load")
 	flag.IntVar(&waitAfter, "run-ms", 0, "with -eval: run the page this long after the load first")
@@ -96,7 +98,7 @@ type prog struct {
 
 var consoleMax = 400
 
-var initJS, evalAfter string
+var initJS, evalAfter, memProf string
 var waitAfter int
 
 func b2i(b bool) int {
@@ -136,6 +138,13 @@ func run(e *engine.Engine, u string, progressive, full, summary, console bool, m
 		}
 		r, eerr := t.Evaluate(evalAfter)
 		fmt.Printf("eval: %s %v\n", r, eerr)
+	}
+	if memProf != "" {
+		runtime.GC()
+		if f, err := os.Create(memProf); err == nil {
+			_ = pprof.WriteHeapProfile(f)
+			f.Close()
+		}
 	}
 	if err != nil {
 		fmt.Printf("%s: %v\n", u, err)
