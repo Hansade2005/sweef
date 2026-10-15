@@ -1,0 +1,166 @@
+{
+ "when": "2026-10-15T12:46:12.890Z",
+ "host": "4 CPUs (Intel(R) Xeon(R) Processor @ 2.10GHz), 15.7 GB",
+ "runs": 3,
+ "idle_ms": 5000,
+ "rows": [
+  {
+   "site": "t3a",
+   "tool": "chromium",
+   "median": {
+    "load_wall_ms": 1601.65474,
+    "load_cpu_s": 1.4300000000000002,
+    "all_wall_ms": 2417.008306,
+    "all_cpu_s": 2.75,
+    "idle_cpu_s": 2.6599999999999997,
+    "peak_rss_mib": 919.265625
+   },
+   "runs": [
+    {
+     "load_wall_ms": 1601.65474,
+     "load_cpu_s": 1.3,
+     "all_wall_ms": 2417.008306,
+     "all_cpu_s": 2.66,
+     "idle_cpu_s": 2.5700000000000003,
+     "peak_rss_mib": 923.19140625
+    },
+    {
+     "load_wall_ms": 1485.336365000001,
+     "load_cpu_s": 1.4300000000000002,
+     "all_wall_ms": 2328.0770170000014,
+     "all_cpu_s": 2.75,
+     "idle_cpu_s": 2.76,
+     "peak_rss_mib": 919.265625
+    },
+    {
+     "load_wall_ms": 1621.8330600000008,
+     "load_cpu_s": 1.6300000000000001,
+     "all_wall_ms": 2519.1740930000014,
+     "all_cpu_s": 3.1,
+     "idle_cpu_s": 2.6599999999999997,
+     "peak_rss_mib": 918.140625
+    }
+   ]
+  },
+  {
+   "site": "t3a",
+   "tool": "sweef",
+   "median": {
+    "load_wall_ms": 4867.499295000001,
+    "load_cpu_s": 3.94,
+    "all_wall_ms": 5424.263766000004,
+    "all_cpu_s": 4.31,
+    "idle_cpu_s": 0.15000000000000036,
+    "peak_rss_mib": 295.48046875
+   },
+   "runs": [
+    {
+     "load_wall_ms": 5170.425020999999,
+     "load_cpu_s": 4.2,
+     "load_ok": true,
+     "all_wall_ms": 5751.314904999999,
+     "all_cpu_s": 4.62,
+     "idle_cpu_s": 0.14999999999999947,
+     "peak_rss_mib": 295.48046875
+    },
+    {
+     "load_wall_ms": 4867.499295000001,
+     "load_cpu_s": 3.94,
+     "load_ok": true,
+     "all_wall_ms": 5424.263766000004,
+     "all_cpu_s": 4.31,
+     "idle_cpu_s": 0.15000000000000036,
+     "peak_rss_mib": 293.6171875
+    },
+    {
+     "load_wall_ms": 4572.913640999999,
+     "load_cpu_s": 3.88,
+     "load_ok": true,
+     "all_wall_ms": 5125.775609999997,
+     "all_cpu_s": 4.27,
+     "idle_cpu_s": 0.17000000000000082,
+     "peak_rss_mib": 309.49609375
+    }
+   ]
+  },
+  {
+   "site": "pipilot",
+   "tool": "chromium",
+   "median": {
+    "load_wall_ms": 1268.6713679999957,
+    "load_cpu_s": 1.4800000000000002,
+    "all_wall_ms": 1894.177588999999,
+    "all_cpu_s": 3.13,
+    "idle_cpu_s": 0.8899999999999997,
+    "peak_rss_mib": 881.234375
+   },
+   "runs": [
+    {
+     "load_wall_ms": 1396.116919,
+     "load_cpu_s": 1.74,
+     "all_wall_ms": 2095.991737000004,
+     "all_cpu_s": 3.13,
+     "idle_cpu_s": 0.9000000000000004,
+     "peak_rss_mib": 871.8828125
+    },
+    {
+     "load_wall_ms": 1145.7186939999956,
+     "load_cpu_s": 1.4300000000000002,
+     "all_wall_ms": 1894.177588999999,
+     "all_cpu_s": 3.13,
+     "idle_cpu_s": 0.8899999999999997,
+     "peak_rss_mib": 891.1953125
+    },
+    {
+     "load_wall_ms": 1268.6713679999957,
+     "load_cpu_s": 1.4800000000000002,
+     "all_wall_ms": 1854.6345779999974,
+     "all_cpu_s": 2.78,
+     "idle_cpu_s": 0.7800000000000002,
+     "peak_rss_mib": 881.234375
+    }
+   ]
+  },
+  {
+   "site": "pipilot",
+   "tool": "sweef",
+   "median": {
+    "load_wall_ms": 3527.5157529999997,
+    "load_cpu_s": 2.63,
+    "all_wall_ms": 4904.943197999994,
+    "all_cpu_s": 4.37,
+    "idle_cpu_s": 0.7999999999999998,
+    "peak_rss_mib": 333.63671875
+   },
+   "runs": [
+    {
+     "load_wall_ms": 3875.6872520000034,
+     "load_cpu_s": 2.81,
+     "load_ok": true,
+     "all_wall_ms": 5443.590079000001,
+     "all_cpu_s": 4.44,
+     "idle_cpu_s": 0.8499999999999996,
+     "peak_rss_mib": 340.17578125
+    },
+    {
+     "load_wall_ms": 3136.480284999998,
+     "load_cpu_s": 2.48,
+     "load_ok": true,
+     "all_wall_ms": 4768.271836,
+     "all_cpu_s": 4.37,
+     "idle_cpu_s": 0.7999999999999998,
+     "peak_rss_mib": 333.63671875
+    },
+    {
+     "load_wall_ms": 3527.5157529999997,
+     "load_cpu_s": 2.63,
+     "load_ok": true,
+     "all_wall_ms": 4904.943197999994,
+     "all_cpu_s": 4.24,
+     "idle_cpu_s": 0.4299999999999997,
+     "peak_rss_mib": 301.0703125
+    }
+   ]
+  }
+ ]
+}

@@ -81,7 +81,7 @@ const fails = rows.filter((r) => r.a.ok < r.a.n);
 if (fails.length) {
   out.push('', '## Failing runs (after)', '');
   for (const r of fails) {
-    const errs = [...new Set(A.runs.filter((x) => x.task === r.id && x.tool === at && !x.ok).map((x) => (x.fail_class ? x.fail_class + ': ' : '') + String(x.error || '').slice(0, 120)))];
+    const errs = [...new Set(A.runs.filter((x) => x.task === r.id && x.tool === at && !x.ok).map((x) => (x.fail_class ? x.fail_class + ': ' : '') + String(x.error || '').replace(/\s+/g, ' ').slice(0, 120)))];
     out.push(`- ${r.id} ${r.a.ok}/${r.a.n}: ${errs.join(' | ')}`);
   }
 }

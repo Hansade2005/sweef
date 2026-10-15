@@ -45,6 +45,24 @@ Plain steps run 23x to 28x faster. The two React steps are slower (10x to open, 
 
 What makes navigation fast: pages with no scripts get no JavaScript VM at all; pages with scripts take a VM from a pre-warmed pool; framework bundles are compiled to bytecode once and the bytecode is kept on disk across daemon restarts; sub-resources go through an HTTP cache with ETag revalidation; scripts and stylesheets are prefetched in parallel; the previous page is torn down in the background.
 
+Re-measured 2026-10-15 on a slower shared 4-CPU host, Sweef only (agent-browser was not installed): whole flow 199 ms one command at a time, 100 ms as one batch, daemon 47 MB; the previous build (bcabc8e) on the same host: 202 ms, 104 ms, 57 MB. The ratios in the table above are from the original run.
+
+### Real public sites (no LLM)
+
+47 tasks on 41 public sites (Wikipedia, GitHub, MDN, Hacker News, npm, PyPI, Next.js, React, Angular, Vue, login and e-commerce demos, news, the owner's sites), 3 runs per task, each run a fresh process with empty caches, against Playwright driving Chromium 141. A run passes only if the snapshot holds the expected text, every scripted step succeeds and the final state matches. Reproduce with `bench/realsites/node/modea.mjs`; every task and every failure is in [modea-2026-10-15.md](bench/realsites/results/modea-2026-10-15.md), and the comparison with the previous build in [modea-2026-10-15-before-after.md](bench/realsites/results/modea-2026-10-15-before-after.md).
+
+| | Sweef (previous build) | Sweef | Playwright + Chromium |
+|---|---|---|---|
+| runs passed | 95/141 | **130/141** | 127/141 |
+| tasks with every run passing | 30/47 | **43/47** | 41/47 |
+| median cold time to a usable snapshot, the 42 tasks both pass | | 2939 ms | **2125 ms** |
+| tasks where it is faster | | 16 | 26 |
+| median snapshot size, est. tokens | 4157 | **4283** | 7356 |
+
+Where Sweef wins: plain and server-rendered pages (Hacker News, NPR and CNN text, Effective Go, rust-lang.org, httpbin, example.com) open 2x to 3.2x faster (arxiv 1.3x), the TodoMVC and quotes SPAs 2.8x and 4.1x faster, and snapshots are about 40% smaller. Where it loses: JavaScript-heavy apps. GitHub is 3.3x to 4.6x slower (7.8 to 15.4 s against 2.3 to 3.4 s), Next.js docs 4x, MDN 2.5x, Wikipedia 1.2x to 1.8x, the owner's React/Vite sites about 2x to 3x. Sweef runs page JavaScript in an interpreter (QuickJS) and lays the page out on the CPU, so a site that executes megabytes of framework code at load pays for it. Stack Overflow (a Cloudflare challenge) and old.reddit.com (a login wall) fail for Sweef; old.reddit.com also fails for Chromium. Per-site memory, CPU, screenshot and interaction comparisons for the owner's sites are in [owner-sites-2026-10-15.md](bench/realsites/results/owner-sites-2026-10-15.md): Sweef uses about a third of Chromium's memory and lands every interaction in the same state, but takes about 2x to 3x as long to load, and on pipilot.dev a click takes 1.3 to 3.5 s against 0.1 to 0.4 s (Sweef waits for the page to settle after each action, and the page animates).
+
+With real LLM agents (Mode B, `claude-haiku-5-5`, 34 tasks x 3 runs, measured 2026-10-14 with the previous build): the Sweef agent solved 79/102 against 99/102 for a Playwright agent, in a median 7.4 s against 4.6 s per task. All 23 failed Sweef runs ended in an agent-loop error (two API requests more than turns, no answer); the cause found was the API rejecting a thinking block, which the loop now recovers from, and several of the failing pages (Wikipedia search, React docs, the-internet dynamic loading) had engine bugs that are now fixed. Neither change has been checked with a new Mode B run yet. See [bench/realsites/README.md](bench/realsites/README.md).
+
 ## A look at the browser
 
 Sweef draws its own interface (tabs, omnibox, sidebar, settings, first-run setup) with its own engine; there is no
