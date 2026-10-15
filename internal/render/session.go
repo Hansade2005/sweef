@@ -18,6 +18,9 @@ import (
 type Session struct {
 	Style *style.Persist
 	svg   svgSess
+	// cq is the container sizes the last layout converged on: the next layout starts its query evaluation
+	// from them, so a document whose containers did not change takes one pass instead of three
+	cq map[*html.Node]style.ContSize
 }
 
 // NewSession returns an empty session.

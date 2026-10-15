@@ -129,6 +129,34 @@ func (e *tabEnv) prefetchDocImages() {
 	}
 }
 
+// PrefetchImages implements render.ImagePrefetcher: the headless commands wait for every image a layout asks
+// for, so the CSS images of the page start downloading together (through the request table, which the
+// synchronous read in Image then joins) rather than one after another. Windows load images in the background
+// and a Data Saver policy decides image by image, so both skip it, as prefetchDocImages does.
+func (e *tabEnv) PrefetchImages(urls []string) {
+	t := e.t
+	if t.asyncImg.Load() || t.policy() != (DataPolicy{}) || t.IsOfflineMode() {
+		return
+	}
+	for _, u := range urls {
+		if strings.HasPrefix(u, "file:") {
+			continue
+		}
+		e.mu.Lock()
+		_, have := e.imgs[u]
+		_, haveSVG := e.svgs[u]
+		e.mu.Unlock()
+		if have || haveSVG {
+			continue
+		}
+		go func(u string) {
+			t.preloadSem <- struct{}{}
+			defer func() { <-t.preloadSem }()
+			_, _, _ = t.fetchRes(u, fetchOpts{kind: KindImage, prefetch: true})
+		}(u)
+	}
+}
+
 // asyncOK: the window shows the page while it loads (Tab.SetAsyncImages) and no
 // Data Saver policy is in force (its gates decide synchronously, see lazy.go).
 func (e *tabEnv) asyncOK(u string) bool {
@@ -360,7 +388,9 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 			env.lz.resetHints()
 			sheets := env.pageSheets()
 			opts := render.Options{
-				Width: float64(width), Height: float64(vh), DPR: dsf,
+				HideScrollbars: t.eng.opts.HideScrollbars,
+				Mobile:         t.mobile,
+				Width:          float64(width), Height: float64(vh), DPR: dsf,
 				ColorScheme: t.ColorSchemeName(), BaseURL: doc.BaseURL(),
 				Sheets: sheets, Env: env, Session: env.sty,
 				Fonts: env.fonts.sync(sheets, float64(width), float64(vh), dsf, t.ColorSchemeName()),
@@ -486,6 +516,9 @@ func (t *Tab) paintPage(width, height int, dsf float64, full bool) (*image.RGBA,
 		}
 		list = kept
 	}
+	if !full {
+		list = scrolledList(list, ext.res.FixedRanges, float64(t.ScrollY()))
+	}
 	t.setPaintDSF(dsf)
 	return raster.Paint(list, width, height, dsf, raster.PaintEnv{
 		Bitmap:     ext.env.Bitmap,
@@ -503,3 +536,28 @@ var (
 	layoutCheck  = os.Getenv("SWEEF_LAYOUT_CHECK") != ""
 	noStyleCache = os.Getenv("SWEEF_NO_STYLE_CACHE") != ""
 )
+
+// scrolledList is the display list of the viewport scrolled down by y: everything moves up by y except the
+// ranges painted by position:fixed boxes, which the viewport keeps in place (a viewport screenshot of a
+// scrolled page showed the top of the page instead).
+func scrolledList(list []render.Op, fixed [][2]int, y float64) []render.Op {
+	if y <= 0 || len(list) == 0 {
+		return list
+	}
+	out := make([]render.Op, 0, len(list)+2+2*len(fixed))
+	out = append(out, render.PushTransform{M: [6]float64{1, 0, 0, 1, 0, -y}})
+	fi := 0
+	for i, op := range list {
+		for fi < len(fixed) && fixed[fi][1] <= i {
+			fi++
+		}
+		if fi < len(fixed) && fixed[fi][0] == i {
+			out = append(out, render.PushTransform{M: [6]float64{1, 0, 0, 1, 0, y}})
+		}
+		out = append(out, op)
+		if fi < len(fixed) && fixed[fi][1] == i+1 {
+			out = append(out, render.PopTransform{})
+		}
+	}
+	return append(out, render.PopTransform{})
+}

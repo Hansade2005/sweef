@@ -1,0 +1,5169 @@
+{
+ "meta": {
+  "started": "2026-10-15T12:03:20.282Z",
+  "host": {
+   "platform": "linux",
+   "arch": "x64",
+   "cpus": 4,
+   "cpu_model": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+   "mem_gb": 15.7,
+   "kernel": "6.18.44-fc-v114"
+  },
+  "versions": {
+   "sweef": "sweef 0.1.0",
+   "chromium": "Chromium 141.0.7390.37",
+   "playwright_core": "1.56.1",
+   "node": "v22.22.0",
+   "agent_browser": null
+  },
+  "config": {
+   "runs": 3,
+   "timeout_s": 30,
+   "pace_ms": 1500,
+   "tools": [
+    "sweef"
+   ],
+   "tasks": 47,
+   "usable_poll_ms": 250,
+   "usable_max_ms": 10000,
+   "network": "sandbox egress proxy; all tools share it"
+  },
+  "notes": [
+   "Each run: fresh process (Sweef: new SWEEF_HOME and daemon killed after; Playwright: new node process and new Chromium).",
+   "cold = first visit in that fresh process (includes daemon / browser launch); warm = repeat visit of the same URL in the same session (HTTP cache populated).",
+   "Tool order is rotated per run and requests are paced to limit rate-limit bias."
+  ]
+ },
+ "runs": [
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 5625.391146,
+    "snapshot_ms": 39.298814999999195,
+    "usable_ms": 5664.9808,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59903,
+    "snapshot_tokens_est": 14976,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60047,
+    "ttfs_ms": 5694.528394
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 21.346698999999717,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 28.52071000000069,
+   "post_snapshot_bytes": 59903,
+   "warm": {
+    "open_ms": 3537.4818760000007,
+    "snapshot_ms": 38.87795300000107,
+    "usable_ms": 3576.393054000001,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59903,
+    "snapshot_tokens_est": 14976,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60047,
+    "ttfs_ms": 3576.393054000001
+   },
+   "task": "wiki-turing",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4978.097797,
+    "snapshot_ms": 49.199712999999974,
+    "usable_ms": 5027.508057000001,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59903,
+    "snapshot_tokens_est": 14976,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60047,
+    "ttfs_ms": 5066.825263999999
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 24.47015100000135,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 33.95106499999929,
+   "post_snapshot_bytes": 59903,
+   "warm": {
+    "open_ms": 3368.1447819999994,
+    "snapshot_ms": 38.1528959999996,
+    "usable_ms": 3406.3455250000006,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59903,
+    "snapshot_tokens_est": 14976,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60047,
+    "ttfs_ms": 3406.3455250000006
+   },
+   "task": "wiki-turing",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4903.611541000002,
+    "snapshot_ms": 40.01996399999916,
+    "usable_ms": 4943.668411000002,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59903,
+    "snapshot_tokens_est": 14976,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60047,
+    "ttfs_ms": 4970.385425
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 21.23732999999993,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 27.50959299999886,
+   "post_snapshot_bytes": 59903,
+   "warm": {
+    "open_ms": 3352.331193000002,
+    "snapshot_ms": 47.89228500000172,
+    "usable_ms": 3400.259060000004,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59903,
+    "snapshot_tokens_est": 14976,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60047,
+    "ttfs_ms": 3400.259060000004
+   },
+   "task": "wiki-turing",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4373.335451000003,
+    "snapshot_ms": 37.047882999999274,
+    "usable_ms": 4410.593849000001,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60019,
+    "snapshot_tokens_est": 15005,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60060,
+    "ttfs_ms": 4434.380385000004
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 19.411533999998937,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 26.348210000003746,
+   "post_snapshot_bytes": 60019,
+   "warm": {
+    "open_ms": 2715.2239650000047,
+    "snapshot_ms": 29.882841999999073,
+    "usable_ms": 2745.144898000006,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60019,
+    "snapshot_tokens_est": 15005,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60060,
+    "ttfs_ms": 2745.144898000006
+   },
+   "task": "wiki-go-language",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4468.635082000001,
+    "snapshot_ms": 27.666904999998224,
+    "usable_ms": 4496.352683999998,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60019,
+    "snapshot_tokens_est": 15005,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60060,
+    "ttfs_ms": 4522.660728999996
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 15.904750000001513,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 27.017519000000902,
+   "post_snapshot_bytes": 60019,
+   "warm": {
+    "open_ms": 2822.033312000007,
+    "snapshot_ms": 33.52843800000119,
+    "usable_ms": 2855.6044110000075,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60019,
+    "snapshot_tokens_est": 15005,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60060,
+    "ttfs_ms": 2855.6044110000075
+   },
+   "task": "wiki-go-language",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4227.1415040000065,
+    "snapshot_ms": 33.15950999999768,
+    "usable_ms": 4260.327699000001,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60019,
+    "snapshot_tokens_est": 15005,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60060,
+    "ttfs_ms": 4283.889614
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 26.088043999996444,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 29.150693999996292,
+   "post_snapshot_bytes": 60019,
+   "warm": {
+    "open_ms": 2924.030254000005,
+    "snapshot_ms": 46.23250499999995,
+    "usable_ms": 2970.2918410000057,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60019,
+    "snapshot_tokens_est": 15005,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 60060,
+    "ttfs_ms": 2970.2918410000057
+   },
+   "task": "wiki-go-language",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 539.7551620000013,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "press",
+     "ms": 3934.128672000006,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 3173.4459320000024,
+    "snapshot_ms": 15.03849399999308,
+    "usable_ms": 3188.642157000002,
+    "snapshot_ok": true,
+    "snapshot_bytes": 35422,
+    "snapshot_tokens_est": 8856,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 29432,
+    "ttfs_ms": 3203.9547820000007
+   },
+   "steps_ms_total": 4473.8838340000075,
+   "final_wait_ms": 19.47355100000277,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 26.763705000004848,
+   "post_snapshot_bytes": 60067,
+   "warm": {
+    "open_ms": 2392.1899530000082,
+    "snapshot_ms": 17.403321999998298,
+    "usable_ms": 2409.6481620000122,
+    "snapshot_ok": true,
+    "snapshot_bytes": 35422,
+    "snapshot_tokens_est": 8856,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 29432,
+    "ttfs_ms": 2409.6481620000122
+   },
+   "task": "wiki-search-flow",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 1408.340068000005,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "press",
+     "ms": 3859.6633469999942,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 2794.3043510000134,
+    "snapshot_ms": 17.21054300000833,
+    "usable_ms": 2811.5415110000176,
+    "snapshot_ok": true,
+    "snapshot_bytes": 35422,
+    "snapshot_tokens_est": 8856,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 29432,
+    "ttfs_ms": 2826.2078059999913
+   },
+   "steps_ms_total": 5268.003414999999,
+   "final_wait_ms": 19.321955999999773,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 23.7826619999978,
+   "post_snapshot_bytes": 60067,
+   "warm": {
+    "open_ms": 2385.2423100000015,
+    "snapshot_ms": 16.66417800000636,
+    "usable_ms": 2401.921939000007,
+    "snapshot_ok": true,
+    "snapshot_bytes": 35422,
+    "snapshot_tokens_est": 8856,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 29432,
+    "ttfs_ms": 2401.921939000007
+   },
+   "task": "wiki-search-flow",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 1727.6084909999918,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "press",
+     "ms": 3882.0854570000083,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 2589.869319999998,
+    "snapshot_ms": 30.738886999999522,
+    "usable_ms": 2620.645633999986,
+    "snapshot_ok": true,
+    "snapshot_bytes": 35422,
+    "snapshot_tokens_est": 8856,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 29432,
+    "ttfs_ms": 2634.9024740000023
+   },
+   "steps_ms_total": 5609.693948,
+   "final_wait_ms": 18.560116000007838,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 26.145745000001625,
+   "post_snapshot_bytes": 60067,
+   "warm": {
+    "open_ms": 2378.1819359999936,
+    "snapshot_ms": 18.19943599999533,
+    "usable_ms": 2396.411678999997,
+    "snapshot_ok": true,
+    "snapshot_bytes": 35422,
+    "snapshot_tokens_est": 8856,
+    "snapshot_sample": "- link \"Jump to content\" [ref=e1]:\n  - /url: \"#bodyContent\"\n- banner:\n  - navigation \"Site\"\n  - link \"Wikipedia The Free Encyclopedia\" [ref=e2]:\n    - /url: /wi",
+    "snapshot_i_bytes": 29432,
+    "ttfs_ms": 2396.411678999997
+   },
+   "task": "wiki-search-flow",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 7635.076304999995,
+    "snapshot_ms": 24.102106999998796,
+    "usable_ms": 7659.322932999989,
+    "snapshot_ok": true,
+    "snapshot_bytes": 12151,
+    "snapshot_tokens_est": 3038,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 10615,
+    "ttfs_ms": 7674.354810999997
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.490986000004341,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 17.55084500000521,
+   "post_snapshot_bytes": 12151,
+   "warm": {
+    "open_ms": 3047.6579159999965,
+    "snapshot_ms": 21.579542000006768,
+    "usable_ms": 3069.2589809999918,
+    "snapshot_ok": true,
+    "snapshot_bytes": 12151,
+    "snapshot_tokens_est": 3038,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 10615,
+    "ttfs_ms": 3069.2589809999918
+   },
+   "task": "github-repo-golang",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 2106.357931999999,
+    "snapshot_ms": 19.071165999994264,
+    "usable_ms": 2125.4507030000095,
+    "snapshot_ok": true,
+    "snapshot_bytes": 12151,
+    "snapshot_tokens_est": 3038,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 10615,
+    "ttfs_ms": 2142.089328999995
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.84230899999966,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 17.321825000006356,
+   "post_snapshot_bytes": 12151,
+   "warm": {
+    "open_ms": 1211.6001760000072,
+    "snapshot_ms": 20.868258999995305,
+    "usable_ms": 1232.4970020000037,
+    "snapshot_ok": true,
+    "snapshot_bytes": 12151,
+    "snapshot_tokens_est": 3038,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 10615,
+    "ttfs_ms": 1232.4970020000037
+   },
+   "task": "github-repo-golang",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 2179.6241049999953,
+    "snapshot_ms": 24.692656999992323,
+    "usable_ms": 2204.343259000001,
+    "snapshot_ok": true,
+    "snapshot_bytes": 12151,
+    "snapshot_tokens_est": 3038,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 10615,
+    "ttfs_ms": 2220.6098369999963
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.176072000002023,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 11.05826099999831,
+   "post_snapshot_bytes": 12151,
+   "warm": {
+    "open_ms": 1394.6273099999962,
+    "snapshot_ms": 17.181500000006054,
+    "usable_ms": 1411.8361460000015,
+    "snapshot_ok": true,
+    "snapshot_bytes": 12151,
+    "snapshot_tokens_est": 3038,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 10615,
+    "ttfs_ms": 1411.8361460000015
+   },
+   "task": "github-repo-golang",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 3529.7087509999983,
+    "snapshot_ms": 34.50943700000062,
+    "usable_ms": 3564.4213750000054,
+    "snapshot_ok": true,
+    "snapshot_bytes": 26210,
+    "snapshot_tokens_est": 6553,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 18414,
+    "ttfs_ms": 3578.849792000008
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 21.918182000008528,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 17.2887550000014,
+   "post_snapshot_bytes": 26210,
+   "warm": {
+    "open_ms": 2012.7760180000041,
+    "snapshot_ms": 30.852786000003107,
+    "usable_ms": 2043.652969000017,
+    "snapshot_ok": true,
+    "snapshot_bytes": 26210,
+    "snapshot_tokens_est": 6553,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 18414,
+    "ttfs_ms": 2043.652969000017
+   },
+   "task": "github-issue-9",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 1577.409983999998,
+    "snapshot_ms": 31.71864999999525,
+    "usable_ms": 1609.1564000000071,
+    "snapshot_ok": true,
+    "snapshot_bytes": 26210,
+    "snapshot_tokens_est": 6553,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 18414,
+    "ttfs_ms": 1623.676599000013
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 20.929856999995536,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 16.39937600000121,
+   "post_snapshot_bytes": 26210,
+   "warm": {
+    "open_ms": 985.9430959999881,
+    "snapshot_ms": 36.0611729999946,
+    "usable_ms": 1022.0241659999883,
+    "snapshot_ok": true,
+    "snapshot_bytes": 26210,
+    "snapshot_tokens_est": 6553,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 18414,
+    "ttfs_ms": 1022.0241659999883
+   },
+   "task": "github-issue-9",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 1672.0452930000029,
+    "snapshot_ms": 34.47658099999535,
+    "usable_ms": 1706.5424120000098,
+    "snapshot_ok": true,
+    "snapshot_bytes": 26210,
+    "snapshot_tokens_est": 6553,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 18414,
+    "ttfs_ms": 1721.9668059999967
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 19.336632999998983,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 13.855921999987913,
+   "post_snapshot_bytes": 26210,
+   "warm": {
+    "open_ms": 2092.8186619999906,
+    "snapshot_ms": 38.847649000003,
+    "usable_ms": 2131.687684999997,
+    "snapshot_ok": true,
+    "snapshot_bytes": 26210,
+    "snapshot_tokens_est": 6553,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 18414,
+    "ttfs_ms": 2131.687684999997
+   },
+   "task": "github-issue-9",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 7192.478224999999,
+    "snapshot_ms": 14.69898500002455,
+    "usable_ms": 17341.89159100002,
+    "snapshot_ok": false,
+    "snapshot_bytes": 4826,
+    "snapshot_tokens_est": 1207,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 4756,
+    "ttfs_ms": 17355.041834000003
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.39109799999278,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 13.396374000003561,
+   "post_snapshot_bytes": 4826,
+   "warm": {
+    "open_ms": 2330.6717310000095,
+    "snapshot_ms": 17.748884999979055,
+    "usable_ms": 12462.625076000026,
+    "snapshot_ok": false,
+    "snapshot_bytes": 4826,
+    "snapshot_tokens_est": 1207,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 4756,
+    "ttfs_ms": 12462.625076000026
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "github-license-file",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 2209.610743999976,
+    "snapshot_ms": 17.03271999998833,
+    "usable_ms": 12361.036432999972,
+    "snapshot_ok": false,
+    "snapshot_bytes": 4826,
+    "snapshot_tokens_est": 1207,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 4756,
+    "ttfs_ms": 12375.497016999987
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.071802999998908,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 15.173627000011038,
+   "post_snapshot_bytes": 4826,
+   "warm": {
+    "open_ms": 2157.300313999993,
+    "snapshot_ms": 17.280262000014773,
+    "usable_ms": 12306.445431,
+    "snapshot_ok": false,
+    "snapshot_bytes": 4826,
+    "snapshot_tokens_est": 1207,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 4756,
+    "ttfs_ms": 12306.445431
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "github-license-file",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 2036.3575610000116,
+    "snapshot_ms": 15.714058999990812,
+    "usable_ms": 12223.761893000017,
+    "snapshot_ok": false,
+    "snapshot_bytes": 4826,
+    "snapshot_tokens_est": 1207,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 4756,
+    "ttfs_ms": 12238.016919000016
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.567941000015708,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 11.565433000010671,
+   "post_snapshot_bytes": 4826,
+   "warm": {
+    "open_ms": 1627.8765539999877,
+    "snapshot_ms": 17.73980500001926,
+    "usable_ms": 11783.471629999985,
+    "snapshot_ok": false,
+    "snapshot_bytes": 4826,
+    "snapshot_tokens_est": 1207,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#start-of-content\"\n- banner:\n  - heading \"Navigation Menu\" [level=2 ref=e2]\n  - button \"Toggle navigation\" [ref=e3",
+    "snapshot_i_bytes": 4756,
+    "ttfs_ms": 11783.471629999985
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "github-license-file",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 626.6944460000086,
+    "snapshot_ms": 13.257803999993484,
+    "usable_ms": 640.0982249999943,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5764,
+    "snapshot_tokens_est": 1441,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 4742,
+    "ttfs_ms": 652.2100250000076
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 10.86520999998902,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.175482999999076,
+   "post_snapshot_bytes": 5764,
+   "warm": {
+    "open_ms": 168.89446899999166,
+    "snapshot_ms": 14.318692000000738,
+    "usable_ms": 183.2550249999913,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5764,
+    "snapshot_tokens_est": 1441,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 4742,
+    "ttfs_ms": 183.2550249999913
+   },
+   "task": "hn-item-1",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 552.9372989999829,
+    "snapshot_ms": 16.555687999993097,
+    "usable_ms": 569.5199049999937,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5764,
+    "snapshot_tokens_est": 1441,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 4742,
+    "ttfs_ms": 586.571563000005
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.513180000009015,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.548553000000538,
+   "post_snapshot_bytes": 5764,
+   "warm": {
+    "open_ms": 134.44703500001924,
+    "snapshot_ms": 16.09098000000813,
+    "usable_ms": 150.5642930000322,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5764,
+    "snapshot_tokens_est": 1441,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 4742,
+    "ttfs_ms": 150.5642930000322
+   },
+   "task": "hn-item-1",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 553.233275000006,
+    "snapshot_ms": 22.718923000007635,
+    "usable_ms": 575.9900539999944,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5764,
+    "snapshot_tokens_est": 1441,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 4742,
+    "ttfs_ms": 587.943815000006
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.010998999990989,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 13.015829000010854,
+   "post_snapshot_bytes": 5764,
+   "warm": {
+    "open_ms": 134.50932299997658,
+    "snapshot_ms": 14.413062000006903,
+    "usable_ms": 148.94586599996546,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5764,
+    "snapshot_tokens_est": 1441,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 4742,
+    "ttfs_ms": 148.94586599996546
+   },
+   "task": "hn-item-1",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 12110.094578000018,
+    "load_error": "✗ Get \"https://news.ycombinator.com/item?id=8863\": read tcp 127.0.0.1:52942->127.0.0.1:33141: read: connection reset by peer",
+    "ttfs_ms": 12110.15353500002
+   },
+   "error": "load_error: ✗ Get \"https://news.ycombinator.com/item?id=8863\": read tcp 127.0.0.1:52942->127.0.0.1:33141: read: connection reset by peer",
+   "fail_class": "load_error",
+   "task": "hn-dropbox",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 955.4404360000044,
+    "snapshot_ms": 19.005169000010937,
+    "usable_ms": 974.6097660000087,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59902,
+    "snapshot_tokens_est": 14976,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 48439,
+    "ttfs_ms": 1001.0268019999785
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 12.986877999996068,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 19.94822099999874,
+   "post_snapshot_bytes": 59902,
+   "warm": {
+    "open_ms": 136.40149700001348,
+    "snapshot_ms": 21.071567000006326,
+    "usable_ms": 157.49505900000804,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59902,
+    "snapshot_tokens_est": 14976,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 48439,
+    "ttfs_ms": 157.49505900000804
+   },
+   "task": "hn-dropbox",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 686.6376769999915,
+    "snapshot_ms": 25.393387000018265,
+    "usable_ms": 712.0666330000095,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59902,
+    "snapshot_tokens_est": 14976,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 48439,
+    "ttfs_ms": 731.2516949999845
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.817742999992333,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 19.26999599998817,
+   "post_snapshot_bytes": 59902,
+   "warm": {
+    "open_ms": 147.01517100000638,
+    "snapshot_ms": 21.13307700000587,
+    "usable_ms": 168.1801029999915,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59902,
+    "snapshot_tokens_est": 14976,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 48439,
+    "ttfs_ms": 168.1801029999915
+   },
+   "task": "hn-dropbox",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 533.9076859999914,
+    "snapshot_ms": 20.646228000026895,
+    "usable_ms": 554.7253519999795,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 570.3794300000009
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.660628999990877,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 16.65593499998795,
+   "post_snapshot_bytes": 32429,
+   "warm": {
+    "open_ms": 147.15789100000984,
+    "snapshot_ms": 21.78172899998026,
+    "usable_ms": 168.9710930000001,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 168.9710930000001
+   },
+   "task": "hn-front",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 519.0591600000043,
+    "snapshot_ms": 22.523174000001745,
+    "usable_ms": 541.6110280000139,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 560.5636079999967
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.249872000014875,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 16.65518400000292,
+   "post_snapshot_bytes": 32429,
+   "warm": {
+    "open_ms": 132.06524699999136,
+    "snapshot_ms": 15.091508999990765,
+    "usable_ms": 147.17986899998505,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 147.17986899998505
+   },
+   "task": "hn-front",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 531.4046820000221,
+    "snapshot_ms": 18.415284999995492,
+    "usable_ms": 549.8487680000253,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 563.9201729999913
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 10.924591999995755,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 14.009603999991668,
+   "post_snapshot_bytes": 32429,
+   "warm": {
+    "open_ms": 138.622383000009,
+    "snapshot_ms": 14.51752100000158,
+    "usable_ms": 153.1671600000118,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 153.1671600000118
+   },
+   "task": "hn-front",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 264.4673049999983,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 547.1317069999932,
+    "snapshot_ms": 21.238094999978784,
+    "usable_ms": 568.3903369999898,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 582.6254809999955
+   },
+   "steps_ms_total": 264.4673049999983,
+   "final_wait_ms": 11.96860399999423,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 17.93605399999069,
+   "post_snapshot_bytes": 17432,
+   "warm": {
+    "open_ms": 262.37083699999494,
+    "snapshot_ms": 16.74335499998415,
+    "usable_ms": 279.1410639999958,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 279.1410639999958
+   },
+   "task": "hn-ask-nav",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 153.1290389999922,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 547.2575200000138,
+    "snapshot_ms": 16.110779000009643,
+    "usable_ms": 563.4082830000261,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 576.3386379999865
+   },
+   "steps_ms_total": 153.1290389999922,
+   "final_wait_ms": 12.705774999980349,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 15.171899999986636,
+   "post_snapshot_bytes": 17432,
+   "warm": {
+    "open_ms": 141.2924350000103,
+    "snapshot_ms": 19.93915800002287,
+    "usable_ms": 161.26382500000182,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 161.26382500000182
+   },
+   "task": "hn-ask-nav",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 163.82460599998012,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 544.075616999995,
+    "snapshot_ms": 16.825915000023087,
+    "usable_ms": 560.9287670000049,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 576.5704639999894
+   },
+   "steps_ms_total": 163.82460599998012,
+   "final_wait_ms": 14.751046999997925,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 14.019304000015836,
+   "post_snapshot_bytes": 17432,
+   "warm": {
+    "open_ms": 169.68966900001396,
+    "snapshot_ms": 14.639095999998972,
+    "usable_ms": 184.35054900002433,
+    "snapshot_ok": true,
+    "snapshot_bytes": 32429,
+    "snapshot_tokens_est": 8108,
+    "snapshot_sample": "- table:\n  - rowgroup:\n    - row:\n      - cell:\n        - table:\n          - rowgroup:\n            - row:\n              - cell:\n                - link [ref=e1]:",
+    "snapshot_i_bytes": 26994,
+    "ttfs_ms": 184.35054900002433
+   },
+   "task": "hn-ask-nav",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 9656.215059999988,
+    "snapshot_ms": 20.95906800002558,
+    "usable_ms": 9677.35110499998,
+    "snapshot_ok": true,
+    "snapshot_bytes": 53986,
+    "snapshot_tokens_est": 13497,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 42651,
+    "ttfs_ms": 9699.320346000022
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 16.33165900001768,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 19.308676999993622,
+   "post_snapshot_bytes": 53986,
+   "warm": {
+    "open_ms": 4800.778052000038,
+    "snapshot_ms": 27.204285999992862,
+    "usable_ms": 4828.028033000068,
+    "snapshot_ok": true,
+    "snapshot_bytes": 54036,
+    "snapshot_tokens_est": 13509,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 42701,
+    "ttfs_ms": 4828.028033000068
+   },
+   "task": "mdn-array-map",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 9063.297506000032,
+    "snapshot_ms": 26.239141000027303,
+    "usable_ms": 9089.572478000016,
+    "snapshot_ok": true,
+    "snapshot_bytes": 54019,
+    "snapshot_tokens_est": 13505,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 42684,
+    "ttfs_ms": 9105.346755000006
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 15.183416999992914,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 23.716297999955714,
+   "post_snapshot_bytes": 54019,
+   "warm": {
+    "open_ms": 4798.909497999994,
+    "snapshot_ms": 22.370300000009593,
+    "usable_ms": 4821.309704999963,
+    "snapshot_ok": true,
+    "snapshot_bytes": 54008,
+    "snapshot_tokens_est": 13502,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 42673,
+    "ttfs_ms": 4821.309704999963
+   },
+   "task": "mdn-array-map",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 10292.156029999955,
+    "snapshot_ms": 26.788739999989048,
+    "usable_ms": 10318.982404999959,
+    "snapshot_ok": true,
+    "snapshot_bytes": 54000,
+    "snapshot_tokens_est": 13500,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 42665,
+    "ttfs_ms": 10340.488356999995
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 18.086913999984972,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 21.71608500002185,
+   "post_snapshot_bytes": 54000,
+   "warm": {
+    "open_ms": 4904.812506999995,
+    "snapshot_ms": 26.88254500000039,
+    "usable_ms": 4931.730531000008,
+    "snapshot_ok": true,
+    "snapshot_bytes": 54017,
+    "snapshot_tokens_est": 13505,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 42682,
+    "ttfs_ms": 4931.730531000008
+   },
+   "task": "mdn-array-map",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 7309.149498999992,
+    "snapshot_ms": 18.625090999994427,
+    "usable_ms": 7327.990164000017,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60033,
+    "snapshot_tokens_est": 15009,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 52923,
+    "ttfs_ms": 7345.704756000021
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 16.16987899999367,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 15.058079999987967,
+   "post_snapshot_bytes": 60033,
+   "warm": {
+    "open_ms": 3677.4268529999536,
+    "snapshot_ms": 20.129146000021137,
+    "usable_ms": 3697.5957759999437,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60040,
+    "snapshot_tokens_est": 15010,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 52930,
+    "ttfs_ms": 3697.5957759999437
+   },
+   "task": "mdn-fetch",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 7186.393724999973,
+    "snapshot_ms": 20.35436399996979,
+    "usable_ms": 7206.787903999968,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60059,
+    "snapshot_tokens_est": 15015,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 52949,
+    "ttfs_ms": 7224.709930000012
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 29.062393000000156,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 24.64301699999487,
+   "post_snapshot_bytes": 60059,
+   "warm": {
+    "open_ms": 3911.1134549999842,
+    "snapshot_ms": 21.278068000043277,
+    "usable_ms": 3932.4275439999765,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60043,
+    "snapshot_tokens_est": 15011,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 52933,
+    "ttfs_ms": 3932.4275439999765
+   },
+   "task": "mdn-fetch",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 7483.255294999981,
+    "snapshot_ms": 20.034145000041462,
+    "usable_ms": 7503.32368099998,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60072,
+    "snapshot_tokens_est": 15018,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 52910,
+    "ttfs_ms": 7518.827308999957
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.59339600004023,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 17.179968999989796,
+   "post_snapshot_bytes": 60072,
+   "warm": {
+    "open_ms": 3587.4940480000223,
+    "snapshot_ms": 21.91779899998801,
+    "usable_ms": 3609.448136000021,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60031,
+    "snapshot_tokens_est": 15008,
+    "snapshot_sample": "- list:\n  - listitem:\n    - link \"Skip to main content\" [ref=e1]:\n      - /url: \"#content\"\n  - listitem:\n    - link \"Skip to search\" [ref=e2]:\n      - /url: \"#m",
+    "snapshot_i_bytes": 52921,
+    "ttfs_ms": 3609.448136000021
+   },
+   "task": "mdn-fetch",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 8394.675434999983,
+    "snapshot_ms": 15.887090000032913,
+    "usable_ms": 8410.882311000023,
+    "snapshot_ok": true,
+    "snapshot_bytes": 7235,
+    "snapshot_tokens_est": 1809,
+    "snapshot_sample": "- region \"Site notifications\":\n  - text: ⚠️\n  - alert:\n    - text: npm tokens that bypass 2FA are being restricted — account changes (Aug 2026) and direct publi",
+    "snapshot_i_bytes": 5994,
+    "ttfs_ms": 8424.746115999995
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 15.801854999968782,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 15.340748999966308,
+   "post_snapshot_bytes": 7235,
+   "warm": {
+    "open_ms": 5394.6541839999845,
+    "snapshot_ms": 15.059859000029974,
+    "usable_ms": 5409.747595000023,
+    "snapshot_ok": true,
+    "snapshot_bytes": 7235,
+    "snapshot_tokens_est": 1809,
+    "snapshot_sample": "- region \"Site notifications\":\n  - text: ⚠️\n  - alert:\n    - text: npm tokens that bypass 2FA are being restricted — account changes (Aug 2026) and direct publi",
+    "snapshot_i_bytes": 5994,
+    "ttfs_ms": 5409.747595000023
+   },
+   "task": "npm-left-pad",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 512.0277600000263,
+    "snapshot_ms": 13.90198899997631,
+    "usable_ms": 10616.681468000053,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 10628.218955000048
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 11.187669999955688,
+   "final_ok": true,
+   "answer_in_page": false,
+   "post_snapshot_ms": 11.214743999997154,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 9435.876342999982,
+    "snapshot_ms": 16.551915999967605,
+    "usable_ms": 9452.455404000008,
+    "snapshot_ok": true,
+    "snapshot_bytes": 7235,
+    "snapshot_tokens_est": 1809,
+    "snapshot_sample": "- region \"Site notifications\":\n  - text: ⚠️\n  - alert:\n    - text: npm tokens that bypass 2FA are being restricted — account changes (Aug 2026) and direct publi",
+    "snapshot_i_bytes": 5994,
+    "ttfs_ms": 9452.455404000008
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "npm-left-pad",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 8336.750044999993,
+    "snapshot_ms": 16.12125000002561,
+    "usable_ms": 8352.89728199999,
+    "snapshot_ok": true,
+    "snapshot_bytes": 7235,
+    "snapshot_tokens_est": 1809,
+    "snapshot_sample": "- region \"Site notifications\":\n  - text: ⚠️\n  - alert:\n    - text: npm tokens that bypass 2FA are being restricted — account changes (Aug 2026) and direct publi",
+    "snapshot_i_bytes": 5994,
+    "ttfs_ms": 8366.368549000006
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.220157000003383,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 11.68723499996122,
+   "post_snapshot_bytes": 7235,
+   "warm": {
+    "open_ms": 4800.929589000007,
+    "snapshot_ms": 14.25986400002148,
+    "usable_ms": 4815.217324000027,
+    "snapshot_ok": true,
+    "snapshot_bytes": 7235,
+    "snapshot_tokens_est": 1809,
+    "snapshot_sample": "- region \"Site notifications\":\n  - text: ⚠️\n  - alert:\n    - text: npm tokens that bypass 2FA are being restricted — account changes (Aug 2026) and direct publi",
+    "snapshot_i_bytes": 5994,
+    "ttfs_ms": 4815.217324000027
+   },
+   "task": "npm-left-pad",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 6268.169083999994,
+    "snapshot_ms": 14.398092999996152,
+    "usable_ms": 6282.744769000041,
+    "snapshot_ok": true,
+    "snapshot_bytes": 17548,
+    "snapshot_tokens_est": 4387,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"PyPI\" [ref=e2]:\n    - /url: /\n  - search:\n    - text: Search PyPI\n    - textbox",
+    "snapshot_i_bytes": 13427,
+    "ttfs_ms": 6294.627442999976
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 17.127338999998756,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 11.884858000034,
+   "post_snapshot_bytes": 17548,
+   "warm": {
+    "open_ms": 5376.840402000002,
+    "snapshot_ms": 14.028550999995787,
+    "usable_ms": 5390.897149999975,
+    "snapshot_ok": true,
+    "snapshot_bytes": 17556,
+    "snapshot_tokens_est": 4389,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"PyPI\" [ref=e2]:\n    - /url: /\n  - search:\n    - text: Search PyPI\n    - textbox",
+    "snapshot_i_bytes": 13427,
+    "ttfs_ms": 5390.897149999975
+   },
+   "task": "pypi-requests",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 6398.583817999985,
+    "snapshot_ms": 16.650657999969553,
+    "usable_ms": 6415.262564999983,
+    "snapshot_ok": true,
+    "snapshot_bytes": 17553,
+    "snapshot_tokens_est": 4389,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"PyPI\" [ref=e2]:\n    - /url: /\n  - search:\n    - text: Search PyPI\n    - textbox",
+    "snapshot_i_bytes": 13428,
+    "ttfs_ms": 6431.572655000025
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 16.692798000003677,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 16.761790000018664,
+   "post_snapshot_bytes": 17553,
+   "warm": {
+    "open_ms": 4474.712946999993,
+    "snapshot_ms": 14.651234999997541,
+    "usable_ms": 4489.391161999956,
+    "snapshot_ok": true,
+    "snapshot_bytes": 17549,
+    "snapshot_tokens_est": 4388,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"PyPI\" [ref=e2]:\n    - /url: /\n  - search:\n    - text: Search PyPI\n    - textbox",
+    "snapshot_i_bytes": 13427,
+    "ttfs_ms": 4489.391161999956
+   },
+   "task": "pypi-requests",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 6291.734518000041,
+    "snapshot_ms": 14.635001000016928,
+    "usable_ms": 6306.459114000027,
+    "snapshot_ok": true,
+    "snapshot_bytes": 17548,
+    "snapshot_tokens_est": 4387,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"PyPI\" [ref=e2]:\n    - /url: /\n  - search:\n    - text: Search PyPI\n    - textbox",
+    "snapshot_i_bytes": 13427,
+    "ttfs_ms": 6322.326461999968
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 18.744929999986198,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 15.440208999963943,
+   "post_snapshot_bytes": 17548,
+   "warm": {
+    "open_ms": 4589.624264999991,
+    "snapshot_ms": 16.591164000041317,
+    "usable_ms": 4606.243701999949,
+    "snapshot_ok": true,
+    "snapshot_bytes": 17556,
+    "snapshot_tokens_est": 4389,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"PyPI\" [ref=e2]:\n    - /url: /\n  - search:\n    - text: Search PyPI\n    - textbox",
+    "snapshot_i_bytes": 13427,
+    "ttfs_ms": 4606.243701999949
+   },
+   "task": "pypi-requests",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 448.83601400000043,
+    "snapshot_ms": 12.709855000022799,
+    "usable_ms": 10551.810571999988,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 10565.661254000035
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 10103.599535999994,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 11.580980999977328,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 262.3240189999924,
+    "snapshot_ms": 11.986731000011787,
+    "usable_ms": 10322.725954000023,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 10322.725954000023
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "so-sorted-array",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 531.3284039999708,
+    "snapshot_ms": 15.94361299998127,
+    "usable_ms": 10608.494065999985,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 10620.349064999959
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 10068.283939999994,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 13.132325000013225,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 259.54257099999813,
+    "snapshot_ms": 11.257512999989558,
+    "usable_ms": 10332.994888000016,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 10332.994888000016
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "so-sorted-array",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 612.1805969999987,
+    "snapshot_ms": 14.890107000013813,
+    "usable_ms": 10688.132212000026,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 10700.035985000024
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 10214.893031999993,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 12.933673000021372,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 257.4295530000236,
+    "snapshot_ms": 12.864330999960657,
+    "usable_ms": 10339.135430999973,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 10339.135430999973
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "so-sorted-array",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 3204.204015000025,
+    "snapshot_ms": 12.811577999964356,
+    "usable_ms": 13291.955888999975,
+    "snapshot_ok": false,
+    "snapshot_bytes": 66,
+    "snapshot_tokens_est": 17,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#main-content\"\n",
+    "snapshot_i_bytes": 66,
+    "ttfs_ms": 13303.673522999976
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 11.474449999979697,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.154257999965921,
+   "post_snapshot_bytes": 66,
+   "warm": {
+    "open_ms": 2408.8224990000017,
+    "snapshot_ms": 14.351541000069119,
+    "usable_ms": 12579.719570999965,
+    "snapshot_ok": false,
+    "snapshot_bytes": 66,
+    "snapshot_tokens_est": 17,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#main-content\"\n",
+    "snapshot_i_bytes": 66,
+    "ttfs_ms": 12579.719570999965
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "reddit-old-programming",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 2866.3264109999873,
+    "snapshot_ms": 15.165162999997847,
+    "usable_ms": 13069.626169000054,
+    "snapshot_ok": false,
+    "snapshot_bytes": 66,
+    "snapshot_tokens_est": 17,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#main-content\"\n",
+    "snapshot_i_bytes": 66,
+    "ttfs_ms": 13082.406853000051
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 11.844848000095226,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.530251000076532,
+   "post_snapshot_bytes": 66,
+   "warm": {
+    "open_ms": 2423.5281780000078,
+    "snapshot_ms": 12.896934000076726,
+    "usable_ms": 12605.05702800001,
+    "snapshot_ok": false,
+    "snapshot_bytes": 66,
+    "snapshot_tokens_est": 17,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#main-content\"\n",
+    "snapshot_i_bytes": 66,
+    "ttfs_ms": 12605.05702800001
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "reddit-old-programming",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 3062.0939109999454,
+    "snapshot_ms": 12.289382000104524,
+    "usable_ms": 13116.637439999962,
+    "snapshot_ok": false,
+    "snapshot_bytes": 66,
+    "snapshot_tokens_est": 17,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#main-content\"\n",
+    "snapshot_i_bytes": 66,
+    "ttfs_ms": 13131.0266460001
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 15.881845999974757,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 14.887449999921955,
+   "post_snapshot_bytes": 66,
+   "warm": {
+    "open_ms": 2426.483522000024,
+    "snapshot_ms": 15.167665999964811,
+    "usable_ms": 12571.104556999984,
+    "snapshot_ok": false,
+    "snapshot_bytes": 66,
+    "snapshot_tokens_est": 17,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#main-content\"\n",
+    "snapshot_i_bytes": 66,
+    "ttfs_ms": 12571.104556999984
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "reddit-old-programming",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4089.5133100000676,
+    "snapshot_ms": 16.474748999928124,
+    "usable_ms": 6184.917312000063,
+    "snapshot_ok": true,
+    "snapshot_bytes": 23988,
+    "snapshot_tokens_est": 5997,
+    "snapshot_sample": "- navigation:\n  - button \"Menu\" [ref=e1]\n  - link \"React\" [ref=e2]:\n    - /url: /\n  - link \"v 19.3\" [ref=e3]:\n    - /url: /versions\n  - button \"Search\" [ref=e4]",
+    "snapshot_i_bytes": 7315,
+    "ttfs_ms": 6401.379864000017
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 16.3493610000005,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 86.88832500006538,
+   "post_snapshot_bytes": 23594,
+   "warm": {
+    "open_ms": 2425.405880999984,
+    "snapshot_ms": 16.875172999920323,
+    "usable_ms": 6997.682597999927,
+    "snapshot_ok": true,
+    "snapshot_bytes": 23988,
+    "snapshot_tokens_est": 5997,
+    "snapshot_sample": "- navigation:\n  - button \"Menu\" [ref=e1]\n  - link \"React\" [ref=e2]:\n    - /url: /\n  - link \"v 19.3\" [ref=e3]:\n    - /url: /versions\n  - button \"Search\" [ref=e4]",
+    "snapshot_i_bytes": 7315,
+    "ttfs_ms": 6997.682597999927
+   },
+   "task": "react-dev-learn",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 5927.301785000018,
+    "snapshot_ms": 455.24177500000224,
+    "usable_ms": 6382.581367000006,
+    "snapshot_ok": true,
+    "snapshot_bytes": 23599,
+    "snapshot_tokens_est": 5900,
+    "snapshot_sample": "- navigation:\n  - button \"Menu\" [ref=e1]\n  - link \"React\" [ref=e2]:\n    - /url: /\n  - link \"v 19.3\" [ref=e3]:\n    - /url: /versions\n  - button \"Search\" [ref=e4]",
+    "snapshot_i_bytes": 7313,
+    "ttfs_ms": 6403.856469999999
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 17.027295000036247,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 27.168061999953352,
+   "post_snapshot_bytes": 23599,
+   "warm": {
+    "open_ms": 2712.741139000049,
+    "snapshot_ms": 17.300010000006296,
+    "usable_ms": 6945.002217000001,
+    "snapshot_ok": true,
+    "snapshot_bytes": 23988,
+    "snapshot_tokens_est": 5997,
+    "snapshot_sample": "- navigation:\n  - button \"Menu\" [ref=e1]\n  - link \"React\" [ref=e2]:\n    - /url: /\n  - link \"v 19.3\" [ref=e3]:\n    - /url: /versions\n  - button \"Search\" [ref=e4]",
+    "snapshot_i_bytes": 7315,
+    "ttfs_ms": 6945.002217000001
+   },
+   "task": "react-dev-learn",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4747.348263000022,
+    "snapshot_ms": 18.004406000021845,
+    "usable_ms": 6239.53958099999,
+    "snapshot_ok": true,
+    "snapshot_bytes": 23995,
+    "snapshot_tokens_est": 5999,
+    "snapshot_sample": "- navigation:\n  - button \"Menu\" [ref=e1]\n  - link \"React\" [ref=e2]:\n    - /url: /\n  - link \"v 19.3\" [ref=e3]:\n    - /url: /versions\n  - button \"Search\" [ref=e4]",
+    "snapshot_i_bytes": 7315,
+    "ttfs_ms": 6529.251607000013
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 17.489628999959677,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 148.7029610000318,
+   "post_snapshot_bytes": 23601,
+   "warm": {
+    "open_ms": 2549.927345999982,
+    "snapshot_ms": 18.93619200005196,
+    "usable_ms": 7144.504554999992,
+    "snapshot_ok": true,
+    "snapshot_bytes": 23995,
+    "snapshot_tokens_est": 5999,
+    "snapshot_sample": "- navigation:\n  - button \"Menu\" [ref=e1]\n  - link \"React\" [ref=e2]:\n    - /url: /\n  - link \"v 19.3\" [ref=e3]:\n    - /url: /versions\n  - button \"Search\" [ref=e4]",
+    "snapshot_i_bytes": 7315,
+    "ttfs_ms": 7144.504554999992
+   },
+   "task": "react-dev-learn",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 14825.647240000078,
+    "snapshot_ms": 178.4137739998987,
+    "usable_ms": 15004.258869000128,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8980,
+    "snapshot_tokens_est": 2245,
+    "snapshot_sample": "- banner:\n  - link \"Vercel Open Source\" [ref=e1]:\n    - /url: https://vercel.com/oss\n  - link \"NextjsLogotype NextjsLogotype\" [ref=e2]:\n    - /url: /\n  - naviga",
+    "snapshot_i_bytes": 5727,
+    "ttfs_ms": 15017.056764999987
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 36.37594800000079,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.819790999987163,
+   "post_snapshot_bytes": 8980,
+   "warm": {
+    "open_ms": 12903.156050999998,
+    "snapshot_ms": 772.0470320000313,
+    "usable_ms": 13675.23879199999,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8980,
+    "snapshot_tokens_est": 2245,
+    "snapshot_sample": "- banner:\n  - link \"Vercel Open Source\" [ref=e1]:\n    - /url: https://vercel.com/oss\n  - link \"NextjsLogotype NextjsLogotype\" [ref=e2]:\n    - /url: /\n  - naviga",
+    "snapshot_i_bytes": 5727,
+    "ttfs_ms": 13675.23879199999
+   },
+   "task": "nextjs-docs",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 14051.717628999962,
+    "snapshot_ms": 565.9362509999191,
+    "usable_ms": 14617.693767999997,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8980,
+    "snapshot_tokens_est": 2245,
+    "snapshot_sample": "- banner:\n  - link \"Vercel Open Source\" [ref=e1]:\n    - /url: https://vercel.com/oss\n  - link \"NextjsLogotype NextjsLogotype\" [ref=e2]:\n    - /url: /\n  - naviga",
+    "snapshot_i_bytes": 5727,
+    "ttfs_ms": 14629.842619000003
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 34.87485200003721,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 11.859351999941282,
+   "post_snapshot_bytes": 8980,
+   "warm": {
+    "open_ms": 13006.693848000024,
+    "snapshot_ms": 144.03636999998707,
+    "usable_ms": 13150.763512999984,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8980,
+    "snapshot_tokens_est": 2245,
+    "snapshot_sample": "- banner:\n  - link \"Vercel Open Source\" [ref=e1]:\n    - /url: https://vercel.com/oss\n  - link \"NextjsLogotype NextjsLogotype\" [ref=e2]:\n    - /url: /\n  - naviga",
+    "snapshot_i_bytes": 5727,
+    "ttfs_ms": 13150.763512999984
+   },
+   "task": "nextjs-docs",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 15446.391716000042,
+    "snapshot_ms": 186.20792600000277,
+    "usable_ms": 15632.639363000053,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8980,
+    "snapshot_tokens_est": 2245,
+    "snapshot_sample": "- banner:\n  - link \"Vercel Open Source\" [ref=e1]:\n    - /url: https://vercel.com/oss\n  - link \"NextjsLogotype NextjsLogotype\" [ref=e2]:\n    - /url: /\n  - naviga",
+    "snapshot_i_bytes": 5727,
+    "ttfs_ms": 15647.767744999961
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 36.297148999990895,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 17.87609099992551,
+   "post_snapshot_bytes": 8980,
+   "warm": {
+    "open_ms": 14015.135171999922,
+    "snapshot_ms": 140.37452700000722,
+    "usable_ms": 14155.54246399994,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8980,
+    "snapshot_tokens_est": 2245,
+    "snapshot_sample": "- banner:\n  - link \"Vercel Open Source\" [ref=e1]:\n    - /url: https://vercel.com/oss\n  - link \"NextjsLogotype NextjsLogotype\" [ref=e2]:\n    - /url: /\n  - naviga",
+    "snapshot_i_bytes": 5727,
+    "ttfs_ms": 14155.54246399994
+   },
+   "task": "nextjs-docs",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 6596.46830800001,
+    "snapshot_ms": 19.61155500006862,
+    "usable_ms": 6616.307738999953,
+    "snapshot_ok": true,
+    "snapshot_bytes": 39166,
+    "snapshot_tokens_est": 9792,
+    "snapshot_sample": "- button \"Skip to main content\" [ref=e1]\n- progressbar \"Page load progress\"\n- navigation:\n  - list:\n    - listitem:\n      - link \"Angular homepage\" [ref=e2]:\n  ",
+    "snapshot_i_bytes": 35994,
+    "ttfs_ms": 6632.703545999946
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 18.83744699996896,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 16.02331200009212,
+   "post_snapshot_bytes": 39166,
+   "warm": {
+    "open_ms": 4760.2240490000695,
+    "snapshot_ms": 17.27610600006301,
+    "usable_ms": 4777.525558000081,
+    "snapshot_ok": true,
+    "snapshot_bytes": 39166,
+    "snapshot_tokens_est": 9792,
+    "snapshot_sample": "- button \"Skip to main content\" [ref=e1]\n- progressbar \"Page load progress\"\n- navigation:\n  - list:\n    - listitem:\n      - link \"Angular homepage\" [ref=e2]:\n  ",
+    "snapshot_i_bytes": 35994,
+    "ttfs_ms": 4777.525558000081
+   },
+   "task": "angular-overview",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 6258.9114899999695,
+    "snapshot_ms": 17.858155999914743,
+    "usable_ms": 6276.798387999996,
+    "snapshot_ok": true,
+    "snapshot_bytes": 39166,
+    "snapshot_tokens_est": 9792,
+    "snapshot_sample": "- button \"Skip to main content\" [ref=e1]\n- progressbar \"Page load progress\"\n- navigation:\n  - list:\n    - listitem:\n      - link \"Angular homepage\" [ref=e2]:\n  ",
+    "snapshot_i_bytes": 35994,
+    "ttfs_ms": 6290.621306000045
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 20.806382999988273,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 14.854980000061914,
+   "post_snapshot_bytes": 39166,
+   "warm": {
+    "open_ms": 4923.381309999968,
+    "snapshot_ms": 20.167030000011437,
+    "usable_ms": 4943.578985000029,
+    "snapshot_ok": true,
+    "snapshot_bytes": 39166,
+    "snapshot_tokens_est": 9792,
+    "snapshot_sample": "- button \"Skip to main content\" [ref=e1]\n- progressbar \"Page load progress\"\n- navigation:\n  - list:\n    - listitem:\n      - link \"Angular homepage\" [ref=e2]:\n  ",
+    "snapshot_i_bytes": 35994,
+    "ttfs_ms": 4943.578985000029
+   },
+   "task": "angular-overview",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 6211.575523000094,
+    "snapshot_ms": 20.090570000000298,
+    "usable_ms": 6231.694297000067,
+    "snapshot_ok": true,
+    "snapshot_bytes": 39166,
+    "snapshot_tokens_est": 9792,
+    "snapshot_sample": "- button \"Skip to main content\" [ref=e1]\n- progressbar \"Page load progress\"\n- navigation:\n  - list:\n    - listitem:\n      - link \"Angular homepage\" [ref=e2]:\n  ",
+    "snapshot_i_bytes": 35994,
+    "ttfs_ms": 6247.051341000013
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 20.579456000006758,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 14.505689000012353,
+   "post_snapshot_bytes": 39166,
+   "warm": {
+    "open_ms": 5079.882817000034,
+    "snapshot_ms": 19.27518300001975,
+    "usable_ms": 5099.186868000077,
+    "snapshot_ok": true,
+    "snapshot_bytes": 39166,
+    "snapshot_tokens_est": 9792,
+    "snapshot_sample": "- button \"Skip to main content\" [ref=e1]\n- progressbar \"Page load progress\"\n- navigation:\n  - list:\n    - listitem:\n      - link \"Angular homepage\" [ref=e2]:\n  ",
+    "snapshot_i_bytes": 35994,
+    "ttfs_ms": 5099.186868000077
+   },
+   "task": "angular-overview",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 5899.015106999897,
+    "snapshot_ms": 16.959786000079475,
+    "usable_ms": 5916.173357999884,
+    "snapshot_ok": true,
+    "snapshot_bytes": 11895,
+    "snapshot_tokens_est": 2974,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#VPContent\"\n- banner:\n  - link \"Vue.js\" [ref=e2]:\n    - /url: /\n  - button \"Search\" [ref=e3]\n  - button \"Mobile na",
+    "snapshot_i_bytes": 3858,
+    "ttfs_ms": 6004.981383000035
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 17.06226300005801,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.875181999988854,
+   "post_snapshot_bytes": 11895,
+   "warm": {
+    "open_ms": 2038.3829409999307,
+    "snapshot_ms": 13.931640000082552,
+    "usable_ms": 2052.339103999897,
+    "snapshot_ok": true,
+    "snapshot_bytes": 11895,
+    "snapshot_tokens_est": 2974,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#VPContent\"\n- banner:\n  - link \"Vue.js\" [ref=e2]:\n    - /url: /\n  - button \"Search\" [ref=e3]\n  - button \"Mobile na",
+    "snapshot_i_bytes": 3858,
+    "ttfs_ms": 2052.339103999897
+   },
+   "task": "vue-introduction",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4930.386590000009,
+    "snapshot_ms": 13.965413000085391,
+    "usable_ms": 4944.375016000005,
+    "snapshot_ok": true,
+    "snapshot_bytes": 11895,
+    "snapshot_tokens_est": 2974,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#VPContent\"\n- banner:\n  - link \"Vue.js\" [ref=e2]:\n    - /url: /\n  - button \"Search\" [ref=e3]\n  - button \"Mobile na",
+    "snapshot_i_bytes": 3858,
+    "ttfs_ms": 4959.413942000014
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 22.653963000047952,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 17.02856099989731,
+   "post_snapshot_bytes": 11895,
+   "warm": {
+    "open_ms": 2097.9899829999777,
+    "snapshot_ms": 14.46410499990452,
+    "usable_ms": 2112.52887499996,
+    "snapshot_ok": true,
+    "snapshot_bytes": 11895,
+    "snapshot_tokens_est": 2974,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#VPContent\"\n- banner:\n  - link \"Vue.js\" [ref=e2]:\n    - /url: /\n  - button \"Search\" [ref=e3]\n  - button \"Mobile na",
+    "snapshot_i_bytes": 3858,
+    "ttfs_ms": 2112.52887499996
+   },
+   "task": "vue-introduction",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 5917.245926999953,
+    "snapshot_ms": 22.89121899998281,
+    "usable_ms": 5940.170461999951,
+    "snapshot_ok": true,
+    "snapshot_bytes": 11895,
+    "snapshot_tokens_est": 2974,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#VPContent\"\n- banner:\n  - link \"Vue.js\" [ref=e2]:\n    - /url: /\n  - button \"Search\" [ref=e3]\n  - button \"Mobile na",
+    "snapshot_i_bytes": 3858,
+    "ttfs_ms": 5954.585062000086
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 17.508390999981202,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 16.923354999977164,
+   "post_snapshot_bytes": 11895,
+   "warm": {
+    "open_ms": 2015.1409940000158,
+    "snapshot_ms": 16.698231999995187,
+    "usable_ms": 2031.8624800000107,
+    "snapshot_ok": true,
+    "snapshot_bytes": 11895,
+    "snapshot_tokens_est": 2974,
+    "snapshot_sample": "- link \"Skip to content\" [ref=e1]:\n  - /url: \"#VPContent\"\n- banner:\n  - link \"Vue.js\" [ref=e2]:\n    - /url: /\n  - button \"Search\" [ref=e3]\n  - button \"Mobile na",
+    "snapshot_i_bytes": 3858,
+    "ttfs_ms": 2031.8624800000107
+   },
+   "task": "vue-introduction",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4016.5602249999065,
+    "snapshot_ms": 46.725402999902144,
+    "usable_ms": 4063.431607999839,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20099,
+    "snapshot_tokens_est": 5025,
+    "snapshot_sample": "- region \"Skip to main content\":\n  - link \"Skip to main content\" [ref=e1]:\n    - /url: \"#__docusaurus_skipToContent_fallback\"\n- navigation \"Main\":\n  - link \"Red",
+    "snapshot_i_bytes": 12375,
+    "ttfs_ms": 4078.191534999991
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.356039999984205,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 14.719406999996863,
+   "post_snapshot_bytes": 20099,
+   "warm": {
+    "open_ms": 3567.5913350000046,
+    "snapshot_ms": 55.47563999996055,
+    "usable_ms": 3623.0938190000597,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20099,
+    "snapshot_tokens_est": 5025,
+    "snapshot_sample": "- region \"Skip to main content\":\n  - link \"Skip to main content\" [ref=e1]:\n    - /url: \"#__docusaurus_skipToContent_fallback\"\n- navigation \"Main\":\n  - link \"Red",
+    "snapshot_i_bytes": 12375,
+    "ttfs_ms": 3623.0938190000597
+   },
+   "task": "redux-getting-started",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 3868.8226690000156,
+    "snapshot_ms": 828.7288460000418,
+    "usable_ms": 4697.589374999981,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20099,
+    "snapshot_tokens_est": 5025,
+    "snapshot_sample": "- region \"Skip to main content\":\n  - link \"Skip to main content\" [ref=e1]:\n    - /url: \"#__docusaurus_skipToContent_fallback\"\n- navigation \"Main\":\n  - link \"Red",
+    "snapshot_i_bytes": 12375,
+    "ttfs_ms": 4755.5906260000775
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 15.817954000085592,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 18.759083000011742,
+   "post_snapshot_bytes": 20099,
+   "warm": {
+    "open_ms": 3350.131449999986,
+    "snapshot_ms": 45.949678000062704,
+    "usable_ms": 3396.1068760000635,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20099,
+    "snapshot_tokens_est": 5025,
+    "snapshot_sample": "- region \"Skip to main content\":\n  - link \"Skip to main content\" [ref=e1]:\n    - /url: \"#__docusaurus_skipToContent_fallback\"\n- navigation \"Main\":\n  - link \"Red",
+    "snapshot_i_bytes": 12375,
+    "ttfs_ms": 3396.1068760000635
+   },
+   "task": "redux-getting-started",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 3717.709944000002,
+    "snapshot_ms": 867.7021189999068,
+    "usable_ms": 4585.441310999915,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20099,
+    "snapshot_tokens_est": 5025,
+    "snapshot_sample": "- region \"Skip to main content\":\n  - link \"Skip to main content\" [ref=e1]:\n    - /url: \"#__docusaurus_skipToContent_fallback\"\n- navigation \"Main\":\n  - link \"Red",
+    "snapshot_i_bytes": 12375,
+    "ttfs_ms": 4627.100580999977
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 16.74547700001858,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 20.519525000010617,
+   "post_snapshot_bytes": 20099,
+   "warm": {
+    "open_ms": 3133.3143349998863,
+    "snapshot_ms": 49.768410000018775,
+    "usable_ms": 3183.116951999953,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20099,
+    "snapshot_tokens_est": 5025,
+    "snapshot_sample": "- region \"Skip to main content\":\n  - link \"Skip to main content\" [ref=e1]:\n    - /url: \"#__docusaurus_skipToContent_fallback\"\n- navigation \"Main\":\n  - link \"Red",
+    "snapshot_i_bytes": 12375,
+    "ttfs_ms": 3183.116951999953
+   },
+   "task": "redux-getting-started",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 3265.984979000059,
+    "snapshot_ms": 21.642433999921195,
+    "usable_ms": 3287.805845999974,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60075,
+    "snapshot_tokens_est": 15019,
+    "snapshot_sample": "- navigation \"Related\":\n  - heading \"Navigation\" [level=3 ref=e1]\n  - list:\n    - listitem:\n      - link \"index\" [ref=e2]:\n        - /url: ../genindex.html\n    ",
+    "snapshot_i_bytes": 27763,
+    "ttfs_ms": 3312.618918000022
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 15.854893999989145,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 18.897546999971382,
+   "post_snapshot_bytes": 60075,
+   "warm": {
+    "open_ms": 1884.1842409999808,
+    "snapshot_ms": 20.460626999964006,
+    "usable_ms": 1904.673899000045,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60075,
+    "snapshot_tokens_est": 15019,
+    "snapshot_sample": "- navigation \"Related\":\n  - heading \"Navigation\" [level=3 ref=e1]\n  - list:\n    - listitem:\n      - link \"index\" [ref=e2]:\n        - /url: ../genindex.html\n    ",
+    "snapshot_i_bytes": 27763,
+    "ttfs_ms": 1904.673899000045
+   },
+   "task": "python-docs-json",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 2800.403384000063,
+    "snapshot_ms": 19.17310999997426,
+    "usable_ms": 2819.604234000086,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60075,
+    "snapshot_tokens_est": 15019,
+    "snapshot_sample": "- navigation \"Related\":\n  - heading \"Navigation\" [level=3 ref=e1]\n  - list:\n    - listitem:\n      - link \"index\" [ref=e2]:\n        - /url: ../genindex.html\n    ",
+    "snapshot_i_bytes": 27763,
+    "ttfs_ms": 2835.4761269999435
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 17.228263999917544,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 16.321364000090398,
+   "post_snapshot_bytes": 60075,
+   "warm": {
+    "open_ms": 1950.2221939999145,
+    "snapshot_ms": 26.04787300003227,
+    "usable_ms": 1976.2967449999414,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60075,
+    "snapshot_tokens_est": 15019,
+    "snapshot_sample": "- navigation \"Related\":\n  - heading \"Navigation\" [level=3 ref=e1]\n  - list:\n    - listitem:\n      - link \"index\" [ref=e2]:\n        - /url: ../genindex.html\n    ",
+    "snapshot_i_bytes": 27763,
+    "ttfs_ms": 1976.2967449999414
+   },
+   "task": "python-docs-json",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 2937.4915269999765,
+    "snapshot_ms": 20.491680999984965,
+    "usable_ms": 2958.016004999983,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60075,
+    "snapshot_tokens_est": 15019,
+    "snapshot_sample": "- navigation \"Related\":\n  - heading \"Navigation\" [level=3 ref=e1]\n  - list:\n    - listitem:\n      - link \"index\" [ref=e2]:\n        - /url: ../genindex.html\n    ",
+    "snapshot_i_bytes": 27763,
+    "ttfs_ms": 2976.1322470000014
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.181276999996044,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 20.727955000009388,
+   "post_snapshot_bytes": 60075,
+   "warm": {
+    "open_ms": 1941.512713000062,
+    "snapshot_ms": 27.879483999917284,
+    "usable_ms": 1969.4282920000842,
+    "snapshot_ok": true,
+    "snapshot_bytes": 60075,
+    "snapshot_tokens_est": 15019,
+    "snapshot_sample": "- navigation \"Related\":\n  - heading \"Navigation\" [level=3 ref=e1]\n  - list:\n    - listitem:\n      - link \"index\" [ref=e2]:\n        - /url: ../genindex.html\n    ",
+    "snapshot_i_bytes": 27763,
+    "ttfs_ms": 1969.4282920000842
+   },
+   "task": "python-docs-json",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4615.455348999938,
+    "snapshot_ms": 26.272007999941707,
+    "usable_ms": 4641.892771999934,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59998,
+    "snapshot_tokens_est": 15000,
+    "snapshot_sample": "- banner:\n  - navigation:\n    - link \"Go\" [ref=e1]:\n      - /url: /\n    - link \"Skip to main content\" [ref=e2]:\n      - /url: \"#main-content\"\n    - list:\n      ",
+    "snapshot_i_bytes": 20271,
+    "ttfs_ms": 4659.06405600009
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 16.318274999968708,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 18.951276000007056,
+   "post_snapshot_bytes": 59998,
+   "warm": {
+    "open_ms": 3419.949597000028,
+    "snapshot_ms": 24.270111000048928,
+    "usable_ms": 3444.246855000034,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59998,
+    "snapshot_tokens_est": 15000,
+    "snapshot_sample": "- banner:\n  - navigation:\n    - link \"Go\" [ref=e1]:\n      - /url: /\n    - link \"Skip to main content\" [ref=e2]:\n      - /url: \"#main-content\"\n    - list:\n      ",
+    "snapshot_i_bytes": 20271,
+    "ttfs_ms": 3444.246855000034
+   },
+   "task": "go-effective-go",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4975.842934999964,
+    "snapshot_ms": 24.340451000025496,
+    "usable_ms": 5000.211370999925,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59998,
+    "snapshot_tokens_est": 15000,
+    "snapshot_sample": "- banner:\n  - navigation:\n    - link \"Go\" [ref=e1]:\n      - /url: /\n    - link \"Skip to main content\" [ref=e2]:\n      - /url: \"#main-content\"\n    - list:\n      ",
+    "snapshot_i_bytes": 20271,
+    "ttfs_ms": 5017.63016099995
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 23.271333000040613,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 21.670324999955483,
+   "post_snapshot_bytes": 59998,
+   "warm": {
+    "open_ms": 3488.986799000064,
+    "snapshot_ms": 23.03606499999296,
+    "usable_ms": 3512.055495000095,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59998,
+    "snapshot_tokens_est": 15000,
+    "snapshot_sample": "- banner:\n  - navigation:\n    - link \"Go\" [ref=e1]:\n      - /url: /\n    - link \"Skip to main content\" [ref=e2]:\n      - /url: \"#main-content\"\n    - list:\n      ",
+    "snapshot_i_bytes": 20271,
+    "ttfs_ms": 3512.055495000095
+   },
+   "task": "go-effective-go",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 5211.336356999935,
+    "snapshot_ms": 23.238088999991305,
+    "usable_ms": 5234.606558999978,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59998,
+    "snapshot_tokens_est": 15000,
+    "snapshot_sample": "- banner:\n  - navigation:\n    - link \"Go\" [ref=e1]:\n      - /url: /\n    - link \"Skip to main content\" [ref=e2]:\n      - /url: \"#main-content\"\n    - list:\n      ",
+    "snapshot_i_bytes": 20271,
+    "ttfs_ms": 5252.612330000033
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 21.050468000001274,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 21.250474000000395,
+   "post_snapshot_bytes": 59998,
+   "warm": {
+    "open_ms": 3365.2471320000477,
+    "snapshot_ms": 27.386064999969676,
+    "usable_ms": 3392.708192000049,
+    "snapshot_ok": true,
+    "snapshot_bytes": 59998,
+    "snapshot_tokens_est": 15000,
+    "snapshot_sample": "- banner:\n  - navigation:\n    - link \"Go\" [ref=e1]:\n      - /url: /\n    - link \"Skip to main content\" [ref=e2]:\n      - /url: \"#main-content\"\n    - list:\n      ",
+    "snapshot_i_bytes": 20271,
+    "ttfs_ms": 3392.708192000049
+   },
+   "task": "go-effective-go",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 592.3886789999669,
+    "snapshot_ms": 15.20376999990549,
+    "usable_ms": 607.8009999998612,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8098,
+    "snapshot_tokens_est": 2025,
+    "snapshot_sample": "- navigation:\n  - link \"Rust Logo\" [ref=e1]:\n    - /url: /\n  - list:\n    - listitem:\n      - link \"Install\" [ref=e2]:\n        - /url: /tools/install\n    - listi",
+    "snapshot_i_bytes": 5338,
+    "ttfs_ms": 622.8437469999772
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.498189999954775,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 15.262805000063963,
+   "post_snapshot_bytes": 8098,
+   "warm": {
+    "open_ms": 19.150022999965586,
+    "snapshot_ms": 12.301018999889493,
+    "usable_ms": 31.474373999866657,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8098,
+    "snapshot_tokens_est": 2025,
+    "snapshot_sample": "- navigation:\n  - link \"Rust Logo\" [ref=e1]:\n    - /url: /\n  - list:\n    - listitem:\n      - link \"Install\" [ref=e2]:\n        - /url: /tools/install\n    - listi",
+    "snapshot_i_bytes": 5338,
+    "ttfs_ms": 31.474373999866657
+   },
+   "task": "rust-lang-home",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 723.3010560000548,
+    "snapshot_ms": 13.851952000055462,
+    "usable_ms": 737.1786009999923,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8098,
+    "snapshot_tokens_est": 2025,
+    "snapshot_sample": "- navigation:\n  - link \"Rust Logo\" [ref=e1]:\n    - /url: /\n  - list:\n    - listitem:\n      - link \"Install\" [ref=e2]:\n        - /url: /tools/install\n    - listi",
+    "snapshot_i_bytes": 5338,
+    "ttfs_ms": 749.267715999973
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.680963999941014,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 13.089781999937259,
+   "post_snapshot_bytes": 8098,
+   "warm": {
+    "open_ms": 31.423593999934383,
+    "snapshot_ms": 14.948518999968655,
+    "usable_ms": 46.39775899995584,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8098,
+    "snapshot_tokens_est": 2025,
+    "snapshot_sample": "- navigation:\n  - link \"Rust Logo\" [ref=e1]:\n    - /url: /\n  - list:\n    - listitem:\n      - link \"Install\" [ref=e2]:\n        - /url: /tools/install\n    - listi",
+    "snapshot_i_bytes": 5338,
+    "ttfs_ms": 46.39775899995584
+   },
+   "task": "rust-lang-home",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 568.1498510000529,
+    "snapshot_ms": 21.226842000032775,
+    "usable_ms": 589.4065080001019,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8098,
+    "snapshot_tokens_est": 2025,
+    "snapshot_sample": "- navigation:\n  - link \"Rust Logo\" [ref=e1]:\n    - /url: /\n  - list:\n    - listitem:\n      - link \"Install\" [ref=e2]:\n        - /url: /tools/install\n    - listi",
+    "snapshot_i_bytes": 5338,
+    "ttfs_ms": 603.1196700000437
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 16.94766500010155,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 15.483127000043169,
+   "post_snapshot_bytes": 8098,
+   "warm": {
+    "open_ms": 28.092193000018597,
+    "snapshot_ms": 12.311864999937825,
+    "usable_ms": 40.42877599992789,
+    "snapshot_ok": true,
+    "snapshot_bytes": 8098,
+    "snapshot_tokens_est": 2025,
+    "snapshot_sample": "- navigation:\n  - link \"Rust Logo\" [ref=e1]:\n    - /url: /\n  - list:\n    - listitem:\n      - link \"Install\" [ref=e2]:\n        - /url: /tools/install\n    - listi",
+    "snapshot_i_bytes": 5338,
+    "ttfs_ms": 40.42877599992789
+   },
+   "task": "rust-lang-home",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 1323.0571830000263,
+    "snapshot_ms": 14.692206999985501,
+    "usable_ms": 1337.9457989999792,
+    "snapshot_ok": true,
+    "snapshot_bytes": 9708,
+    "snapshot_tokens_est": 2427,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"archive home\" [ref=e2]:\n    - /url: https://arxiv.org/\n  - navigation \"Main nav",
+    "snapshot_i_bytes": 7822,
+    "ttfs_ms": 1355.9371689999243
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 17.24137399997562,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 19.7850309999194,
+   "post_snapshot_bytes": 9708,
+   "warm": {
+    "open_ms": 163.71756900008768,
+    "snapshot_ms": 14.146596000064164,
+    "usable_ms": 177.89363500010222,
+    "snapshot_ok": true,
+    "snapshot_bytes": 9708,
+    "snapshot_tokens_est": 2427,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"archive home\" [ref=e2]:\n    - /url: https://arxiv.org/\n  - navigation \"Main nav",
+    "snapshot_i_bytes": 7822,
+    "ttfs_ms": 177.89363500010222
+   },
+   "task": "arxiv-attention",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 1038.8351970000658,
+    "snapshot_ms": 20.708588000037707,
+    "usable_ms": 1059.57174699998,
+    "snapshot_ok": true,
+    "snapshot_bytes": 9708,
+    "snapshot_tokens_est": 2427,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"archive home\" [ref=e2]:\n    - /url: https://arxiv.org/\n  - navigation \"Main nav",
+    "snapshot_i_bytes": 7822,
+    "ttfs_ms": 1074.2567989999661
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 15.209013000014238,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 18.96750099991914,
+   "post_snapshot_bytes": 9708,
+   "warm": {
+    "open_ms": 161.24521700001787,
+    "snapshot_ms": 15.355779999983497,
+    "usable_ms": 176.63824000000022,
+    "snapshot_ok": true,
+    "snapshot_bytes": 9708,
+    "snapshot_tokens_est": 2427,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"archive home\" [ref=e2]:\n    - /url: https://arxiv.org/\n  - navigation \"Main nav",
+    "snapshot_i_bytes": 7822,
+    "ttfs_ms": 176.63824000000022
+   },
+   "task": "arxiv-attention",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 1014.3043090000283,
+    "snapshot_ms": 14.16832999989856,
+    "usable_ms": 1028.5081120000686,
+    "snapshot_ok": true,
+    "snapshot_bytes": 9708,
+    "snapshot_tokens_est": 2427,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"archive home\" [ref=e2]:\n    - /url: https://arxiv.org/\n  - navigation \"Main nav",
+    "snapshot_i_bytes": 7822,
+    "ttfs_ms": 1040.0550819999771
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.04398499999661,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 15.486248000059277,
+   "post_snapshot_bytes": 9708,
+   "warm": {
+    "open_ms": 150.834514999995,
+    "snapshot_ms": 13.573137999977916,
+    "usable_ms": 164.4373529999284,
+    "snapshot_ok": true,
+    "snapshot_bytes": 9708,
+    "snapshot_tokens_est": 2427,
+    "snapshot_sample": "- link \"Skip to main content\" [ref=e1]:\n  - /url: \"#content\"\n- banner:\n  - link \"archive home\" [ref=e2]:\n    - /url: https://arxiv.org/\n  - navigation \"Main nav",
+    "snapshot_i_bytes": 7822,
+    "ttfs_ms": 164.4373529999284
+   },
+   "task": "arxiv-attention",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 272.99605399998836,
+    "snapshot_ms": 12.712479999987409,
+    "usable_ms": 285.9089399999939,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1433,
+    "snapshot_tokens_est": 359,
+    "snapshot_sample": "- paragraph: This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring ",
+    "snapshot_i_bytes": 78,
+    "ttfs_ms": 297.18088400003035
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 11.521697000018321,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 11.92630900000222,
+   "post_snapshot_bytes": 1433,
+   "warm": {
+    "open_ms": 70.68451300007291,
+    "snapshot_ms": 14.8193410000531,
+    "usable_ms": 85.5386760000838,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1433,
+    "snapshot_tokens_est": 359,
+    "snapshot_sample": "- paragraph: This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring ",
+    "snapshot_i_bytes": 78,
+    "ttfs_ms": 85.5386760000838
+   },
+   "task": "example-com",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 280.60646599996835,
+    "snapshot_ms": 13.834998999955133,
+    "usable_ms": 294.4751839999808,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1433,
+    "snapshot_tokens_est": 359,
+    "snapshot_sample": "- paragraph: This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring ",
+    "snapshot_i_bytes": 78,
+    "ttfs_ms": 306.75522799999453
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.288241000031121,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.269333000062034,
+   "post_snapshot_bytes": 1433,
+   "warm": {
+    "open_ms": 72.87970499997027,
+    "snapshot_ms": 13.239671000046656,
+    "usable_ms": 86.1490970000159,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1433,
+    "snapshot_tokens_est": 359,
+    "snapshot_sample": "- paragraph: This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring ",
+    "snapshot_i_bytes": 78,
+    "ttfs_ms": 86.1490970000159
+   },
+   "task": "example-com",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 284.5268320000032,
+    "snapshot_ms": 13.60242799995467,
+    "usable_ms": 298.157807999989,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1433,
+    "snapshot_tokens_est": 359,
+    "snapshot_sample": "- paragraph: This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring ",
+    "snapshot_i_bytes": 78,
+    "ttfs_ms": 310.44265500002075
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.23799599998165,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.243474999908358,
+   "post_snapshot_bytes": 1433,
+   "warm": {
+    "open_ms": 71.73339200008195,
+    "snapshot_ms": 13.979616999975406,
+    "usable_ms": 85.75399800005835,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1433,
+    "snapshot_tokens_est": 359,
+    "snapshot_sample": "- paragraph: This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring ",
+    "snapshot_i_bytes": 78,
+    "ttfs_ms": 85.75399800005835
+   },
+   "task": "example-com",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 521.8812470000703,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "fill",
+     "ms": 517.7491779999109,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 209.13412800000515,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 2830.8422969999956,
+    "snapshot_ms": 15.827685999916866,
+    "usable_ms": 2846.868531999993,
+    "snapshot_ok": true,
+    "snapshot_bytes": 389,
+    "snapshot_tokens_est": 98,
+    "snapshot_sample": "- text: Swag Labs\n- main:\n  - form \"Login\":\n    - textbox \"Username\" [ref=e1]\n    - textbox \"Password\" [type=password ref=e2]\n    - button \"Login\" [ref=e3]\n  - ",
+    "snapshot_i_bytes": 248,
+    "ttfs_ms": 2860.8110659999074
+   },
+   "steps_ms_total": 1248.7645529999863,
+   "final_wait_ms": 10134.506597999949,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 12.65374800004065,
+   "post_snapshot_bytes": 389,
+   "warm": {
+    "open_ms": 90.09733500005677,
+    "snapshot_ms": 15.1762709999457,
+    "usable_ms": 105.31957900011912,
+    "snapshot_ok": true,
+    "snapshot_bytes": 389,
+    "snapshot_tokens_est": 98,
+    "snapshot_sample": "- text: Swag Labs\n- main:\n  - form \"Login\":\n    - textbox \"Username\" [ref=e1]\n    - textbox \"Password\" [type=password ref=e2]\n    - button \"Login\" [ref=e3]\n  - ",
+    "snapshot_i_bytes": 248,
+    "ttfs_ms": 105.31957900011912
+   },
+   "error": "final check failed",
+   "fail_class": "final_mismatch",
+   "task": "saucedemo-login",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 516.0326800000621,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "fill",
+     "ms": 518.466599999927,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 184.70065400004387,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 2887.230988999945,
+    "snapshot_ms": 16.215627999976277,
+    "usable_ms": 2903.472228999948,
+    "snapshot_ok": true,
+    "snapshot_bytes": 389,
+    "snapshot_tokens_est": 98,
+    "snapshot_sample": "- text: Swag Labs\n- main:\n  - form \"Login\":\n    - textbox \"Username\" [ref=e1]\n    - textbox \"Password\" [type=password ref=e2]\n    - button \"Login\" [ref=e3]\n  - ",
+    "snapshot_i_bytes": 248,
+    "ttfs_ms": 2916.81851500005
+   },
+   "steps_ms_total": 1219.199934000033,
+   "final_wait_ms": 10096.031712000025,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 11.869115000008605,
+   "post_snapshot_bytes": 389,
+   "warm": {
+    "open_ms": 97.2739129998954,
+    "snapshot_ms": 13.248856000020169,
+    "usable_ms": 110.54949799994938,
+    "snapshot_ok": true,
+    "snapshot_bytes": 389,
+    "snapshot_tokens_est": 98,
+    "snapshot_sample": "- text: Swag Labs\n- main:\n  - form \"Login\":\n    - textbox \"Username\" [ref=e1]\n    - textbox \"Password\" [type=password ref=e2]\n    - button \"Login\" [ref=e3]\n  - ",
+    "snapshot_i_bytes": 248,
+    "ttfs_ms": 110.54949799994938
+   },
+   "error": "final check failed",
+   "fail_class": "final_mismatch",
+   "task": "saucedemo-login",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 517.5019479999319,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "fill",
+     "ms": 521.7869410000276,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 193.9443050000118,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 3036.7414809999755,
+    "snapshot_ms": 14.404601000016555,
+    "usable_ms": 3051.1768649999285,
+    "snapshot_ok": true,
+    "snapshot_bytes": 389,
+    "snapshot_tokens_est": 98,
+    "snapshot_sample": "- text: Swag Labs\n- main:\n  - form \"Login\":\n    - textbox \"Username\" [ref=e1]\n    - textbox \"Password\" [type=password ref=e2]\n    - button \"Login\" [ref=e3]\n  - ",
+    "snapshot_i_bytes": 248,
+    "ttfs_ms": 3065.0330689999973
+   },
+   "steps_ms_total": 1233.2331939999713,
+   "final_wait_ms": 10094.607973000035,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 11.293445999966934,
+   "post_snapshot_bytes": 389,
+   "warm": {
+    "open_ms": 77.35223499999847,
+    "snapshot_ms": 13.032414000015706,
+    "usable_ms": 90.41155399999116,
+    "snapshot_ok": true,
+    "snapshot_bytes": 389,
+    "snapshot_tokens_est": 98,
+    "snapshot_sample": "- text: Swag Labs\n- main:\n  - form \"Login\":\n    - textbox \"Username\" [ref=e1]\n    - textbox \"Password\" [type=password ref=e2]\n    - button \"Login\" [ref=e3]\n  - ",
+    "snapshot_i_bytes": 248,
+    "ttfs_ms": 90.41155399999116
+   },
+   "error": "final check failed",
+   "fail_class": "final_mismatch",
+   "task": "saucedemo-login",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 14.341463000047952,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "fill",
+     "ms": 12.969210000010207,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 697.0235450000037,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 1549.9368910000194,
+    "snapshot_ms": 12.515828000032343,
+    "usable_ms": 1562.5894540000008,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3081,
+    "snapshot_tokens_est": 771,
+    "snapshot_sample": "- link \"Press \\\"Enter\\\" to skip to content\" [ref=e1]:\n  - /url: \"#main-container\"\n- banner:\n  - link \"Practice Test Automation\" [ref=e2]:\n    - /url: https://pr",
+    "snapshot_i_bytes": 1521,
+    "ttfs_ms": 1575.5455860000802
+   },
+   "steps_ms_total": 724.3342180000618,
+   "final_wait_ms": 13.38623900001403,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 11.145873000030406,
+   "post_snapshot_bytes": 1485,
+   "warm": {
+    "open_ms": 143.63233399996534,
+    "snapshot_ms": 12.774824999971315,
+    "usable_ms": 156.43340599990916,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3081,
+    "snapshot_tokens_est": 771,
+    "snapshot_sample": "- link \"Press \\\"Enter\\\" to skip to content\" [ref=e1]:\n  - /url: \"#main-container\"\n- banner:\n  - link \"Practice Test Automation\" [ref=e2]:\n    - /url: https://pr",
+    "snapshot_i_bytes": 1521,
+    "ttfs_ms": 156.43340599990916
+   },
+   "task": "practice-login",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 11.87073599989526,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "fill",
+     "ms": 13.32698699994944,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 701.8595200000564,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 1254.040452000103,
+    "snapshot_ms": 12.270083000068553,
+    "usable_ms": 1266.3599370000884,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3081,
+    "snapshot_tokens_est": 771,
+    "snapshot_sample": "- link \"Press \\\"Enter\\\" to skip to content\" [ref=e1]:\n  - /url: \"#main-container\"\n- banner:\n  - link \"Practice Test Automation\" [ref=e2]:\n    - /url: https://pr",
+    "snapshot_i_bytes": 1521,
+    "ttfs_ms": 1278.3316720000003
+   },
+   "steps_ms_total": 727.0572429999011,
+   "final_wait_ms": 12.22448400000576,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 23.35707100003492,
+   "post_snapshot_bytes": 1485,
+   "warm": {
+    "open_ms": 148.47083400003612,
+    "snapshot_ms": 34.385051999939606,
+    "usable_ms": 182.88507900002878,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3081,
+    "snapshot_tokens_est": 771,
+    "snapshot_sample": "- link \"Press \\\"Enter\\\" to skip to content\" [ref=e1]:\n  - /url: \"#main-container\"\n- banner:\n  - link \"Practice Test Automation\" [ref=e2]:\n    - /url: https://pr",
+    "snapshot_i_bytes": 1521,
+    "ttfs_ms": 182.88507900002878
+   },
+   "task": "practice-login",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 11.76199499994982,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "fill",
+     "ms": 11.904285999946296,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 734.1153560000239,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 1289.60027299996,
+    "snapshot_ms": 13.06022500002291,
+    "usable_ms": 1302.6995449999813,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3081,
+    "snapshot_tokens_est": 771,
+    "snapshot_sample": "- link \"Press \\\"Enter\\\" to skip to content\" [ref=e1]:\n  - /url: \"#main-container\"\n- banner:\n  - link \"Practice Test Automation\" [ref=e2]:\n    - /url: https://pr",
+    "snapshot_i_bytes": 1521,
+    "ttfs_ms": 1314.2664229999064
+   },
+   "steps_ms_total": 757.78163699992,
+   "final_wait_ms": 14.19998800009489,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 23.173195999930613,
+   "post_snapshot_bytes": 1485,
+   "warm": {
+    "open_ms": 155.87818200001493,
+    "snapshot_ms": 35.56753200001549,
+    "usable_ms": 191.47409200004768,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3081,
+    "snapshot_tokens_est": 771,
+    "snapshot_sample": "- link \"Press \\\"Enter\\\" to skip to content\" [ref=e1]:\n  - /url: \"#main-container\"\n- banner:\n  - link \"Practice Test Automation\" [ref=e2]:\n    - /url: https://pr",
+    "snapshot_i_bytes": 1521,
+    "ttfs_ms": 191.47409200004768
+   },
+   "task": "practice-login",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 11.510984999942593,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "fill",
+     "ms": 12.261092000058852,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 147.23827600001823,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 511.5148400000762,
+    "snapshot_ms": 12.575058000045829,
+    "usable_ms": 524.2319290001178,
+    "snapshot_ok": true,
+    "snapshot_bytes": 917,
+    "snapshot_tokens_est": 230,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Login Page\" [level=2 ref=e2]\n- heading \"This is where you ca",
+    "snapshot_i_bytes": 595,
+    "ttfs_ms": 537.3368079999927
+   },
+   "steps_ms_total": 171.01035300001968,
+   "final_wait_ms": 16.253971999976784,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 13.297274999902584,
+   "post_snapshot_bytes": 528,
+   "warm": {
+    "open_ms": 102.08238799998071,
+    "snapshot_ms": 14.244485000032,
+    "usable_ms": 116.35623499995563,
+    "snapshot_ok": true,
+    "snapshot_bytes": 917,
+    "snapshot_tokens_est": 230,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Login Page\" [level=2 ref=e2]\n- heading \"This is where you ca",
+    "snapshot_i_bytes": 595,
+    "ttfs_ms": 116.35623499995563
+   },
+   "task": "internet-login",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 11.469947999925353,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "fill",
+     "ms": 11.32065699994564,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 149.4690689999843,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 526.265287999995,
+    "snapshot_ms": 12.919845000025816,
+    "usable_ms": 539.2059819999849,
+    "snapshot_ok": true,
+    "snapshot_bytes": 917,
+    "snapshot_tokens_est": 230,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Login Page\" [level=2 ref=e2]\n- heading \"This is where you ca",
+    "snapshot_i_bytes": 595,
+    "ttfs_ms": 550.5289239999838
+   },
+   "steps_ms_total": 172.2596739998553,
+   "final_wait_ms": 14.601090000011027,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.6217389999656,
+   "post_snapshot_bytes": 528,
+   "warm": {
+    "open_ms": 117.0005929999752,
+    "snapshot_ms": 12.289743999950588,
+    "usable_ms": 129.31203599995933,
+    "snapshot_ok": true,
+    "snapshot_bytes": 917,
+    "snapshot_tokens_est": 230,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Login Page\" [level=2 ref=e2]\n- heading \"This is where you ca",
+    "snapshot_i_bytes": 595,
+    "ttfs_ms": 129.31203599995933
+   },
+   "task": "internet-login",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 12.602858999976888,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "fill",
+     "ms": 14.340793999959715,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 150.06293199991342,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 501.6531759999925,
+    "snapshot_ms": 12.568920999998227,
+    "usable_ms": 514.2446879999479,
+    "snapshot_ok": true,
+    "snapshot_bytes": 917,
+    "snapshot_tokens_est": 230,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Login Page\" [level=2 ref=e2]\n- heading \"This is where you ca",
+    "snapshot_i_bytes": 595,
+    "ttfs_ms": 525.1207440000726
+   },
+   "steps_ms_total": 177.00658499985002,
+   "final_wait_ms": 11.914744999958202,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.959062000038102,
+   "post_snapshot_bytes": 528,
+   "warm": {
+    "open_ms": 93.52955400000792,
+    "snapshot_ms": 12.676466000033543,
+    "usable_ms": 106.23531999997795,
+    "snapshot_ok": true,
+    "snapshot_bytes": 917,
+    "snapshot_tokens_est": 230,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Login Page\" [level=2 ref=e2]\n- heading \"This is where you ca",
+    "snapshot_i_bytes": 595,
+    "ttfs_ms": 106.23531999997795
+   },
+   "task": "internet-login",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 12.395223999978043,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "wait_text",
+     "ms": 30012.160166000016,
+     "ok": false,
+     "err": "✗ engine: timeout waiting for condition: locator \"text=Hello World!\" never became visible"
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 544.0849980000639,
+    "snapshot_ms": 14.052676000050269,
+    "usable_ms": 558.2729840000393,
+    "snapshot_ok": true,
+    "snapshot_bytes": 433,
+    "snapshot_tokens_est": 109,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Dynamically Loaded Page Elements\" [level=3 ref=e2]\n- heading",
+    "snapshot_i_bytes": 390,
+    "ttfs_ms": 571.4193050001049
+   },
+   "steps_ms_total": 30024.555389999994,
+   "final_wait_ms": 13.124211000045761,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.965430999989621,
+   "post_snapshot_bytes": 433,
+   "warm": {
+    "open_ms": 107.40595400007442,
+    "snapshot_ms": 14.470354999997653,
+    "usable_ms": 121.90473299997393,
+    "snapshot_ok": true,
+    "snapshot_bytes": 433,
+    "snapshot_tokens_est": 109,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Dynamically Loaded Page Elements\" [level=3 ref=e2]\n- heading",
+    "snapshot_i_bytes": 390,
+    "ttfs_ms": 121.90473299997393
+   },
+   "error": "step_error: ✗ engine: timeout waiting for condition: locator \"text=Hello World!\" never became visible",
+   "fail_class": "step_error",
+   "task": "internet-dynamic-loading",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 23.894563999958336,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "wait_text",
+     "ms": 30017.058285999927,
+     "ok": false,
+     "err": "✗ engine: timeout waiting for condition: locator \"text=Hello World!\" never became visible"
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 609.197077000048,
+    "snapshot_ms": 13.552706000045873,
+    "usable_ms": 622.7848990000784,
+    "snapshot_ok": true,
+    "snapshot_bytes": 433,
+    "snapshot_tokens_est": 109,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Dynamically Loaded Page Elements\" [level=3 ref=e2]\n- heading",
+    "snapshot_i_bytes": 390,
+    "ttfs_ms": 633.8817390000913
+   },
+   "steps_ms_total": 30040.952849999885,
+   "final_wait_ms": 17.234116000006907,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 13.102524000103585,
+   "post_snapshot_bytes": 433,
+   "warm": {
+    "open_ms": 150.0820670000976,
+    "snapshot_ms": 11.513715000008233,
+    "usable_ms": 161.61940400011372,
+    "snapshot_ok": true,
+    "snapshot_bytes": 433,
+    "snapshot_tokens_est": 109,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Dynamically Loaded Page Elements\" [level=3 ref=e2]\n- heading",
+    "snapshot_i_bytes": 390,
+    "ttfs_ms": 161.61940400011372
+   },
+   "error": "step_error: ✗ engine: timeout waiting for condition: locator \"text=Hello World!\" never became visible",
+   "fail_class": "step_error",
+   "task": "internet-dynamic-loading",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 15.885427000001073,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "wait_text",
+     "ms": 30018.041795999976,
+     "ok": false,
+     "err": "✗ engine: timeout waiting for condition: locator \"text=Hello World!\" never became visible"
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 617.8903219997883,
+    "snapshot_ms": 15.81256500002928,
+    "usable_ms": 633.7294809997547,
+    "snapshot_ok": true,
+    "snapshot_bytes": 433,
+    "snapshot_tokens_est": 109,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Dynamically Loaded Page Elements\" [level=3 ref=e2]\n- heading",
+    "snapshot_i_bytes": 390,
+    "ttfs_ms": 645.3134200000204
+   },
+   "steps_ms_total": 30033.927222999977,
+   "final_wait_ms": 13.314727999968454,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 13.362556000007316,
+   "post_snapshot_bytes": 433,
+   "warm": {
+    "open_ms": 97.32792999991216,
+    "snapshot_ms": 12.85310299997218,
+    "usable_ms": 110.21123300003819,
+    "snapshot_ok": true,
+    "snapshot_bytes": 433,
+    "snapshot_tokens_est": 109,
+    "snapshot_sample": "- link \"Fork me on GitHub\" [ref=e1]:\n  - /url: https://github.com/saucelabs/the-internet\n- heading \"Dynamically Loaded Page Elements\" [level=3 ref=e2]\n- heading",
+    "snapshot_i_bytes": 390,
+    "ttfs_ms": 110.21123300003819
+   },
+   "error": "step_error: ✗ engine: timeout waiting for condition: locator \"text=Hello World!\" never became visible",
+   "fail_class": "step_error",
+   "task": "internet-dynamic-loading",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 163.9132840000093,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 698.8465209999122,
+    "snapshot_ms": 11.745393000077456,
+    "usable_ms": 710.7655919999816,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1974,
+    "snapshot_tokens_est": 494,
+    "snapshot_sample": "- heading \"Quotes to Scrape\" [level=1 ref=e1]:\n  - link \"Quotes to Scrape\" [ref=e2]:\n    - /url: /\n- paragraph:\n  - link \"Login\" [ref=e3]:\n    - /url: /login\n- ",
+    "snapshot_i_bytes": 448,
+    "ttfs_ms": 722.1856140000746
+   },
+   "steps_ms_total": 163.9132840000093,
+   "final_wait_ms": 12.382811000104994,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 14.98161599994637,
+   "post_snapshot_bytes": 2421,
+   "warm": {
+    "open_ms": 174.06314899981953,
+    "snapshot_ms": 14.816885999869555,
+    "usable_ms": 188.90573799982667,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1974,
+    "snapshot_tokens_est": 494,
+    "snapshot_sample": "- heading \"Quotes to Scrape\" [level=1 ref=e1]:\n  - link \"Quotes to Scrape\" [ref=e2]:\n    - /url: /\n- paragraph:\n  - link \"Login\" [ref=e3]:\n    - /url: /login\n- ",
+    "snapshot_i_bytes": 448,
+    "ttfs_ms": 188.90573799982667
+   },
+   "task": "quotes-js-next",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 197.51612500008196,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 469.8795360000804,
+    "snapshot_ms": 12.09139099996537,
+    "usable_ms": 481.9958409999963,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1974,
+    "snapshot_tokens_est": 494,
+    "snapshot_sample": "- heading \"Quotes to Scrape\" [level=1 ref=e1]:\n  - link \"Quotes to Scrape\" [ref=e2]:\n    - /url: /\n- paragraph:\n  - link \"Login\" [ref=e3]:\n    - /url: /login\n- ",
+    "snapshot_i_bytes": 448,
+    "ttfs_ms": 493.37655399995856
+   },
+   "steps_ms_total": 197.51612500008196,
+   "final_wait_ms": 16.68503400008194,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.895100000081584,
+   "post_snapshot_bytes": 2421,
+   "warm": {
+    "open_ms": 174.576940999832,
+    "snapshot_ms": 13.871139000169933,
+    "usable_ms": 188.47129299980588,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1974,
+    "snapshot_tokens_est": 494,
+    "snapshot_sample": "- heading \"Quotes to Scrape\" [level=1 ref=e1]:\n  - link \"Quotes to Scrape\" [ref=e2]:\n    - /url: /\n- paragraph:\n  - link \"Login\" [ref=e3]:\n    - /url: /login\n- ",
+    "snapshot_i_bytes": 448,
+    "ttfs_ms": 188.47129299980588
+   },
+   "task": "quotes-js-next",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 176.68582000001334,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 771.229879999999,
+    "snapshot_ms": 20.97867100010626,
+    "usable_ms": 792.2351919999346,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1974,
+    "snapshot_tokens_est": 494,
+    "snapshot_sample": "- heading \"Quotes to Scrape\" [level=1 ref=e1]:\n  - link \"Quotes to Scrape\" [ref=e2]:\n    - /url: /\n- paragraph:\n  - link \"Login\" [ref=e3]:\n    - /url: /login\n- ",
+    "snapshot_i_bytes": 448,
+    "ttfs_ms": 809.8520609999541
+   },
+   "steps_ms_total": 176.68582000001334,
+   "final_wait_ms": 12.922152000013739,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 10.291649000020698,
+   "post_snapshot_bytes": 2421,
+   "warm": {
+    "open_ms": 163.16762199997902,
+    "snapshot_ms": 12.284106999868527,
+    "usable_ms": 175.47763499990106,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1974,
+    "snapshot_tokens_est": 494,
+    "snapshot_sample": "- heading \"Quotes to Scrape\" [level=1 ref=e1]:\n  - link \"Quotes to Scrape\" [ref=e2]:\n    - /url: /\n- paragraph:\n  - link \"Login\" [ref=e3]:\n    - /url: /login\n- ",
+    "snapshot_i_bytes": 448,
+    "ttfs_ms": 175.47763499990106
+   },
+   "task": "quotes-js-next",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 608.1505740000866,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 2220.255140000023,
+    "snapshot_ms": 14.3879799998831,
+    "usable_ms": 2234.8237630000804,
+    "snapshot_ok": true,
+    "snapshot_bytes": 16627,
+    "snapshot_tokens_est": 4157,
+    "snapshot_sample": "- banner:\n  - link \"Books to Scrape\" [ref=e1]:\n    - /url: index.html\n  - text: We love being scraped!\n- list:\n  - listitem:\n    - link \"Home\" [ref=e2]:\n      -",
+    "snapshot_i_bytes": 15170,
+    "ttfs_ms": 2247.699576999992
+   },
+   "steps_ms_total": 608.1505740000866,
+   "final_wait_ms": 14.875599999912083,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 13.726062000030652,
+   "post_snapshot_bytes": 11516,
+   "warm": {
+    "open_ms": 508.8170199999586,
+    "snapshot_ms": 15.66347000002861,
+    "usable_ms": 524.5026650000364,
+    "snapshot_ok": true,
+    "snapshot_bytes": 16627,
+    "snapshot_tokens_est": 4157,
+    "snapshot_sample": "- banner:\n  - link \"Books to Scrape\" [ref=e1]:\n    - /url: index.html\n  - text: We love being scraped!\n- list:\n  - listitem:\n    - link \"Home\" [ref=e2]:\n      -",
+    "snapshot_i_bytes": 15170,
+    "ttfs_ms": 524.5026650000364
+   },
+   "task": "books-travel",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 677.6630929999519,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 1744.3731129998341,
+    "snapshot_ms": 16.256854999810457,
+    "usable_ms": 1760.7064600000158,
+    "snapshot_ok": true,
+    "snapshot_bytes": 16627,
+    "snapshot_tokens_est": 4157,
+    "snapshot_sample": "- banner:\n  - link \"Books to Scrape\" [ref=e1]:\n    - /url: index.html\n  - text: We love being scraped!\n- list:\n  - listitem:\n    - link \"Home\" [ref=e2]:\n      -",
+    "snapshot_i_bytes": 15170,
+    "ttfs_ms": 1774.5298109999858
+   },
+   "steps_ms_total": 677.6630929999519,
+   "final_wait_ms": 14.638393000001088,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 14.131938999984413,
+   "post_snapshot_bytes": 11516,
+   "warm": {
+    "open_ms": 512.719213000033,
+    "snapshot_ms": 17.314690000144765,
+    "usable_ms": 530.0609490000643,
+    "snapshot_ok": true,
+    "snapshot_bytes": 16627,
+    "snapshot_tokens_est": 4157,
+    "snapshot_sample": "- banner:\n  - link \"Books to Scrape\" [ref=e1]:\n    - /url: index.html\n  - text: We love being scraped!\n- list:\n  - listitem:\n    - link \"Home\" [ref=e2]:\n      -",
+    "snapshot_i_bytes": 15170,
+    "ttfs_ms": 530.0609490000643
+   },
+   "task": "books-travel",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 628.7040369999595,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 1747.3246420000214,
+    "snapshot_ms": 14.127348999958485,
+    "usable_ms": 1761.4804670000449,
+    "snapshot_ok": true,
+    "snapshot_bytes": 16627,
+    "snapshot_tokens_est": 4157,
+    "snapshot_sample": "- banner:\n  - link \"Books to Scrape\" [ref=e1]:\n    - /url: index.html\n  - text: We love being scraped!\n- list:\n  - listitem:\n    - link \"Home\" [ref=e2]:\n      -",
+    "snapshot_i_bytes": 15170,
+    "ttfs_ms": 1773.6042130000424
+   },
+   "steps_ms_total": 628.7040369999595,
+   "final_wait_ms": 17.615198000101373,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 13.14649900002405,
+   "post_snapshot_bytes": 11516,
+   "warm": {
+    "open_ms": 496.85480300011113,
+    "snapshot_ms": 17.532742999959737,
+    "usable_ms": 514.4174359999597,
+    "snapshot_ok": true,
+    "snapshot_bytes": 16627,
+    "snapshot_tokens_est": 4157,
+    "snapshot_sample": "- banner:\n  - link \"Books to Scrape\" [ref=e1]:\n    - /url: index.html\n  - text: We love being scraped!\n- list:\n  - listitem:\n    - link \"Home\" [ref=e2]:\n      -",
+    "snapshot_i_bytes": 15170,
+    "ttfs_ms": 514.4174359999597
+   },
+   "task": "books-travel",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 3089.5912009999156,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 3110.9125699999277,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 5597.029391000047,
+    "snapshot_ms": 13.895806000102311,
+    "usable_ms": 5611.096895999974,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5109,
+    "snapshot_tokens_est": 1278,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 4377,
+    "ttfs_ms": 5622.511307999957
+   },
+   "steps_ms_total": 6200.503770999843,
+   "final_wait_ms": 14.79841100005433,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.806546999840066,
+   "post_snapshot_bytes": 7571,
+   "warm": {
+    "open_ms": 2379.0291220000945,
+    "snapshot_ms": 13.242669000057504,
+    "usable_ms": 2392.299638000317,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5109,
+    "snapshot_tokens_est": 1278,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 4377,
+    "ttfs_ms": 2392.299638000317
+   },
+   "task": "webscraper-laptops",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 3176.8933269998524,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 3114.5745709999464,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 4660.143602999859,
+    "snapshot_ms": 14.55939200008288,
+    "usable_ms": 4674.741425999673,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5157,
+    "snapshot_tokens_est": 1290,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 4384,
+    "ttfs_ms": 4691.016574000008
+   },
+   "steps_ms_total": 6291.467897999799,
+   "final_wait_ms": 12.490243999985978,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 12.39464999991469,
+   "post_snapshot_bytes": 7571,
+   "warm": {
+    "open_ms": 2380.093189999927,
+    "snapshot_ms": 14.956362999975681,
+    "usable_ms": 2395.084233999951,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5157,
+    "snapshot_tokens_est": 1290,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 4384,
+    "ttfs_ms": 2395.084233999951
+   },
+   "task": "webscraper-laptops",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 3060.3796889998484,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 2994.938184000086,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 5104.332033999963,
+    "snapshot_ms": 14.40646900003776,
+    "usable_ms": 5118.767400000012,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5109,
+    "snapshot_tokens_est": 1278,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 4377,
+    "ttfs_ms": 5147.2879280000925
+   },
+   "steps_ms_total": 6055.3178729999345,
+   "final_wait_ms": 19.687818000093102,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 14.480263999896124,
+   "post_snapshot_bytes": 7571,
+   "warm": {
+    "open_ms": 2398.101498000091,
+    "snapshot_ms": 15.675753999967128,
+    "usable_ms": 2413.810760000022,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5109,
+    "snapshot_tokens_est": 1278,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 4377,
+    "ttfs_ms": 2413.810760000022
+   },
+   "task": "webscraper-laptops",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4835.9889479998965,
+    "snapshot_ms": 13.536792000057176,
+    "usable_ms": 4849.7062009996735,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5157,
+    "snapshot_tokens_est": 1290,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 3901,
+    "ttfs_ms": 4878.6659389999695
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 15.940931000048295,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 14.112083000130951,
+   "post_snapshot_bytes": 5157,
+   "warm": {
+    "open_ms": 2427.198693000013,
+    "snapshot_ms": 16.660506000043824,
+    "usable_ms": 2443.8871679999866,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5157,
+    "snapshot_tokens_est": 1290,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 3901,
+    "ttfs_ms": 2443.8871679999866
+   },
+   "task": "webscraper-tables",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4859.557732000016,
+    "snapshot_ms": 16.3402800001204,
+    "usable_ms": 4875.926730999956,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5157,
+    "snapshot_tokens_est": 1290,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 3901,
+    "ttfs_ms": 4909.7320999999065
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 16.122260000091046,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 19.43989000003785,
+   "post_snapshot_bytes": 5157,
+   "warm": {
+    "open_ms": 2458.608138000127,
+    "snapshot_ms": 20.72733199992217,
+    "usable_ms": 2479.3645050001796,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5157,
+    "snapshot_tokens_est": 1290,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 3901,
+    "ttfs_ms": 2479.3645050001796
+   },
+   "task": "webscraper-tables",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 4868.839514999883,
+    "snapshot_ms": 13.116934000048786,
+    "usable_ms": 4881.991243999917,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5157,
+    "snapshot_tokens_est": 1290,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 3901,
+    "ttfs_ms": 4893.2850409999955
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 11.709078999934718,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 11.717940999893472,
+   "post_snapshot_bytes": 5157,
+   "warm": {
+    "open_ms": 2426.6270280000754,
+    "snapshot_ms": 14.806472999975085,
+    "usable_ms": 2441.4617159999907,
+    "snapshot_ok": true,
+    "snapshot_bytes": 5157,
+    "snapshot_tokens_est": 1290,
+    "snapshot_sample": "- banner:\n  - alert:\n    - link \"Web Scraper Cloud replaces your complex scraping stack. - Try it free for 7 days\" [ref=e1]:\n      - /url: https://cloud.webscra",
+    "snapshot_i_bytes": 3901,
+    "ttfs_ms": 2441.4617159999907
+   },
+   "task": "webscraper-tables",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 10.543696000007913,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 63.144377999939024,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 292.50362700014375,
+    "snapshot_ms": 15.038553000194952,
+    "usable_ms": 307.7093290002085,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1102,
+    "snapshot_tokens_est": 276,
+    "snapshot_sample": "- form:\n  - paragraph:\n    - text: \"Customer name:\"\n    - textbox \"Customer name:\" [ref=e1]\n  - paragraph:\n    - text: \"Telephone:\"\n    - textbox \"Telephone:\" [",
+    "snapshot_i_bytes": 735,
+    "ttfs_ms": 320.4283469999209
+   },
+   "steps_ms_total": 73.68807399994694,
+   "final_wait_ms": 13.566815999802202,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 13.119387000100687,
+   "post_snapshot_bytes": 249,
+   "warm": {
+    "open_ms": 61.02686899993569,
+    "snapshot_ms": 14.743636999977753,
+    "usable_ms": 75.79822699981742,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1102,
+    "snapshot_tokens_est": 276,
+    "snapshot_sample": "- form:\n  - paragraph:\n    - text: \"Customer name:\"\n    - textbox \"Customer name:\" [ref=e1]\n  - paragraph:\n    - text: \"Telephone:\"\n    - textbox \"Telephone:\" [",
+    "snapshot_i_bytes": 735,
+    "ttfs_ms": 75.79822699981742
+   },
+   "task": "httpbin-form",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 12.530812999932095,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 66.71440599998459,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 276.0887540001422,
+    "snapshot_ms": 15.763018999947235,
+    "usable_ms": 291.8812180000823,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1102,
+    "snapshot_tokens_est": 276,
+    "snapshot_sample": "- form:\n  - paragraph:\n    - text: \"Customer name:\"\n    - textbox \"Customer name:\" [ref=e1]\n  - paragraph:\n    - text: \"Telephone:\"\n    - textbox \"Telephone:\" [",
+    "snapshot_i_bytes": 735,
+    "ttfs_ms": 308.5225339999888
+   },
+   "steps_ms_total": 79.24521899991669,
+   "final_wait_ms": 17.76056299987249,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 11.381253000115976,
+   "post_snapshot_bytes": 249,
+   "warm": {
+    "open_ms": 629.799706999911,
+    "snapshot_ms": 12.8324000001885,
+    "usable_ms": 642.6594459998887,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1102,
+    "snapshot_tokens_est": 276,
+    "snapshot_sample": "- form:\n  - paragraph:\n    - text: \"Customer name:\"\n    - textbox \"Customer name:\" [ref=e1]\n  - paragraph:\n    - text: \"Telephone:\"\n    - textbox \"Telephone:\" [",
+    "snapshot_i_bytes": 735,
+    "ttfs_ms": 642.6594459998887
+   },
+   "task": "httpbin-form",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 13.588531999848783,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "click",
+     "ms": 68.85741699999198,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": true,
+   "cold": {
+    "open_ms": 372.3536229999736,
+    "snapshot_ms": 15.31548499991186,
+    "usable_ms": 387.70287699997425,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1102,
+    "snapshot_tokens_est": 276,
+    "snapshot_sample": "- form:\n  - paragraph:\n    - text: \"Customer name:\"\n    - textbox \"Customer name:\" [ref=e1]\n  - paragraph:\n    - text: \"Telephone:\"\n    - textbox \"Telephone:\" [",
+    "snapshot_i_bytes": 735,
+    "ttfs_ms": 402.06749100005254
+   },
+   "steps_ms_total": 82.44594899984077,
+   "final_wait_ms": 13.591048000147566,
+   "final_ok": true,
+   "answer_in_page": true,
+   "post_snapshot_ms": 14.647287999978289,
+   "post_snapshot_bytes": 249,
+   "warm": {
+    "open_ms": 58.88681100006215,
+    "snapshot_ms": 16.059929999988526,
+    "usable_ms": 74.98470500018448,
+    "snapshot_ok": true,
+    "snapshot_bytes": 1102,
+    "snapshot_tokens_est": 276,
+    "snapshot_sample": "- form:\n  - paragraph:\n    - text: \"Customer name:\"\n    - textbox \"Customer name:\" [ref=e1]\n  - paragraph:\n    - text: \"Telephone:\"\n    - textbox \"Telephone:\" [",
+    "snapshot_i_bytes": 735,
+    "ttfs_ms": 74.98470500018448
+   },
+   "task": "httpbin-form",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 516.0331650001463,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "press",
+     "ms": 2286.904839999974,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 3061.5746079999954,
+    "snapshot_ms": 13.928151000058278,
+    "usable_ms": 3075.7018919999246,
+    "snapshot_ok": true,
+    "snapshot_bytes": 2083,
+    "snapshot_tokens_est": 521,
+    "snapshot_sample": "- complementary:\n  - banner:\n    - heading \"React\" [level=3 ref=e1]\n    - heading \"React\" [level=5 ref=e2]\n    - link \"Source\" [ref=e3]:\n      - /url: https://g",
+    "snapshot_i_bytes": 1570,
+    "ttfs_ms": 3089.678227999946
+   },
+   "steps_ms_total": 2802.93800500012,
+   "final_wait_ms": 10131.657843000023,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 80.32562200003304,
+   "post_snapshot_bytes": 2083,
+   "warm": {
+    "open_ms": 2287.927488000132,
+    "snapshot_ms": 15.397211000090465,
+    "usable_ms": 2303.3611210002564,
+    "snapshot_ok": true,
+    "snapshot_bytes": 2083,
+    "snapshot_tokens_est": 521,
+    "snapshot_sample": "- complementary:\n  - banner:\n    - heading \"React\" [level=3 ref=e1]\n    - heading \"React\" [level=5 ref=e2]\n    - link \"Source\" [ref=e3]:\n      - /url: https://g",
+    "snapshot_i_bytes": 1570,
+    "ttfs_ms": 2303.3611210002564
+   },
+   "error": "final check failed",
+   "fail_class": "final_mismatch",
+   "task": "todomvc-react",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 516.8791090000886,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "press",
+     "ms": 2281.4280879998114,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 3279.510877000168,
+    "snapshot_ms": 12.735711000161245,
+    "usable_ms": 3292.274076000089,
+    "snapshot_ok": true,
+    "snapshot_bytes": 2083,
+    "snapshot_tokens_est": 521,
+    "snapshot_sample": "- complementary:\n  - banner:\n    - heading \"React\" [level=3 ref=e1]\n    - heading \"React\" [level=5 ref=e2]\n    - link \"Source\" [ref=e3]:\n      - /url: https://g",
+    "snapshot_i_bytes": 1570,
+    "ttfs_ms": 3303.4970459998585
+   },
+   "steps_ms_total": 2798.3071969999,
+   "final_wait_ms": 10095.331118000206,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 73.93096500006504,
+   "post_snapshot_bytes": 2083,
+   "warm": {
+    "open_ms": 2286.0564300001133,
+    "snapshot_ms": 16.0108130001463,
+    "usable_ms": 2302.1042020001914,
+    "snapshot_ok": true,
+    "snapshot_bytes": 2083,
+    "snapshot_tokens_est": 521,
+    "snapshot_sample": "- complementary:\n  - banner:\n    - heading \"React\" [level=3 ref=e1]\n    - heading \"React\" [level=5 ref=e2]\n    - link \"Source\" [ref=e3]:\n      - /url: https://g",
+    "snapshot_i_bytes": 1570,
+    "ttfs_ms": 2302.1042020001914
+   },
+   "error": "final check failed",
+   "fail_class": "final_mismatch",
+   "task": "todomvc-react",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "fill",
+     "ms": 515.5228790000547,
+     "ok": true,
+     "err": null
+    },
+    {
+     "op": "press",
+     "ms": 2285.2372949998826,
+     "ok": true,
+     "err": null
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 3092.3552099999506,
+    "snapshot_ms": 15.308061999967322,
+    "usable_ms": 3107.693905999884,
+    "snapshot_ok": true,
+    "snapshot_bytes": 2083,
+    "snapshot_tokens_est": 521,
+    "snapshot_sample": "- complementary:\n  - banner:\n    - heading \"React\" [level=3 ref=e1]\n    - heading \"React\" [level=5 ref=e2]\n    - link \"Source\" [ref=e3]:\n      - /url: https://g",
+    "snapshot_i_bytes": 1570,
+    "ttfs_ms": 3120.0574699998833
+   },
+   "steps_ms_total": 2800.7601739999373,
+   "final_wait_ms": 10083.001081000082,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 66.66329700010829,
+   "post_snapshot_bytes": 2083,
+   "warm": {
+    "open_ms": 2285.6311810000334,
+    "snapshot_ms": 13.959754999959841,
+    "usable_ms": 2299.620284000179,
+    "snapshot_ok": true,
+    "snapshot_bytes": 2083,
+    "snapshot_tokens_est": 521,
+    "snapshot_sample": "- complementary:\n  - banner:\n    - heading \"React\" [level=3 ref=e1]\n    - heading \"React\" [level=5 ref=e2]\n    - link \"Source\" [ref=e3]:\n      - /url: https://g",
+    "snapshot_i_bytes": 1570,
+    "ttfs_ms": 2299.620284000179
+   },
+   "error": "final check failed",
+   "fail_class": "final_mismatch",
+   "task": "todomvc-react",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 1037.552675000159,
+    "snapshot_ms": 13.674855000106618,
+    "usable_ms": 1051.3649230001029,
+    "snapshot_ok": true,
+    "snapshot_bytes": 13708,
+    "snapshot_tokens_est": 3427,
+    "snapshot_sample": "- link \"DuckDuckGo\" [ref=e1]:\n  - /url: /html/\n- form:\n  - textbox [ref=e2]: golang\n  - button \"Submit\" [ref=e3]\n  - combobox [ref=e4]:\n    - text: All Regions\n",
+    "snapshot_i_bytes": 13454,
+    "ttfs_ms": 1065.015561999986
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.483509000157937,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 13.894832000136375,
+   "post_snapshot_bytes": 13708,
+   "warm": {
+    "open_ms": 60.41141699999571,
+    "snapshot_ms": 16.115527000045404,
+    "usable_ms": 76.56300199986435,
+    "snapshot_ok": true,
+    "snapshot_bytes": 13708,
+    "snapshot_tokens_est": 3427,
+    "snapshot_sample": "- link \"DuckDuckGo\" [ref=e1]:\n  - /url: /html/\n- form:\n  - textbox [ref=e2]: golang\n  - button \"Submit\" [ref=e3]\n  - combobox [ref=e4]:\n    - text: All Regions\n",
+    "snapshot_i_bytes": 13454,
+    "ttfs_ms": 76.56300199986435
+   },
+   "task": "search-ddg",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 511.0740910000168,
+    "snapshot_ms": 14.830281999893486,
+    "usable_ms": 10591.015254999977,
+    "snapshot_ok": false,
+    "snapshot_bytes": 375,
+    "snapshot_tokens_est": 94,
+    "snapshot_sample": "- link \"DuckDuckGo\" [ref=e1]:\n  - /url: /html/\n- iframe\n- form:\n  - text: \"Unfortunately, bots use DuckDuckGo too. Please complete the following challenge to co",
+    "snapshot_i_bytes": 84,
+    "ttfs_ms": 10601.979355000192
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.281023000134155,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 13.012264000019059,
+   "post_snapshot_bytes": 375,
+   "warm": {
+    "open_ms": 153.3005739999935,
+    "snapshot_ms": 13.899957000045106,
+    "usable_ms": 10225.945802999893,
+    "snapshot_ok": false,
+    "snapshot_bytes": 375,
+    "snapshot_tokens_est": 94,
+    "snapshot_sample": "- link \"DuckDuckGo\" [ref=e1]:\n  - /url: /html/\n- iframe\n- form:\n  - text: \"Unfortunately, bots use DuckDuckGo too. Please complete the following challenge to co",
+    "snapshot_i_bytes": 84,
+    "ttfs_ms": 10225.945802999893
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "search-ddg",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 540.4635280000512,
+    "snapshot_ms": 14.571943999966606,
+    "usable_ms": 10617.665261000162,
+    "snapshot_ok": false,
+    "snapshot_bytes": 375,
+    "snapshot_tokens_est": 94,
+    "snapshot_sample": "- link \"DuckDuckGo\" [ref=e1]:\n  - /url: /html/\n- iframe\n- form:\n  - text: \"Unfortunately, bots use DuckDuckGo too. Please complete the following challenge to co",
+    "snapshot_i_bytes": 84,
+    "ttfs_ms": 10629.129113999894
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.775514000095427,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 10.501421000109985,
+   "post_snapshot_bytes": 375,
+   "warm": {
+    "open_ms": 146.2091829997953,
+    "snapshot_ms": 12.228398999897763,
+    "usable_ms": 10266.673276999732,
+    "snapshot_ok": false,
+    "snapshot_bytes": 375,
+    "snapshot_tokens_est": 94,
+    "snapshot_sample": "- link \"DuckDuckGo\" [ref=e1]:\n  - /url: /html/\n- iframe\n- form:\n  - text: \"Unfortunately, bots use DuckDuckGo too. Please complete the following challenge to co",
+    "snapshot_i_bytes": 84,
+    "ttfs_ms": 10266.673276999732
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "search-ddg",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 801.5373279999476,
+    "snapshot_ms": 13.694487999891862,
+    "usable_ms": 815.4007509998046,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3925,
+    "snapshot_tokens_est": 982,
+    "snapshot_sample": "- banner:\n  - paragraph:\n    - text: Text-Only Version\n    - link \"Go To Full Site\" [ref=e1]:\n      - /url: https://www.npr.org/\n- main:\n  - heading \"NPR : Nati",
+    "snapshot_i_bytes": 3809,
+    "ttfs_ms": 828.67173000006
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 12.978672999888659,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 16.896447999868542,
+   "post_snapshot_bytes": 3925,
+   "warm": {
+    "open_ms": 135.9754439999815,
+    "snapshot_ms": 14.5153299998492,
+    "usable_ms": 150.52522800001316,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3925,
+    "snapshot_tokens_est": 982,
+    "snapshot_sample": "- banner:\n  - paragraph:\n    - text: Text-Only Version\n    - link \"Go To Full Site\" [ref=e1]:\n      - /url: https://www.npr.org/\n- main:\n  - heading \"NPR : Nati",
+    "snapshot_i_bytes": 3809,
+    "ttfs_ms": 150.52522800001316
+   },
+   "task": "npr-text",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 332.78100299998187,
+    "snapshot_ms": 12.172014000127092,
+    "usable_ms": 344.9822619999759,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3925,
+    "snapshot_tokens_est": 982,
+    "snapshot_sample": "- banner:\n  - paragraph:\n    - text: Text-Only Version\n    - link \"Go To Full Site\" [ref=e1]:\n      - /url: https://www.npr.org/\n- main:\n  - heading \"NPR : Nati",
+    "snapshot_i_bytes": 3809,
+    "ttfs_ms": 358.5146389999427
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 15.308399999979883,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 23.572143000084907,
+   "post_snapshot_bytes": 3925,
+   "warm": {
+    "open_ms": 122.96079299994744,
+    "snapshot_ms": 13.90783299994655,
+    "usable_ms": 136.89301699982025,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3925,
+    "snapshot_tokens_est": 982,
+    "snapshot_sample": "- banner:\n  - paragraph:\n    - text: Text-Only Version\n    - link \"Go To Full Site\" [ref=e1]:\n      - /url: https://www.npr.org/\n- main:\n  - heading \"NPR : Nati",
+    "snapshot_i_bytes": 3809,
+    "ttfs_ms": 136.89301699982025
+   },
+   "task": "npr-text",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 1219.9453340000473,
+    "snapshot_ms": 13.666107999859378,
+    "usable_ms": 1233.6416559999343,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3934,
+    "snapshot_tokens_est": 984,
+    "snapshot_sample": "- banner:\n  - paragraph:\n    - text: Text-Only Version\n    - link \"Go To Full Site\" [ref=e1]:\n      - /url: https://www.npr.org/\n- main:\n  - heading \"NPR : Nati",
+    "snapshot_i_bytes": 3818,
+    "ttfs_ms": 1245.859769999981
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 14.007423999952152,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 16.05489299981855,
+   "post_snapshot_bytes": 3934,
+   "warm": {
+    "open_ms": 79.29478700016625,
+    "snapshot_ms": 16.948710000142455,
+    "usable_ms": 96.27566300029866,
+    "snapshot_ok": true,
+    "snapshot_bytes": 3934,
+    "snapshot_tokens_est": 984,
+    "snapshot_sample": "- banner:\n  - paragraph:\n    - text: Text-Only Version\n    - link \"Go To Full Site\" [ref=e1]:\n      - /url: https://www.npr.org/\n- main:\n  - heading \"NPR : Nati",
+    "snapshot_i_bytes": 3818,
+    "ttfs_ms": 96.27566300029866
+   },
+   "task": "npr-text",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 329.7856159999501,
+    "snapshot_ms": 13.294268000172451,
+    "usable_ms": 343.2572210000362,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20169,
+    "snapshot_tokens_est": 5043,
+    "snapshot_sample": "- banner:\n  - link \"CNN\" [ref=e1]:\n    - /url: /\n  - text: 10/15/2026\n- paragraph: Latest Stories\n- list:\n  - listitem:\n    - link \"Harry and Meghan make first ",
+    "snapshot_i_bytes": 19974,
+    "ttfs_ms": 358.68466300005093
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 19.650024000089616,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 13.827942000003532,
+   "post_snapshot_bytes": 20169,
+   "warm": {
+    "open_ms": 34.92934300005436,
+    "snapshot_ms": 15.981176000088453,
+    "usable_ms": 50.93653800012544,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20169,
+    "snapshot_tokens_est": 5043,
+    "snapshot_sample": "- banner:\n  - link \"CNN\" [ref=e1]:\n    - /url: /\n  - text: 10/15/2026\n- paragraph: Latest Stories\n- list:\n  - listitem:\n    - link \"Harry and Meghan make first ",
+    "snapshot_i_bytes": 19974,
+    "ttfs_ms": 50.93653800012544
+   },
+   "task": "cnn-lite",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 317.5846639999654,
+    "snapshot_ms": 12.884380999952555,
+    "usable_ms": 330.493981000036,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20169,
+    "snapshot_tokens_est": 5043,
+    "snapshot_sample": "- banner:\n  - link \"CNN\" [ref=e1]:\n    - /url: /\n  - text: 10/15/2026\n- paragraph: Latest Stories\n- list:\n  - listitem:\n    - link \"Harry and Meghan make first ",
+    "snapshot_i_bytes": 19974,
+    "ttfs_ms": 347.3851700001396
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 12.399868999840692,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 13.827787999995053,
+   "post_snapshot_bytes": 20169,
+   "warm": {
+    "open_ms": 34.91007300000638,
+    "snapshot_ms": 13.417121000122279,
+    "usable_ms": 48.35303999995813,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20169,
+    "snapshot_tokens_est": 5043,
+    "snapshot_sample": "- banner:\n  - link \"CNN\" [ref=e1]:\n    - /url: /\n  - text: 10/15/2026\n- paragraph: Latest Stories\n- list:\n  - listitem:\n    - link \"Harry and Meghan make first ",
+    "snapshot_i_bytes": 19974,
+    "ttfs_ms": 48.35303999995813
+   },
+   "task": "cnn-lite",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": true,
+   "cold": {
+    "open_ms": 372.1694600000046,
+    "snapshot_ms": 19.788056999910623,
+    "usable_ms": 391.99708800017834,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20169,
+    "snapshot_tokens_est": 5043,
+    "snapshot_sample": "- banner:\n  - link \"CNN\" [ref=e1]:\n    - /url: /\n  - text: 10/15/2026\n- paragraph: Latest Stories\n- list:\n  - listitem:\n    - link \"Harry and Meghan make first ",
+    "snapshot_i_bytes": 19974,
+    "ttfs_ms": 405.4465059998911
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 13.205452000023797,
+   "final_ok": true,
+   "answer_in_page": null,
+   "post_snapshot_ms": 13.445151000050828,
+   "post_snapshot_bytes": 20169,
+   "warm": {
+    "open_ms": 35.05357099999674,
+    "snapshot_ms": 13.180351000046358,
+    "usable_ms": 48.26128499978222,
+    "snapshot_ok": true,
+    "snapshot_bytes": 20169,
+    "snapshot_tokens_est": 5043,
+    "snapshot_sample": "- banner:\n  - link \"CNN\" [ref=e1]:\n    - /url: /\n  - text: 10/15/2026\n- paragraph: Latest Stories\n- list:\n  - listitem:\n    - link \"Harry and Meghan make first ",
+    "snapshot_i_bytes": 19974,
+    "ttfs_ms": 48.26128499978222
+   },
+   "task": "cnn-lite",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 1293.2653860000428,
+    "load_error": "✗ Get \"https://zaide.com/\": tls: failed to verify certificate: x509: certificate is valid for kst.ye-xiu.com, not zaide.com",
+    "ttfs_ms": 1293.2932109998073
+   },
+   "error": "load_error: ✗ Get \"https://zaide.com/\": tls: failed to verify certificate: x509: certificate is valid for kst.ye-xiu.com, not zaide.com",
+   "fail_class": "load_error",
+   "task": "zaide-home",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 928.6520630000159,
+    "load_error": "✗ Get \"https://zaide.com/\": tls: failed to verify certificate: x509: certificate is valid for kst.ye-xiu.com, not zaide.com",
+    "ttfs_ms": 928.6847740001976
+   },
+   "error": "load_error: ✗ Get \"https://zaide.com/\": tls: failed to verify certificate: x509: certificate is valid for kst.ye-xiu.com, not zaide.com",
+   "fail_class": "load_error",
+   "task": "zaide-home",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 1840.9925259999,
+    "load_error": "✗ Get \"https://zaide.com/\": tls: failed to verify certificate: x509: certificate is valid for kst.ye-xiu.com, not zaide.com",
+    "ttfs_ms": 1841.023988999892
+   },
+   "error": "load_error: ✗ Get \"https://zaide.com/\": tls: failed to verify certificate: x509: certificate is valid for kst.ye-xiu.com, not zaide.com",
+   "fail_class": "load_error",
+   "task": "zaide-home",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 4581.14394999994,
+    "snapshot_ms": 14.794844000134617,
+    "usable_ms": 14651.0581449999,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 14661.657989999978
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 10099.566927999957,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 12.13267600000836,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 2750.2270919999573,
+    "snapshot_ms": 15.764837000053376,
+    "usable_ms": 12895.096339000156,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 12895.096339000156
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "t3a-home",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 4375.962261999957,
+    "snapshot_ms": 13.791990999830887,
+    "usable_ms": 14446.075136000058,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 14457.525542000076
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 10063.379255000036,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 12.91258699982427,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 2706.8114119998645,
+    "snapshot_ms": 14.534986000042409,
+    "usable_ms": 12795.806738999905,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 12795.806738999905
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "t3a-home",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 4533.732039999915,
+    "snapshot_ms": 13.800783000187948,
+    "usable_ms": 14611.26231599995,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 14626.671827999875
+   },
+   "steps_ms_total": 0,
+   "final_wait_ms": 10083.176160999807,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 12.40411000000313,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 2704.7423270000145,
+    "snapshot_ms": 13.433466000016779,
+    "usable_ms": 12787.545224000001,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 12787.545224000001
+   },
+   "error": "snapshot lacks expected text",
+   "fail_class": "snapshot_mismatch",
+   "task": "t3a-home",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 5386.9103359999135,
+     "ok": false,
+     "err": "✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/platform\\\"]\" never became visible"
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 4431.414175000042,
+    "snapshot_ms": 14.3566269997973,
+    "usable_ms": 14550.605759000173,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 14564.427896999987
+   },
+   "steps_ms_total": 5386.9103359999135,
+   "final_wait_ms": 10088.995779999997,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 10.920307999942452,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 2709.9624580000527,
+    "snapshot_ms": 12.88406000006944,
+    "usable_ms": 12795.996386999963,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 12795.996386999963
+   },
+   "error": "step_error: ✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/platform\\\"]\" never became visible",
+   "fail_class": "step_error",
+   "task": "t3a-nav-platform",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 5386.540694999974,
+     "ok": false,
+     "err": "✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/platform\\\"]\" never became visible"
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 4800.7108820001595,
+    "snapshot_ms": 13.44719299999997,
+    "usable_ms": 14907.893021000084,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 14919.03766999999
+   },
+   "steps_ms_total": 5386.540694999974,
+   "final_wait_ms": 10110.46204000013,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 12.980486999964342,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 2768.4988430000376,
+    "snapshot_ms": 14.679131000069901,
+    "usable_ms": 12835.598647000035,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 12835.598647000035
+   },
+   "error": "step_error: ✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/platform\\\"]\" never became visible",
+   "fail_class": "step_error",
+   "task": "t3a-nav-platform",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 5386.242715000175,
+     "ok": false,
+     "err": "✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/platform\\\"]\" never became visible"
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 4579.612054000143,
+    "snapshot_ms": 15.548153000185266,
+    "usable_ms": 14816.743744000327,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 14828.070409999928
+   },
+   "steps_ms_total": 5386.242715000175,
+   "final_wait_ms": 10098.895298000192,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 13.05424700002186,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 2779.7240300001577,
+    "snapshot_ms": 17.755347999976948,
+    "usable_ms": 12888.027166000102,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 12888.027166000102
+   },
+   "error": "step_error: ✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/platform\\\"]\" never became visible",
+   "fail_class": "step_error",
+   "task": "t3a-nav-platform",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 5389.811312000034,
+     "ok": false,
+     "err": "✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/employers\\\"]\" never became visible"
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 4727.462738000089,
+    "snapshot_ms": 13.413529000012204,
+    "usable_ms": 14855.232720999978,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 14866.41389299999
+   },
+   "steps_ms_total": 5389.811312000034,
+   "final_wait_ms": 10177.96356799989,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 11.758401999948546,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 2729.7425329999533,
+    "snapshot_ms": 14.427012000000104,
+    "usable_ms": 12819.200290000066,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 12819.200290000066
+   },
+   "error": "step_error: ✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/employers\\\"]\" never became visible",
+   "fail_class": "step_error",
+   "task": "t3a-nav-employers",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 5389.827100000111,
+     "ok": false,
+     "err": "✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/employers\\\"]\" never became visible"
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 4645.142102000071,
+    "snapshot_ms": 11.707356999861076,
+    "usable_ms": 14779.121812999947,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 14793.38078700006
+   },
+   "steps_ms_total": 5389.827100000111,
+   "final_wait_ms": 10091.312215999933,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 13.772971999831498,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 2745.6565779999364,
+    "snapshot_ms": 11.941715999972075,
+    "usable_ms": 12861.717636999907,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 12861.717636999907
+   },
+   "error": "step_error: ✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/employers\\\"]\" never became visible",
+   "fail_class": "step_error",
+   "task": "t3a-nav-employers",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [
+    {
+     "op": "click",
+     "ms": 5389.8451220002025,
+     "ok": false,
+     "err": "✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/employers\\\"]\" never became visible"
+    }
+   ],
+   "ok": false,
+   "cold": {
+    "open_ms": 4667.644521000097,
+    "snapshot_ms": 12.165979999816045,
+    "usable_ms": 14733.156297000125,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 14745.892427999992
+   },
+   "steps_ms_total": 5389.8451220002025,
+   "final_wait_ms": 10126.922601999948,
+   "final_ok": false,
+   "answer_in_page": false,
+   "post_snapshot_ms": 14.433263999875635,
+   "post_snapshot_bytes": 77,
+   "warm": {
+    "open_ms": 2866.3943320000544,
+    "snapshot_ms": 14.048886999953538,
+    "usable_ms": 12951.613264000043,
+    "snapshot_ok": false,
+    "snapshot_bytes": 77,
+    "snapshot_tokens_est": 20,
+    "snapshot_sample": "- text: (page has no visible content; it may require JavaScript or be blank)\n",
+    "snapshot_i_bytes": 47,
+    "ttfs_ms": 12951.613264000043
+   },
+   "error": "step_error: ✗ engine: timeout waiting for condition: locator \"header a[href=\\\"/employers\\\"]\" never became visible",
+   "fail_class": "step_error",
+   "task": "t3a-nav-employers",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35033.36320200004,
+    "load_error": "✗ read unix @->/tmp/sweef-home-RLu5sj/default.sock: i/o timeout",
+    "ttfs_ms": 35033.387244999874
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-RLu5sj/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-home",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35032.20984899998,
+    "load_error": "✗ read unix @->/tmp/sweef-home-VncDfK/default.sock: i/o timeout",
+    "ttfs_ms": 35032.2397429999
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-VncDfK/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-home",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35040.990277000004,
+    "load_error": "✗ read unix @->/tmp/sweef-home-Bpg3rL/default.sock: i/o timeout",
+    "ttfs_ms": 35041.01916200016
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-Bpg3rL/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-home",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35024.35498400009,
+    "load_error": "✗ read unix @->/tmp/sweef-home-8YhHDV/default.sock: i/o timeout",
+    "ttfs_ms": 35024.385997999925
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-8YhHDV/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-nav-pricing",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35027.53780299984,
+    "load_error": "✗ read unix @->/tmp/sweef-home-6PfrGx/default.sock: i/o timeout",
+    "ttfs_ms": 35027.568615
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-6PfrGx/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-nav-pricing",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35030.79333799984,
+    "load_error": "✗ read unix @->/tmp/sweef-home-sRwkP2/default.sock: i/o timeout",
+    "ttfs_ms": 35030.87222100003
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-sRwkP2/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-nav-pricing",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35040.148939999985,
+    "load_error": "✗ read unix @->/tmp/sweef-home-2OXUQg/default.sock: i/o timeout",
+    "ttfs_ms": 35040.178371000104
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-2OXUQg/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-nav-docs",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35041.02494799998,
+    "load_error": "✗ read unix @->/tmp/sweef-home-35AsF6/default.sock: i/o timeout",
+    "ttfs_ms": 35041.050636
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-35AsF6/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-nav-docs",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35026.143286000006,
+    "load_error": "✗ read unix @->/tmp/sweef-home-cI4ZWB/default.sock: i/o timeout",
+    "ttfs_ms": 35026.1733299999
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-cI4ZWB/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-nav-docs",
+   "run": 3
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35052.73205899983,
+    "load_error": "✗ read unix @->/tmp/sweef-home-O7ACzj/default.sock: i/o timeout",
+    "ttfs_ms": 35052.76872900012
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-O7ACzj/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-cta-start",
+   "run": 1
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35035.11818500003,
+    "load_error": "✗ read unix @->/tmp/sweef-home-04qy4s/default.sock: i/o timeout",
+    "ttfs_ms": 35035.14449600014
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-04qy4s/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-cta-start",
+   "run": 2
+  },
+  {
+   "tool": "sweef",
+   "steps": [],
+   "ok": false,
+   "cold": {
+    "open_ms": 35024.37098899996,
+    "load_error": "✗ read unix @->/tmp/sweef-home-l6eFq0/default.sock: i/o timeout",
+    "ttfs_ms": 35024.404267000034
+   },
+   "error": "load_error: ✗ read unix @->/tmp/sweef-home-l6eFq0/default.sock: i/o timeout",
+   "fail_class": "load_error",
+   "task": "pp-cta-start",
+   "run": 3
+  }
+ ]
+}

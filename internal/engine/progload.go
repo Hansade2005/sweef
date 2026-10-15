@@ -258,6 +258,9 @@ func (p *progLoad) step(slice time.Duration) bool {
 				t.finishLoad(p.url)
 			}
 			t.tmark("load.done", "")
+			if stageTrace {
+				stageLog("load", t.ID, 0, "%s", hostStatTake())
+			}
 			t.pl.CompareAndSwap(p, nil)
 			return false
 		}

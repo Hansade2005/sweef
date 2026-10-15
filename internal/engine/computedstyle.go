@@ -93,6 +93,62 @@ func computedStyleOf(d *fnet.Doc, id int64) map[string]any {
 		"font-family":      cssFamilies(st.FontFamily),
 		"opacity":          cssNum(st.Opacity),
 	}
+	// keyword properties as the cascade resolved them (pages and libraries read these to decide layout and
+	// behaviour; they all answered the tag defaults before)
+	kw := func(name, v, def string) {
+		if v == "" {
+			v = def
+		}
+		out[name] = v
+	}
+	kw("text-align", st.TextAlign, "start")
+	kw("text-transform", st.TextTransform, "none")
+	kw("white-space", st.WhiteSpace, "normal")
+	kw("word-break", st.WordBreak, "normal")
+	kw("overflow-wrap", st.OverflowWrap, "normal")
+	kw("direction", st.Direction, "ltr")
+	kw("cursor", st.Cursor, "auto")
+	kw("pointer-events", st.PointerEvents, "auto")
+	kw("list-style-type", st.ListStyleType, "disc")
+	kw("float", st.Float, "none")
+	kw("clear", st.Clear, "none")
+	kw("vertical-align", st.VerticalAlign, "baseline")
+	kw("text-overflow", st.TextOverflow, "clip")
+	kw("object-fit", st.ObjectFit, "fill")
+	kw("flex-direction", st.FlexDirection, "row")
+	kw("flex-wrap", st.FlexWrap, "nowrap")
+	kw("justify-content", st.JustifyContent, "normal")
+	kw("align-items", st.AlignItems, "normal")
+	kw("align-self", st.AlignSelf, "auto")
+	kw("align-content", st.AlignContent, "normal")
+	kw("overflow-x", st.OverflowX, "visible")
+	kw("overflow-y", st.OverflowY, "visible")
+	if st.OverflowX == st.OverflowY {
+		kw("overflow", st.OverflowX, "visible")
+	} else {
+		out["overflow"] = st.OverflowX + " " + st.OverflowY
+	}
+	out["flex-grow"] = cssNum(st.FlexGrow)
+	out["flex-shrink"] = cssNum(st.FlexShrink)
+	out["order"] = strconv.Itoa(st.Order)
+	out["letter-spacing"] = "normal"
+	if st.LetterSpacing != 0 {
+		out["letter-spacing"] = cssPx(st.LetterSpacing)
+	}
+	var deco []string
+	if st.TextDecorLine&1 != 0 {
+		deco = append(deco, "underline")
+	}
+	if st.TextDecorLine&2 != 0 {
+		deco = append(deco, "overline")
+	}
+	if st.TextDecorLine&4 != 0 {
+		deco = append(deco, "line-through")
+	}
+	if len(deco) == 0 {
+		deco = []string{"none"}
+	}
+	out["text-decoration-line"] = strings.Join(deco, " ")
 	switch st.FontStyle {
 	case 1:
 		out["font-style"] = "italic"
@@ -148,3 +204,16 @@ func setBoxValues(out map[string]any, b *render.Box, st *style.Computed) {
 
 // docQuirks reports whether the document renders in quirks mode (document.compatMode).
 func docQuirks(d *fnet.Doc) bool { return render.IsQuirks(d.Root) }
+
+// mediaMatches evaluates a media query the way the page's stylesheets are evaluated (matchMedia): the
+// same viewport, colour scheme, device emulation and range syntax, so script and CSS agree.
+func (t *Tab) mediaMatches(q string) bool {
+	w, h, dsf, mobile, _ := t.Viewport()
+	if w <= 0 {
+		w, h = 1280, 720
+	}
+	if dsf <= 0 {
+		dsf = 1
+	}
+	return style.MediaMatches(q, &style.Env{Width: float64(w), Height: float64(h), DPR: dsf, ColorScheme: t.ColorSchemeName(), Mobile: mobile})
+}

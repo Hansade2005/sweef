@@ -261,7 +261,9 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 			return s.ok(r, "✓ browser ready"), err
 		}
 		u := args[0]
-		if !looksLikeURL(u) && !strings.HasPrefix(u, "about:") {
+		// a bare host gets https://; data:, about:, blob: URLs and paths of the current page go as they are
+		if !looksLikeURL(u) && !strings.HasPrefix(u, "about:") && !strings.HasPrefix(u, "data:") && !strings.HasPrefix(u, "blob:") &&
+			!strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "?") {
 			u = "https://" + u
 		}
 		r, err := s.call("Page.navigate", map[string]any{"url": u})
@@ -700,6 +702,15 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 		}
 		c.Close()
 		s.call("Browser.shutdown", nil)
+		// wait for the daemon to be gone: one still shutting down when the next command starts a new daemon
+		// removed that daemon's socket on its way out, and the command after got a fresh session ("no such tab")
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			c, err := s.dial()
+			if err != nil {
+				break
+			}
+			c.Close()
+		}
 		os.Remove(s.sock)
 		return "✓ session closed", nil
 	}
@@ -852,7 +863,10 @@ func (s *cliSession) wait(args []string) (string, error) {
 		return "✓ " + *load, err
 	case len(rest) > 0:
 		if ms, err := strconv.Atoi(rest[0]); err == nil {
-			time.Sleep(time.Duration(ms) * time.Millisecond)
+			// the daemon runs the page meanwhile; a sleep here left timers and animations frozen
+			if _, err := s.call("Page.waitForTimeout", map[string]any{"ms": ms}); err != nil {
+				return "", err
+			}
 			return fmt.Sprintf("✓ waited %dms", ms), nil
 		}
 		_, err := s.call("Page.waitForSelector", map[string]any{"selector": normSel(rest[0]), "state": *state, "timeoutMs": to})

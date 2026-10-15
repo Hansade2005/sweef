@@ -81,3 +81,12 @@ func TestFontFaceInStyleEngine(t *testing.T) {
 		t.Fatalf("engine fonts: %+v", e.Fonts)
 	}
 }
+
+// Minified CSS writes `url(x.woff2)format("woff2")` with no space: nextjs.org's fonts were requested as
+// `x.woff2)format("woff2"` and fell back.
+func TestFaceSrcWithoutSpaces(t *testing.T) {
+	got := parseFaceSrc(`url(../media/Geist.woff2)format("woff2"),url("a b.woff") format('woff'),local(Arial)`)
+	if len(got) != 3 || got[0].URL != "../media/Geist.woff2" || got[0].Format != "woff2" || got[1].URL != "a b.woff" || got[1].Format != "woff" || got[2].Local != "Arial" {
+		t.Fatalf("got %+v", got)
+	}
+}

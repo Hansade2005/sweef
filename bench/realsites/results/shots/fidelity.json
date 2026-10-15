@@ -1,0 +1,385 @@
+{
+ "when": "2026-10-15T12:42:59.069Z",
+ "settle_ms": 2000,
+ "results": [
+  {
+   "site": "t3a",
+   "viewport": "desktop",
+   "state": "load",
+   "chromium": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     1280,
+     800
+    ],
+    "b_size": [
+     1280,
+     800
+    ],
+    "diff_pct": 4.72,
+    "mae": 8.37,
+    "ssim": 0.8963
+   },
+   "parity": true
+  },
+  {
+   "site": "t3a",
+   "viewport": "desktop",
+   "state": "scroll",
+   "chromium": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     1280,
+     800
+    ],
+    "b_size": [
+     1280,
+     800
+    ],
+    "diff_pct": 14.26,
+    "mae": 16.71,
+    "ssim": 0.768
+   },
+   "parity": true
+  },
+  {
+   "site": "t3a",
+   "viewport": "desktop",
+   "state": "nav-platform",
+   "chromium": {
+    "url": "https://the3rdacademy.com/platform",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     1280,
+     800
+    ],
+    "b_size": [
+     1280,
+     800
+    ],
+    "diff_pct": 8.43,
+    "mae": 15.94,
+    "ssim": 0.827
+   },
+   "parity": true
+  },
+  {
+   "site": "t3a",
+   "viewport": "mobile",
+   "state": "load",
+   "chromium": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     390,
+     844
+    ],
+    "b_size": [
+     390,
+     844
+    ],
+    "diff_pct": 3.67,
+    "mae": 6.62,
+    "ssim": 0.9332
+   },
+   "parity": true
+  },
+  {
+   "site": "t3a",
+   "viewport": "mobile",
+   "state": "scroll",
+   "chromium": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     390,
+     844
+    ],
+    "b_size": [
+     390,
+     844
+    ],
+    "diff_pct": 7.14,
+    "mae": 9.67,
+    "ssim": 0.853
+   },
+   "parity": true
+  },
+  {
+   "site": "t3a",
+   "viewport": "mobile",
+   "state": "menu",
+   "chromium": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://the3rdacademy.com/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     390,
+     844
+    ],
+    "b_size": [
+     390,
+     844
+    ],
+    "diff_pct": 0.5,
+    "mae": 0.62,
+    "ssim": 0.9896
+   },
+   "parity": true
+  },
+  {
+   "site": "pipilot",
+   "viewport": "desktop",
+   "state": "load",
+   "chromium": {
+    "url": "https://www.pipilot.dev/",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://www.pipilot.dev/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     1280,
+     800
+    ],
+    "b_size": [
+     1280,
+     800
+    ],
+    "diff_pct": 5.54,
+    "mae": 8.19,
+    "ssim": 0.8674
+   },
+   "parity": true
+  },
+  {
+   "site": "pipilot",
+   "viewport": "desktop",
+   "state": "scroll",
+   "chromium": {
+    "url": "https://www.pipilot.dev/",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://www.pipilot.dev/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     1280,
+     800
+    ],
+    "b_size": [
+     1280,
+     800
+    ],
+    "diff_pct": 5.15,
+    "mae": 5.61,
+    "ssim": 0.8708
+   },
+   "parity": true
+  },
+  {
+   "site": "pipilot",
+   "viewport": "desktop",
+   "state": "nav-pricing",
+   "chromium": {
+    "url": "https://www.pipilot.dev/pricing",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://www.pipilot.dev/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     1280,
+     800
+    ],
+    "b_size": [
+     1280,
+     800
+    ],
+    "diff_pct": 6.25,
+    "mae": 7.94,
+    "ssim": 0.8564
+   },
+   "parity": true
+  },
+  {
+   "site": "pipilot",
+   "viewport": "desktop",
+   "state": "cta",
+   "chromium": {
+    "url": "https://www.pipilot.dev/app",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://www.pipilot.dev/app",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     1280,
+     800
+    ],
+    "b_size": [
+     1280,
+     800
+    ],
+    "diff_pct": 6.46,
+    "mae": 9.95,
+    "ssim": 0.8634
+   },
+   "parity": true
+  },
+  {
+   "site": "pipilot",
+   "viewport": "mobile",
+   "state": "load",
+   "chromium": {
+    "url": "https://www.pipilot.dev/",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://www.pipilot.dev/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     390,
+     844
+    ],
+    "b_size": [
+     390,
+     844
+    ],
+    "diff_pct": 6.69,
+    "mae": 7.5,
+    "ssim": 0.8401
+   },
+   "parity": true
+  },
+  {
+   "site": "pipilot",
+   "viewport": "mobile",
+   "state": "scroll",
+   "chromium": {
+    "url": "https://www.pipilot.dev/",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://www.pipilot.dev/",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     390,
+     844
+    ],
+    "b_size": [
+     390,
+     844
+    ],
+    "diff_pct": 4.7,
+    "mae": 4.97,
+    "ssim": 0.8928
+   },
+   "parity": true
+  },
+  {
+   "site": "pipilot",
+   "viewport": "mobile",
+   "state": "cta",
+   "chromium": {
+    "url": "https://www.pipilot.dev/app",
+    "check": true
+   },
+   "sweef": {
+    "url": "https://www.pipilot.dev/app",
+    "check": true
+   },
+   "diff": {
+    "a_size": [
+     390,
+     844
+    ],
+    "b_size": [
+     390,
+     844
+    ],
+    "diff_pct": 7.94,
+    "mae": 8.94,
+    "ssim": 0.8181
+   },
+   "parity": true
+  },
+  {
+   "site": "zaide",
+   "viewport": "desktop",
+   "state": "load",
+   "chromium": {
+    "error": "page.goto: net::ERR_CERT_COMMON_NAME_INVALID at https://zaide.com/"
+   },
+   "sweef": {
+    "url": "about:blank",
+    "check": false,
+    "error": "✗ Get \"https://zaide.com/\": tls: failed to verify certificate: x509: certificate is valid for kst.ye-xiu.com, not zaide.com"
+   },
+   "parity": false
+  },
+  {
+   "site": "zaide",
+   "viewport": "mobile",
+   "state": "load",
+   "chromium": {
+    "error": "page.goto: net::ERR_CERT_COMMON_NAME_INVALID at https://zaide.com/"
+   },
+   "sweef": {
+    "url": "about:blank",
+    "check": false,
+    "error": "✗ Get \"https://zaide.com/\": tls: failed to verify certificate: x509: certificate is valid for kst.ye-xiu.com, not zaide.com"
+   },
+   "parity": false
+  }
+ ]
+}

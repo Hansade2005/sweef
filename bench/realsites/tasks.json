@@ -1,534 +1,643 @@
 {
- "version": 1,
- "authored": "2026-10-14",
- "tasks": [
-  {
-   "id": "wiki-turing",
-   "category": "wikipedia",
-   "url": "https://en.wikipedia.org/wiki/Alan_Turing",
-   "goal": "On this page, what is Alan Turing's full date of birth? Answer with the date as written in the article.",
-   "snapshot_check": "Alan Turing",
-   "steps": [],
-   "answer_check": "23 June 1912",
-   "mode_b": true,
-   "risk": "rate-limit (Wikimedia 429 under repeated load)"
-  },
-  {
-   "id": "wiki-go-language",
-   "category": "wikipedia",
-   "url": "https://en.wikipedia.org/wiki/Go_(programming_language)",
-   "goal": "Who designed the Go programming language? List the designers named in the infobox.",
-   "snapshot_check": "Go \\(programming language\\)|Go programming language",
-   "steps": [],
-   "answer_check": "Griesemer",
-   "mode_b": true,
-   "risk": "rate-limit (Wikimedia 429 under repeated load)"
-  },
-  {
-   "id": "wiki-search-flow",
-   "category": "wikipedia",
-   "url": "https://en.wikipedia.org/wiki/Main_Page",
-   "goal": "Use the Wikipedia search box to search for 'Ada Lovelace', open her article, and tell me in which year she was born.",
-   "snapshot_check": "Wikipedia",
-   "steps": [
+  "version": 1,
+  "authored": "2026-10-14",
+  "tasks": [
     {
-     "op": "fill",
-     "selector": "input[name=search]",
-     "value": "Ada Lovelace"
+      "id": "wiki-turing",
+      "category": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Alan_Turing",
+      "goal": "On this page, what is Alan Turing's full date of birth? Answer with the date as written in the article.",
+      "snapshot_check": "Alan Turing",
+      "steps": [],
+      "answer_check": "23 June 1912",
+      "mode_b": true,
+      "risk": "rate-limit (Wikimedia 429 under repeated load)"
     },
     {
-     "op": "press",
-     "key": "Enter",
-     "selector": "input[name=search]"
-    }
-   ],
-   "final_check": "Augusta Ada King|Ada Lovelace",
-   "answer_check": "1815",
-   "mode_b": true,
-   "risk": "rate-limit (Wikimedia 429 under repeated load)"
-  },
-  {
-   "id": "github-repo-golang",
-   "category": "github",
-   "url": "https://github.com/golang/go",
-   "goal": "What open source license does the golang/go GitHub repository use? Answer with the license name shown on the repository page.",
-   "snapshot_check": "golang",
-   "steps": [],
-   "answer_check": "BSD-3-Clause|BSD 3-Clause",
-   "mode_b": true
-  },
-  {
-   "id": "github-issue-9",
-   "category": "github",
-   "url": "https://github.com/golang/go/issues/9",
-   "goal": "Open golang/go issue number 9. What is its title?",
-   "snapshot_check": "already used the name",
-   "steps": [],
-   "answer_check": "already used the name for \\*?MY\\*? programming language",
-   "mode_b": true
-  },
-  {
-   "id": "github-license-file",
-   "category": "github",
-   "url": "https://github.com/golang/go/blob/master/LICENSE",
-   "goal": "What is the copyright holder named in the license text of the golang/go repository?",
-   "snapshot_check": "Redistribution and use",
-   "steps": [],
-   "answer_check": "Google|The Go Authors",
-   "mode_b": true
-  },
-  {
-   "id": "hn-item-1",
-   "category": "hacker-news",
-   "url": "https://news.ycombinator.com/item?id=1",
-   "goal": "Which user submitted Hacker News item 1 (the 'Y Combinator' post)?",
-   "snapshot_check": "Y Combinator",
-   "steps": [],
-   "answer_check": "\\bpg\\b",
-   "mode_b": true
-  },
-  {
-   "id": "hn-dropbox",
-   "category": "hacker-news",
-   "url": "https://news.ycombinator.com/item?id=8863",
-   "goal": "Who submitted the Hacker News post 'My YC app: Dropbox'?",
-   "snapshot_check": "Dropbox",
-   "steps": [],
-   "answer_check": "dhouston",
-   "mode_b": true
-  },
-  {
-   "id": "hn-front",
-   "category": "hacker-news",
-   "url": "https://news.ycombinator.com/",
-   "goal": "Report the title of the story currently ranked first on the Hacker News front page.",
-   "snapshot_check": "Hacker News",
-   "steps": [],
-   "answer_check": null,
-   "mode_b": false,
-   "note": "Dynamic content: Mode A only (no stable answer to grade)."
-  },
-  {
-   "id": "hn-ask-nav",
-   "category": "hacker-news",
-   "url": "https://news.ycombinator.com/",
-   "goal": "Click the 'ask' link in the top navigation and report the page title.",
-   "snapshot_check": "Hacker News",
-   "steps": [
-    {
-     "op": "click",
-     "selector": "a[href=ask]"
-    }
-   ],
-   "final_check": "Ask HN|ask\\?|/ask",
-   "answer_check": null,
-   "mode_b": false,
-   "note": "Mode A only (dynamic)."
-  },
-  {
-   "id": "mdn-array-map",
-   "category": "mdn",
-   "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map",
-   "goal": "According to MDN, what does Array.prototype.map() return?",
-   "snapshot_check": "Array.prototype.map\\(\\)",
-   "steps": [],
-   "answer_check": "new array",
-   "mode_b": true
-  },
-  {
-   "id": "mdn-fetch",
-   "category": "mdn",
-   "url": "https://developer.mozilla.org/en-US/docs/Web/API/Window/fetch",
-   "goal": "According to MDN, what type of value does fetch() return?",
-   "snapshot_check": "fetch\\(\\)",
-   "steps": [],
-   "answer_check": "Promise",
-   "mode_b": true
-  },
-  {
-   "id": "npm-left-pad",
-   "category": "package-registry",
-   "url": "https://www.npmjs.com/package/left-pad",
-   "goal": "What is the latest published version of the npm package left-pad?",
-   "snapshot_check": "left-pad",
-   "steps": [],
-   "answer_check": "1\\.3\\.0",
-   "mode_b": true,
-   "risk": "bot-block (Cloudflare challenge expected)"
-  },
-  {
-   "id": "pypi-requests",
-   "category": "package-registry",
-   "url": "https://pypi.org/project/requests/",
-   "goal": "What license is the PyPI package 'requests' distributed under?",
-   "snapshot_check": "requests",
-   "steps": [],
-   "answer_check": "Apache",
-   "mode_b": true,
-   "risk": "TLS (sandbox proxy CA not trusted by Chromium unless ignoreHTTPSErrors)"
-  },
-  {
-   "id": "so-sorted-array",
-   "category": "q-and-a",
-   "url": "https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster-than-processing-an-unsorted-array",
-   "goal": "On Stack Overflow, which CPU feature explains why a sorted array is processed faster than an unsorted one in this question?",
-   "snapshot_check": "sorted array",
-   "steps": [],
-   "answer_check": "branch predict",
-   "mode_b": true,
-   "risk": "bot-block (possible)"
-  },
-  {
-   "id": "reddit-old-programming",
-   "category": "forum",
-   "url": "https://old.reddit.com/r/programming/",
-   "goal": "What is the name of the subreddit shown on this page?",
-   "snapshot_check": "programming",
-   "steps": [],
-   "answer_check": "programming",
-   "mode_b": true,
-   "risk": "bot-block (network security block expected)"
-  },
-  {
-   "id": "react-dev-learn",
-   "category": "react-nextjs",
-   "url": "https://react.dev/learn",
-   "goal": "On the React docs Quick Start page, what is the name of the first section of the page body (the first topic you will learn)?",
-   "snapshot_check": "Quick Start",
-   "steps": [],
-   "answer_check": "Creating and nesting components",
-   "mode_b": true
-  },
-  {
-   "id": "nextjs-docs",
-   "category": "react-nextjs",
-   "url": "https://nextjs.org/docs",
-   "goal": "On the Next.js docs landing page, which router (App Router or Pages Router) does the page say it is currently showing docs for?",
-   "snapshot_check": "Next\\.js",
-   "steps": [],
-   "answer_check": "App Router",
-   "mode_b": true
-  },
-  {
-   "id": "angular-overview",
-   "category": "spa-docs",
-   "url": "https://angular.dev/overview",
-   "goal": "On angular.dev, what does the overview page say Angular is? Quote the key phrase.",
-   "snapshot_check": "Angular",
-   "steps": [],
-   "answer_check": "web framework|framework",
-   "mode_b": true
-  },
-  {
-   "id": "vue-introduction",
-   "category": "spa-docs",
-   "url": "https://vuejs.org/guide/introduction.html",
-   "goal": "How does the Vue docs introduction describe Vue (one adjective that starts with 'p' followed by 'framework')?",
-   "snapshot_check": "Vue",
-   "steps": [],
-   "answer_check": "[Pp]rogressive",
-   "mode_b": true
-  },
-  {
-   "id": "redux-getting-started",
-   "category": "spa-docs",
-   "url": "https://redux.js.org/introduction/getting-started",
-   "goal": "On the Redux Getting Started page, which package does it recommend as the standard way to write Redux logic?",
-   "snapshot_check": "Redux",
-   "steps": [],
-   "answer_check": "Redux Toolkit",
-   "mode_b": true
-  },
-  {
-   "id": "python-docs-json",
-   "category": "docs",
-   "url": "https://docs.python.org/3/library/json.html",
-   "goal": "In the Python json module docs, what is the name of the function that serializes an object to a JSON formatted string?",
-   "snapshot_check": "json",
-   "steps": [],
-   "answer_check": "json\\.dumps|dumps\\(",
-   "mode_b": true
-  },
-  {
-   "id": "go-effective-go",
-   "category": "docs",
-   "url": "https://go.dev/doc/effective_go",
-   "goal": "In Effective Go, which tool is recommended to handle formatting automatically?",
-   "snapshot_check": "Effective Go",
-   "steps": [],
-   "answer_check": "gofmt",
-   "mode_b": true
-  },
-  {
-   "id": "rust-lang-home",
-   "category": "docs",
-   "url": "https://www.rust-lang.org/",
-   "goal": "What tagline does the Rust homepage use to describe the language?",
-   "snapshot_check": "Rust",
-   "steps": [],
-   "answer_check": "reliable and efficient",
-   "mode_b": true
-  },
-  {
-   "id": "arxiv-attention",
-   "category": "science",
-   "url": "https://arxiv.org/abs/1706.03762",
-   "goal": "Who is the first listed author of the arXiv paper 1706.03762?",
-   "snapshot_check": "Attention Is All You Need",
-   "steps": [],
-   "answer_check": "Vaswani",
-   "mode_b": true
-  },
-  {
-   "id": "example-com",
-   "category": "control",
-   "url": "https://example.com",
-   "goal": "What does the page say this domain is for use in? Answer with the key phrase.",
-   "snapshot_check": "documentation examples",
-   "steps": [],
-   "answer_check": "documentation",
-   "mode_b": true,
-   "note": "Control: smallest possible page."
-  },
-  {
-   "id": "saucedemo-login",
-   "category": "spa-login",
-   "url": "https://www.saucedemo.com/",
-   "goal": "Log in as user 'standard_user' with password 'secret_sauce' and tell me the name of the first product listed.",
-   "snapshot_check": "Swag Labs",
-   "steps": [
-    {
-     "op": "fill",
-     "selector": "#user-name",
-     "value": "standard_user"
+      "id": "wiki-go-language",
+      "category": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Go_(programming_language)",
+      "goal": "Who designed the Go programming language? List the designers named in the infobox.",
+      "snapshot_check": "Go \\(programming language\\)|Go programming language",
+      "steps": [],
+      "answer_check": "Griesemer",
+      "mode_b": true,
+      "risk": "rate-limit (Wikimedia 429 under repeated load)"
     },
     {
-     "op": "fill",
-     "selector": "#password",
-     "value": "secret_sauce"
+      "id": "wiki-search-flow",
+      "category": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Main_Page",
+      "goal": "Use the Wikipedia search box to search for 'Ada Lovelace', open her article, and tell me in which year she was born.",
+      "snapshot_check": "Wikipedia",
+      "steps": [
+        {
+          "op": "fill",
+          "selector": "input[name=search]",
+          "value": "Ada Lovelace"
+        },
+        {
+          "op": "press",
+          "key": "Enter",
+          "selector": "input[name=search]"
+        }
+      ],
+      "final_check": "Augusta Ada King|Ada Lovelace",
+      "answer_check": "1815",
+      "mode_b": true,
+      "risk": "rate-limit (Wikimedia 429 under repeated load)"
     },
     {
-     "op": "click",
-     "selector": "#login-button"
-    }
-   ],
-   "final_check": "Products",
-   "answer_check": "Sauce Labs Backpack",
-   "mode_b": true
-  },
-  {
-   "id": "practice-login",
-   "category": "login-form",
-   "url": "https://practicetestautomation.com/practice-test-login/",
-   "goal": "Log in with username 'student' and password 'Password123'. What message does the page show after logging in?",
-   "snapshot_check": "Test login",
-   "steps": [
-    {
-     "op": "fill",
-     "selector": "#username",
-     "value": "student"
+      "id": "github-repo-golang",
+      "category": "github",
+      "url": "https://github.com/golang/go",
+      "goal": "What open source license does the golang/go GitHub repository use? Answer with the license name shown on the repository page.",
+      "snapshot_check": "golang",
+      "steps": [],
+      "answer_check": "BSD-3-Clause|BSD 3-Clause",
+      "mode_b": true
     },
     {
-     "op": "fill",
-     "selector": "#password",
-     "value": "Password123"
+      "id": "github-issue-9",
+      "category": "github",
+      "url": "https://github.com/golang/go/issues/9",
+      "goal": "Open golang/go issue number 9. What is its title?",
+      "snapshot_check": "already used the name",
+      "steps": [],
+      "answer_check": "already used the name for \\*?MY\\*? programming language",
+      "mode_b": true
     },
     {
-     "op": "click",
-     "selector": "#submit"
-    }
-   ],
-   "final_check": "Logged In Successfully",
-   "answer_check": "Logged In Successfully",
-   "mode_b": true
-  },
-  {
-   "id": "internet-login",
-   "category": "login-form",
-   "url": "https://the-internet.herokuapp.com/login",
-   "goal": "Log in with username 'tomsmith' and password 'SuperSecretPassword!'. What flash message does the page show?",
-   "snapshot_check": "Login Page",
-   "steps": [
-    {
-     "op": "fill",
-     "selector": "#username",
-     "value": "tomsmith"
+      "id": "github-license-file",
+      "category": "github",
+      "url": "https://github.com/golang/go/blob/master/LICENSE",
+      "goal": "What is the copyright holder named in the license text of the golang/go repository?",
+      "snapshot_check": "Redistribution and use",
+      "steps": [],
+      "answer_check": "Google|The Go Authors",
+      "mode_b": true
     },
     {
-     "op": "fill",
-     "selector": "#password",
-     "value": "SuperSecretPassword!"
+      "id": "hn-item-1",
+      "category": "hacker-news",
+      "url": "https://news.ycombinator.com/item?id=1",
+      "goal": "Which user submitted Hacker News item 1 (the 'Y Combinator' post)?",
+      "snapshot_check": "Y Combinator",
+      "steps": [],
+      "answer_check": "\\bpg\\b",
+      "mode_b": true
     },
     {
-     "op": "click",
-     "selector": "button[type=submit]"
-    }
-   ],
-   "final_check": "You logged into a secure area",
-   "answer_check": "You logged into a secure area",
-   "mode_b": true,
-   "risk": "availability (herokuapp host timed out in the authoring sandbox)"
-  },
-  {
-   "id": "internet-dynamic-loading",
-   "category": "login-form",
-   "url": "https://the-internet.herokuapp.com/dynamic_loading/2",
-   "goal": "Click the Start button and wait for the result. What text appears?",
-   "snapshot_check": "Dynamic Loading",
-   "steps": [
-    {
-     "op": "click",
-     "selector": "#start button"
+      "id": "hn-dropbox",
+      "category": "hacker-news",
+      "url": "https://news.ycombinator.com/item?id=8863",
+      "goal": "Who submitted the Hacker News post 'My YC app: Dropbox'?",
+      "snapshot_check": "Dropbox",
+      "steps": [],
+      "answer_check": "dhouston",
+      "mode_b": true
     },
     {
-     "op": "wait_text",
-     "text": "Hello World!"
-    }
-   ],
-   "final_check": "Hello World!",
-   "answer_check": "Hello World!",
-   "mode_b": true,
-   "risk": "availability (herokuapp host timed out in the authoring sandbox)"
-  },
-  {
-   "id": "quotes-js-next",
-   "category": "spa-js-rendered",
-   "url": "https://quotes.toscrape.com/js/",
-   "goal": "This page renders quotes with JavaScript. Click 'Next' and report the author of the first quote on page 2.",
-   "snapshot_check": "Albert Einstein",
-   "steps": [
-    {
-     "op": "click",
-     "selector": "li.next a"
-    }
-   ],
-   "final_check": "Marilyn Monroe",
-   "answer_check": "Marilyn Monroe",
-   "mode_b": true
-  },
-  {
-   "id": "books-travel",
-   "category": "ecommerce-demo",
-   "url": "https://books.toscrape.com/",
-   "goal": "Open the 'Travel' category. How many results does it show?",
-   "snapshot_check": "Books to Scrape",
-   "steps": [
-    {
-     "op": "click",
-     "selector": "text=Travel"
-    }
-   ],
-   "final_check": "Travel",
-   "answer_check": "11 results",
-   "mode_b": true
-  },
-  {
-   "id": "webscraper-laptops",
-   "category": "ecommerce-demo",
-   "url": "https://webscraper.io/test-sites/e-commerce/static",
-   "goal": "Go to Computers then Laptops. What is the price of the product named 'Packard 255 G2'?",
-   "snapshot_check": "E-commerce training site",
-   "steps": [
-    {
-     "op": "click",
-     "selector": "a.category-link[href$='computers']"
+      "id": "hn-front",
+      "category": "hacker-news",
+      "url": "https://news.ycombinator.com/",
+      "goal": "Report the title of the story currently ranked first on the Hacker News front page.",
+      "snapshot_check": "Hacker News",
+      "steps": [],
+      "answer_check": null,
+      "mode_b": false,
+      "note": "Dynamic content: Mode A only (no stable answer to grade)."
     },
     {
-     "op": "click",
-     "selector": "a.subcategory-link[href$='laptops']"
-    }
-   ],
-   "final_check": "Computers / Laptops",
-   "answer_check": "416\\.99",
-   "mode_b": true
-  },
-  {
-   "id": "webscraper-tables",
-   "category": "ecommerce-demo",
-   "url": "https://webscraper.io/test-sites/tables",
-   "goal": "How many table layouts does the test site list on this page? Name the first one.",
-   "snapshot_check": "Table playground",
-   "steps": [],
-   "answer_check": "Semantically correct tables",
-   "mode_b": true
-  },
-  {
-   "id": "httpbin-form",
-   "category": "login-form",
-   "url": "https://httpbin.org/forms/post",
-   "goal": "Fill the customer name field with 'Ada' and submit the order form. What customer name does the response echo back?",
-   "snapshot_check": "Customer name",
-   "steps": [
-    {
-     "op": "fill",
-     "selector": "input[name=custname]",
-     "value": "Ada"
+      "id": "hn-ask-nav",
+      "category": "hacker-news",
+      "url": "https://news.ycombinator.com/",
+      "goal": "Click the 'ask' link in the top navigation and report the page title.",
+      "snapshot_check": "Hacker News",
+      "steps": [
+        {
+          "op": "click",
+          "selector": "a[href=ask]"
+        }
+      ],
+      "final_check": "Ask HN|ask\\?|/ask",
+      "answer_check": null,
+      "mode_b": false,
+      "note": "Mode A only (dynamic)."
     },
     {
-     "op": "click",
-     "selector": "text=Submit order"
-    }
-   ],
-   "final_check": "custname.{0,8}Ada",
-   "answer_check": "Ada",
-   "mode_b": true,
-   "risk": "availability (httpbin is occasionally slow)"
-  },
-  {
-   "id": "todomvc-react",
-   "category": "spa-js-rendered",
-   "url": "https://todomvc.com/examples/react/dist/",
-   "goal": "Add a todo item 'Buy milk' and report the item counter text shown at the bottom.",
-   "snapshot_check": "TodoMVC",
-   "steps": [
-    {
-     "op": "fill",
-     "selector": ".new-todo",
-     "value": "Buy milk"
+      "id": "mdn-array-map",
+      "category": "mdn",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map",
+      "goal": "According to MDN, what does Array.prototype.map() return?",
+      "snapshot_check": "Array.prototype.map\\(\\)",
+      "steps": [],
+      "answer_check": "new array",
+      "mode_b": true
     },
     {
-     "op": "press",
-     "key": "Enter",
-     "selector": ".new-todo"
+      "id": "mdn-fetch",
+      "category": "mdn",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Window/fetch",
+      "goal": "According to MDN, what type of value does fetch() return?",
+      "snapshot_check": "fetch\\(\\)",
+      "steps": [],
+      "answer_check": "Promise",
+      "mode_b": true
+    },
+    {
+      "id": "npm-left-pad",
+      "category": "package-registry",
+      "url": "https://www.npmjs.com/package/left-pad",
+      "goal": "What is the latest published version of the npm package left-pad?",
+      "snapshot_check": "left-pad",
+      "steps": [],
+      "answer_check": "1\\.3\\.0",
+      "mode_b": true,
+      "risk": "bot-block (Cloudflare challenge expected)"
+    },
+    {
+      "id": "pypi-requests",
+      "category": "package-registry",
+      "url": "https://pypi.org/project/requests/",
+      "goal": "What license is the PyPI package 'requests' distributed under?",
+      "snapshot_check": "requests",
+      "steps": [],
+      "answer_check": "Apache",
+      "mode_b": true,
+      "risk": "TLS (sandbox proxy CA not trusted by Chromium unless ignoreHTTPSErrors)"
+    },
+    {
+      "id": "so-sorted-array",
+      "category": "q-and-a",
+      "url": "https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster-than-processing-an-unsorted-array",
+      "goal": "On Stack Overflow, which CPU feature explains why a sorted array is processed faster than an unsorted one in this question?",
+      "snapshot_check": "sorted array",
+      "steps": [],
+      "answer_check": "branch predict",
+      "mode_b": true,
+      "risk": "bot-block (possible)"
+    },
+    {
+      "id": "reddit-old-programming",
+      "category": "forum",
+      "url": "https://old.reddit.com/r/programming/",
+      "goal": "What is the name of the subreddit shown on this page?",
+      "snapshot_check": "programming",
+      "steps": [],
+      "answer_check": "programming",
+      "mode_b": true,
+      "risk": "bot-block (network security block expected)"
+    },
+    {
+      "id": "react-dev-learn",
+      "category": "react-nextjs",
+      "url": "https://react.dev/learn",
+      "goal": "On the React docs Quick Start page, what is the name of the first section of the page body (the first topic you will learn)?",
+      "snapshot_check": "Quick Start",
+      "steps": [],
+      "answer_check": "Creating and nesting components",
+      "mode_b": true
+    },
+    {
+      "id": "nextjs-docs",
+      "category": "react-nextjs",
+      "url": "https://nextjs.org/docs",
+      "goal": "On the Next.js docs landing page, which router (App Router or Pages Router) does the page say it is currently showing docs for?",
+      "snapshot_check": "Next\\.js",
+      "steps": [],
+      "answer_check": "App Router",
+      "mode_b": true
+    },
+    {
+      "id": "angular-overview",
+      "category": "spa-docs",
+      "url": "https://angular.dev/overview",
+      "goal": "On angular.dev, what does the overview page say Angular is? Quote the key phrase.",
+      "snapshot_check": "Angular",
+      "steps": [],
+      "answer_check": "web framework|framework",
+      "mode_b": true
+    },
+    {
+      "id": "vue-introduction",
+      "category": "spa-docs",
+      "url": "https://vuejs.org/guide/introduction.html",
+      "goal": "How does the Vue docs introduction describe Vue (one adjective that starts with 'p' followed by 'framework')?",
+      "snapshot_check": "Vue",
+      "steps": [],
+      "answer_check": "[Pp]rogressive",
+      "mode_b": true
+    },
+    {
+      "id": "redux-getting-started",
+      "category": "spa-docs",
+      "url": "https://redux.js.org/introduction/getting-started",
+      "goal": "On the Redux Getting Started page, which package does it recommend as the standard way to write Redux logic?",
+      "snapshot_check": "Redux",
+      "steps": [],
+      "answer_check": "Redux Toolkit",
+      "mode_b": true
+    },
+    {
+      "id": "python-docs-json",
+      "category": "docs",
+      "url": "https://docs.python.org/3/library/json.html",
+      "goal": "In the Python json module docs, what is the name of the function that serializes an object to a JSON formatted string?",
+      "snapshot_check": "json",
+      "steps": [],
+      "answer_check": "json\\.dumps|dumps\\(",
+      "mode_b": true
+    },
+    {
+      "id": "go-effective-go",
+      "category": "docs",
+      "url": "https://go.dev/doc/effective_go",
+      "goal": "In Effective Go, which tool is recommended to handle formatting automatically?",
+      "snapshot_check": "Effective Go",
+      "steps": [],
+      "answer_check": "gofmt",
+      "mode_b": true
+    },
+    {
+      "id": "rust-lang-home",
+      "category": "docs",
+      "url": "https://www.rust-lang.org/",
+      "goal": "What tagline does the Rust homepage use to describe the language?",
+      "snapshot_check": "Rust",
+      "steps": [],
+      "answer_check": "reliable and efficient",
+      "mode_b": true
+    },
+    {
+      "id": "arxiv-attention",
+      "category": "science",
+      "url": "https://arxiv.org/abs/1706.03762",
+      "goal": "Who is the first listed author of the arXiv paper 1706.03762?",
+      "snapshot_check": "Attention Is All You Need",
+      "steps": [],
+      "answer_check": "Vaswani",
+      "mode_b": true
+    },
+    {
+      "id": "example-com",
+      "category": "control",
+      "url": "https://example.com",
+      "goal": "What does the page say this domain is for use in? Answer with the key phrase.",
+      "snapshot_check": "documentation examples",
+      "steps": [],
+      "answer_check": "documentation",
+      "mode_b": true,
+      "note": "Control: smallest possible page."
+    },
+    {
+      "id": "saucedemo-login",
+      "category": "spa-login",
+      "url": "https://www.saucedemo.com/",
+      "goal": "Log in as user 'standard_user' with password 'secret_sauce' and tell me the name of the first product listed.",
+      "snapshot_check": "Swag Labs",
+      "steps": [
+        {
+          "op": "fill",
+          "selector": "#user-name",
+          "value": "standard_user"
+        },
+        {
+          "op": "fill",
+          "selector": "#password",
+          "value": "secret_sauce"
+        },
+        {
+          "op": "click",
+          "selector": "#login-button"
+        }
+      ],
+      "final_check": "Products",
+      "answer_check": "Sauce Labs Backpack",
+      "mode_b": true
+    },
+    {
+      "id": "practice-login",
+      "category": "login-form",
+      "url": "https://practicetestautomation.com/practice-test-login/",
+      "goal": "Log in with username 'student' and password 'Password123'. What message does the page show after logging in?",
+      "snapshot_check": "Test login",
+      "steps": [
+        {
+          "op": "fill",
+          "selector": "#username",
+          "value": "student"
+        },
+        {
+          "op": "fill",
+          "selector": "#password",
+          "value": "Password123"
+        },
+        {
+          "op": "click",
+          "selector": "#submit"
+        }
+      ],
+      "final_check": "Logged In Successfully",
+      "answer_check": "Logged In Successfully",
+      "mode_b": true
+    },
+    {
+      "id": "internet-login",
+      "category": "login-form",
+      "url": "https://the-internet.herokuapp.com/login",
+      "goal": "Log in with username 'tomsmith' and password 'SuperSecretPassword!'. What flash message does the page show?",
+      "snapshot_check": "Login Page",
+      "steps": [
+        {
+          "op": "fill",
+          "selector": "#username",
+          "value": "tomsmith"
+        },
+        {
+          "op": "fill",
+          "selector": "#password",
+          "value": "SuperSecretPassword!"
+        },
+        {
+          "op": "click",
+          "selector": "button[type=submit]"
+        }
+      ],
+      "final_check": "You logged into a secure area",
+      "answer_check": "You logged into a secure area",
+      "mode_b": true,
+      "risk": "availability (herokuapp host timed out in the authoring sandbox)"
+    },
+    {
+      "id": "internet-dynamic-loading",
+      "category": "login-form",
+      "url": "https://the-internet.herokuapp.com/dynamic_loading/2",
+      "goal": "Click the Start button and wait for the result. What text appears?",
+      "snapshot_check": "Dynamically Loaded",
+      "steps": [
+        {
+          "op": "click",
+          "selector": "#start button"
+        },
+        {
+          "op": "wait_text",
+          "text": "Hello World!"
+        }
+      ],
+      "final_check": "Hello World!",
+      "answer_check": "Hello World!",
+      "mode_b": true,
+      "risk": "availability (herokuapp host timed out in the authoring sandbox)"
+    },
+    {
+      "id": "quotes-js-next",
+      "category": "spa-js-rendered",
+      "url": "https://quotes.toscrape.com/js/",
+      "goal": "This page renders quotes with JavaScript. Click 'Next' and report the author of the first quote on page 2.",
+      "snapshot_check": "Albert Einstein",
+      "steps": [
+        {
+          "op": "click",
+          "selector": "li.next a"
+        }
+      ],
+      "final_check": "Marilyn Monroe",
+      "answer_check": "Marilyn Monroe",
+      "mode_b": true
+    },
+    {
+      "id": "books-travel",
+      "category": "ecommerce-demo",
+      "url": "https://books.toscrape.com/",
+      "goal": "Open the 'Travel' category. How many results does it show?",
+      "snapshot_check": "Books to Scrape",
+      "steps": [
+        {
+          "op": "click",
+          "selector": "text=Travel"
+        }
+      ],
+      "final_check": "Travel",
+      "answer_check": "11 results",
+      "mode_b": true
+    },
+    {
+      "id": "webscraper-laptops",
+      "category": "ecommerce-demo",
+      "url": "https://webscraper.io/test-sites/e-commerce/static",
+      "goal": "Go to Computers then Laptops. What is the price of the product named 'Packard 255 G2'?",
+      "snapshot_check": "E-commerce training site",
+      "steps": [
+        {
+          "op": "click",
+          "selector": "a.category-link[href$='computers']"
+        },
+        {
+          "op": "click",
+          "selector": "a.subcategory-link[href$='laptops']"
+        }
+      ],
+      "final_check": "Computers / Laptops",
+      "answer_check": "416\\.99",
+      "mode_b": true
+    },
+    {
+      "id": "webscraper-tables",
+      "category": "ecommerce-demo",
+      "url": "https://webscraper.io/test-sites/tables",
+      "goal": "How many table layouts does the test site list on this page? Name the first one.",
+      "snapshot_check": "Table playground",
+      "steps": [],
+      "answer_check": "Semantically correct tables",
+      "mode_b": true
+    },
+    {
+      "id": "httpbin-form",
+      "category": "login-form",
+      "url": "https://httpbin.org/forms/post",
+      "goal": "Fill the customer name field with 'Ada' and submit the order form. What customer name does the response echo back?",
+      "snapshot_check": "Customer name",
+      "steps": [
+        {
+          "op": "fill",
+          "selector": "input[name=custname]",
+          "value": "Ada"
+        },
+        {
+          "op": "click",
+          "selector": "text=Submit order"
+        }
+      ],
+      "final_check": "custname.{0,8}Ada",
+      "answer_check": "Ada",
+      "mode_b": true,
+      "risk": "availability (httpbin is occasionally slow)"
+    },
+    {
+      "id": "todomvc-react",
+      "category": "spa-js-rendered",
+      "url": "https://todomvc.com/examples/react/dist/",
+      "goal": "Add a todo item 'Buy milk' and report the item counter text shown at the bottom.",
+      "snapshot_check": "TodoMVC",
+      "steps": [
+        {
+          "op": "fill",
+          "selector": ".new-todo",
+          "value": "Buy milk"
+        },
+        {
+          "op": "press",
+          "key": "Enter",
+          "selector": ".new-todo"
+        }
+      ],
+      "final_check": "Buy milk",
+      "answer_check": "1 item left",
+      "mode_b": true
+    },
+    {
+      "id": "search-ddg",
+      "category": "search-results",
+      "url": "https://duckduckgo.com/html/?q=golang",
+      "goal": "Report the title of the first search result for 'golang'.",
+      "snapshot_check": "golang",
+      "steps": [],
+      "answer_check": null,
+      "mode_b": false,
+      "risk": "bot-block (challenge page expected)",
+      "note": "Mode A only; expected to be blocked, kept so the table does not hide it."
+    },
+    {
+      "id": "npr-text",
+      "category": "news",
+      "url": "https://text.npr.org/",
+      "goal": "Report the first headline on the page.",
+      "snapshot_check": "NPR",
+      "steps": [],
+      "answer_check": null,
+      "mode_b": false,
+      "note": "Dynamic content: Mode A only."
+    },
+    {
+      "id": "cnn-lite",
+      "category": "news",
+      "url": "https://lite.cnn.com/",
+      "goal": "Report the first headline on the page.",
+      "snapshot_check": "CNN",
+      "steps": [],
+      "answer_check": null,
+      "mode_b": false,
+      "note": "Dynamic content: Mode A only."
+    },
+    {
+      "id": "zaide-home",
+      "category": "owner-site",
+      "url": "https://zaide.com/",
+      "goal": "What is the main headline on the zaide.com home page?",
+      "snapshot_check": "zaide",
+      "steps": [],
+      "answer_check": "zaide",
+      "mode_b": true,
+      "risk": "availability (2026-10-15: zaide.com answers with a certificate for another host over HTTPS and 404 over HTTP from this sandbox)"
+    },
+    {
+      "id": "t3a-home",
+      "category": "owner-site",
+      "url": "https://the3rdacademy.com/",
+      "goal": "What is the main headline on The 3rd Academy home page?",
+      "snapshot_check": "Beyond\\s*Credentials",
+      "steps": [],
+      "answer_check": "beyond credentials"
+    },
+    {
+      "id": "t3a-nav-platform",
+      "category": "owner-site",
+      "url": "https://the3rdacademy.com/",
+      "goal": "Open the Platform page from the top navigation and tell me its main headline.",
+      "snapshot_check": "Beyond\\s*Credentials",
+      "steps": [
+        {
+          "op": "click",
+          "selector": "header a[href=\"/platform\"]"
+        }
+      ],
+      "final_check": "Future\\s+of\\s+Workplace\\s+Readiness",
+      "answer_check": "future of workplace readiness",
+      "mode_b": true
+    },
+    {
+      "id": "t3a-nav-employers",
+      "category": "owner-site",
+      "url": "https://the3rdacademy.com/",
+      "goal": "Open the Employers page from the top navigation and tell me its main headline.",
+      "snapshot_check": "Beyond\\s*Credentials",
+      "steps": [
+        {
+          "op": "click",
+          "selector": "header a[href=\"/employers\"]"
+        }
+      ],
+      "final_check": "Add\\s+documented\\s+behavioral\\s+evidence",
+      "answer_check": "documented behavioral evidence",
+      "mode_b": true
+    },
+    {
+      "id": "pp-home",
+      "category": "owner-site",
+      "url": "https://www.pipilot.dev/",
+      "goal": "What is the main headline on the PiPilot home page?",
+      "snapshot_check": "Describe\\s+it\\.",
+      "steps": [],
+      "answer_check": "describe it"
+    },
+    {
+      "id": "pp-nav-pricing",
+      "category": "owner-site",
+      "url": "https://www.pipilot.dev/",
+      "goal": "Open PiPilot's pricing page and tell me its main headline.",
+      "snapshot_check": "Describe\\s+it\\.",
+      "steps": [
+        {
+          "op": "click",
+          "selector": "a[href=\"/pricing\"]"
+        }
+      ],
+      "final_check": "Start\\s+free\\.\\s+Pay\\s+when\\s+you\\s+ship",
+      "answer_check": "start free",
+      "mode_b": true
+    },
+    {
+      "id": "pp-nav-docs",
+      "category": "owner-site",
+      "url": "https://www.pipilot.dev/",
+      "goal": "Open PiPilot's documentation and tell me the title of its first section after the introduction.",
+      "snapshot_check": "Describe\\s+it\\.",
+      "steps": [
+        {
+          "op": "click",
+          "selector": "a[href=\"/docs\"]"
+        }
+      ],
+      "final_check": "PiPilot\\s+docs",
+      "answer_check": "quickstart",
+      "mode_b": true
+    },
+    {
+      "id": "pp-cta-start",
+      "category": "owner-site",
+      "url": "https://www.pipilot.dev/",
+      "goal": "Click 'Start building free' and tell me what the page asks you to do.",
+      "snapshot_check": "Start\\s+building\\s+free",
+      "steps": [
+        {
+          "op": "click",
+          "selector": "text=Start building free"
+        }
+      ],
+      "final_check": "/app[\\s\\S]*sign\\s+in",
+      "answer_check": "sign in",
+      "mode_b": true
     }
-   ],
-   "final_check": "Buy milk",
-   "answer_check": "1 item left",
-   "mode_b": true
-  },
-  {
-   "id": "search-ddg",
-   "category": "search-results",
-   "url": "https://duckduckgo.com/html/?q=golang",
-   "goal": "Report the title of the first search result for 'golang'.",
-   "snapshot_check": "golang",
-   "steps": [],
-   "answer_check": null,
-   "mode_b": false,
-   "risk": "bot-block (challenge page expected)",
-   "note": "Mode A only; expected to be blocked, kept so the table does not hide it."
-  },
-  {
-   "id": "npr-text",
-   "category": "news",
-   "url": "https://text.npr.org/",
-   "goal": "Report the first headline on the page.",
-   "snapshot_check": "NPR",
-   "steps": [],
-   "answer_check": null,
-   "mode_b": false,
-   "note": "Dynamic content: Mode A only."
-  },
-  {
-   "id": "cnn-lite",
-   "category": "news",
-   "url": "https://lite.cnn.com/",
-   "goal": "Report the first headline on the page.",
-   "snapshot_check": "CNN",
-   "steps": [],
-   "answer_check": null,
-   "mode_b": false,
-   "note": "Dynamic content: Mode A only."
-  }
- ]
+  ]
 }

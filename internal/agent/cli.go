@@ -33,6 +33,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	verbose := fs.Bool("v", false, "print status events and debug lines")
 	thoughts := fs.Bool("thoughts", false, "request and print thought summaries")
 	noThink := fs.Bool("no-thinking", false, "disable thinking (valid at effort <= high)")
+	allowTrackers := fs.Bool("allow-trackers", false, "load third-party ad, analytics and tracking requests (blocked by default)")
 	jsonOut := fs.Bool("json", false, "machine-readable: print only one JSON object {answer,text,stop,stats} on stdout (for benchmarks)")
 	baseURL := fs.String("base-url", "", "API base URL (default $ANTHROPIC_BASE_URL or https://api.anthropic.com)")
 	fs.Usage = func() {
@@ -71,7 +72,11 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 		cfg.Logf = func(f string, a ...any) { fmt.Fprintf(out, "[debug] "+f+"\n", a...) }
 	}
 
-	eng := engine.New(engine.DefaultOptions())
+	eo := engine.DefaultOptions()
+	eo.BlockTrackers = !*allowTrackers && os.Getenv("SWEEF_ALLOW_TRACKERS") == "" // see engine/trackers.go
+	eo.HideScrollbars = true
+	eo.NoAutoplay = os.Getenv("SWEEF_AUTOPLAY") == ""
+	eng := engine.New(eo)
 	defer eng.Close()
 	be := NewRPCBackend(eng)
 	inR := bufio.NewReader(in)
@@ -117,7 +122,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	exit := 0
 	midline := false
 	var textBuf strings.Builder
-	var doneText string
+	var doneText, errText string
 	st, _ := ag.Run(ctx, task, func(e Event) {
 		outMu.Lock()
 		defer outMu.Unlock()
@@ -157,6 +162,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 				midline = false
 			}
 			fmt.Fprintf(out, "\nerror: %s\n", e.Text)
+			errText = e.Text
 			exit = 1
 		}
 	})
@@ -166,8 +172,9 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 			Answer string   `json:"answer"` // the done-tool summary (what the user reads)
 			Text   string   `json:"text"`   // all assistant text
 			Stop   string   `json:"stop"`
+			Error  string   `json:"error,omitempty"` // why a run with stop "error" ended (the API's message)
 			Stats  RunStats `json:"stats"`
-		}{doneText, textBuf.String(), final.Stop, final})
+		}{doneText, textBuf.String(), final.Stop, errText, final})
 		fmt.Fprintln(realOut, string(b))
 		return exit
 	}

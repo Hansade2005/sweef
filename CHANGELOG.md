@@ -9,6 +9,42 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ## [Unreleased]
 
+### Agent browsing: speed and reliability on real sites
+Measured on 47 tasks / 41 public sites, 3 fresh-process runs each with empty caches, against Playwright + Chromium 141
+(`bench/realsites/results/modea-2026-10-15*.md`): runs passed 95/141 -> 130/141 (Chromium 127/141); median cold time to
+a usable snapshot on the tasks both builds pass 2221 -> 2237 ms (flat overall: GitHub now runs its scripts and is slower,
+most other sites are faster, e.g. Next.js docs 15.0 -> 6.7 s, MDN 9.7 -> 4.7 s, React docs 6.4 -> 2.4 s, Angular 6.3 ->
+3.1 s, Effective Go 5.0 -> 0.8 s). Against Chromium Sweef is faster on 16 of 42 tasks and slower on 26 (median 2.9 s vs
+2.1 s); JavaScript-heavy sites (GitHub, Next.js, MDN, the owner's React/Vite sites) stay 1.8x to 4.6x slower.
+- Headless settle is bounded and adaptive: it ends after 300 ms of quiet, and requests started after the settle deadline
+  no longer extend it; a batch of due timers stops at the pump deadline.
+- Entry modules compile and run under their URL (`import.meta.url`, relative `import()`), so GitHub's code view and
+  pipilot.dev's chunks load (pipilot.dev used to reload itself in a loop); queued `import()` calls download in parallel
+  (GitHub issue page 16 -> 10 s).
+- Cheaper layouts: the cross-pass style cache works with `@container` and `:has()`, intermediate container-query passes are
+  not finished, CSS background images are fetched in parallel before painting, the SVG filter precheck is exact;
+  IntersectionObserver / ResizeObserver deliveries are batched per task.
+- Known third-party trackers are not loaded in agent sessions (`--allow-trackers` / `SWEEF_ALLOW_TRACKERS=1` loads them).
+- Agent sessions do not preload media or decode a playing video past its first picture (`SWEEF_AUTOPLAY=1` restores it):
+  pipilot.dev idle CPU 9.2 -> 0.8 CPU-s per 5 s, peak memory 707 -> 334 MiB (one run before, median of 3 after).
+- Platform functions print as native code (the prelude is compiled without its source): Optimizely deleted element.style
+  on the-internet.herokuapp.com and jQuery did not start. Fixture flow total 218 -> 199 ms, daemon 58 -> 47 MB.
+- Forms submit through the `submit` event (React forms, saucedemo); Enter no longer submits twice; snapshot refs whose
+  element was replaced by an equivalent control are healed; waits honour `timeoutMs` and keep the page running;
+  `innerText` follows the rendering; `opacity: 0` no longer hides content from snapshots; same-origin links are listed as
+  paths and navigation accepts them.
+- Web Animations (`Element.animate`) run and finish as a task after the frame; `matchMedia` agrees with CSS (hover and
+  pointer are desktop's); scrollbars are hidden in agent screenshots like headless Chromium; viewport screenshots of a
+  scrolled page show the scrolled viewport; `-webkit-line-clamp`.
+- The snapshot's visibility cascade handles CSS escapes and nesting (Tailwind v4): pipilot.dev's desktop navigation was
+  missing and a click on it waited 35 s. `@font-face` `url()format()` without a space loads the font (nextjs.org).
+- The agent loop survives an API rejection of a thinking block (every failed Sweef run of the 2026-10-14 Mode B baseline
+  ended this way; not yet re-measured) and records the error of failed runs.
+- Bench: cold runs start with empty caches (the 2026-10-14 Sweef cold numbers were partly warm), owner-site tasks
+  (the3rdacademy.com, pipilot.dev, zaide.com), `fidelity.mjs` (screenshots and interaction parity vs Chromium),
+  `resources.mjs` (memory, CPU, idle CPU vs Chromium's process tree), `compare.mjs` (before/after tables), `loadtl`
+  `-init/-eval/-run-ms/-memprofile`.
+
 ### Added
 - **Right-click menus everywhere.** One themed menu (light, dark, incognito) drawn by the chrome above the page, so it can extend
   outside the page area and looks the same on every OS. Arrow keys, Enter, Esc, submenus; it closes on an outside click, scroll,

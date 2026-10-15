@@ -1089,8 +1089,8 @@
       get: function () { return sw.outerHTML(this[ID]); },
       set: function (v) { var p = this.parentNode; if (!p || p.nodeType !== 1) throw DOMException("Failed to set the 'outerHTML' property on 'Element': This element has no parent node.", 'NoModificationAllowedError'); this.insertAdjacentHTML('afterend', toStr(v)); p.removeChild(this); }
     },
-    innerText: { get: function () { return sw.textContent(this[ID]); }, set: function (v) { this.textContent = v; } },
-    outerText: { get: function () { return sw.textContent(this[ID]); }, set: function (v) { var t = documentWrapper.createTextNode(toStr(v)); this.replaceWith(t); } },
+    innerText: { get: function () { return host('innerText') ? sw.innerText(this[ID]) : sw.textContent(this[ID]); }, set: function (v) { this.textContent = v; } },
+    outerText: { get: function () { return host('innerText') ? sw.innerText(this[ID]) : sw.textContent(this[ID]); }, set: function (v) { var t = documentWrapper.createTextNode(toStr(v)); this.replaceWith(t); } },
     nextElementSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; for (var i = k.indexOf(this) + 1; i < k.length; i++) if (k[i].nodeType === 1) return k[i]; return null; } return nextElement(this[ID], 'nextSibling'); } },
     previousElementSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; for (var i = k.indexOf(this) - 1; i >= 0; i--) if (k[i].nodeType === 1) return k[i]; return null; } return nextElement(this[ID], 'prevSibling'); } },
     shadowRoot: { get: function () { return slots(this).shadowRoot || null; } },
@@ -1165,10 +1165,152 @@
     attachShadow: function (init) { var s = slots(this); if (s.shadowRoot) throw DOMException('Shadow root cannot be created on a host which already hosts a shadow tree.', 'NotSupportedError'); s.shadowRoot = this; return this; },
     requestFullscreen: function () { return Promise.resolve(); },
     requestPointerLock: function () { }, setPointerCapture: function () { }, releasePointerCapture: function () { }, hasPointerCapture: function () { return false; },
-    animate: function () { return { cancel: function () { }, finish: function () { }, pause: function () { }, play: function () { }, finished: Promise.resolve(), onfinish: null, currentTime: 0, playState: 'finished' }; },
-    getAnimations: function () { return []; },
+    animate: function (keyframes, options) { return waapiAnimate(this, keyframes, options); },
+    getAnimations: function () { var el = this; return waapiAll.filter(function (a) { return a.effect && a.effect.target === el && a.playState !== 'finished' && a.playState !== 'idle'; }); },
     checkVisibility: function () { return this.isConnected; }
   });
+  // ---- Web Animations (Element.animate) ----
+  // A working subset: keyframes (array or property-indexed form, offsets), duration, delay, iterations,
+  // direction, fill and linear timing, run in real time on animation frames. Values are written to the
+  // element's inline style while the animation is in effect (the value the page would compute) and the
+  // previous inline value comes back when it stops having an effect (fill none / cancel). Numbers inside
+  // values with the same shape interpolate (opacity, lengths, transforms with the same functions, rgb()
+  // colours); other values switch at the midpoint. finish/cancel events and the finished/ready promises
+  // follow the spec closely enough for animation libraries (Framer Motion commits its final values when an
+  // animation finishes: with the old stub nothing ever finished, and content animated in from opacity 0
+  // stayed invisible in screenshots).
+  var waapiAll = [];
+  function waapiKebab(p) { return p === 'cssFloat' ? 'float' : p.indexOf('--') === 0 ? p : p.replace(/[A-Z]/g, function (c) { return '-' + c.toLowerCase(); }); }
+  function waapiFrames(kf) {
+    var frames = [];
+    if (Array.isArray(kf)) frames = kf.map(function (f) { return Object.assign({}, f); });
+    else if (kf && typeof kf === 'object') {
+      var props = Object.keys(kf).filter(function (k) { return k !== 'offset' && k !== 'easing' && k !== 'composite'; }), n = 0;
+      props.forEach(function (k) { n = Math.max(n, Array.isArray(kf[k]) ? kf[k].length : 1); });
+      for (var i = 0; i < n; i++) {
+        var f = {};
+        props.forEach(function (k) { var v = Array.isArray(kf[k]) ? kf[k] : [kf[k]]; if (i < v.length) f[k] = v[i]; });
+        if (Array.isArray(kf.offset) && kf.offset[i] != null) f.offset = kf.offset[i];
+        frames.push(f);
+      }
+    }
+    var m = frames.length;
+    frames.forEach(function (f, i) { if (f.offset == null) f.offset = m <= 1 ? 1 : i / (m - 1); });
+    return frames;
+  }
+  function waapiLerp(a, b, t) {
+    a = String(a); b = String(b);
+    if (t <= 0) return a; if (t >= 1) return b;
+    var na = a.match(/-?\d*\.?\d+(e-?\d+)?/gi) || [], nb = b.match(/-?\d*\.?\d+(e-?\d+)?/gi) || [];
+    var sa = a.replace(/-?\d*\.?\d+(e-?\d+)?/gi, '#'), sb = b.replace(/-?\d*\.?\d+(e-?\d+)?/gi, '#');
+    if (sa !== sb || na.length !== nb.length || !na.length) return t < 0.5 ? a : b;
+    var i = 0;
+    return sa.replace(/#/g, function () { var x = +na[i], y = +nb[i]; i++; var v = x + (y - x) * t; return String(Math.round(v * 10000) / 10000); });
+  }
+  // The animated values of an element live in the host attribute data-sw-anim, which the style engine applies
+  // after the element's normal declarations, inline style included (the animation origin of the cascade):
+  // page writes to inline style never fight an animation, and getComputedStyle shows the animated value.
+  function waapiEffect(el, anim, vals) {
+    var sl = slots(el), list = sl.anims || (sl.anims = []), i;
+    for (i = 0; i < list.length && list[i].a !== anim; i++) {}
+    if (vals) { if (i < list.length) list[i].v = vals; else list.push({ a: anim, v: vals }); } else if (i < list.length) list.splice(i, 1);
+    var merged = {}; list.forEach(function (e) { Object.keys(e.v).forEach(function (k) { merged[k] = e.v[k]; }); });
+    var text = Object.keys(merged).map(function (k) { return k + ': ' + merged[k]; }).join('; ');
+    if (text === (sl.animText || '')) return;
+    sl.animText = text;
+    try { if (text) sw.setAttr(el[ID], 'data-sw-anim', text); else sw.removeAttr(el[ID], 'data-sw-anim'); } catch (e) { /* detached */ }
+  }
+  function waapiAnimate(el, keyframes, options) {
+    var o = typeof options === 'number' ? { duration: options } : Object.assign({}, options || {});
+    var dur = o.duration === 'auto' || o.duration == null ? 0 : Math.max(0, +o.duration || 0);
+    var delay = +o.delay || 0, endDelay = +o.endDelay || 0, iters = o.iterations == null ? 1 : +o.iterations;
+    if (!(iters >= 0)) iters = 1;
+    var fill = o.fill || 'auto', dir = o.direction || 'normal';
+    var frames = waapiFrames(keyframes), props = {};
+    frames.forEach(function (f) { Object.keys(f).forEach(function (k) { if (k !== 'offset' && k !== 'easing' && k !== 'composite') props[k] = 1; }); });
+    props = Object.keys(props);
+    var resolveFin, rejectFin, rafId = 0, holdTime = null, rate = +o.playbackRate || 1;
+    var anim = {
+      id: o.id || '', playState: 'running', pending: false, replaceState: 'active', playbackRate: rate, timeline: documentWrapper.timeline || null,
+      startTime: nowMs(), onfinish: null, oncancel: null, onremove: null, _listeners: {},
+      effect: {
+        target: el, pseudoElement: o.pseudoElement || null, composite: o.composite || 'replace',
+        getKeyframes: function () { return frames.map(function (f) { return Object.assign({ computedOffset: f.offset, easing: 'linear', composite: 'auto' }, f); }); },
+        setKeyframes: function (k) { frames = waapiFrames(k); },
+        getTiming: function () { return { delay: delay, endDelay: endDelay, duration: dur, iterations: iters, direction: dir, fill: fill, easing: o.easing || 'linear' }; },
+        getComputedTiming: function () { var ct = local(); return { localTime: ct, progress: progressAt(ct), currentIteration: 0, activeDuration: dur * iters, endTime: delay + dur * iters + endDelay, duration: dur, delay: delay, iterations: iters, direction: dir, fill: fill }; },
+        updateTiming: function (t) { if (t) { if (t.duration != null) dur = +t.duration; if (t.delay != null) delay = +t.delay; if (t.iterations != null) iters = +t.iterations; if (t.fill) fill = t.fill; } }
+      },
+      addEventListener: function (t, f) { (this._listeners[t] = this._listeners[t] || []).push(f); },
+      removeEventListener: function (t, f) { var l = this._listeners[t]; if (l) { var i = l.indexOf(f); if (i >= 0) l.splice(i, 1); } },
+      dispatchEvent: function (e) { var l = (this._listeners[e.type] || []).slice(); l.forEach(function (f) { try { f.call(anim, e); } catch (x) { reportError(x); } }); return true; }
+    };
+    anim.finished = new Promise(function (res, rej) { resolveFin = res; rejectFin = rej; });
+    anim.finished.catch(function () { });
+    anim.ready = Promise.resolve(anim);
+    function local() { return holdTime != null ? holdTime : (nowMs() - anim.startTime) * rate; }
+    function endTime() { return delay + dur * iters; }
+    function progressAt(t) {
+      if (t < delay) return null;
+      if (!isFinite(iters) || dur <= 0 && iters > 0) { if (dur <= 0) return 1; }
+      var act = Math.min(t - delay, dur * iters);
+      var it = dur > 0 ? act / dur : iters, cur = Math.floor(it), p = it - cur;
+      if (act >= dur * iters && iters > 0) { p = iters % 1 || 1; cur = Math.ceil(iters) - 1; }
+      var rev = dir === 'reverse' || (dir === 'alternate' && cur % 2 === 1) || (dir === 'alternate-reverse' && cur % 2 === 0);
+      return rev ? 1 - p : p;
+    }
+    function valueAt(prop, p) {
+      var fs = frames.filter(function (f) { return f[prop] != null; });
+      if (!fs.length) return null;
+      if (fs.length === 1) { var under = el.style.getPropertyValue(waapiKebab(prop)) || getComputedStyle(el).getPropertyValue(waapiKebab(prop)); return fs[0].offset >= 1 ? waapiLerp(under, fs[0][prop], p) : fs[0][prop]; }
+      if (p <= fs[0].offset) return fs[0][prop];
+      for (var i = 1; i < fs.length; i++) if (p <= fs[i].offset) { var a = fs[i - 1], b = fs[i], span = b.offset - a.offset; return waapiLerp(a[prop], b[prop], span > 0 ? (p - a.offset) / span : 1); }
+      return fs[fs.length - 1][prop];
+    }
+    var effectOn = false;
+    function apply(p) {
+      var vals = {};
+      props.forEach(function (k) { var v = valueAt(k, p); if (v != null) vals[waapiKebab(k)] = String(v); });
+      effectOn = true; waapiEffect(el, anim, vals);
+    }
+    function restore() { if (effectOn) { effectOn = false; waapiEffect(el, anim, null); } }
+    function holdsAfter() { return fill === 'forwards' || fill === 'both'; }
+    function holdsBefore() { return fill === 'backwards' || fill === 'both'; }
+    function fire(type) { var e = { type: type, target: anim, currentTime: local(), timelineTime: nowMs() }; var h = anim['on' + type]; if (typeof h === 'function') { try { h.call(anim, e); } catch (x) { reportError(x); } } anim.dispatchEvent(e); }
+    function finishNow() {
+      if (anim.playState === 'finished') return;
+      anim.playState = 'finished';
+      if (holdsAfter()) apply(progressAt(endTime()) == null ? 1 : progressAt(endTime())); else restore();
+      var i = waapiAll.indexOf(anim); if (i >= 0 && !holdsAfter()) waapiAll.splice(i, 1);
+      resolveFin(anim);
+      fire('finish');
+    }
+    function tick() {
+      rafId = 0;
+      if (anim.playState !== 'running') return;
+      var t = local();
+      if (isFinite(iters) && t >= endTime()) { apply(progressAt(endTime()) == null ? 1 : progressAt(endTime())); global.setTimeout(finishNow, 0); return; } // the finish event is a task after the frame, as in a browser
+      var p = progressAt(t);
+      if (p == null) { if (holdsBefore()) apply(progressAt(delay) || 0); } else apply(p);
+      rafId = global.requestAnimationFrame(tick);
+    }
+    anim.play = function () { if (anim.playState === 'finished') { anim.startTime = nowMs(); holdTime = null; } else if (holdTime != null) { anim.startTime = nowMs() - holdTime / rate; holdTime = null; } anim.playState = 'running'; if (!rafId) rafId = global.requestAnimationFrame(tick); };
+    anim.pause = function () { if (anim.playState === 'running') { holdTime = local(); anim.playState = 'paused'; } };
+    anim.finish = function () { finishNow(); };
+    anim.cancel = function () { if (anim.playState === 'idle') return; anim.playState = 'idle'; restore(); var i = waapiAll.indexOf(anim); if (i >= 0) waapiAll.splice(i, 1); var e = DOMException('The user aborted a request.', 'AbortError'); rejectFin(e); anim.finished = new Promise(function (res, rej) { resolveFin = res; rejectFin = rej; }); anim.finished.catch(function () { }); fire('cancel'); };
+    anim.reverse = function () { rate = -rate; anim.playbackRate = rate; };
+    anim.updatePlaybackRate = function (r) { var t = local(); rate = +r || 1; anim.playbackRate = rate; anim.startTime = nowMs() - t / rate; };
+    anim.commitStyles = function () { var p = progressAt(local()); if (p == null) p = 1; props.forEach(function (k) { var v = valueAt(k, p); if (v != null) el.style.setProperty(waapiKebab(k), String(v)); }); };
+    anim.persist = function () { anim.replaceState = 'persisted'; };
+    Object.defineProperty(anim, 'currentTime', { get: function () { return anim.playState === 'idle' ? null : local(); }, set: function (v) { if (v == null) return; if (anim.playState === 'running') anim.startTime = nowMs() - (+v) / rate; else holdTime = +v; var p = progressAt(+v); if (p != null) apply(p); }, configurable: true });
+    waapiAll.push(anim);
+    var p0 = progressAt(0);
+    if (p0 != null) apply(p0); else if (holdsBefore()) apply(progressAt(delay) || 0);
+    if (dur * iters + delay <= 0 && isFinite(iters)) Promise.resolve().then(finishNow); // zero-length: finishes in the next microtask
+    else rafId = global.requestAnimationFrame(tick);
+    return anim;
+  }
+
   function attrName(el, name) { name = toStr(name); return el[NS] && el[NS] !== XHTML_NS ? name : name.toLowerCase(); }
   function insertAdjacent(el, position, node) {
     position = String(position).toLowerCase();
@@ -2197,6 +2339,33 @@
   setTag(MutationObserver, 'MutationObserver'); global.MutationObserver = MutationObserver; global.WebKitMutationObserver = MutationObserver;
 
   // IntersectionObserver / ResizeObserver: report every observed element once, as visible.
+  // Notifications are batched the way a browser's rendering step delivers them: the observe() calls of a task
+  // are answered by one timer that measures every target first (a single layout, since nothing changes the tree
+  // between the measurements) and then calls each observer once with its entries. One timer per target made a
+  // page that observes fifty links lay out fifty times, every callback's DOM change invalidating the next.
+  var obsPending = [], obsScheduled = false;
+  function obsQueue(obs, el, make) {
+    obsPending.push({ obs: obs, el: el, make: make });
+    if (!obsScheduled) { obsScheduled = true; setTimeoutImpl(obsFlush, [], 0, false); }
+  }
+  function obsFlush() {
+    obsScheduled = false;
+    var batch = obsPending; obsPending = [];
+    var groups = [], i, j;
+    for (i = 0; i < batch.length; i++) {
+      var p = batch[i];
+      if (p.obs._targets.indexOf(p.el) < 0) continue;
+      var rect = p.el.getBoundingClientRect ? p.el.getBoundingClientRect() : new DOMRect();
+      for (j = 0; j < groups.length && groups[j].obs !== p.obs; j++) {}
+      if (j === groups.length) groups.push({ obs: p.obs, entries: [] });
+      groups[j].entries.push(p.make(p.el, rect));
+    }
+    for (i = 0; i < groups.length; i++) {
+      var g = groups[i], live = [];
+      for (j = 0; j < g.entries.length; j++) if (g.obs._targets.indexOf(g.entries[j].target) >= 0) live.push(g.entries[j]);
+      if (live.length) { try { g.obs._cb(live, g.obs); } catch (e) { reportError(e); } }
+    }
+  }
   function IntersectionObserver(cb, options) {
     if (typeof cb !== 'function') throw new TypeError('callback must be a function');
     this._cb = cb; this._targets = []; options = options || {};
@@ -2207,13 +2376,9 @@
     observe: function (el) {
       if (this._targets.indexOf(el) >= 0) return;
       this._targets.push(el);
-      var self = this;
-      setTimeoutImpl(function () {
-        if (self._targets.indexOf(el) < 0) return;
-        var rect = el.getBoundingClientRect ? el.getBoundingClientRect() : new DOMRect();
-        var entry = { target: el, time: nowMs(), isIntersecting: true, intersectionRatio: 1, boundingClientRect: rect, intersectionRect: rect, rootBounds: new DOMRect(0, 0, viewport().width, viewport().height), isVisible: true };
-        try { self._cb([entry], self); } catch (e) { reportError(e); }
-      }, [], 0, false);
+      obsQueue(this, el, function (el, rect) {
+        return { target: el, time: nowMs(), isIntersecting: true, intersectionRatio: 1, boundingClientRect: rect, intersectionRect: rect, rootBounds: new DOMRect(0, 0, viewport().width, viewport().height), isVisible: true };
+      });
     },
     unobserve: function (el) { var i = this._targets.indexOf(el); if (i >= 0) this._targets.splice(i, 1); },
     disconnect: function () { this._targets = []; },
@@ -2230,13 +2395,10 @@
     observe: function (el) {
       if (this._targets.indexOf(el) >= 0) return;
       this._targets.push(el);
-      var self = this;
-      setTimeoutImpl(function () {
-        if (self._targets.indexOf(el) < 0) return;
-        var rect = el.getBoundingClientRect ? el.getBoundingClientRect() : new DOMRect();
+      obsQueue(this, el, function (el, rect) {
         var size = [{ inlineSize: rect.width, blockSize: rect.height }];
-        try { self._cb([{ target: el, contentRect: rect, borderBoxSize: size, contentBoxSize: size, devicePixelContentBoxSize: size }], self); } catch (e) { reportError(e); }
-      }, [], 0, false);
+        return { target: el, contentRect: rect, borderBoxSize: size, contentBoxSize: size, devicePixelContentBoxSize: size };
+      });
     },
     unobserve: IntersectionObserver.prototype.unobserve,
     disconnect: IntersectionObserver.prototype.disconnect
@@ -2277,13 +2439,16 @@
     } catch (e) { reportError(e); }
     runningTimer = null;
   }
-  function runTimers(now, withBg) {
+  function runTimers(now, withBg, budget) {
     now = +now; if (!(now >= 0)) now = nowMs(); if (now > lastNow) lastNow = now;
+    // budget (ms, 0 = none): stop starting timers once it is spent; the rest stay due for the next pump
+    var t0 = Date.now(); budget = +budget || 0;
     // Only timers that were pending when this pass started run now; timers armed
     // by callbacks (and re-armed intervals) wait for the next pump so microtasks
     // get flushed between macrotasks, as in a browser event loop.
     var startSeq = timerSeq;
     while (timers.length && timers[0].when <= now && timers[0].seq <= startSeq) {
+      if (budget > 0 && Date.now() - t0 >= budget) return 0;
       var t = timers.shift();
       runTimer(t);
       if (t.interval >= 0 && !t.cancelled) {
@@ -2403,7 +2568,8 @@
   global.matchMedia = function matchMedia(query) {
     query = String(query);
     var matches = false, m;
-    if (/prefers-color-scheme\s*:\s*dark/.test(query)) matches = viewport().dark;
+    if (host('mediaMatches')) matches = !!sw.mediaMatches(query); // the stylesheets' evaluator: CSS and script agree
+    else if (/prefers-color-scheme\s*:\s*dark/.test(query)) matches = viewport().dark;
     else if (/prefers-color-scheme\s*:\s*light/.test(query)) matches = !viewport().dark;
     else if ((m = /\(\s*(min|max)-width\s*:\s*(\d+(?:\.\d+)?)px\s*\)/.exec(query))) matches = m[1] === 'min' ? viewport().width >= +m[2] : viewport().width <= +m[2];
     else if (/prefers-reduced-motion\s*:\s*reduce/.test(query)) matches = true;
@@ -2707,7 +2873,10 @@
     getEntriesByName: function (name, type) { return this.getEntries().filter(function (e) { return e.name === name && (!type || e.entryType === type); }); },
     toJSON: function () { return { timeOrigin: this.timeOrigin }; }
   });
-  function markTime(name) { for (var i = perfMarks.length - 1; i >= 0; i--) if (perfMarks[i].name === name) return perfMarks[i].startTime; throw DOMException("Failed to execute 'measure' on 'Performance': The mark '" + name + "' does not exist.", 'SyntaxError'); }
+  // measure() also accepts the PerformanceTiming attribute names as marks (React's dev timings measure from
+  // 'navigationStart'); they are all at the time origin here except the unload/redirect ones, which are 0 (unset)
+  var TIMING_MARKS = /^(navigationStart|fetchStart|domainLookupStart|domainLookupEnd|connectStart|connectEnd|requestStart|responseStart|responseEnd|domLoading|domInteractive|domContentLoadedEventStart|domContentLoadedEventEnd|domComplete|loadEventStart|loadEventEnd)$/;
+  function markTime(name) { for (var i = perfMarks.length - 1; i >= 0; i--) if (perfMarks[i].name === name) return perfMarks[i].startTime; if (TIMING_MARKS.test(name)) return 0; throw DOMException("Failed to execute 'measure' on 'Performance': The mark '" + name + "' does not exist.", 'SyntaxError'); }
   var perfObj = Object.create(Performance.prototype);
   var timeOrigin = Date.now();
   getters(perfObj, { timeOrigin: { get: function () { return timeOrigin; } }, timing: { get: function () { return { navigationStart: timeOrigin, fetchStart: timeOrigin, domainLookupStart: timeOrigin, domainLookupEnd: timeOrigin, connectStart: timeOrigin, connectEnd: timeOrigin, requestStart: timeOrigin, responseStart: timeOrigin, responseEnd: timeOrigin, domLoading: timeOrigin, domInteractive: timeOrigin, domContentLoadedEventStart: timeOrigin, domContentLoadedEventEnd: timeOrigin, domComplete: timeOrigin, loadEventStart: timeOrigin, loadEventEnd: timeOrigin, unloadEventStart: 0, unloadEventEnd: 0, redirectStart: 0, redirectEnd: 0, secureConnectionStart: 0 }; } }, navigation: { get: function () { return { type: 0, redirectCount: 0, TYPE_NAVIGATE: 0, TYPE_RELOAD: 1, TYPE_BACK_FORWARD: 2 }; } }, memory: { get: function () { return { jsHeapSizeLimit: 16777216, totalJSHeapSize: 4194304, usedJSHeapSize: 2097152 }; } }, eventCounts: { get: function () { return new Map(); } }, onresourcetimingbufferfull: { get: function () { return null; }, set: function () { } } });
@@ -3855,7 +4024,7 @@
   // true once the page has registered a wheel listener that can cancel (not passive): the host then waits for the page's answer before scrolling
   exportFn('__swWheelNP', function () { return wheelNP; });
   exportFn('__swSetValueFromGo', function (id, value) { try { return setValueFromGo(id, value); } catch (e) { reportError(e); return false; } });
-  exportFn('__swRunTimers', function (now, withBg) { try { return runTimers(now, !!withBg); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
+  exportFn('__swRunTimers', function (now, withBg, budget) { try { return runTimers(now, !!withBg, budget); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
   exportFn('__swFlushMutationObservers', function () { try { flushMutationObservers(); } catch (e) { reportError(e); } return pendingObservers.length; });
   exportFn('__swSetHidden', function (h, quiet) { h = !!h; if (h === pageHidden) return false; pageHidden = h; if (!quiet) { try { fire(documentWrapper, 'visibilitychange', { bubbles: true }); } catch (e) { reportError(e); } } return true; });
   exportFn('__swFireLifecycle', function (name) { try { return fireLifecycle(name); } catch (e) { reportError(e); return true; } });

@@ -122,8 +122,12 @@ func (j *jsVM) hostHTTPTake(a []any) (any, error) {
 	return out.res, nil
 }
 
-// httpInFlight reports whether a page request younger than httpGrace is unanswered.
-func (j *jsVM) httpInFlight() bool {
+// httpInFlightBefore reports whether a page request that started before cutoff (zero = any) and is younger
+// than httpGrace is unanswered. The
+// settle pump passes its deadline: a request the page had already sent when the budget ran out gets its grace,
+// but one started afterwards does not extend the wait, or a page that keeps issuing requests (Next.js prefetches
+// every link it renders, one batch after another; a poller) would hold the load until it stops on its own.
+func (j *jsVM) httpInFlightBefore(cutoff time.Time) bool {
 	r := j.realtime
 	if r == nil || r.httpPending.Load() == 0 {
 		return false
@@ -131,7 +135,7 @@ func (j *jsVM) httpInFlight() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, at := range r.httpAt {
-		if time.Since(at) < httpGrace {
+		if (cutoff.IsZero() || at.Before(cutoff)) && time.Since(at) < httpGrace {
 			return true
 		}
 	}

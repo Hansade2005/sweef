@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -156,6 +157,7 @@ func (t *Tab) Click(sel string) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	l := t.Locator(sel)
 	// A ref that resolves to something that can never be clicked fails at
 	// once instead of waiting for it to become visible.
@@ -177,6 +179,27 @@ func (t *Tab) Click(sel string) error {
 		return err
 	}
 	return t.clickBackend(bid, sel)
+}
+
+// healRef maps a snapshot ref whose element was hidden or replaced since the snapshot to the control that took
+// its place (fnet.Doc.HealRef: same accessible name, compatible role, unambiguous); other selectors pass through.
+func (t *Tab) healRef(sel string) string {
+	s := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(sel), "@"), "ref=")
+	if len(s) < 2 || s[0] != 'e' {
+		return sel
+	}
+	id, err := strconv.ParseInt(s[1:], 10, 64)
+	if err != nil {
+		return sel
+	}
+	healed := sel
+	_ = t.withDoc(func(d *fnet.Doc) error {
+		if nr, ok := d.HealRef(id); ok {
+			healed = "e" + strconv.FormatInt(nr, 10)
+		}
+		return nil
+	})
+	return healed
 }
 
 var nonRenderable = map[string]bool{"script": true, "style": true, "head": true, "meta": true, "link": true, "title": true, "template": true, "noscript": true}
@@ -246,10 +269,16 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 		if typ == "submit" || typ == "image" || (typ == "" && strings.EqualFold(info.Name, "button")) {
 			inForm := false
 			_ = t.withDoc(func(d *fnet.Doc) error { inForm = d.FormOf(bid) != 0; return nil })
-			if inForm {
-				return t.SubmitFormBackend(bid)
+			if !inForm {
+				return nil
 			}
-			return nil
+			// with a VM the form is submitted the way a browser does it: a cancelable submit event first (the
+			// page's own handler usually takes over: React/Vue/Angular forms, fetch-based logins), then the
+			// navigation. Posting it from here skipped the event: saucedemo's login went out as a plain GET.
+			if _, ok := t.jsCall("__swDefaultAction", bid); ok {
+				return nil
+			}
+			return t.SubmitFormBackend(bid)
 		}
 		if typ == "checkbox" || typ == "radio" {
 			_ = t.withDoc(func(d *fnet.Doc) error { return d.SetChecked(bid, !(info.Checked)) })
@@ -317,6 +346,7 @@ func (t *Tab) Type(sel, text string, delay time.Duration) error {
 		return err
 	}
 	t.NoteUserActivation()
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -362,16 +392,17 @@ func (t *Tab) Press(sel, keys string) error {
 		return err
 	}
 	t.NoteUserActivation()
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).BackendID()
 	if err != nil {
 		return err
 	}
 	key := strings.TrimSpace(keys)
-	proceed := true
-	if r, ok := t.jsCall("__swDispatchKey", bid, key); ok {
-		proceed = truthyAny(r)
-	}
-	if proceed && strings.EqualFold(key, "Enter") {
+	// With a VM the page's key handling owns the default action: Enter in a field submits its form through
+	// the submit event (implicit submission), which page code may cancel (React, Vue and Angular forms all do,
+	// then fetch). Submitting here as well sent the form a second time, as a plain GET, past the cancellation.
+	// Only a page without a VM (no scripts at all) is submitted from here.
+	if _, ok := t.jsCall("__swDispatchKey", bid, key); !ok && strings.EqualFold(key, "Enter") {
 		info := t.infoForBackend(bid)
 		if info != nil && strings.EqualFold(info.Name, "input") {
 			return t.SubmitFormFor(sel)
@@ -402,6 +433,7 @@ func (t *Tab) Fill2(sel, value string) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -439,6 +471,7 @@ func (t *Tab) setChecked(sel string, want bool) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -460,6 +493,7 @@ func (t *Tab) SelectOption(sel, value string) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err

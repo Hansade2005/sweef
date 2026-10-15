@@ -35,6 +35,9 @@ type Entry struct {
 	Pseudo string // "", before, after, marker, first-line, first-letter, placeholder, ...
 	Rule   *Rule
 	key    string // bucket key (for debugging)
+	// dynamic: the selector uses :has(), so whether it matches depends on the element's descendants (or later
+	// siblings), which a cached style does not observe (persist.go)
+	dynamic bool
 }
 
 // Rule is a style rule with its declarations.
@@ -67,6 +70,7 @@ type Env struct {
 	ColorScheme   string // light | dark
 	Print         bool
 	ReducedMotion bool
+	Mobile        bool // touch device emulation: hover/pointer answer none/coarse (desktop: hover/fine)
 }
 
 // Parsed is the result of parsing one stylesheet text.
@@ -557,7 +561,7 @@ func (p *parser) addRule(selText string, decls []Decl) {
 			continue
 		}
 		for _, e := range cs.Entries() {
-			r.Entries = append(r.Entries, &Entry{Sel: e, Spec: e.Spec, Pseudo: pseudo, Rule: r, key: base})
+			r.Entries = append(r.Entries, &Entry{Sel: e, Spec: e.Spec, Pseudo: pseudo, Rule: r, key: base, dynamic: e.Features().Has})
 		}
 	}
 	if len(r.Entries) == 0 {
@@ -830,10 +834,16 @@ func mediaFeature(f string, env *Env) bool {
 	case "inverted-colors", "scan":
 		return false
 	case "hover", "any-hover":
-		// headless Chromium has no pointing device
-		return val == "none"
+		// as headless Chromium answers (Playwright, CDP): a desktop has a mouse, an emulated phone a finger
+		if env.Mobile {
+			return val == "none"
+		}
+		return val == "hover" || val == ""
 	case "pointer", "any-pointer":
-		return val == "none"
+		if env.Mobile {
+			return val == "coarse" || val == ""
+		}
+		return val == "fine" || val == ""
 	case "color":
 		if val == "" {
 			return true

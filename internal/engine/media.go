@@ -353,7 +353,7 @@ func (m *mediaHost) fns() map[string]hostFn {
 		if m.j.tab == nil {
 			return false, nil
 		}
-		return m.j.tab.policy().BlockMediaLoad, nil
+		return m.j.tab.policy().BlockMediaLoad || m.j.tab.eng.opts.NoAutoplay, nil
 	}
 	// the page enters or leaves element fullscreen: the embedding app gives it the whole window
 	f["fullscreen"] = func(a []any) (any, error) {

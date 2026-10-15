@@ -33,3 +33,10 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // same polling policy so SPA pages that render late are measured, not skipped.
 export const USABLE_POLL_MS = 250;
 export const USABLE_MAX_MS = 10000;
+
+// rmTree removes a per-run directory. A daemon that is still shutting down may write into its cache while the
+// tree is removed (ENOTEMPTY); retry, and never let cleanup end a benchmark run.
+export function rmTree(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); }
+  catch (e) { console.error(`warning: could not remove ${dir}: ${e.message}`); }
+}

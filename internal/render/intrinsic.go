@@ -60,8 +60,8 @@ func (c *ctx) intrinsic(b *lbox) {
 	}
 	// scrollbars
 	if b.st.OverflowY == "scroll" {
-		mn += sbSize
-		mx += sbSize
+		mn += c.sbSize()
+		mx += c.sbSize()
 	}
 	b.minW, b.maxW = mn, mx
 }

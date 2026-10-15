@@ -442,3 +442,35 @@ func TestCSSLargePageCost(t *testing.T) {
 		t.Fatalf("snapshot too slow: %v (limit %v)", best, limit)
 	}
 }
+
+// CSS nesting: Tailwind v4 writes responsive variants as `.lg\:block { @media (width >= 64rem) { … } }`; the
+// desktop navigation of pipilot.dev was missing from the snapshot (and not clickable) because nested rules were
+// skipped.
+func TestCSSNestedRules(t *testing.T) {
+	d := mustDoc(t, `<nav class="hidden lg:block"><a href="/p">Pricing</a></nav><div class="card"><b class="x">Bold</b><i>It</i></div><ul class="a"><li>Item</li></ul>`)
+	css := `@layer utilities { .hidden { display: none } .lg\:block { @media (width >= 64rem) { display: block } } }
+.card { & .x { display: none } i { visibility: hidden } }
+.a, .b { &:not(.z) > li { display: none } }`
+	d.SetStylesheets([]string{css}, 1280, "light")
+	y, _ := d.AriaSnapshotYAML()
+	if !strings.Contains(y, "Pricing") {
+		t.Fatalf("wide: nested @media should show the nav:\n%s", y)
+	}
+	if strings.Contains(y, "Bold") || strings.Contains(y, "It") || strings.Contains(y, "Item") {
+		t.Fatalf("nested style rules should apply:\n%s", y)
+	}
+	d.SetStylesheets([]string{css}, 400, "light")
+	if y, _ := d.AriaSnapshotYAML(); strings.Contains(y, "Pricing") {
+		t.Fatalf("narrow: nav should stay hidden:\n%s", y)
+	}
+}
+
+// A backslash escape is never a quote: Tailwind's `.content-\[\'x\'\]` made the rest of pipilot.dev's sheet
+// one long "string", which dropped every later rule (the desktop nav stayed display:none for snapshots and clicks).
+func TestCSSEscapedQuotesInSelectors(t *testing.T) {
+	d := mustDoc(t, `<nav class="hidden lg:block"><a href="/p">Pricing</a></nav>`)
+	d.SetStylesheets([]string{`@layer utilities{.hidden{display:none}.content-\[\'✓\'\]:before{--tw-content:"✓"}.\[grid-template-areas\:\'a\'_\'b\'\]{grid-template-areas:"a" "b"}@media(min-width:64rem){.lg\:block{display:block}}}`}, 1280, "light")
+	if y, _ := d.AriaSnapshotYAML(); !strings.Contains(y, "Pricing") {
+		t.Fatalf("rules after an escaped quote were lost:\n%s", y)
+	}
+}

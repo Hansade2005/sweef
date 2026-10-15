@@ -996,3 +996,91 @@ func TestModuleGraphDownloadsInParallel(t *testing.T) {
 		t.Fatalf("the module graph took %v: its modules were fetched one after the other", d)
 	}
 }
+
+// An entry module is compiled under its URL: a dynamic import("./x.js") run later (from a timer, after other
+// scripts ran) resolves against the module, import.meta.url is the module's URL (webpack's automatic
+// publicPath reads it), and a chunk importing the entry module back gets the instance that already ran.
+func TestEntryModuleKeepsItsURL(t *testing.T) {
+	mux := http.NewServeMux()
+	js := func(path, body string) {
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/javascript")
+			fmt.Fprint(w, body)
+		})
+	}
+	mux.HandleFunc("/page", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><p id="out">-</p>
+<script type="module" src="/assets/main.js"></script>
+<script src="/third/party.js"></script>`)
+	})
+	js("/assets/main.js", `import { dep } from './dep.js';
+window.runs = (window.runs || 0) + 1;
+export const tag = dep;
+window.metaURL = import.meta.url;
+setTimeout(function () { import('./chunk.js').then(function (m) { document.getElementById('out').textContent = m.v; }, function (e) { document.getElementById('out').textContent = 'ERR ' + e; }); }, 20);`)
+	js("/assets/chunk.js", `import { tag } from './main.js'; export const v = 'chunk:' + tag;`)
+	js("/assets/dep.js", `export const dep = 'main';`) // a static import: compiling the entry module resolves it
+	js("/third/party.js", `window.third = 1;`)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	if err := tab.Navigate(srv.URL+"/page", nil); err != nil {
+		t.Fatal(err)
+	}
+	tab.Settle(300 * time.Millisecond)
+	want := `"chunk:main|` + srv.URL + `/assets/main.js|1"`
+	if v := mustEval(t, tab, `document.getElementById('out').textContent + '|' + window.metaURL + '|' + window.runs`); v != want {
+		t.Fatalf("got %s, want %s\nconsole:\n%s", v, want, consoleText(tab))
+	}
+}
+
+// The chunks of a Promise.all over import() calls download together: QuickJS loads each dynamic import from its
+// own job, one after another, and GitHub's issue page waited ~120 round trips in a row for its rspack chunks.
+func TestQueuedDynamicImportsDownloadTogether(t *testing.T) {
+	var mu sync.Mutex
+	inFlight, peak := 0, 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/page", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><p id="out">-</p><script type="module" src="/assets/main.js"></script>`)
+	})
+	mux.HandleFunc("/assets/main.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprint(w, `setTimeout(function () {
+  var t0 = Date.now(), ids = [1, 2, 3, 4, 5, 6];
+  Promise.all(ids.map(function (i) { return import('./c' + i + '.js'); })).then(function (ms) {
+    document.getElementById('out').textContent = ms.map(function (m) { return m.v; }).join(',');
+  }, function (e) { document.getElementById('out').textContent = 'ERR ' + e; });
+}, 10);`)
+	})
+	mux.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		inFlight++
+		if inFlight > peak {
+			peak = inFlight
+		}
+		mu.Unlock()
+		time.Sleep(150 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprintf(w, `export const v = %q;`, strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/assets/"), ".js"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	if err := tab.Navigate(srv.URL+"/page", nil); err != nil {
+		t.Fatal(err)
+	}
+	tab.Settle(2 * time.Second)
+	if v := mustEval(t, tab, `document.getElementById('out').textContent`); v != `"c1,c2,c3,c4,c5,c6"` {
+		t.Fatalf("got %s\nconsole:\n%s", v, consoleText(tab))
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if peak < 3 {
+		t.Fatalf("at most %d chunk downloads at once: queued import() calls loaded one by one", peak)
+	}
+}

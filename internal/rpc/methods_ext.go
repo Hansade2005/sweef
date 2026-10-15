@@ -280,7 +280,21 @@ func init() {
 		return map[string]bool{"ok": true}, t.WaitForURL(str(p, "pattern"), dur(p, "timeout", 30*time.Second))
 	})
 	registerExt("Page.waitForTimeout", func(sv *Server, p Params) (any, error) {
-		time.Sleep(dur(p, "ms", time.Second) / 1000 * time.Millisecond) // ms value
+		d := time.Second
+		if ms, ok := p["ms"].(float64); ok && ms >= 0 {
+			d = time.Duration(ms) * time.Millisecond
+		} else if ms, ok := p["timeout"].(float64); ok && ms >= 0 {
+			d = time.Duration(ms) * time.Millisecond
+		}
+		if d > 60*time.Second {
+			d = 60 * time.Second
+		}
+		// the page keeps running meanwhile (timers, animations, responses), as it would in a browser
+		if t, err := sv.tab(p); err == nil {
+			t.RunFor(d)
+		} else {
+			time.Sleep(d)
+		}
 		return map[string]bool{"ok": true}, nil
 	})
 
@@ -561,6 +575,11 @@ func predicate(fn func(*engine.Locator) (bool, error)) func(*Server, Params) (an
 
 func dur(p Params, k string, def time.Duration) time.Duration {
 	if ms, ok := p[k].(float64); ok && ms > 0 {
+		return time.Duration(ms) * time.Millisecond
+	}
+	// the CLI, the batch runner and the SDKs send "timeoutMs": reading only "timeout" made every wait run
+	// for the 30 s default, past the caller's own deadline (the CLI then failed with a socket i/o timeout)
+	if ms, ok := p[k+"Ms"].(float64); ok && ms > 0 {
 		return time.Duration(ms) * time.Millisecond
 	}
 	return def

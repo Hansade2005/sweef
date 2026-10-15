@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
-import { HERE, CHROMIUM, loadTasks, re, estTokens, sleep, USABLE_POLL_MS, USABLE_MAX_MS } from './lib.mjs';
+import { HERE, CHROMIUM, loadTasks, re, estTokens, sleep, USABLE_POLL_MS, USABLE_MAX_MS, rmTree } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const opt = { runs: 3, tools: 'sweef,playwright,agent-browser', timeout: 30, paceMs: 1500, only: '', sweef: process.env.SWEEF || 'sweef', out: '', skipWarm: false };
@@ -52,7 +52,11 @@ function cliAdapter(kind) {
   const bin = kind === 'sweef' ? opt.sweef : opt.ab;
   return async function runCli(task) {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), kind + '-home-'));
-    const env = { ...process.env, SWEEF_HOME: home, AGENT_BROWSER_EXECUTABLE_PATH: CHROMIUM, AGENT_BROWSER_SESSION: 'bench' + process.pid };
+    // A cold run starts with empty caches, as the Playwright side does (a fresh Chromium profile): Sweef's
+    // bytecode and HTTP caches default to ~/.cache/sweef, which every earlier run (and day) had filled, so
+    // until 2026-10-15 Sweef's "cold" runs replayed cached bytecode and responses. The warm visit below runs
+    // in the same session and so still sees what the cold visit cached.
+    const env = { ...process.env, SWEEF_HOME: home, SWEEF_CACHE_DIR: path.join(home, 'cache'), AGENT_BROWSER_EXECUTABLE_PATH: CHROMIUM, AGENT_BROWSER_SESSION: 'bench' + process.pid };
     const tf = `${TMS / 1000}s`;
     const run = (a) => exec(bin, a, env, TMS + 15000);
     const res = { tool: kind, steps: [], ok: false };
@@ -118,6 +122,8 @@ function cliAdapter(kind) {
         for (;;) {
           const r = await evalJs('location.href + "\\n" + document.body.innerText');
           txt = r.code === 0 ? r.out : '';
+          // sweef eval prints the value as JSON: decode it, or line breaks reach the regex as the two characters \n
+          try { const v = JSON.parse(txt.trim()); if (typeof v === 'string') txt = v; } catch { /* not JSON: keep the raw text */ }
           if (fc.test(txt) || performance.now() - tf0 > USABLE_MAX_MS) break;
           await sleep(USABLE_POLL_MS);
         }
@@ -137,7 +143,7 @@ function cliAdapter(kind) {
     await exec(bin, ['close'], env, 15000);
     // make sure no daemon outlives the run (fresh daemon per run is part of the method)
     if (sweef) spawnSync('pkill', ['-f', `${home}/default.sock`]);
-    fs.rmSync(home, { recursive: true, force: true });
+    rmTree(home);
     return res;
   };
 }

@@ -252,6 +252,10 @@ type Result struct {
 	Viewport      Rect
 	Boxes         map[*html.Node]*Box
 	List          []Op
+	// FixedRanges are the [start, end) ranges of List painted by position:fixed boxes (outermost only, in
+	// order): a screenshot of the page scrolled by y draws List moved up by y except these, which stay where
+	// the viewport has them.
+	FixedRanges [][2]int
 	// Text records every run of text that was painted, in paint order (see TextBox).
 	Text []TextBox
 	// Hit returns the topmost element at a document point, honoring paint
@@ -304,14 +308,18 @@ type FrameEnv interface {
 
 // Options configure one layout pass.
 type Options struct {
-	Width, Height float64 // viewport in CSS px
-	DPR           float64 // device pixel ratio (for image-set, resolution media)
-	ColorScheme   string  // "light" | "dark"
-	BaseURL       string
-	Sheets        []Sheet // author sheets in order; the UA sheet is built in
-	Env           Env
-	ReducedMotion bool
-	Print         bool // media type print instead of screen
+	// HideScrollbars lays out and paints without scrollbars (no space reserved for them), as headless Chromium
+	// does under Playwright and CDP (--hide-scrollbars); scrolling still works
+	HideScrollbars bool
+	Mobile         bool    // touch device emulation (media features hover/pointer)
+	Width, Height  float64 // viewport in CSS px
+	DPR            float64 // device pixel ratio (for image-set, resolution media)
+	ColorScheme    string  // "light" | "dark"
+	BaseURL        string
+	Sheets         []Sheet // author sheets in order; the UA sheet is built in
+	Env            Env
+	ReducedMotion  bool
+	Print          bool // media type print instead of screen
 	// ScrollX, ScrollY is the viewport's scroll position, used to decide which
 	// content-visibility:auto subtrees are on screen.
 	ScrollX, ScrollY float64

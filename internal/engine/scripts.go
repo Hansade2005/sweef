@@ -40,6 +40,22 @@ func (t *Tab) settleBudget() time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+// settleQuiet is how long the document must stay unchanged, with nothing but timers left to run, before a
+// headless pump stops ahead of its budget (Options.SettleQuietMs; 0 = off). A page with a ticking clock, a
+// carousel or a poller always has a timer due, so without it every load and every action paid the whole
+// budget; a page whose content is still arriving keeps changing the document, or has requests in flight,
+// and the pump goes on.
+func (t *Tab) settleQuiet() time.Duration {
+	ms := t.eng.opts.SettleQuietMs
+	if ms < 0 {
+		return 0
+	}
+	if ms == 0 {
+		ms = 300
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
 // runScriptEl fetches (if needed) and executes one <script> element, then
 // dispatches load or error on it.
 func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {

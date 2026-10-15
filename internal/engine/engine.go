@@ -45,6 +45,7 @@ type Options struct {
 	ViewportWidth    int    // default viewport width (px) for text rendering
 	ViewportHeight   int    // default viewport height (px)
 	SettleMs         int    // event-loop budget after load and after actions (default 1500)
+	SettleQuietMs    int    // a headless settle ends early once only timers are left and the document has not changed for this long (0 = default 300; negative = off, pump to SettleMs)
 	JSMemoryMiB      int    // QuickJS heap cap per tab (default 256: YouTube's player and its BotGuard script need more than 64)
 	JSTimeoutMs      int    // single-eval timeout; a looping script is interrupted (default 30000: a real page's longest tasks, YouTube's first render among them, run past 5 s on a loaded machine, and an interrupted task leaves the page half-built)
 	WarmVMs          int    // JS VMs kept pre-built so navigations skip prelude setup (default 1)
@@ -54,6 +55,9 @@ type Options struct {
 	StorageQuotaMiB  int    // hard cap per origin for all site storage in MiB (0 = 20% of the budget)
 	StorageBudgetMiB int    // global budget of all origins in MiB (0 = 60% of the profile volume's free space, at most 64 GiB); see docs/storage.md
 	DisableFrames    bool   // do not load <iframe> documents (frames.go): pages see no content window, as before frames existed
+	BlockTrackers    bool   // refuse third-party requests to known ad, analytics and tracking hosts (trackers.go); the agent-facing commands turn it on
+	HideScrollbars   bool   // lay out and paint without scrollbars, as headless Chromium under Playwright/CDP does; the agent-facing commands turn it on
+	NoAutoplay       bool   // media do not preload or autoplay (the page's own play() still loads them), as under the Data Saver; the agent-facing commands turn it on: a background video cost ~150 MB of decoded frames and a core of CPU for nothing an agent reads
 }
 
 func DefaultOptions() Options {

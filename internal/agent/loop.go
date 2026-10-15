@@ -592,8 +592,15 @@ func (a *Agent) loop(ctx context.Context, rs *runState, text string) error {
 				recoveredThinking = true
 				a.cvMu.Lock()
 				n := a.cv.stripThinking()
+				// and stop asking for thinking in this run: with thinking enabled the API requires the
+				// assistant turn that owns the pending tool results to start with a thinking block, so a
+				// stripped history was rejected again and the run died (Mode B: 23 of 23 sweef errors had
+				// exactly two failed requests)
+				noThink := a.cfg
+				noThink.Thinking = ThinkingDisabled
+				a.cv.head = buildHead(&noThink)
 				a.cvMu.Unlock()
-				a.cfg.logf("API rejected replayed thinking; stripped %d blocks and retrying", n)
+				a.cfg.logf("API rejected replayed thinking (%s); stripped %d blocks, thinking off for this run, retrying", ae.Message, n)
 				if len(te.calls) == 0 {
 					continue
 				}

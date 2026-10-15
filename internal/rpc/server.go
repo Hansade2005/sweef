@@ -37,6 +37,45 @@ type Server struct {
 	OnShutdown func()
 
 	lastActivity atomic.Int64
+
+	// BackgroundPump keeps the pages' event loops running between calls for a short while after each call
+	// (pumpWindow), so work a page started (a client-side route loading its chunk, a fetch, a delayed render)
+	// completes between an agent's commands, as it would in a browser, instead of only while the next command
+	// runs. Pages then go quiet: no CPU is spent on animation loops of a page nobody is driving.
+	BackgroundPump bool
+	drive          sync.RWMutex // calls hold it shared; a background pump holds it alone
+	inCall         atomic.Int32
+}
+
+// pumpWindow is how long after the last call the background pump keeps pages running.
+const pumpWindow = 3 * time.Second
+
+// backgroundPump runs until ctx ends (see Server.BackgroundPump).
+func (s *Server) backgroundPump(ctx context.Context) {
+	tick := time.NewTicker(25 * time.Millisecond)
+	defer tick.Stop()
+	var rest time.Time // no pump before this (duty-cycle limit)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		if time.Since(time.Unix(0, s.lastActivity.Load())) > pumpWindow || s.inCall.Load() > 0 {
+			continue
+		}
+		if time.Now().Before(rest) || !s.drive.TryLock() {
+			continue
+		}
+		t0 := time.Now()
+		for _, t := range s.eng.ListTabs() {
+			t.Settle(15 * time.Millisecond) // returns at once when nothing is due
+		}
+		s.drive.Unlock()
+		// at most a quarter of one core: a page whose every animation frame forces an expensive layout would
+		// otherwise keep the daemon busy for the whole window while the agent thinks
+		rest = time.Now().Add(3 * time.Since(t0))
+	}
 }
 
 func NewServer(e *engine.Engine) *Server {
@@ -101,6 +140,13 @@ func (s *Server) tab(p Params) (*engine.Tab, error) {
 
 // Call executes one method and returns a JSON result or an RpcError.
 func (s *Server) Call(method string, raw json.RawMessage) (json.RawMessage, *protocol.RpcError) {
+	s.inCall.Add(1)
+	s.drive.RLock()
+	defer func() {
+		s.drive.RUnlock()
+		s.inCall.Add(-1)
+		s.lastActivity.Store(time.Now().UnixNano()) // the background pump's window starts when the call ends
+	}()
 	s.lastActivity.Store(time.Now().UnixNano())
 	var p Params
 	if len(raw) > 0 {
@@ -495,8 +541,19 @@ func (s *Server) ServeTCP(ctx context.Context, addr string) error {
 	}
 	defer ln.Close()
 	if network == "unix" {
-		defer os.Remove(addr)
 		_ = os.Chmod(addr, 0o600)
+		// remove the socket only while it is still this listener's: once a new daemon has bound the same
+		// path (the old one still shutting down), removing it would strand the new one's clients
+		if mine, err := os.Stat(addr); err == nil {
+			defer func() {
+				if cur, err := os.Stat(addr); err == nil && os.SameFile(mine, cur) {
+					_ = os.Remove(addr)
+				}
+			}()
+		}
+		if ul, ok := ln.(*net.UnixListener); ok {
+			ul.SetUnlinkOnClose(false) // the deferred check above decides
+		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -504,6 +561,9 @@ func (s *Server) ServeTCP(ctx context.Context, addr string) error {
 		<-ctx.Done()
 		ln.Close()
 	}()
+	if s.BackgroundPump {
+		go s.backgroundPump(ctx)
+	}
 	if s.IdleTimeout > 0 {
 		go func() {
 			tick := time.NewTicker(time.Second)

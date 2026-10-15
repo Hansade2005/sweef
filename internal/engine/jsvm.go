@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -110,8 +111,68 @@ func fullPrelude() string {
 			b.WriteString(zpack.String(preludeZExtras[n]))
 		}
 	}
+	if !preludeStripsSource() {
+		b.WriteString("\n")
+		b.WriteString(nativeToStringJS)
+	}
 	return b.String()
 }
+
+// The platform the preludes build prints as built-in code, "function f() { [native code] }", the way a browser's
+// platform does. Pages tell their own code from the platform's that way: Optimizely's "Cleanse" deletes every
+// non-native accessor from HTMLElement.prototype (so element.style was gone on the-internet.herokuapp.com and
+// jQuery failed to start), and lodash, core-js and others test for native implementations the same way. The
+// prelude is compiled without its source text (QuickJS then prints functions as native code, and the bytecode
+// is smaller); where the C API is out of reach (preludeStripsSource false) nativeToStringJS does it instead.
+//
+// nativeToStringJS runs after every prelude: the platform the preludes built (constructors, prototype methods,
+// accessors, functions on globals such as console or CSS) prints as built-in code, "function f() { [native
+// code] }", the way a browser's platform does. Pages tell their own code from the platform's that way: Optimizely's
+// "Cleanse" deletes every non-native accessor from HTMLElement.prototype (so element.style was gone on
+// the-internet.herokuapp.com and jQuery failed to start), and lodash, core-js and others test for native
+// implementations the same way. Functions the page defines keep their source.
+const nativeToStringJS = `;(function (g) {
+  var nat = new WeakSet(), FP = Function.prototype, orig = FP.toString;
+  var gopn = Object.getOwnPropertyNames, gopd = Object.getOwnPropertyDescriptor, gpo = Object.getPrototypeOf;
+  function fn(f) { if (typeof f === 'function') nat.add(f); }
+  function props(o) {
+    var ks; try { ks = gopn(o); } catch (e) { return; }
+    for (var i = 0; i < ks.length; i++) {
+      var d; try { d = gopd(o, ks[i]); } catch (e) { continue; }
+      if (!d) continue;
+      if (d.get) fn(d.get);
+      if (d.set) fn(d.set);
+      if (typeof d.value === 'function') fn(d.value);
+    }
+  }
+  var seen = new WeakSet();
+  function obj(o) {
+    for (; o && (typeof o === 'object' || typeof o === 'function') && o !== Object.prototype && o !== FP; o = gpo(o)) {
+      if (seen.has(o)) return;
+      seen.add(o);
+      props(o);
+      if (typeof o === 'function' && o.prototype && typeof o.prototype === 'object') obj(o.prototype);
+    }
+  }
+  var ks = gopn(g);
+  for (var i = 0; i < ks.length; i++) {
+    var d; try { d = gopd(g, ks[i]); } catch (e) { continue; }
+    if (!d) continue;
+    if (d.get) fn(d.get);
+    if (d.set) fn(d.set);
+    var v = d.value;
+    if (v && (typeof v === 'function' || typeof v === 'object') && v !== g) { fn(v); obj(v); }
+  }
+  obj(gpo(g));
+  props(Object.prototype); props(FP);
+  var ts = function toString() {
+    if (nat.has(this)) { var n = this.name; return 'function ' + (typeof n === 'string' ? n : '') + '() { [native code] }'; }
+    return orig.call(this);
+  };
+  nat.add(ts);
+  Object.defineProperty(FP, 'toString', { value: ts, writable: true, configurable: true, enumerable: false });
+})(globalThis);
+`
 
 // preludeKey names the prelude for the bytecode cache without inflating it: it hashes what is embedded (the
 // deflated blobs, which are committed files and only change when the source does) instead of the 1.2 MB of source,
@@ -126,6 +187,11 @@ func preludeKey() [32]byte {
 	}
 	part("z", "dom", domPreludeZ)
 	part("z", "domext", domPreludeExtZ)
+	if preludeStripsSource() {
+		part("strip", "source", "")
+	} else {
+		part("r", "native-tostring", nativeToStringJS)
+	}
 	for _, n := range preludeNames() {
 		if src, ok := preludeExtras[n]; ok {
 			part("r", n, src)
@@ -176,7 +242,10 @@ func compiledPrelude() []byte {
 			return
 		}
 		defer vm.Close()
-		if bc, err := vm.Compile(fullPrelude(), quickjs.EvalGlobal); err == nil {
+		restore := stripSource(vm)
+		bc, err := vm.Compile(fullPrelude(), quickjs.EvalGlobal)
+		restore()
+		if err == nil {
 			preludeBytecode = bc
 			if file != "" {
 				tmp := file + ".tmp"
@@ -190,6 +259,7 @@ func compiledPrelude() []byte {
 }
 
 type jsVM struct {
+	fullPump  atomic.Bool // RunFor: pump for the whole duration (no quiet early stop)
 	holdBG    atomic.Bool // explicit waits also wait on background (media clock) timers
 	wakeMs    float64     // set by pumpUntil when a slice ends with a timer pending: ms until it is due
 	bcState   string      // bytecode cache outcome of the last runCached (hit, miss, small), for the load timeline
@@ -274,7 +344,10 @@ func buildVM(o Options) (*jsVM, error) {
 		}
 	}
 	if !loaded {
-		if _, err := vm.Eval(fullPrelude(), quickjs.EvalGlobal); err != nil {
+		restore := stripSource(vm)
+		_, err := vm.Eval(fullPrelude(), quickjs.EvalGlobal)
+		restore()
+		if err != nil {
 			vm.Close()
 			return nil, fmt.Errorf("prelude: %w", err)
 		}
@@ -524,7 +597,11 @@ func (j *jsVM) runModule(src, name string) error {
 	j.syncNet = true // a top-level await inside the module is awaited without an event loop: requests complete in place
 	j.curScript = name
 	defer func() { j.syncNet, j.curScript = false, "" }()
-	if len(src) < 256 {
+	named := strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://")
+	if named {
+		src = withImportMetaURL(src, name)
+	}
+	if len(src) < 256 && !named {
 		j.bcState = "small"
 		if _, err := j.vm.Eval(src, quickjs.EvalModule); err != nil {
 			j.tab.LogConsole("error", jsErrorText(err, name))
@@ -536,11 +613,27 @@ func (j *jsVM) runModule(src, name string) error {
 	// module source: 3 s of compiling a second time otherwise)
 	cache := j.tab.eng.code
 	key := codeKey("\x00module\x00" + src)
+	if named {
+		key = codeKey("\x00module\x00" + name + "\x00" + src) // the bytecode carries the module's name
+	}
 	bc := cache.get(key)
 	fromCache := bc != nil
 	j.bcState = "miss"
 	if fromCache {
 		j.bcState = "hit"
+	}
+	if bc == nil && named {
+		// compiled and run under its URL: its relative imports, import.meta.url and its identity in the module
+		// map are right (qjsnamed.go)
+		if b, err, ok := runModuleNamed(j.vm, src, name); ok {
+			if len(b) > 0 {
+				cache.put(key, b)
+			}
+			if err != nil {
+				j.tab.LogConsole("error", jsErrorText(err, name))
+			}
+			return err
+		}
 	}
 	if bc == nil {
 		var err error
@@ -573,8 +666,14 @@ func errLoc(err error, name string) string {
 		return ""
 	}
 	for _, ln := range strings.Split(qe.Stack, "\n") {
-		if i := strings.Index(ln, "<eval>:"); i >= 0 {
-			rest := strings.TrimRight(ln[i+len("<eval>:"):], ") ")
+		tag := "<eval>:"
+		i := strings.Index(ln, tag)
+		if i < 0 {
+			tag = name + ":" // a module compiled under its URL (qjsnamed.go)
+			i = strings.Index(ln, tag)
+		}
+		if i >= 0 {
+			rest := strings.TrimRight(ln[i+len(tag):], ") ")
 			if rest != "" && rest[0] >= '0' && rest[0] <= '9' {
 				return name + ":" + rest
 			}
@@ -691,6 +790,14 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		return false, true
 	}
 	j.wakeMs = 0
+	// quiet: headless pumps stop once the document stopped changing and only timers remain (Tab.settleQuiet)
+	var quiet time.Duration
+	var lastGen uint64
+	lastChange := time.Now()
+	if soft.IsZero() && j.tab != nil && !j.tab.progMode.Load() && !j.fullPump.Load() {
+		quiet = j.tab.settleQuiet()
+		lastGen = j.docGen()
+	}
 	for {
 		j.drainScripts(soft)
 		j.jobs()
@@ -700,7 +807,13 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 			// A background tab under the Data Saver runs no timers (no polling, no
 			// animation frames) and no workers; promise jobs and results already
 			// delivered still flow, so an explicit evaluate does not hang.
-			next = j.runTimers()
+			// a batch of due timers stops at the deadline: on a page whose animation frames each force a
+			// layout, one batch could otherwise run for many seconds past the settle budget
+			var budget float64
+			if !deadline.IsZero() {
+				budget = math.Max(1, float64(time.Until(deadline))/float64(time.Millisecond))
+			}
+			next = j.runTimers(budget)
 		}
 		if j.drainAsync() {
 			delivered = true
@@ -725,7 +838,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		}
 		j.mu.Unlock()
 		sliceOver := !soft.IsZero() && !time.Now().Before(soft)
-		httpWait := soft.IsZero() && (j.tab == nil || !j.tab.progMode.Load()) && j.httpInFlight() // a window's tab never waits on the network
+		httpWait := soft.IsZero() && (j.tab == nil || !j.tab.progMode.Load()) && j.httpInFlightBefore(deadline) // a window's tab never waits on the network
 		if more || ((delivered || j.hasLiveWork()) && time.Now().Before(deadline)) || httpWait {
 			if sliceOver {
 				return false, false
@@ -742,6 +855,13 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		}
 		if next < 0 {
 			return false, true
+		}
+		if quiet > 0 {
+			if g := j.docGen(); g != lastGen {
+				lastGen, lastChange = g, time.Now()
+			} else if time.Since(lastChange) >= quiet && !j.tab.framesBusy() { // a frame still loading is not quiet
+				return false, true
+			}
 		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
@@ -762,6 +882,45 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 			time.Sleep(wait)
 		}
 	}
+}
+
+// RunFor runs the page's event loop for d (timers, animation frames, network callbacks) without the early
+// stop of a settle: the "wait <ms>" of an agent, after which an animation or a delayed render has progressed
+// as far as it would have in a browser.
+func (t *Tab) RunFor(d time.Duration) {
+	t.runTasks()
+	if t.beforeDCL() {
+		time.Sleep(d)
+		return
+	}
+	t.mu.RLock()
+	j := t.js
+	t.mu.RUnlock()
+	if j == nil {
+		time.Sleep(d)
+		return
+	}
+	j.fullPump.Store(true)
+	defer j.fullPump.Store(false)
+	end := time.Now().Add(d)
+	for time.Now().Before(end) {
+		j.pump(time.Until(end))
+		if rest := time.Until(end); rest > 0 {
+			time.Sleep(min(rest, 10*time.Millisecond)) // idle page: nothing due yet
+		}
+	}
+}
+
+// docGen is the mutation counter of the tab's document (0 without one).
+func (j *jsVM) docGen() uint64 {
+	t := j.tab
+	t.mu.RLock()
+	d := t.dom
+	t.mu.RUnlock()
+	if d == nil {
+		return 0
+	}
+	return d.MutationGen()
 }
 
 // Settle pumps the page's event loop for up to d (exported for RPC waits).
@@ -802,8 +961,8 @@ func (t *Tab) settle(d time.Duration) {
 	}
 }
 
-func (j *jsVM) runTimers() float64 {
-	r, err := j.call("__swRunTimers", j.nowMs(), j.holdBG.Load())
+func (j *jsVM) runTimers(budgetMs float64) float64 {
+	r, err := j.call("__swRunTimers", j.nowMs(), j.holdBG.Load(), budgetMs)
 	if err != nil {
 		j.tab.LogConsole("error", jsErrorText(err, "timers"))
 		return -1
@@ -992,9 +1151,16 @@ func normalizeJS(v any) any {
 // ---- module loader ---------------------------------------------------------------
 
 func (j *jsVM) installModuleLoader(docURL string) {
-	j.vm.SetModuleLoader(func(_ *quickjs.VM, name string) (string, error) {
+	j.vm.SetModuleLoader(func(vm *quickjs.VM, name string) (string, error) {
 		if !strings.HasPrefix(name, "http://") && !strings.HasPrefix(name, "https://") {
 			return "", fmt.Errorf("cannot resolve bare module specifier %q", name)
+		}
+		// the other import() calls already queued (Promise.all over a bundler's chunks) download now, in
+		// parallel, instead of one round trip each as QuickJS gets to their jobs
+		for _, d := range pendingDynamicImports(vm) {
+			if u, err := j.resolveModule(d[0], d[1], docURL); err == nil {
+				j.prefetchModule(u)
+			}
 		}
 		body, status, err := j.tab.fetchResourceKind(name, KindScript)
 		if err != nil {
@@ -1004,31 +1170,36 @@ func (j *jsVM) installModuleLoader(docURL string) {
 			return "", fmt.Errorf("module %s: HTTP %d", name, status)
 		}
 		j.prefetchModuleDeps(name, body)
-		return body, nil
+		return withImportMetaURL(body, name), nil
 	}, func(_ *quickjs.VM, base, name string) (string, error) {
-		if strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://") {
-			return name, nil
-		}
-		b := base
+		return j.resolveModule(base, name, docURL)
+	})
+}
+
+// resolveModule is the module name a specifier imported from base resolves to.
+func (j *jsVM) resolveModule(base, name, docURL string) (string, error) {
+	if strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://") {
+		return name, nil
+	}
+	b := base
+	if !strings.HasPrefix(b, "http://") && !strings.HasPrefix(b, "https://") {
+		// the importing script has no module name of its own (QuickJS names every evaluated source "<eval>"):
+		// relative specifiers resolve against the script being run, as the browser does, else the document
+		b = j.curBase
 		if !strings.HasPrefix(b, "http://") && !strings.HasPrefix(b, "https://") {
-			// the importing script has no module name of its own (QuickJS names every evaluated source "<eval>"):
-			// relative specifiers resolve against the script being run, as the browser does, else the document
-			b = j.curBase
-			if !strings.HasPrefix(b, "http://") && !strings.HasPrefix(b, "https://") {
-				b = j.tab.URL()
-				if b == "about:blank" {
-					b = docURL
-				}
+			b = j.tab.URL()
+			if b == "about:blank" {
+				b = docURL
 			}
 		}
-		if strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../") || strings.HasPrefix(name, "/") {
-			return resolveURL(b, name)
-		}
-		if u, ok := j.mapImport(name); ok {
-			return u, nil
-		}
-		return "", fmt.Errorf("bare module specifier %q is not supported (no import map entry)", name)
-	})
+	}
+	if strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../") || strings.HasPrefix(name, "/") {
+		return resolveURL(b, name)
+	}
+	if u, ok := j.mapImport(name); ok {
+		return u, nil
+	}
+	return "", fmt.Errorf("bare module specifier %q is not supported (no import map entry)", name)
 }
 
 // addImportMap reads a <script type="importmap"> body: its "imports" table maps bare specifiers (and
@@ -1182,6 +1353,7 @@ func (j *jsVM) registerHost() error {
 		{"nodeValue", doc(func(d *fnet.Doc, a []any) (any, error) { return d.NodeValue(argI(a, 0)), nil })},
 		{"setNodeValue", doc(func(d *fnet.Doc, a []any) (any, error) { d.SetNodeValue(argI(a, 0), argS(a, 1)); return nil, nil })},
 		{"textContent", doc(func(d *fnet.Doc, a []any) (any, error) { return d.TextContent(argI(a, 0)), nil })},
+		{"innerText", doc(func(d *fnet.Doc, a []any) (any, error) { return innerTextOf(d, argI(a, 0)), nil })},
 		{"setTextContent", doc(func(d *fnet.Doc, a []any) (any, error) { d.SetTextContent(argI(a, 0), argS(a, 1)); return nil, nil })},
 		{"innerHTML", doc(func(d *fnet.Doc, a []any) (any, error) {
 			s, err := d.InnerHTML(argI(a, 0))
@@ -1258,6 +1430,7 @@ func (j *jsVM) registerHost() error {
 			return nil, nil
 		}},
 		{"quirks", doc(func(d *fnet.Doc, a []any) (any, error) { return docQuirks(d), nil })},
+		{"mediaMatches", func(a []any) (any, error) { return j.tab.mediaMatches(argS(a, 0)), nil }},
 		{"computedStyle", doc(func(d *fnet.Doc, a []any) (any, error) { return computedStyleOf(d, argI(a, 0)), nil })},
 		{"box", doc(func(d *fnet.Doc, a []any) (any, error) {
 			if g, ok := d.GeometryOf(argI(a, 0)); ok {
@@ -1646,8 +1819,17 @@ func (j *jsVM) registerHost() error {
 			name, inner := x.name, x.fn
 			fns[i] = func(a []any) (any, error) {
 				t0 := time.Now()
+				var n0 int64
+				if j.tab != nil {
+					n0, _ = j.tab.LayoutStats()
+				}
 				r, err := inner(a)
 				hostStat(name, time.Since(t0))
+				if j.tab != nil {
+					if n1, _ := j.tab.LayoutStats(); n1 > n0 {
+						hostStat("layout<-"+name, time.Since(t0)) // which bridge calls force layouts
+					}
+				}
 				return r, err
 			}
 		}
@@ -1794,23 +1976,32 @@ func (j *jsVM) prefetchModuleDeps(base, src string) {
 		if !(strings.HasPrefix(abs, "http://") || strings.HasPrefix(abs, "https://")) {
 			continue
 		}
-		j.modMu.Lock() // not j.mu: the loader runs inside an evaluation that holds it
-		if j.modSeen == nil {
-			j.modSeen = map[string]bool{}
-		}
-		dup := j.modSeen[abs] || len(j.modSeen) >= maxPrefetchedModules
-		j.modSeen[abs] = true
-		j.modMu.Unlock()
-		if dup {
-			continue
-		}
-		go func(abs string) {
-			t.preloadSem <- struct{}{}
-			body, status, err := t.fetchRes(abs, fetchOpts{kind: KindScript, prefetch: true})
-			<-t.preloadSem
-			if err == nil && status < 400 {
-				j.prefetchModuleDeps(abs, body)
-			}
-		}(abs)
+		j.prefetchModule(abs)
 	}
+}
+
+// prefetchModule starts reading one module (and then its static imports) unless it was already started.
+func (j *jsVM) prefetchModule(abs string) {
+	t := j.tab
+	if t == nil || t.policy().ScriptMaxBytes > 0 || !(strings.HasPrefix(abs, "http://") || strings.HasPrefix(abs, "https://")) {
+		return
+	}
+	j.modMu.Lock() // not j.mu: the loader runs inside an evaluation that holds it
+	if j.modSeen == nil {
+		j.modSeen = map[string]bool{}
+	}
+	dup := j.modSeen[abs] || len(j.modSeen) >= maxPrefetchedModules
+	j.modSeen[abs] = true
+	j.modMu.Unlock()
+	if dup {
+		return
+	}
+	go func() {
+		t.preloadSem <- struct{}{}
+		body, status, err := t.fetchRes(abs, fetchOpts{kind: KindScript, prefetch: true})
+		<-t.preloadSem
+		if err == nil && status < 400 {
+			j.prefetchModuleDeps(abs, body)
+		}
+	}()
 }

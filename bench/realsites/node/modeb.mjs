@@ -16,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
-import { HERE, loadTasks, re, sleep } from './lib.mjs';
+import { HERE, loadTasks, re, sleep, rmTree } from './lib.mjs';
 import { loadPrices, costUSD } from './cost.mjs';
 import { runPwAgent } from './pw_agent.mjs';
 
@@ -88,14 +88,15 @@ async function runSweefAgent(task) {
   if (opt.thinking === 'disabled') a.push('-no-thinking');
   if (opt.baseUrl) a.push('-base-url', opt.baseUrl);
   a.push(promptFor(task));
-  const env = { ...process.env, SWEEF_HOME: home };
+  const env = { ...process.env, SWEEF_HOME: home, SWEEF_CACHE_DIR: path.join(home, 'cache') }; // empty caches, like the fresh Chromium profile
   const r = await execp(opt.sweef, a, env, TMS);
-  fs.rmSync(home, { recursive: true, force: true });
+  rmTree(home);
   const out = { tool: 'sweef-agent', wall_ms: r.ms, exit: r.code };
   try {
     const j = JSON.parse(r.out.trim().split('\n').pop());
     const s = j.stats;
     out.stop = j.stop; out.answer = j.answer || j.text || ''; out.text = j.text || '';
+    if (j.error) out.error = String(j.error).slice(0, 300).split(apiKey).join('[redacted]'); // why stop=error
     out.turns = s.turns; out.requests = s.requests; out.retries = s.retries; out.tool_calls = s.toolCalls;
     out.tool_ms = s.toolTotalMs; out.model_ms = null; out.snapshots = s.fullSnapshots + s.deltaSnapshots; out.delta_snapshots = s.deltaSnapshots;
     out.usage = { input_tokens: s.usage.input_tokens, output_tokens: s.usage.output_tokens, cache_read_input_tokens: s.usage.cache_read_input_tokens, cache_creation_input_tokens: s.usage.cache_creation_input_tokens };
