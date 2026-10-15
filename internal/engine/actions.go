@@ -65,6 +65,23 @@ func (t *Tab) jsCall(fn string, args ...any) (any, bool) {
 // afterAction lets page scripts react (fetch, re-render) before the tool returns.
 func (t *Tab) afterAction() { t.settle(t.settleBudget() / 3) }
 
+// afterInput follows an action that edits a control rather than the page (fill, type, select, check, hover):
+// the page's handlers already ran inside the event dispatch, so only microtasks, due timers, observers and
+// answers in flight are drained (as Playwright's fill returns once the value is in). It cost a whole quiet
+// window (300 ms) per field, four in a login form. SetFullInputSettle restores afterAction for the last step
+// of a batch, whose observation follows at once.
+func (t *Tab) afterInput() {
+	if t.fullInputSettle.Load() {
+		t.afterAction()
+		return
+	}
+	t.settle(0)
+}
+
+// SetFullInputSettle makes input actions settle like any other action until it is cleared (Batch.run sets it
+// for the last step).
+func (t *Tab) SetFullInputSettle(on bool) { t.fullInputSettle.Store(on) }
+
 // ---- attribute / html getters by backend id ---------------------------------
 
 func (t *Tab) GetAttributeByBackend(backendID int64, k string) (string, bool, error) {
@@ -314,7 +331,7 @@ func (t *Tab) Hover(sel string) error {
 	t.fire(bid, "pointerover", nil)
 	t.fire(bid, "mouseover", nil)
 	t.fire(bid, "mouseenter", nil)
-	t.afterAction()
+	t.afterInput()
 	return nil
 }
 
@@ -361,7 +378,7 @@ func (t *Tab) Type(sel, text string, delay time.Duration) error {
 		}
 	}
 	t.fire(bid, "change", nil)
-	t.afterAction()
+	t.afterInput()
 	return nil
 }
 
@@ -525,7 +542,7 @@ func (t *Tab) Fill2(sel, value string) error {
 		t.fire(bid, "input", nil)
 		t.fire(bid, "change", nil)
 	}
-	t.afterAction()
+	t.afterInput()
 	return nil
 }
 
@@ -550,7 +567,7 @@ func (t *Tab) setChecked(sel string, want bool) error {
 	}
 	t.fire(bid, "input", nil)
 	t.fire(bid, "change", nil)
-	t.afterAction()
+	t.afterInput()
 	return nil
 }
 
@@ -572,7 +589,7 @@ func (t *Tab) SelectOption(sel, value string) error {
 	}
 	t.fire(bid, "input", nil)
 	t.fire(bid, "change", nil)
-	t.afterAction()
+	t.afterInput()
 	return nil
 }
 

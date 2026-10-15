@@ -188,20 +188,22 @@ type Tab struct {
 	// scriptGeom > 0 while a host call of the page's script runs: a layout it forces (getBoundingClientRect,
 	// offsetWidth, an observer) does not wait for the network, as in a browser (scriptForcedLayout)
 	scriptGeom atomic.Int32
-	imgSem     chan struct{}             // images fetched at once
-	preloadSem chan struct{}             // requests the preload scanner has in flight
-	imgTimer   atomic.Bool               // a relayout request for newly arrived images is scheduled
-	onUpdate   atomic.Pointer[func()]    // the window's "repaint me" callback (SetUpdateHook)
-	onWake     atomic.Pointer[func()]    // the window's "give the event loop a slice" callback (SetWakeHook)
-	pl         atomic.Pointer[progLoad]  // load work still pending after NavigateProgressive (progload.go)
-	plMu       sync.Mutex                // one LoadStep at a time
-	progMode   atomic.Bool               // the current navigation is progressive: page-initiated navigations are too
-	tr         atomic.Pointer[loadTrace] // timeline of the current navigation (loadtrace.go)
-	traceNet   atomic.Bool               // record DNS/connect/TLS/first byte of every request
-	win        winState                  // frames, opener/popups, messaging (windows.go, frames.go)
-	audio      tabAudio                  // mix group, mute and audible state (tabaudio.go)
-	fs         tabFullscreen             // element fullscreen (tabfullscreen.go)
-	ms         tabMediaSession           // navigator.mediaSession (tabmediasession.go)
+	// fullInputSettle: input actions settle like other actions (SetFullInputSettle)
+	fullInputSettle atomic.Bool
+	imgSem          chan struct{}             // images fetched at once
+	preloadSem      chan struct{}             // requests the preload scanner has in flight
+	imgTimer        atomic.Bool               // a relayout request for newly arrived images is scheduled
+	onUpdate        atomic.Pointer[func()]    // the window's "repaint me" callback (SetUpdateHook)
+	onWake          atomic.Pointer[func()]    // the window's "give the event loop a slice" callback (SetWakeHook)
+	pl              atomic.Pointer[progLoad]  // load work still pending after NavigateProgressive (progload.go)
+	plMu            sync.Mutex                // one LoadStep at a time
+	progMode        atomic.Bool               // the current navigation is progressive: page-initiated navigations are too
+	tr              atomic.Pointer[loadTrace] // timeline of the current navigation (loadtrace.go)
+	traceNet        atomic.Bool               // record DNS/connect/TLS/first byte of every request
+	win             winState                  // frames, opener/popups, messaging (windows.go, frames.go)
+	audio           tabAudio                  // mix group, mute and audible state (tabaudio.go)
+	fs              tabFullscreen             // element fullscreen (tabfullscreen.go)
+	ms              tabMediaSession           // navigator.mediaSession (tabmediasession.go)
 }
 
 func newTab(e *Engine, id string) *Tab {

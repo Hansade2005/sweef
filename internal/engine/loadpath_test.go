@@ -1198,3 +1198,40 @@ setTimeout(function () { var p = document.createElement('p'); p.textContent = 'l
 		t.Errorf("content added at 150 ms missing or the animation never ran: %s", v)
 	}
 }
+
+// Filling a field drains what the input started (microtasks, due timers) but does not wait out a settle on a
+// page that keeps changing; the handler's own update is visible at once. With SetFullInputSettle it settles
+// like a click (the last step of a batch).
+func TestFillSettlesLightly(t *testing.T) {
+	tab := newTabForLoad(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><input id=q><p id=echo></p><p id=tick></p><script>
+document.getElementById('q').addEventListener('input', function (e) { Promise.resolve().then(function () { document.getElementById('echo').textContent = 'got ' + e.target.value; }); });
+var n = 0; setInterval(function () { document.getElementById('tick').textContent = ++n; }, 50);
+</script>`)
+	}))
+	defer srv.Close()
+	if err := tab.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Now()
+	if err := tab.Fill2("#q", "abc"); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d > 80*time.Millisecond {
+		t.Errorf("fill took %v on a page that never goes quiet", d)
+	}
+	if v := mustEval(t, tab, `document.getElementById('echo').textContent`); !strings.Contains(v, "got abc") {
+		t.Errorf("input handler result: %s", v)
+	}
+	tab.SetFullInputSettle(true)
+	defer tab.SetFullInputSettle(false)
+	t0 = time.Now()
+	if err := tab.Fill2("#q", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d < 50*time.Millisecond {
+		t.Errorf("a full input settle returned after %v", d)
+	}
+}

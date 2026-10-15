@@ -73,6 +73,11 @@ func (s *Server) batch(p Params) (any, error) {
 	failed := 0
 	for i, st := range steps {
 		t0 := time.Now()
+		// an input step settles fully only when it ends the batch: its observation follows at once
+		if t, terr := s.tab(Params{"tab": tab}); terr == nil {
+			t.SetFullInputSettle(i == len(steps)-1)
+			defer t.SetFullInputSettle(false)
+		}
 		name := st.Cmd
 		var res any
 		var err error
