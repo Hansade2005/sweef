@@ -129,6 +129,34 @@ func (e *tabEnv) prefetchDocImages() {
 	}
 }
 
+// PrefetchImages implements render.ImagePrefetcher: the headless commands wait for every image a layout asks
+// for, so the CSS images of the page start downloading together (through the request table, which the
+// synchronous read in Image then joins) rather than one after another. Windows load images in the background
+// and a Data Saver policy decides image by image, so both skip it, as prefetchDocImages does.
+func (e *tabEnv) PrefetchImages(urls []string) {
+	t := e.t
+	if t.asyncImg.Load() || t.policy() != (DataPolicy{}) || t.IsOfflineMode() {
+		return
+	}
+	for _, u := range urls {
+		if strings.HasPrefix(u, "file:") {
+			continue
+		}
+		e.mu.Lock()
+		_, have := e.imgs[u]
+		_, haveSVG := e.svgs[u]
+		e.mu.Unlock()
+		if have || haveSVG {
+			continue
+		}
+		go func(u string) {
+			t.preloadSem <- struct{}{}
+			defer func() { <-t.preloadSem }()
+			_, _, _ = t.fetchRes(u, fetchOpts{kind: KindImage, prefetch: true})
+		}(u)
+	}
+}
+
 // asyncOK: the window shows the page while it loads (Tab.SetAsyncImages) and no
 // Data Saver policy is in force (its gates decide synchronously, see lazy.go).
 func (e *tabEnv) asyncOK(u string) bool {
