@@ -67,6 +67,11 @@ type tabEnv struct {
 // results do not depend on how fast the network is.
 func (e *tabEnv) scriptForcedLayout() bool {
 	t := e.t
+	// the browser's own pages (sweef://) have every resource at hand and measure their menus and panels from
+	// script, so their geometry reads must see the finished layout
+	if strings.HasPrefix(t.URL(), "sweef://") {
+		return false
+	}
 	return t.scriptGeom.Load() > 0 && !t.asyncImg.Load() && t.policy() == (DataPolicy{}) && !t.IsOfflineMode()
 }
 

@@ -479,9 +479,10 @@ func TestRealUIPageMenuRendersOverViewport(t *testing.T) {
 	h.wantMenu("page", "Reload")
 	h.waitFor("menu drawn", func() bool { return len(menuDOM(h)) >= 5 })
 	vp := h.vp()
-	if a := h.app.comp.ChromeAlphaAt(int(vp.X)+655, int(vp.Y)+360); a == 0 {
-		t.Fatal("the menu must be composited over the page area")
-	}
+	// the chrome layer is repainted after its DOM changed: wait for the pixels, not just the rows
+	h.waitFor("the menu composited over the page area", func() bool {
+		return h.app.comp.ChromeAlphaAt(int(vp.X)+655, int(vp.Y)+360) != 0
+	})
 	h.shot("ctx-page.png")
 	h.key("ArrowDown")
 	h.key("ArrowDown")
