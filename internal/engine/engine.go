@@ -56,6 +56,7 @@ type Options struct {
 	StorageBudgetMiB int    // global budget of all origins in MiB (0 = 60% of the profile volume's free space, at most 64 GiB); see docs/storage.md
 	DisableFrames    bool   // do not load <iframe> documents (frames.go): pages see no content window, as before frames existed
 	BlockTrackers    bool   // refuse third-party requests to known ad, analytics and tracking hosts (trackers.go); the agent-facing commands turn it on
+	HideScrollbars   bool   // lay out and paint without scrollbars, as headless Chromium under Playwright/CDP does; the agent-facing commands turn it on
 }
 
 func DefaultOptions() Options {

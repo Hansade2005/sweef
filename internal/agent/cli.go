@@ -74,6 +74,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 
 	eo := engine.DefaultOptions()
 	eo.BlockTrackers = !*allowTrackers && os.Getenv("SWEEF_ALLOW_TRACKERS") == "" // see engine/trackers.go
+	eo.HideScrollbars = true
 	eng := engine.New(eo)
 	defer eng.Close()
 	be := NewRPCBackend(eng)

@@ -180,7 +180,7 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 	if scheme == "" {
 		scheme = "light"
 	}
-	env := &style.Env{Width: o.Width, Height: o.Height, DPR: o.DPR, ColorScheme: scheme, Print: o.Print, ReducedMotion: o.ReducedMotion}
+	env := &style.Env{Width: o.Width, Height: o.Height, DPR: o.DPR, ColorScheme: scheme, Print: o.Print, ReducedMotion: o.ReducedMotion, Mobile: o.Mobile}
 	var sheets []style.SheetIn
 	for _, s := range o.Sheets {
 		if s.UserAgent {
@@ -288,7 +288,7 @@ func (c *ctx) layoutRoot(rb *lbox) {
 	_, oy := c.viewportOverflow()
 	c.sbViewport = 0
 	if oy == "scroll" {
-		c.sbViewport = sbSize
+		c.sbViewport = c.sbSize()
 	}
 	for pass := 0; pass < 4; pass++ {
 		c.resetKids(rb)
@@ -301,12 +301,12 @@ func (c *ctx) layoutRoot(rb *lbox) {
 		docH := math.Max(rb.ovBottom, rb.y+rb.h+rb.mar[2])
 		docW := math.Max(rb.ovRight, rb.x+rb.w+rb.mar[1])
 		ox, _ := c.viewportOverflow()
-		if c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh-c.sbViewportH+0.01 {
-			c.sbViewport = sbSize
+		if c.sbSize() > 0 && c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh-c.sbViewportH+0.01 {
+			c.sbViewport = c.sbSize()
 			continue
 		}
-		if c.sbViewportH == 0 && (ox == "auto" || ox == "visible" || ox == "scroll") && docW > c.vw-c.sbViewport+0.01 {
-			c.sbViewportH = sbSize
+		if c.sbSize() > 0 && c.sbViewportH == 0 && (ox == "auto" || ox == "visible" || ox == "scroll") && docW > c.vw-c.sbViewport+0.01 {
+			c.sbViewportH = c.sbSize()
 			continue
 		}
 		break

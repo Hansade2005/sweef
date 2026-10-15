@@ -44,6 +44,7 @@ func engineOptsFrom(fs *flag.FlagSet) engine.Options {
 		opts.DefaultUserAgent = f.Value.String()
 	}
 	// agent-facing entry points block known trackers unless asked not to (engine trackers.go)
+	opts.HideScrollbars = true // like headless Chromium (Playwright, CDP): the full width is the page's
 	opts.BlockTrackers = os.Getenv("SWEEF_ALLOW_TRACKERS") == ""
 	if f := fs.Lookup("allow-trackers"); f != nil && f.Value.String() == "true" {
 		opts.BlockTrackers = false

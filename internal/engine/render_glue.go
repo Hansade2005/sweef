@@ -388,7 +388,9 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 			env.lz.resetHints()
 			sheets := env.pageSheets()
 			opts := render.Options{
-				Width: float64(width), Height: float64(vh), DPR: dsf,
+				HideScrollbars: t.eng.opts.HideScrollbars,
+				Mobile:         t.mobile,
+				Width:          float64(width), Height: float64(vh), DPR: dsf,
 				ColorScheme: t.ColorSchemeName(), BaseURL: doc.BaseURL(),
 				Sheets: sheets, Env: env, Session: env.sty,
 				Fonts: env.fonts.sync(sheets, float64(width), float64(vh), dsf, t.ColorSchemeName()),
