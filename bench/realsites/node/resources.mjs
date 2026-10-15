@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { chromium } from 'playwright-core';
+import { chromium, rmTree } from 'playwright-core';
 import { CHROMIUM, sleep } from './lib.mjs';
 
 const opt = { sweef: 'sweef', runs: 3, out: '', idleMs: 5000 };
@@ -70,7 +70,7 @@ async function runChromium(site) {
   r.all_wall_ms = performance.now() - t0; r.all_cpu_s = s.cpu();
   const c0 = s.cpu(); await sleep(opt.idleMs); r.idle_cpu_s = s.cpu() - c0;
   r.peak_rss_mib = s.peak();
-  s.stop(); await ctx.close(); fs.rmSync(dir, { recursive: true, force: true });
+  s.stop(); await ctx.close(); rmTree(dir);
   return r;
 }
 
@@ -87,7 +87,7 @@ async function runSweef(site) {
   r.all_wall_ms = performance.now() - t0; r.all_cpu_s = s.cpu();
   const c0 = s.cpu(); await sleep(opt.idleMs); r.idle_cpu_s = s.cpu() - c0;
   r.peak_rss_mib = s.peak();
-  s.stop(); run('close'); fs.rmSync(home, { recursive: true, force: true });
+  s.stop(); run('close'); rmTree(home);
   return r;
 }
 

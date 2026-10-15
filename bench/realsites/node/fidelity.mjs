@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
-import { CHROMIUM, sleep } from './lib.mjs';
+import { CHROMIUM, sleep, rmTree } from './lib.mjs';
 
 const opt = { sweef: process.env.SWEEF || 'sweef', shotdiff: 'shotdiff', out: '../results/shots', only: '', settleMs: 2000, keep: false };
 for (let i = 2; i < process.argv.length; i++) {
@@ -95,7 +95,7 @@ function sweefRun(site, vp, dir) {
     }
   } finally {
     run('close');
-    fs.rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
   return out;
 }
@@ -126,4 +126,4 @@ for (const site of SITES) {
   }
 }
 fs.writeFileSync(path.join(opt.out, 'fidelity.json'), JSON.stringify({ when: new Date().toISOString(), settle_ms: opt.settleMs, results }, null, 1));
-if (!opt.keep) fs.rmSync(raw, { recursive: true, force: true }); else console.error('raw screenshots kept in ' + raw);
+if (!opt.keep) rmTree(raw); else console.error('raw screenshots kept in ' + raw);

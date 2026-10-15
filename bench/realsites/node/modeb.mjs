@@ -16,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
-import { HERE, loadTasks, re, sleep } from './lib.mjs';
+import { HERE, loadTasks, re, sleep, rmTree } from './lib.mjs';
 import { loadPrices, costUSD } from './cost.mjs';
 import { runPwAgent } from './pw_agent.mjs';
 
@@ -90,7 +90,7 @@ async function runSweefAgent(task) {
   a.push(promptFor(task));
   const env = { ...process.env, SWEEF_HOME: home, SWEEF_CACHE_DIR: path.join(home, 'cache') }; // empty caches, like the fresh Chromium profile
   const r = await execp(opt.sweef, a, env, TMS);
-  fs.rmSync(home, { recursive: true, force: true });
+  rmTree(home);
   const out = { tool: 'sweef-agent', wall_ms: r.ms, exit: r.code };
   try {
     const j = JSON.parse(r.out.trim().split('\n').pop());

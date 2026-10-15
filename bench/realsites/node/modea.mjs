@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
-import { HERE, CHROMIUM, loadTasks, re, estTokens, sleep, USABLE_POLL_MS, USABLE_MAX_MS } from './lib.mjs';
+import { HERE, CHROMIUM, loadTasks, re, estTokens, sleep, USABLE_POLL_MS, USABLE_MAX_MS, rmTree } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const opt = { runs: 3, tools: 'sweef,playwright,agent-browser', timeout: 30, paceMs: 1500, only: '', sweef: process.env.SWEEF || 'sweef', out: '', skipWarm: false };
@@ -143,7 +143,7 @@ function cliAdapter(kind) {
     await exec(bin, ['close'], env, 15000);
     // make sure no daemon outlives the run (fresh daemon per run is part of the method)
     if (sweef) spawnSync('pkill', ['-f', `${home}/default.sock`]);
-    fs.rmSync(home, { recursive: true, force: true });
+    rmTree(home);
     return res;
   };
 }
