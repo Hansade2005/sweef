@@ -996,3 +996,39 @@ func TestModuleGraphDownloadsInParallel(t *testing.T) {
 		t.Fatalf("the module graph took %v: its modules were fetched one after the other", d)
 	}
 }
+
+// An entry module is compiled under its URL: a dynamic import("./x.js") run later (from a timer, after other
+// scripts ran) resolves against the module, import.meta.url is the module's URL (webpack's automatic
+// publicPath reads it), and a chunk importing the entry module back gets the instance that already ran.
+func TestEntryModuleKeepsItsURL(t *testing.T) {
+	mux := http.NewServeMux()
+	js := func(path, body string) {
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/javascript")
+			fmt.Fprint(w, body)
+		})
+	}
+	mux.HandleFunc("/page", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><p id="out">-</p>
+<script type="module" src="/assets/main.js"></script>
+<script src="/third/party.js"></script>`)
+	})
+	js("/assets/main.js", `window.runs = (window.runs || 0) + 1;
+export const tag = 'main';
+window.metaURL = import.meta.url;
+setTimeout(function () { import('./chunk.js').then(function (m) { document.getElementById('out').textContent = m.v; }, function (e) { document.getElementById('out').textContent = 'ERR ' + e; }); }, 20);`)
+	js("/assets/chunk.js", `import { tag } from './main.js'; export const v = 'chunk:' + tag;`)
+	js("/third/party.js", `window.third = 1;`)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	if err := tab.Navigate(srv.URL+"/page", nil); err != nil {
+		t.Fatal(err)
+	}
+	tab.Settle(300 * time.Millisecond)
+	want := `"chunk:main|` + srv.URL + `/assets/main.js|1"`
+	if v := mustEval(t, tab, `document.getElementById('out').textContent + '|' + window.metaURL + '|' + window.runs`); v != want {
+		t.Fatalf("got %s, want %s\nconsole:\n%s", v, want, consoleText(tab))
+	}
+}

@@ -524,7 +524,11 @@ func (j *jsVM) runModule(src, name string) error {
 	j.syncNet = true // a top-level await inside the module is awaited without an event loop: requests complete in place
 	j.curScript = name
 	defer func() { j.syncNet, j.curScript = false, "" }()
-	if len(src) < 256 {
+	named := strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://")
+	if named {
+		src = withImportMetaURL(src, name)
+	}
+	if len(src) < 256 && !named {
 		j.bcState = "small"
 		if _, err := j.vm.Eval(src, quickjs.EvalModule); err != nil {
 			j.tab.LogConsole("error", jsErrorText(err, name))
@@ -536,11 +540,22 @@ func (j *jsVM) runModule(src, name string) error {
 	// module source: 3 s of compiling a second time otherwise)
 	cache := j.tab.eng.code
 	key := codeKey("\x00module\x00" + src)
+	if named {
+		key = codeKey("\x00module\x00" + name + "\x00" + src) // the bytecode carries the module's name
+	}
 	bc := cache.get(key)
 	fromCache := bc != nil
 	j.bcState = "miss"
 	if fromCache {
 		j.bcState = "hit"
+	}
+	if bc == nil && named {
+		// named after its URL: its relative imports, import.meta.url and its identity in the module map
+		// are right (qjsnamed.go)
+		if b, err := compileNamed(j.vm, src, name, quickjs.EvalModule); err == nil {
+			bc = b
+			cache.put(key, bc)
+		}
 	}
 	if bc == nil {
 		var err error
@@ -573,8 +588,14 @@ func errLoc(err error, name string) string {
 		return ""
 	}
 	for _, ln := range strings.Split(qe.Stack, "\n") {
-		if i := strings.Index(ln, "<eval>:"); i >= 0 {
-			rest := strings.TrimRight(ln[i+len("<eval>:"):], ") ")
+		tag := "<eval>:"
+		i := strings.Index(ln, tag)
+		if i < 0 {
+			tag = name + ":" // a module compiled under its URL (qjsnamed.go)
+			i = strings.Index(ln, tag)
+		}
+		if i >= 0 {
+			rest := strings.TrimRight(ln[i+len(tag):], ") ")
 			if rest != "" && rest[0] >= '0' && rest[0] <= '9' {
 				return name + ":" + rest
 			}
@@ -1031,7 +1052,7 @@ func (j *jsVM) installModuleLoader(docURL string) {
 			return "", fmt.Errorf("module %s: HTTP %d", name, status)
 		}
 		j.prefetchModuleDeps(name, body)
-		return body, nil
+		return withImportMetaURL(body, name), nil
 	}, func(_ *quickjs.VM, base, name string) (string, error) {
 		if strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://") {
 			return name, nil
