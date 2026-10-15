@@ -40,7 +40,7 @@ var sessionCommands = map[string]bool{
 	"screenshot": true, "close": true, "quit": true, "exit": true, "stats": true, "set": true, "find": true,
 	"storage": true, "cookies": true, "state": true, "drag": true, "dialog": true,
 	"batch": true, "pdf": true, "downloads": true, "download": true, "route": true, "unroute": true,
-	"bind": true, "bindings": true,
+	"bind": true, "bindings": true, "rpc": true,
 }
 
 // isSessionCommand decides between the one-shot commands (snapshot <url>,
@@ -688,6 +688,19 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 
 	case "stats":
 		r, err := s.call("Browser.stats", nil)
+		return string(r), err
+
+	case "rpc": // any RPC method against the session: sweef rpc Page.frames '{"tab":"tab-1"}'
+		if err := need(args, 1, "rpc <Method> [params-json]"); err != nil {
+			return "", err
+		}
+		params := map[string]any{}
+		if len(args) > 1 {
+			if err := json.Unmarshal([]byte(args[1]), &params); err != nil {
+				return "", fmt.Errorf("rpc: params must be a JSON object: %v", err)
+			}
+		}
+		r, err := s.call(args[0], params)
 		return string(r), err
 
 	case "set":
