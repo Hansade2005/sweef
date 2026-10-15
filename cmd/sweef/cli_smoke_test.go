@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -31,6 +32,9 @@ func TestMain(m *testing.M) {
 // a local site: open, snapshot refs, click, fill, get, eval, batch, rpc,
 // screenshot, dialog, close.
 func TestSessionCLISmoke(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the session daemon's detach and socket handling are exercised on Unix")
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -51,7 +55,11 @@ func TestSessionCLISmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	home := t.TempDir()
+	home, err := os.MkdirTemp("", "swcli") // short: unix socket paths are limited to ~104 bytes on macOS
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(home)
 	env := append(os.Environ(), "SWEEF_CLI_TEST_MAIN=1", "SWEEF_HOME="+home, "SWEEF_CACHE_DIR="+filepath.Join(home, "cache"))
 	run := func(args ...string) string {
 		t.Helper()
