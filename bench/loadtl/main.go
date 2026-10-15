@@ -38,6 +38,7 @@ func main() {
 	)
 	flag.IntVar(&consoleMax, "console-width", 400, "with -console: characters of each message to print")
 	prof := flag.String("cpuprofile", "", "write a CPU profile of the load here")
+	flag.StringVar(&initJS, "init", "", "file with JavaScript to run before the page's scripts (a debugging hook)")
 	flag.Parse()
 	if *prof != "" {
 		f, err := os.Create(*prof)
@@ -93,6 +94,8 @@ type prog struct {
 
 var consoleMax = 400
 
+var initJS string
+
 func b2i(b bool) int {
 	if b {
 		return 1
@@ -108,6 +111,14 @@ func run(e *engine.Engine, u string, progressive, full, summary, console bool, m
 	}
 	defer e.CloseTab(t.ID)
 	t.TraceNetwork(true)
+	if initJS != "" {
+		src, err := os.ReadFile(initJS)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		t.AddInitScript(string(src))
+	}
 	t0 := time.Now()
 	var pr prog
 	if progressive {
