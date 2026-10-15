@@ -190,7 +190,7 @@ func compiledPrelude() []byte {
 }
 
 type jsVM struct {
-	fullPump atomic.Bool // RunFor: pump for the whole duration (no quiet early stop)
+	fullPump  atomic.Bool // RunFor: pump for the whole duration (no quiet early stop)
 	holdBG    atomic.Bool // explicit waits also wait on background (media clock) timers
 	wakeMs    float64     // set by pumpUntil when a slice ends with a timer pending: ms until it is due
 	bcState   string      // bytecode cache outcome of the last runCached (hit, miss, small), for the load timeline
