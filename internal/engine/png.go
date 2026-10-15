@@ -57,7 +57,7 @@ func (t *Tab) renderPNG(width, height int, dsf float64, full bool) []byte {
 	if width > 0 && dsf > 0 {
 		if rgba, ok := t.paintPage(width, height, dsf, full); ok {
 			var buf bytes.Buffer
-			_ = (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, rgba)
+			_ = encodePNGFast(&buf, rgba)
 			return buf.Bytes()
 		}
 	}
