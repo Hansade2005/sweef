@@ -236,6 +236,16 @@ func (c *convo) lastMsg() *message {
 
 // addPending queues text that is merged into the next user message (after
 // any tool results, which must come first).
+// hasAssistant reports whether the history holds a model turn yet.
+func (c *convo) hasAssistant() bool {
+	for _, m := range c.msgs {
+		if m.role == "assistant" {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *convo) addPending(text string) { c.pending = append(c.pending, text) }
 
 func (c *convo) flushPending(m *message) {

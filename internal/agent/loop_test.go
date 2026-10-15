@@ -278,8 +278,10 @@ func TestToolDefinitionsAndPrefixSize(t *testing.T) {
 	ag, _ := New(Config{APIKey: "k"}, newFakeBE())
 	est := ag.PrefixTokenEstimate()
 	t.Logf("static prefix: %d bytes, ~%d tokens (tools %d bytes, system %d bytes)", len(ag.cv.head), est, len(toolsJSON), len(systemPrompt))
-	if est < 5000 {
-		t.Fatalf("static prefix is ~%d tokens; it must comfortably exceed Haiku's 4096-token minimum cacheable prefix", est)
+	// Claude Haiku 5.5 caches prefixes from 512 tokens: stay well above that, and keep the prefix small, since
+	// every turn re-reads it
+	if est < 1024 || est > 3000 {
+		t.Fatalf("static prefix is ~%d tokens; want 1024..3000 (cacheable on Haiku 5.5, and cheap to re-read)", est)
 	}
 	// determinism: rebuilding gives the same bytes
 	cfg := ag.cfg
@@ -1376,5 +1378,25 @@ func TestEarlyDispatchGain(t *testing.T) {
 	t.Logf("first tool started %v before message_stop", gain.Round(time.Millisecond))
 	if gain < 120*time.Millisecond {
 		t.Fatalf("early dispatch gain only %v (expected ~160ms)", gain)
+	}
+}
+
+// By default the first request already carries the starting page: the model can act on its refs at once,
+// without a read_page round trip.
+func TestInitialObservationRidesWithTheTask(t *testing.T) {
+	f := newFakeAPI(t, scripted(
+		toolTurn("", false, tc{"t1", "act", actJSON(`[{"op":"click","ref":"e3"}]`)}),
+		doneTurn("ok")))
+	ag := newAgent(t, f, newFakeBE(), func(c *Config) { c.NoInitialObservation = false })
+	_, st, err := runCollect(t, ag, "add the item to the cart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := string(f.requests()[0])
+	if !strings.Contains(first, `kind=\"snapshot\"`) || !strings.Contains(first, "ref=e3") {
+		t.Fatalf("the first request should carry the page snapshot: %.400s", first)
+	}
+	if st.Requests != 2 || st.FullSnapshots != 1 || st.DeltaSnapshots != 1 {
+		t.Fatalf("stats %+v", st)
 	}
 }

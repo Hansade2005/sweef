@@ -35,6 +35,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	noThink := fs.Bool("no-thinking", false, "disable thinking (valid at effort <= high)")
 	allowTrackers := fs.Bool("allow-trackers", false, "load third-party ad, analytics and tracking requests (blocked by default)")
 	jsonOut := fs.Bool("json", false, "machine-readable: print only one JSON object {answer,text,stop,stats} on stdout (for benchmarks)")
+	noInitObs := fs.Bool("no-initial-snapshot", false, "do not send the starting page's snapshot with the task (the model then reads it with a tool call)")
 	baseURL := fs.String("base-url", "", "API base URL (default $ANTHROPIC_BASE_URL or https://api.anthropic.com)")
 	fs.Usage = func() {
 		fmt.Fprintf(out, "usage: sweef agent [flags] \"<task>\"\n\nRuns the browser agent headlessly. Needs ANTHROPIC_API_KEY.\n\n")
@@ -62,6 +63,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	}
 	cfg := Config{APIKey: key, Model: *model, Effort: *effort, MaxTurns: *maxTurns, MaxCostUSD: *maxCost, ThoughtSummaries: *thoughts}
 	cfg.BaseURL = *baseURL
+	cfg.NoInitialObservation = *noInitObs
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = os.Getenv("ANTHROPIC_BASE_URL")
 	}

@@ -172,7 +172,11 @@ type Config struct {
 	// Context management.
 	SnapshotMaxTokens int // cap per snapshot; default 6000
 	ExtractMaxChars   int // cap per extract result; default 8000
-	Compact           CompactConfig
+	// NoInitialObservation: do not put an observation of the current tab next to the task. By default the
+	// first user message of a run carries the snapshot (or the delta, on a page already read) of the page the
+	// run starts on, which saves the read_page round trip almost every task began with.
+	NoInitialObservation bool
+	Compact              CompactConfig
 
 	// Transport.
 	HTTPClient   *http.Client                               // optional override

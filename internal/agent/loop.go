@@ -533,6 +533,22 @@ func (a *Agent) loop(ctx context.Context, rs *runState, text string) error {
 	a.cvMu.Lock()
 	a.cv.addUserText(text)
 	a.cvMu.Unlock()
+	a.cvMu.Lock()
+	firstRun := !a.cv.hasAssistant()
+	a.cvMu.Unlock()
+	if !a.cfg.NoInitialObservation && firstRun { // the first run of the conversation only
+		if tab := rs.tab(); tab != "" {
+			if u := a.be.URL(tab); u != "" && !isInternalURL(u) && a.vis.Allowed(u) {
+				rs.event(Event{Kind: EventAction, Tool: toolReadPage, Text: "Reading the page"})
+				t0 := time.Now()
+				p := a.observe(ctx, rs, tab, false)
+				rs.stats.tool(time.Since(t0))
+				a.cvMu.Lock()
+				a.cv.addUserText(p.text)
+				a.cvMu.Unlock()
+			}
+		}
+	}
 
 	recoveredThinking := false
 	streamFailures := 0
