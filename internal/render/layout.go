@@ -195,6 +195,7 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 		c.eng = o.Session.Style.Acquire(env, sheets, c.quirks)
 	} else {
 		c.eng = style.NewEngineQ(env, sheets, c.quirks)
+		c.eng.BeginPass()
 	}
 	c.eng.SysFont = "arial"
 	c.eng.SetWebFonts(o.Fonts)

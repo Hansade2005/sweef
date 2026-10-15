@@ -38,7 +38,12 @@ type Entry struct {
 	// dynamic: the selector uses :has(), so whether it matches depends on the element's descendants (or later
 	// siblings), which a cached style does not observe (persist.go)
 	dynamic bool
+	// need: names some ancestor of a matching element must carry (snet.SelectorEntry.AncestorNeed)
+	need snet.Bloom
 }
+
+// AncestorNeed is the entry's ancestor filter (snet.SelectorEntry.AncestorNeed).
+func (en *Entry) AncestorNeed() snet.Bloom { return en.need }
 
 // Rule is a style rule with its declarations.
 type Rule struct {
@@ -561,7 +566,7 @@ func (p *parser) addRule(selText string, decls []Decl) {
 			continue
 		}
 		for _, e := range cs.Entries() {
-			r.Entries = append(r.Entries, &Entry{Sel: e, Spec: e.Spec, Pseudo: pseudo, Rule: r, key: base, dynamic: e.Features().Has})
+			r.Entries = append(r.Entries, &Entry{Sel: e, Spec: e.Spec, Pseudo: pseudo, Rule: r, key: base, dynamic: e.Features().Has, need: e.AncestorNeed()})
 		}
 	}
 	if len(r.Entries) == 0 {

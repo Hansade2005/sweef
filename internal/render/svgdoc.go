@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	snet "github.com/sweefbrowser/sweef/internal/net"
 	"github.com/sweefbrowser/sweef/internal/style"
 )
 
@@ -128,6 +129,7 @@ type svgCascade struct {
 	idx    *style.EntryIndex
 	rank   map[*style.Rule]int // position of each rule in rules
 	memo   map[*html.Node][]style.Decl
+	anc    map[*html.Node]snet.Bloom // ancestor filters of this pass (reset with memo)
 	// keep carries declsFor answers across passes of a session for elements
 	// whose cascade inputs are known (keyFn, from the style cache)
 	keep  map[*html.Node]*declKept
@@ -182,6 +184,7 @@ func (sc *svgCascade) declsFor(n *html.Node) []style.Decl {
 	}
 	if sc.memo == nil {
 		sc.memo = map[*html.Node][]style.Decl{}
+		sc.anc = map[*html.Node]snet.Bloom{}
 	}
 	if sc.keyFn != nil {
 		if anc, own, ok := sc.keyFn(n); ok {
@@ -214,8 +217,21 @@ func (sc *svgCascade) declsForUncached(n *html.Node) []style.Decl {
 	}
 	var hits []hit
 	var byRule map[*style.Rule]int
+	var anc snet.Bloom
+	ancDone := sc.anc == nil // no memo (a scene built outside declsFor): no filter
 	for _, en := range sc.idx.Candidates(n, nil) {
-		if en.Pseudo != "" || !en.Sel.Match(n, nil) {
+		if en.Pseudo != "" {
+			continue
+		}
+		if need := en.AncestorNeed(); need != (snet.Bloom{}) && sc.anc != nil {
+			if !ancDone {
+				anc, ancDone = style.AncestorBloom(n, sc.anc), true
+			}
+			if !need.Subset(anc) {
+				continue
+			}
+		}
+		if !en.Sel.Match(n, nil) {
 			continue
 		}
 		if byRule == nil {

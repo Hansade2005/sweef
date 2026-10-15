@@ -161,6 +161,9 @@ func (p *Persist) Acquire(env *Env, sheets []SheetIn, quirks bool) *Engine {
 }
 
 func (p *Persist) beginPass() {
+	if p.eng != nil {
+		p.eng.BeginPass()
+	}
 	if p.eng != nil && len(p.eng.share) > 8192 {
 		// the sharing table only grows (styles recomputed every pass, under :has() or container queries, add
 		// new entries each time): start it afresh rather than holding tens of thousands of dead styles

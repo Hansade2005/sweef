@@ -9,6 +9,8 @@ import (
 
 	"golang.org/x/net/html"
 
+	snet "github.com/sweefbrowser/sweef/internal/net"
+
 	"github.com/sweefbrowser/sweef/internal/font"
 )
 
@@ -49,6 +51,44 @@ type Engine struct {
 	web        *font.WebSet // the document's web fonts: declared families get scoped names (webfonts.go)
 	// usesWebMetrics: some length was computed from the metrics of a web font (webfonts.go)
 	usesWebMetrics bool
+	// anc memoizes the ancestor filter of the elements matched in this pass (BeginPass; nil: no filter, for an
+	// engine that outlives a DOM mutation); ancN/ancB is the last answer (collect asks for one element at a time)
+	anc  map[*html.Node]snet.Bloom
+	ancN *html.Node
+	ancB snet.Bloom
+}
+
+// BeginPass starts a style pass over a document that does not change until the next BeginPass: matching may
+// then use the ancestor filter, memoized per element.
+func (e *Engine) BeginPass() {
+	e.anc = map[*html.Node]snet.Bloom{}
+	e.ancN = nil
+}
+
+// ancBloom returns the union of NodeBloom over n's element ancestors.
+func (e *Engine) ancBloom(n *html.Node) snet.Bloom {
+	if n == e.ancN {
+		return e.ancB
+	}
+	b := AncestorBloom(n, e.anc)
+	e.ancN, e.ancB = n, b
+	return b
+}
+
+// AncestorBloom returns the union of snet.NodeBloom over n's element ancestors, memoized in memo (keyed by the
+// element whose ancestors were hashed).
+func AncestorBloom(n *html.Node, memo map[*html.Node]snet.Bloom) snet.Bloom {
+	p := n.Parent
+	if p == nil || p.Type != html.ElementNode {
+		return snet.Bloom{}
+	}
+	if b, ok := memo[n]; ok {
+		return b
+	}
+	b := AncestorBloom(p, memo)
+	b.Add(snet.NodeBloom(p))
+	memo[n] = b
+	return b
 }
 
 var (
@@ -274,6 +314,9 @@ func (e *Engine) entryMatches(n *html.Node, en *Entry, pseudo string) bool {
 		if scopeEl == n && !strings.Contains(en.key, ":scope") {
 			return false
 		}
+	}
+	if en.need != (snet.Bloom{}) && e.anc != nil && !en.need.Subset(e.ancBloom(n)) {
+		return false
 	}
 	if !en.Sel.Match(n, scopeEl) {
 		return false
