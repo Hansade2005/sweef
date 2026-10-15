@@ -68,7 +68,7 @@ jobs:
         shell: bash
         run: |
           go build -o "$RUNNER_TEMP/sweef" ./cmd/sweef
-          SWEEF_BIN="$RUNNER_TEMP/sweef" node --test pkg/sdk/node/test/sdk.test.js
+          SWEEF_BIN="$RUNNER_TEMP/sweef" node --test pkg/sdk/node/test/sdk.test.js pkg/sdk/node/test/install.test.js
           SWEEF_BIN="$RUNNER_TEMP/sweef" python3 -m unittest discover -s pkg/sdk/py/tests
       # The render, raster and font fidelity tests compare against Chromium references captured on Linux with
       # the font set above, so they only make sense on Linux. macOS and Windows still build and vet everything

@@ -68,7 +68,7 @@ The replies are written for a context window:
 ## Node SDK
 
 ```bash
-npm install @sweef/browser      # plus the sweef binary on PATH or in SWEEF_BIN
+npm install @sweef/browser      # the engine is downloaded on first use (or at install)
 ```
 
 ```js
@@ -85,7 +85,7 @@ await sw.close();
 ## Python SDK
 
 ```bash
-pip install sweef-browser       # plus the sweef binary on PATH or in SWEEF_BIN
+pip install sweef-browser       # the engine is downloaded on first use
 ```
 
 ```python
@@ -98,6 +98,20 @@ with Sweef.launch() as sw:
 ```
 
 Synchronous, standard library only, typed (`py.typed`). The same methods as the Node SDK in snake_case. Full reference: [pkg/sdk/py/README.md](../pkg/sdk/py/README.md).
+
+## Engine auto-install (SDKs)
+
+Both SDKs resolve the engine in this order: the `binary` option, `SWEEF_BIN`, `sweef` on PATH, the per-user cache, then a
+one-time download of the engine version the SDK pins (`0.1.0-alpha.4` in SDK 0.2.1) from GitHub Releases into
+`$XDG_CACHE_HOME/sweef/<version>/sweef` (`~/Library/Caches/sweef/...` on macOS, `%LOCALAPPDATA%\sweef\cache\<version>\sweef.exe`
+on Windows). The archive's SHA-256 is verified before it is executed; PATH and shell profiles are never touched. The SDKs
+also provide a `sweef` command (`npm i -g @sweef/browser`, `pipx install sweef-browser`) and a pre-fetch command
+(`npx -p @sweef/browser sweef-install`, `python -m sweef`; `--print-path` prints without downloading).
+
+- Proxy: `HTTPS_PROXY` / `NO_PROXY` are honored. Mirror or air-gap: `SWEEF_DOWNLOAD_BASE` serves `<base>/v<version>/<asset>` and `SHA256SUMS`.
+- Pin another engine: `SWEEF_VERSION`. Opt out: `SWEEF_SKIP_DOWNLOAD=1` (then only the first three lookups apply and the error says how to install by hand).
+- Uninstall: delete the cache directory `<cache>/sweef/<version>`. `SWEEF_CACHE_DIR` is the engine's own page/bytecode cache, a different thing from `SWEEF_ENGINE_CACHE`.
+- Without a pinned hash (other versions) the hash comes from the mirror's own `SHA256SUMS`, which catches corruption but not a compromised origin; use the default version for the pinned guarantee.
 
 ## Session CLI
 
@@ -118,6 +132,7 @@ sweef close
 | Variable | Effect |
 |---|---|
 | `SWEEF_BIN` | the binary the SDKs start |
+| `SWEEF_VERSION`, `SWEEF_DOWNLOAD_BASE`, `SWEEF_ENGINE_CACHE`, `SWEEF_SKIP_DOWNLOAD` | SDK engine auto-install (see "Engine auto-install") |
 | `SWEEF_CACHE_DIR` | bytecode, HTTP and font-index caches (`off` disables) |
 | `SWEEF_MCP_AUTO_DELTA=0` | no snapshot delta after MCP actions |
 | `SWEEF_AUTOPLAY=1` | let pages autoplay media (off for agents) |

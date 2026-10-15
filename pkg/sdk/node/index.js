@@ -15,7 +15,8 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const MAGIC = 'SWF1';
-const VERSION = '0.2.0';
+const VERSION = '0.2.1';
+const { ensureBinary, SweefInstallError } = require('./install.js');
 
 class RpcError extends Error {
   constructor(code, message, data) {
@@ -349,19 +350,6 @@ function sessionDir() {
   return path.join(os.tmpdir(), `sweef-${typeof process.getuid === 'function' ? process.getuid() : 0}`);
 }
 
-function findBinary(binary) {
-  const exe = binary || process.env.SWEEF_BIN;
-  if (exe) return exe;
-  const names = process.platform === 'win32' ? ['sweef.exe'] : ['sweef'];
-  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
-    for (const n of names) {
-      const p = path.join(dir, n);
-      try { fs.accessSync(p, fs.constants.X_OK); return p; } catch (_) { /* next */ }
-    }
-  }
-  throw new Error('sweef binary not found: set SWEEF_BIN, put sweef on PATH, or pass { binary }');
-}
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function dialUntil(opts, deadline, proc) {
@@ -379,9 +367,13 @@ class Sweef {
   // connect attaches to a running `sweef serve` ({ addr: 'unix:/path' | 'host:port' }, or host/port/path).
   static async connect(opts = {}) { return new Sweef(await Connection.open(opts)); }
 
+  // ensureBinary resolves the engine (binary option, SWEEF_BIN, PATH, per-user cache) and downloads it
+  // into the cache when absent; returns its path. Unless SWEEF_SKIP_DOWNLOAD is set.
+  static ensureBinary(opts = {}) { return ensureBinary(opts); }
+
   // launch starts a private `sweef serve` (a unix socket, or a loopback port on Windows) and connects.
   static async launch({ binary, args = [], addr, timeout = 10000, env } = {}) {
-    const exe = findBinary(binary);
+    const exe = await ensureBinary({ binary });
     let cleanup = null;
     if (!addr) {
       if (process.platform === 'win32') {
@@ -410,7 +402,7 @@ class Sweef {
     try { return new Sweef(await Connection.open({ path: sock })); } catch (_) { /* start it */ }
     fs.mkdirSync(path.dirname(sock), { recursive: true, mode: 0o700 });
     try { fs.unlinkSync(sock); } catch (_) { /* absent */ }
-    const proc = spawn(findBinary(binary), ['serve', '--addr', `unix:${sock}`, '--idle-timeout', process.env.SWEEF_IDLE_TIMEOUT || '1h'], { stdio: 'ignore', detached: true });
+    const proc = spawn(await ensureBinary({ binary }), ['serve', '--addr', `unix:${sock}`, '--idle-timeout', process.env.SWEEF_IDLE_TIMEOUT || '1h'], { stdio: 'ignore', detached: true });
     proc.unref();
     return new Sweef(await dialUntil({ path: sock }, Date.now() + timeout, null));
   }
@@ -451,4 +443,4 @@ class Sweef {
   }
 }
 
-module.exports = { Sweef, Page, Locator, BrowserContext, Keyboard, Mouse, Connection, RpcError, MAGIC, VERSION };
+module.exports = { Sweef, Page, Locator, BrowserContext, Keyboard, Mouse, Connection, RpcError, MAGIC, VERSION, ensureBinary, SweefInstallError };

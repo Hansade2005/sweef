@@ -33,7 +33,7 @@ test: ## short tests (what CI runs on Linux)
 
 test-sdk: ## Node and Python SDK tests against a freshly built sweef (local fixtures, no network)
 	$(GO) build -o $${TMPDIR:-/tmp}/sweef-sdk-test ./cmd/sweef
-	SWEEF_BIN=$${TMPDIR:-/tmp}/sweef-sdk-test node --test pkg/sdk/node/test/sdk.test.js
+	SWEEF_BIN=$${TMPDIR:-/tmp}/sweef-sdk-test node --test pkg/sdk/node/test/sdk.test.js pkg/sdk/node/test/install.test.js
 	SWEEF_BIN=$${TMPDIR:-/tmp}/sweef-sdk-test python3 -m unittest discover -s pkg/sdk/py/tests
 
 test-all: ## including the slow, FATE-gated tests

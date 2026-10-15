@@ -19,7 +19,7 @@ export interface ConnectOptions {
 }
 
 export interface LaunchOptions {
-  /** sweef binary (default: $SWEEF_BIN, then PATH) */
+  /** sweef binary (default: $SWEEF_BIN, then PATH, then the per-user cache, then an automatic download into it) */
   binary?: string;
   /** extra `sweef serve` flags, e.g. ['--settle-ms', '500'] */
   args?: string[];
@@ -298,7 +298,31 @@ export interface NewContextOptions {
   storagePath?: string;
 }
 
+export interface EnsureBinaryOptions {
+  /** explicit engine path; returned as is */
+  binary?: string;
+  /** override the engine version (default: $SWEEF_VERSION or the version pinned by this SDK) */
+  version?: string;
+  /** release mirror, layout `<base>/v<version>/<asset>` (default: $SWEEF_DOWNLOAD_BASE or GitHub Releases) */
+  base?: string;
+  /** cache root (default: $SWEEF_ENGINE_CACHE or the per-user cache) */
+  cacheDir?: string;
+  /** progress sink for the one-line download message (default: stderr) */
+  log?: (message: string) => void;
+}
+
+/** Thrown when the engine cannot be found or downloaded; the message has manual install instructions. */
+export declare class SweefInstallError extends Error {}
+
+/**
+ * Resolve the engine path: `binary`, $SWEEF_BIN, `sweef` on PATH, the per-user cache, else download it
+ * (sha256-verified) into the cache. $SWEEF_SKIP_DOWNLOAD=1 disables the download.
+ */
+export declare function ensureBinary(opts?: EnsureBinaryOptions): Promise<string>;
+
 export declare class Sweef {
+  /** same as the exported ensureBinary */
+  static ensureBinary(opts?: EnsureBinaryOptions): Promise<string>;
   readonly conn: Connection;
   static connect(opts?: ConnectOptions): Promise<Sweef>;
   static launch(opts?: LaunchOptions): Promise<Sweef>;
