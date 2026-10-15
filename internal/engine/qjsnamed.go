@@ -103,7 +103,7 @@ func runModuleNamed(vm *quickjs.VM, src, name string) (bc []byte, err error, han
 	}
 	lib.Xjs_module_set_import_meta(tls, ctx, v, 0, 1)
 	_, _ = vm.Eval("0", quickjs.EvalGlobal) // arms the VM's evaluation timeout from now, as its own Eval* calls do
-	r := lib.XJS_EvalFunction(tls, ctx, v) // takes v
+	r := lib.XJS_EvalFunction(tls, ctx, v)  // takes v
 	r = lib.Xjs_std_await(tls, ctx, r)
 	if r.Ftag == lib.EJS_TAG_EXCEPTION {
 		lib.XFreeValue(tls, ctx, r)
