@@ -71,15 +71,24 @@ type ctx struct {
 func Layout(root *html.Node, o Options) *Result {
 	cv := &cvState{open: map[*html.Node]bool{}}
 	run := func() *Result {
-		res, obs, has := layoutPass(root, o, nil, cv)
+		// A pass whose container sizes are about to be measured again is never read: only the last one is
+		// finished (boxes, display list, hit testing), the others are dropped after layout.
+		var used map[*html.Node]style.ContSize
+		if o.Session != nil {
+			used = o.Session.cq
+		}
+		p, obs, has := layoutPass(root, o, used, cv)
 		if has {
-			var used map[*html.Node]style.ContSize
 			for pass := 0; pass < 5 && !sameContSizes(used, obs); pass++ {
 				used = obs
-				res, obs, _ = layoutPass(root, o, used, cv)
+				p.release()
+				p, obs, _ = layoutPass(root, o, used, cv)
 			}
 		}
-		return res
+		if o.Session != nil {
+			o.Session.cq = obs
+		}
+		return p.complete()
 	}
 	res := run()
 	if len(cv.cands) == 0 {
@@ -113,10 +122,40 @@ func sameContSizes(a, b map[*html.Node]style.ContSize) bool {
 	return true
 }
 
-// layoutPass is one full layout. It returns the sizes of the document's query
-// containers as laid out, and whether the style engine saw any @container
-// rule (a re-run is only needed then).
-func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv *cvState) (*Result, map[*html.Node]style.ContSize, bool) {
+// pendingPass is a layout pass that has been laid out but not finished.
+type pendingPass struct {
+	c        *ctx
+	rb       *lbox // nil: the result is already complete (an empty document)
+	tk       stageClock
+	released bool
+}
+
+// complete finishes the pass (boxes, display list, hit testing) and returns its result.
+func (p *pendingPass) complete() *Result {
+	if p.rb != nil {
+		p.c.finishResult(p.rb)
+		p.tk.lap("finish")
+	}
+	p.release()
+	return p.c.res
+}
+
+// release ends the pass's use of the layout session (its style and SVG caches).
+func (p *pendingPass) release() {
+	if p.released {
+		return
+	}
+	p.released = true
+	if s := p.c.sess; s != nil {
+		s.Style.EndPass()
+		s.svg.sweep()
+	}
+}
+
+// layoutPass is one full layout, up to but not including finishResult (see pendingPass). It returns the sizes
+// of the document's query containers as laid out, and whether the style engine saw any @container rule (a
+// re-run is only needed then).
+func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv *cvState) (*pendingPass, map[*html.Node]style.ContSize, bool) {
 	if o.Width <= 0 {
 		o.Width = 1280
 	}
@@ -154,7 +193,6 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 		c.sess = o.Session
 		o.Session.Style.SetWebFonts(o.Fonts)
 		c.eng = o.Session.Style.Acquire(env, sheets, c.quirks)
-		defer func() { o.Session.Style.EndPass(); o.Session.svg.sweep() }()
 	} else {
 		c.eng = style.NewEngineQ(env, sheets, c.quirks)
 	}
@@ -168,7 +206,7 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 		res.Width, res.Height = o.Width, o.Height
 		res.Viewport = Rect{0, 0, o.Width, o.Height}
 		res.Hit = func(x, y float64) *html.Node { return nil }
-		return res, nil, false
+		return &pendingPass{c: c}, nil, false
 	}
 	var top []*lbox
 	tk := newStageClock()
@@ -178,7 +216,7 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 		res.Width, res.Height = o.Width, o.Height
 		res.Viewport = Rect{0, 0, o.Width, o.Height}
 		res.Hit = func(x, y float64) *html.Node { return nil }
-		return res, nil, false
+		return &pendingPass{c: c}, nil, false
 	}
 	rb := top[0]
 	rb.kind = kBlock
@@ -186,10 +224,9 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 	c.findBody(rb)
 	c.layoutRoot(rb)
 	tk.lap("layout")
-	c.finishResult(rb)
-	tk.lap("finish")
+	p := &pendingPass{c: c, rb: rb, tk: tk}
 	if !c.eng.HasContainerQueries() {
-		return res, nil, false
+		return p, nil, false
 	}
 	obs := map[*html.Node]style.ContSize{}
 	for _, n := range c.eng.ContainerNodes() {
@@ -197,12 +234,16 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 			if b.pseudo != "" {
 				continue
 			}
-			obs[n] = style.ContSize{W: b.w - b.bor[1] - b.bor[3] - b.pad[1] - b.pad[3] - b.sbW, H: b.h - b.bor[0] - b.bor[2] - b.pad[0] - b.pad[2] - b.sbH}
+			// in 1/64 px, the layout unit browsers use: passes that start from different sizes (the previous
+			// layout's, or none) settle on exactly the same values instead of ones a rounding error apart
+			obs[n] = style.ContSize{W: q64(b.w - b.bor[1] - b.bor[3] - b.pad[1] - b.pad[3] - b.sbW), H: q64(b.h - b.bor[0] - b.bor[2] - b.pad[0] - b.pad[2] - b.sbH)}
 			break
 		}
 	}
-	return res, obs, true
+	return p, obs, true
 }
+
+func q64(v float64) float64 { return math.Round(v*64) / 64 }
 
 func findDocEl(n *html.Node) *html.Node {
 	if n == nil {
