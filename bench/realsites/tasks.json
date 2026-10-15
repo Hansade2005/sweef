@@ -562,7 +562,7 @@
           "selector": "header a[href=\"/platform\"]"
         }
       ],
-      "final_check": "Future of Workplace Readiness",
+      "final_check": "Future\\s+of\\s+Workplace\\s+Readiness",
       "answer_check": "future of workplace readiness",
       "mode_b": true
     },
@@ -578,7 +578,7 @@
           "selector": "header a[href=\"/employers\"]"
         }
       ],
-      "final_check": "Add documented behavioral evidence",
+      "final_check": "Add\\s+documented\\s+behavioral\\s+evidence",
       "answer_check": "documented behavioral evidence",
       "mode_b": true
     },
@@ -587,7 +587,7 @@
       "category": "owner-site",
       "url": "https://www.pipilot.dev/",
       "goal": "What is the main headline on the PiPilot home page?",
-      "snapshot_check": "Describe it\\.",
+      "snapshot_check": "Describe\\s+it\\.",
       "steps": [],
       "answer_check": "describe it"
     },
@@ -596,14 +596,14 @@
       "category": "owner-site",
       "url": "https://www.pipilot.dev/",
       "goal": "Open PiPilot's pricing page and tell me its main headline.",
-      "snapshot_check": "Describe it\\.",
+      "snapshot_check": "Describe\\s+it\\.",
       "steps": [
         {
           "op": "click",
           "selector": "a[href=\"/pricing\"]"
         }
       ],
-      "final_check": "Start free\\. Pay when you ship",
+      "final_check": "Start\\s+free\\.\\s+Pay\\s+when\\s+you\\s+ship",
       "answer_check": "start free",
       "mode_b": true
     },
@@ -612,14 +612,14 @@
       "category": "owner-site",
       "url": "https://www.pipilot.dev/",
       "goal": "Open PiPilot's documentation and tell me the title of its first section after the introduction.",
-      "snapshot_check": "Describe it\\.",
+      "snapshot_check": "Describe\\s+it\\.",
       "steps": [
         {
           "op": "click",
           "selector": "a[href=\"/docs\"]"
         }
       ],
-      "final_check": "PiPilot docs",
+      "final_check": "PiPilot\\s+docs",
       "answer_check": "quickstart",
       "mode_b": true
     },
@@ -628,14 +628,14 @@
       "category": "owner-site",
       "url": "https://www.pipilot.dev/",
       "goal": "Click 'Start building free' and tell me what the page asks you to do.",
-      "snapshot_check": "Start building free",
+      "snapshot_check": "Start\\s+building\\s+free",
       "steps": [
         {
           "op": "click",
           "selector": "text=Start building free"
         }
       ],
-      "final_check": "/app[\\s\\S]*sign in",
+      "final_check": "/app[\\s\\S]*sign\\s+in",
       "answer_check": "sign in",
       "mode_b": true
     }
