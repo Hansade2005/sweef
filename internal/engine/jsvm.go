@@ -691,6 +691,14 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		return false, true
 	}
 	j.wakeMs = 0
+	// quiet: headless pumps stop once the document stopped changing and only timers remain (Tab.settleQuiet)
+	var quiet time.Duration
+	var lastGen uint64
+	lastChange := time.Now()
+	if soft.IsZero() && j.tab != nil && !j.tab.progMode.Load() {
+		quiet = j.tab.settleQuiet()
+		lastGen = j.docGen()
+	}
 	for {
 		j.drainScripts(soft)
 		j.jobs()
@@ -725,7 +733,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		}
 		j.mu.Unlock()
 		sliceOver := !soft.IsZero() && !time.Now().Before(soft)
-		httpWait := soft.IsZero() && (j.tab == nil || !j.tab.progMode.Load()) && j.httpInFlight() // a window's tab never waits on the network
+		httpWait := soft.IsZero() && (j.tab == nil || !j.tab.progMode.Load()) && j.httpInFlightBefore(deadline) // a window's tab never waits on the network
 		if more || ((delivered || j.hasLiveWork()) && time.Now().Before(deadline)) || httpWait {
 			if sliceOver {
 				return false, false
@@ -742,6 +750,13 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		}
 		if next < 0 {
 			return false, true
+		}
+		if quiet > 0 {
+			if g := j.docGen(); g != lastGen {
+				lastGen, lastChange = g, time.Now()
+			} else if time.Since(lastChange) >= quiet {
+				return false, true
+			}
 		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
@@ -762,6 +777,18 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 			time.Sleep(wait)
 		}
 	}
+}
+
+// docGen is the mutation counter of the tab's document (0 without one).
+func (j *jsVM) docGen() uint64 {
+	t := j.tab
+	t.mu.RLock()
+	d := t.dom
+	t.mu.RUnlock()
+	if d == nil {
+		return 0
+	}
+	return d.MutationGen()
 }
 
 // Settle pumps the page's event loop for up to d (exported for RPC waits).
@@ -1646,8 +1673,17 @@ func (j *jsVM) registerHost() error {
 			name, inner := x.name, x.fn
 			fns[i] = func(a []any) (any, error) {
 				t0 := time.Now()
+				var n0 int64
+				if j.tab != nil {
+					n0, _ = j.tab.LayoutStats()
+				}
 				r, err := inner(a)
 				hostStat(name, time.Since(t0))
+				if j.tab != nil {
+					if n1, _ := j.tab.LayoutStats(); n1 > n0 {
+						hostStat("layout<-"+name, time.Since(t0)) // which bridge calls force layouts
+					}
+				}
 				return r, err
 			}
 		}
