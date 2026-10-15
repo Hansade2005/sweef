@@ -111,8 +111,59 @@ func fullPrelude() string {
 			b.WriteString(zpack.String(preludeZExtras[n]))
 		}
 	}
+	b.WriteString("\n")
+	b.WriteString(nativeToStringJS)
 	return b.String()
 }
+
+// nativeToStringJS runs after every prelude: the platform the preludes built (constructors, prototype methods,
+// accessors, functions on globals such as console or CSS) prints as built-in code, "function f() { [native
+// code] }", the way a browser's platform does. Pages tell their own code from the platform's that way: Optimizely's
+// "Cleanse" deletes every non-native accessor from HTMLElement.prototype (so element.style was gone on
+// the-internet.herokuapp.com and jQuery failed to start), and lodash, core-js and others test for native
+// implementations the same way. Functions the page defines keep their source.
+const nativeToStringJS = `;(function (g) {
+  var nat = new WeakSet(), FP = Function.prototype, orig = FP.toString;
+  var gopn = Object.getOwnPropertyNames, gopd = Object.getOwnPropertyDescriptor, gpo = Object.getPrototypeOf;
+  function fn(f) { if (typeof f === 'function') nat.add(f); }
+  function props(o) {
+    var ks; try { ks = gopn(o); } catch (e) { return; }
+    for (var i = 0; i < ks.length; i++) {
+      var d; try { d = gopd(o, ks[i]); } catch (e) { continue; }
+      if (!d) continue;
+      if (d.get) fn(d.get);
+      if (d.set) fn(d.set);
+      if (typeof d.value === 'function') fn(d.value);
+    }
+  }
+  var seen = new WeakSet();
+  function obj(o) {
+    for (; o && (typeof o === 'object' || typeof o === 'function') && o !== Object.prototype && o !== FP; o = gpo(o)) {
+      if (seen.has(o)) return;
+      seen.add(o);
+      props(o);
+      if (typeof o === 'function' && o.prototype && typeof o.prototype === 'object') obj(o.prototype);
+    }
+  }
+  var ks = gopn(g);
+  for (var i = 0; i < ks.length; i++) {
+    var d; try { d = gopd(g, ks[i]); } catch (e) { continue; }
+    if (!d) continue;
+    if (d.get) fn(d.get);
+    if (d.set) fn(d.set);
+    var v = d.value;
+    if (v && (typeof v === 'function' || typeof v === 'object') && v !== g) { fn(v); obj(v); }
+  }
+  obj(gpo(g));
+  props(Object.prototype); props(FP);
+  var ts = function toString() {
+    if (nat.has(this)) { var n = this.name; return 'function ' + (typeof n === 'string' ? n : '') + '() { [native code] }'; }
+    return orig.call(this);
+  };
+  nat.add(ts);
+  Object.defineProperty(FP, 'toString', { value: ts, writable: true, configurable: true, enumerable: false });
+})(globalThis);
+`
 
 // preludeKey names the prelude for the bytecode cache without inflating it: it hashes what is embedded (the
 // deflated blobs, which are committed files and only change when the source does) instead of the 1.2 MB of source,
@@ -127,6 +178,7 @@ func preludeKey() [32]byte {
 	}
 	part("z", "dom", domPreludeZ)
 	part("z", "domext", domPreludeExtZ)
+	part("r", "native-tostring", nativeToStringJS)
 	for _, n := range preludeNames() {
 		if src, ok := preludeExtras[n]; ok {
 			part("r", n, src)
