@@ -1347,6 +1347,7 @@ func (j *jsVM) registerHost() error {
 			return nil, nil
 		}},
 		{"quirks", doc(func(d *fnet.Doc, a []any) (any, error) { return docQuirks(d), nil })},
+		{"mediaMatches", func(a []any) (any, error) { return j.tab.mediaMatches(argS(a, 0)), nil }},
 		{"computedStyle", doc(func(d *fnet.Doc, a []any) (any, error) { return computedStyleOf(d, argI(a, 0)), nil })},
 		{"box", doc(func(d *fnet.Doc, a []any) (any, error) {
 			if g, ok := d.GeometryOf(argI(a, 0)); ok {

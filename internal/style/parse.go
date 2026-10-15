@@ -70,6 +70,7 @@ type Env struct {
 	ColorScheme   string // light | dark
 	Print         bool
 	ReducedMotion bool
+	Mobile        bool // touch device emulation: hover/pointer answer none/coarse (desktop: hover/fine)
 }
 
 // Parsed is the result of parsing one stylesheet text.
@@ -833,10 +834,16 @@ func mediaFeature(f string, env *Env) bool {
 	case "inverted-colors", "scan":
 		return false
 	case "hover", "any-hover":
-		// headless Chromium has no pointing device
-		return val == "none"
+		// as headless Chromium answers (Playwright, CDP): a desktop has a mouse, an emulated phone a finger
+		if env.Mobile {
+			return val == "none"
+		}
+		return val == "hover" || val == ""
 	case "pointer", "any-pointer":
-		return val == "none"
+		if env.Mobile {
+			return val == "coarse" || val == ""
+		}
+		return val == "fine" || val == ""
 	case "color":
 		if val == "" {
 			return true

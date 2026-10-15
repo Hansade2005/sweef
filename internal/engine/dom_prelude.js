@@ -2568,7 +2568,8 @@
   global.matchMedia = function matchMedia(query) {
     query = String(query);
     var matches = false, m;
-    if (/prefers-color-scheme\s*:\s*dark/.test(query)) matches = viewport().dark;
+    if (host('mediaMatches')) matches = !!sw.mediaMatches(query); // the stylesheets' evaluator: CSS and script agree
+    else if (/prefers-color-scheme\s*:\s*dark/.test(query)) matches = viewport().dark;
     else if (/prefers-color-scheme\s*:\s*light/.test(query)) matches = !viewport().dark;
     else if ((m = /\(\s*(min|max)-width\s*:\s*(\d+(?:\.\d+)?)px\s*\)/.exec(query))) matches = m[1] === 'min' ? viewport().width >= +m[2] : viewport().width <= +m[2];
     else if (/prefers-reduced-motion\s*:\s*reduce/.test(query)) matches = true;
