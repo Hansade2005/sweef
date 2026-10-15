@@ -1931,8 +1931,78 @@ func (t *Tab) setURLOnly(raw string) {
 	t.mu.Unlock()
 }
 
-// staticImportRE finds the specifiers of static imports and re-exports (not import(...) calls: those may never run).
+// staticImportRE finds the specifiers of static imports and re-exports (not import(...) calls: those may never
+// run). staticImportSpecs is the same match without the regexp engine, which took half a second of CPU over
+// github.com's 770 kB modules; the regexp stays as its specification (tests).
 var staticImportRE = regexp.MustCompile(`(?:\bimport|\bexport)\s*(?:[^'"();=]*?\bfrom\s*)?['"]([^'"\n]+)['"]`)
+
+func isWordByte(c byte) bool {
+	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+func isRESpace(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\f' || c == '\r' }
+
+// quotedSpec reads ['"]([^'"\n]+)['"] at i: the specifier and the index after the closing quote.
+func quotedSpec(src string, i int) (string, int, bool) {
+	if i >= len(src) || (src[i] != '"' && src[i] != '\'') {
+		return "", 0, false
+	}
+	j := i + 1
+	for j < len(src) && src[j] != '"' && src[j] != '\'' && src[j] != '\n' {
+		j++
+	}
+	if j == i+1 || j >= len(src) || src[j] == '\n' {
+		return "", 0, false
+	}
+	return src[i+1 : j], j + 1, true
+}
+
+// staticImportSpecs returns what staticImportRE.FindAllStringSubmatch would capture, in order.
+func staticImportSpecs(src string) []string {
+	var out []string
+	for i := 0; i+6 <= len(src); {
+		k := i + strings.IndexAny(src[i:], "ie")
+		if k < i || k+6 > len(src) {
+			break
+		}
+		if w := src[k : k+6]; (w != "import" && w != "export") || (k > 0 && isWordByte(src[k-1])) {
+			i = k + 1
+			continue
+		}
+		j := k + 6
+		for j < len(src) && isRESpace(src[j]) {
+			j++
+		}
+		// (?:[^'"();=]*?\bfrom\s*)? : the shortest run up to a "from" (at a word boundary) followed by a quote
+		end, spec, ok := 0, "", false
+		for m := j; m < len(src); m++ {
+			c := src[m]
+			if c == 'f' && strings.HasPrefix(src[m:], "from") && !isWordByte(src[m-1]) {
+				q := m + 4
+				for q < len(src) && isRESpace(src[q]) {
+					q++
+				}
+				if s, e, good := quotedSpec(src, q); good {
+					spec, end, ok = s, e, true
+					break
+				}
+			}
+			if c == '\'' || c == '"' || c == '(' || c == ')' || c == ';' || c == '=' {
+				break
+			}
+		}
+		if !ok { // the group is optional: a quote right after the keyword and spaces
+			spec, end, ok = quotedSpec(src, j)
+		}
+		if ok {
+			out = append(out, spec)
+			i = end
+			continue
+		}
+		i = k + 1
+	}
+	return out
+}
 
 // maxPrefetchedModules bounds the speculative reads of one document's module graph.
 const maxPrefetchedModules = 400
@@ -1946,8 +2016,7 @@ func (j *jsVM) prefetchModuleDeps(base, src string) {
 	if t == nil || t.policy().ScriptMaxBytes > 0 {
 		return
 	}
-	for _, m := range staticImportRE.FindAllStringSubmatch(src, -1) {
-		spec := m[1]
+	for _, spec := range staticImportSpecs(src) {
 		var abs string
 		switch {
 		case strings.HasPrefix(spec, "http://") || strings.HasPrefix(spec, "https://"):
