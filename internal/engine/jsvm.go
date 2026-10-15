@@ -790,10 +790,22 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		quiet = j.tab.settleQuiet()
 		lastGen = j.docGen()
 	}
+	var tTimers, tSleep, tDrain time.Duration
+	var why [5]int // SWEEF_STAGES: what kept the pump going (scripts, delivered, live work, http, document changes)
+	t0 := time.Now()
+	if stageTrace {
+		defer func() {
+			if time.Since(t0) > 50*time.Millisecond {
+				stageLog("pump", "", time.Since(t0), "quiet=%v more=%d delivered=%d live=%d http=%d docchg=%d timers=%.0fms sleep=%.0fms drain=%.0fms", quiet, why[0], why[1], why[2], why[3], why[4], ms(tTimers), ms(tSleep), ms(tDrain))
+			}
+		}()
+	}
 	for {
+		td := time.Now()
 		j.drainScripts(soft)
 		j.jobs()
 		delivered := j.drainAsync()
+		tDrain += time.Since(td)
 		next := float64(-1)
 		if j.tab == nil || !j.tab.suspended() {
 			// A background tab under the Data Saver runs no timers (no polling, no
@@ -805,7 +817,9 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 			if !deadline.IsZero() {
 				budget = math.Max(1, float64(time.Until(deadline))/float64(time.Millisecond))
 			}
+			tt := time.Now()
 			next = j.runTimers(budget)
+			tTimers += time.Since(tt)
 		}
 		if j.drainAsync() {
 			delivered = true
@@ -832,6 +846,18 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		sliceOver := !soft.IsZero() && !time.Now().Before(soft)
 		httpWait := soft.IsZero() && (j.tab == nil || !j.tab.progMode.Load()) && j.httpInFlightBefore(deadline) // a window's tab never waits on the network
 		if more || ((delivered || j.hasLiveWork()) && time.Now().Before(deadline)) || httpWait {
+			if stageTrace {
+				switch {
+				case more:
+					why[0]++
+				case delivered:
+					why[1]++
+				case httpWait:
+					why[3]++
+				default:
+					why[2]++
+				}
+			}
 			if sliceOver {
 				return false, false
 			}
@@ -842,6 +868,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 					return false, false
 				}
 				time.Sleep(time.Millisecond)
+				tSleep += time.Millisecond
 			}
 			continue
 		}
@@ -851,6 +878,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		if quiet > 0 {
 			if g := j.docGen(); g != lastGen {
 				lastGen, lastChange = g, time.Now()
+				why[4]++
 			} else if time.Since(lastChange) >= quiet && !j.tab.framesBusy() { // a frame still loading is not quiet
 				return false, true
 			}
@@ -872,6 +900,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		}
 		if wait > 0 {
 			time.Sleep(wait)
+			tSleep += wait
 		}
 	}
 }
