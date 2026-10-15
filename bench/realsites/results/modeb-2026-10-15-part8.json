@@ -1,0 +1,51 @@
+{
+ "meta": {
+  "started": "2026-10-15T16:24:13.668Z",
+  "mock": false,
+  "config": {
+   "model": "claude-haiku-5-5",
+   "runs": 3,
+   "max_turns": 40,
+   "max_tokens": 8192,
+   "effort": "low",
+   "thinking": "adaptive",
+   "max_cost_usd": 0.5,
+   "snapshot_max_tokens": 6000,
+   "task_timeout_s": 300,
+   "pw_observe": "snapshot",
+   "tools": [
+    "sweef-agent",
+    "playwright-agent"
+   ],
+   "tasks": 0,
+   "base_url": "https://api.anthropic.com"
+  },
+  "versions": {
+   "sweef": "sweef 0.1.0",
+   "node": "v22.22.0"
+  },
+  "prices": {
+   "_note": "USD per million tokens, first-party API list prices (claude-api model table cached 2026-10-06). Edit and verify against your invoice. Cost in Mode B results is computed from reported token usage with this one table for BOTH agents; the Sweef binary's own cost estimate is recorded separately.",
+   "cache_read_mult": 0.1,
+   "cache_write_mult": 1.25,
+   "models": {
+    "claude-haiku-5-5": {
+     "in": 0.1,
+     "out": 0.5,
+     "long_threshold": 100000,
+     "in_long": 0.5,
+     "out_long": 2.5
+    },
+    "claude-sonnet-5-5": {
+     "in": 2,
+     "out": 10
+    },
+    "claude-opus-5-5": {
+     "in": 4,
+     "out": 20
+    }
+   }
+  }
+ },
+ "runs": []
+}
