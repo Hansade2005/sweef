@@ -285,6 +285,8 @@ func init() {
 			d = time.Duration(ms) * time.Millisecond
 		} else if ms, ok := p["timeout"].(float64); ok && ms >= 0 {
 			d = time.Duration(ms) * time.Millisecond
+		} else if ms, ok := p["timeoutMs"].(float64); ok && ms >= 0 { // the SDKs' spelling
+			d = time.Duration(ms) * time.Millisecond
 		}
 		if d > 60*time.Second {
 			d = 60 * time.Second
@@ -304,7 +306,9 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		t.ArmDialogResponse(boolv(p, "accept"), str(p, "promptText"))
+		// MCP, the session CLI and the SDKs send action: "accept"|"dismiss"; reading only the boolean
+		// "accept" made every armed dialog dismiss.
+		t.ArmDialogResponse(boolv(p, "accept") || strings.EqualFold(str(p, "action"), "accept"), str(p, "promptText"))
 		return map[string]bool{"ok": true}, nil
 	})
 	registerExt("Page.getDialogs", func(sv *Server, p Params) (any, error) {

@@ -9,6 +9,7 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -160,11 +161,23 @@ func (s *Server) Call(method string, raw json.RawMessage) (json.RawMessage, *pro
 	if err != nil {
 		return nil, toRpc(err)
 	}
-	b, merr := json.Marshal(res)
+	b, merr := MarshalCompact(res)
 	if merr != nil {
 		return nil, internal(merr.Error())
 	}
 	return b, nil
+}
+
+// MarshalCompact is json.Marshal without HTML escaping: page HTML, snapshots and
+// text are full of <, > and &, and \u003c costs six bytes (and tokens) for one.
+func MarshalCompact(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 func snapshotOptions(p Params) engine.SnapshotOptions {
@@ -334,9 +347,11 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		format := strOr(p, "type", "png")
 		out := map[string]any{"text": t.Screenshot(w)}
 		if format == "png" {
-			pb := t.PNGScreenshot(w, h, dsf)
-			if p["fullPage"] == true {
+			var pb []byte
+			if p["fullPage"] == true { // one render, not a viewport shot thrown away first
 				pb = t.PNGScreenshotFull(w, dsf)
+			} else {
+				pb = t.PNGScreenshot(w, h, dsf)
 			}
 			out["pngBase64"] = base64.StdEncoding.EncodeToString(pb)
 			out["bytes"] = len(pb)

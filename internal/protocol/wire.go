@@ -11,11 +11,13 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"sync"
 )
 
@@ -51,20 +53,37 @@ func (e *RpcError) Error() string { return fmt.Sprintf("rpc %d: %s", e.Code, e.M
 
 // WriteMsg serialises m into one frame and writes it.
 func WriteMsg(w io.Writer, m *Message) error {
-	b, err := json.Marshal(m)
-	if err != nil {
-		return err
+	// One buffer, one Write: header and payload used to go out as two writes (two
+	// syscalls, and two TCP segments with Nagle off).
+	buf := make([]byte, 8, 64+len(m.Result)+len(m.Params))
+	copy(buf[:4], Magic)
+	if m.Method == "" && m.Error == nil && m.Params == nil && len(m.Result) > 0 {
+		// A response: splice the result in as is. json.Marshal would re-scan (compact and
+		// HTML-escape) the whole result, which is the bulk of every frame (HTML, snapshots,
+		// screenshots), and \u003c-escaping costs six bytes for one.
+		buf = append(buf, `{"jsonrpc":"2.0"`...)
+		if m.ID != 0 {
+			buf = append(buf, `,"id":`...)
+			buf = strconv.AppendInt(buf, m.ID, 10)
+		}
+		buf = append(buf, `,"result":`...)
+		buf = append(buf, m.Result...)
+		buf = append(buf, '}')
+	} else {
+		var b bytes.Buffer
+		enc := json.NewEncoder(&b)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(m); err != nil {
+			return err
+		}
+		buf = append(buf, bytes.TrimSuffix(b.Bytes(), []byte("\n"))...)
 	}
-	if len(b) > MaxFrameLen {
+	n := len(buf) - 8
+	if n > MaxFrameLen {
 		return ErrTooLarge
 	}
-	hdr := make([]byte, 8)
-	copy(hdr[:4], Magic)
-	binary.LittleEndian.PutUint32(hdr[4:], uint32(len(b)))
-	if _, err := w.Write(hdr); err != nil {
-		return err
-	}
-	_, err = w.Write(b)
+	binary.LittleEndian.PutUint32(buf[4:8], uint32(n))
+	_, err := w.Write(buf)
 	return err
 }
 
