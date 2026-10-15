@@ -790,13 +790,13 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		quiet = j.tab.settleQuiet()
 		lastGen = j.docGen()
 	}
-	var tTimers, tSleep, tDrain time.Duration
+	var tTimers, tSleep, tDrain, tObs time.Duration
 	var why [5]int // SWEEF_STAGES: what kept the pump going (scripts, delivered, live work, http, document changes)
 	t0 := time.Now()
 	if stageTrace {
 		defer func() {
 			if time.Since(t0) > 50*time.Millisecond {
-				stageLog("pump", "", time.Since(t0), "quiet=%v more=%d delivered=%d live=%d http=%d docchg=%d timers=%.0fms sleep=%.0fms drain=%.0fms", quiet, why[0], why[1], why[2], why[3], why[4], ms(tTimers), ms(tSleep), ms(tDrain))
+				stageLog("pump", "", time.Since(t0), "quiet=%v more=%d delivered=%d live=%d http=%d docchg=%d timers=%.0fms sleep=%.0fms drain=%.0fms jobs+observers=%.0fms", quiet, why[0], why[1], why[2], why[3], why[4], ms(tTimers), ms(tSleep), ms(tDrain), ms(tObs))
 			}
 		}()
 	}
@@ -821,11 +821,13 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 			next = j.runTimers(budget)
 			tTimers += time.Since(tt)
 		}
+		to := time.Now()
 		if j.drainAsync() {
 			delivered = true
 		}
 		j.jobs()
 		j.flushObservers()
+		tObs += time.Since(to)
 		if nav := j.takeNav(); nav != "" {
 			if strings.HasPrefix(nav, "form://") {
 				id, _ := strconv.ParseInt(strings.TrimPrefix(nav, "form://"), 10, 64)
@@ -1864,6 +1866,10 @@ func (j *jsVM) registerHost() error {
 		if i < 0 || i >= len(fns) {
 			return nil, fmt.Errorf("unknown host function %d", i)
 		}
+		if t := j.tab; t != nil {
+			t.scriptGeom.Add(1)
+			defer t.scriptGeom.Add(-1)
+		}
 		return fns[i](a[1:])
 	}); err != nil {
 		return err
@@ -1966,6 +1972,29 @@ func (t *Tab) setURLOnly(raw string) {
 // github.com's 770 kB modules; the regexp stays as its specification (tests).
 var staticImportRE = regexp.MustCompile(`(?:\bimport|\bexport)\s*(?:[^'"();=]*?\bfrom\s*)?['"]([^'"\n]+)['"]`)
 
+// moduleLikePath: a specifier the prefetcher may fetch. A browser resolves no file extensions, so a real
+// import names its file in full; the import lines that bundles carry as text (code templates of an app
+// builder, documentation) mostly do not ("./App", "./styles.css", "./routes.d.ts") and were fetched for
+// nothing, 40 requests on pipilot.dev, ahead of the page's real modules.
+func moduleLikePath(spec string) bool {
+	p := spec
+	if i := strings.IndexAny(p, "?#"); i >= 0 {
+		p = p[:i]
+	}
+	if strings.HasSuffix(p, ".d.ts") {
+		return false
+	}
+	dot := strings.LastIndexByte(p, '.')
+	if dot < 0 || strings.LastIndexByte(p, '/') > dot {
+		return !strings.HasPrefix(spec, ".") && !strings.HasPrefix(spec, "/") // a bare name: the import map decides
+	}
+	switch p[dot+1:] {
+	case "js", "mjs", "cjs", "jsx", "ts", "tsx", "vue", "svelte":
+		return true
+	}
+	return false
+}
+
 func isWordByte(c byte) bool {
 	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
@@ -2047,6 +2076,9 @@ func (j *jsVM) prefetchModuleDeps(base, src string) {
 		return
 	}
 	for _, spec := range staticImportSpecs(src) {
+		if !moduleLikePath(spec) {
+			continue
+		}
 		var abs string
 		switch {
 		case strings.HasPrefix(spec, "http://") || strings.HasPrefix(spec, "https://"):

@@ -19,6 +19,7 @@ import (
 	"github.com/sweefbrowser/sweef/internal/agent"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"strings"
 	"syscall"
 
@@ -147,6 +148,13 @@ func cmdMCP(args []string) {
 	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
 	addCommonFlags(fs)
 	_ = fs.Parse(args)
+	if path := os.Getenv("SWEEF_CPUPROFILE"); path != "" { // development aid: profile the daemon until it exits
+		if f, err := os.Create(path); err == nil {
+			if pprof.StartCPUProfile(f) == nil {
+				defer pprof.StopCPUProfile()
+			}
+		}
+	}
 	o := engineOptsFrom(fs)
 	o.WarmVMs = 2 // long-lived agent server: keep two JS VMs ready (engine vmPool)
 	e := engine.New(o)
@@ -166,6 +174,13 @@ func cmdServe(args []string) {
 	idle := fs.Duration("idle-timeout", 0, "exit after this long without a request (0 = never)")
 	addCommonFlags(fs)
 	_ = fs.Parse(args)
+	if path := os.Getenv("SWEEF_CPUPROFILE"); path != "" { // development aid: profile the daemon until it exits
+		if f, err := os.Create(path); err == nil {
+			if pprof.StartCPUProfile(f) == nil {
+				defer pprof.StopCPUProfile()
+			}
+		}
+	}
 	o := engineOptsFrom(fs)
 	o.WarmVMs = 2 // long-lived agent server: keep two JS VMs ready (engine vmPool)
 	e := engine.New(o)

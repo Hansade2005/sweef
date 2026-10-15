@@ -35,3 +35,15 @@ func TestStaticImportSpecsMatchesRegexp(t *testing.T) {
 		}
 	}
 }
+
+func TestModuleLikePath(t *testing.T) {
+	for spec, want := range map[string]bool{
+		"./chunk-abc.js": true, "/assets/x.mjs?v=1": true, "https://cdn.x/y.js#z": true, "./App.vue": true,
+		"./App": false, "./styles.css": false, "../types/routes.d.ts": false, "./data.json": false,
+		"react": true, "@scope/pkg": true, "lodash.debounce": false, "./dir.v2/App": false,
+	} {
+		if got := moduleLikePath(spec); got != want {
+			t.Errorf("moduleLikePath(%q) = %v, want %v", spec, got, want)
+		}
+	}
+}
