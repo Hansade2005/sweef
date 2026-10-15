@@ -143,6 +143,7 @@ func cmdServe(args []string) {
 	defer e.Close()
 	srv := rpc.NewServer(e)
 	srv.IdleTimeout = *idle
+	srv.BackgroundPump = true // pages finish what they started between calls (rpc.Server.BackgroundPump)
 	ctx, cancel := withSignals(context.Background())
 	defer cancel()
 	srv.OnShutdown = cancel
