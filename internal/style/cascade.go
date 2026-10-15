@@ -35,12 +35,15 @@ type Engine struct {
 	share     map[uint64]*Computed
 	scratch   []*Entry
 	hasPseudo bool
-	contSize  map[*html.Node]ContSize
-	conts     map[*html.Node]*contInfo
-	hasCQ     bool
-	curCont   *html.Node
-	persist   *Persist     // cross-pass style cache (persist.go); nil: none
-	web       *font.WebSet // the document's web fonts: declared families get scoped names (webfonts.go)
+	// genContent lists, per pseudo-element ("before", "after"), the entries whose rule declares content: only
+	// those can make the pseudo-element generate a box (HasGeneratedContent)
+	genContent map[string][]*Entry
+	contSize   map[*html.Node]ContSize
+	conts      map[*html.Node]*contInfo
+	hasCQ      bool
+	curCont    *html.Node
+	persist    *Persist     // cross-pass style cache (persist.go); nil: none
+	web        *font.WebSet // the document's web fonts: declared families get scoped names (webfonts.go)
 	// usesWebMetrics: some length was computed from the metrics of a web font (webfonts.go)
 	usesWebMetrics bool
 }
@@ -116,6 +119,12 @@ func (e *Engine) addRule(r *Rule) {
 		}
 		if en.Pseudo != "" {
 			e.hasPseudo = true
+			if (en.Pseudo == "before" || en.Pseudo == "after") && declaresContent(r.Decls) {
+				if e.genContent == nil {
+					e.genContent = map[string][]*Entry{}
+				}
+				e.genContent[en.Pseudo] = append(e.genContent[en.Pseudo], en)
+			}
 		}
 		if r.Cont != nil {
 			e.hasCQ = true
@@ -227,6 +236,45 @@ func attrOf(n *html.Node, k string) (string, bool) {
 	return "", false
 }
 
+func declaresContent(ds []Decl) bool {
+	for _, d := range ds {
+		if d.Name == "content" {
+			return true
+		}
+	}
+	return false
+}
+
+// HasGeneratedContent reports whether some rule that declares content matches the ::before or ::after
+// (pseudo "before" / "after") of n. Without one the pseudo-element's content is normal and it generates no
+// box, so layout can skip computing its style: a reset like `*, ::before, ::after { box-sizing: border-box }`
+// otherwise makes every element of the page compute two pseudo-element styles that are thrown away.
+func (e *Engine) HasGeneratedContent(n *html.Node, pseudo string) bool {
+	for _, en := range e.genContent[pseudo] {
+		if e.entryMatches(n, en, pseudo) {
+			return true
+		}
+	}
+	return false
+}
+
+// entryMatches: en applies to n (selector, @scope and @container conditions); the caller checked the pseudo.
+func (e *Engine) entryMatches(n *html.Node, en *Entry, pseudo string) bool {
+	var scopeEl *html.Node
+	if en.Rule.Scope != nil {
+		if scopeEl = scopeRootFor(n, en.Rule.Scope); scopeEl == nil {
+			return false
+		}
+		if scopeEl == n && !strings.Contains(en.key, ":scope") {
+			return false
+		}
+	}
+	if !en.Sel.Match(n, scopeEl) {
+		return false
+	}
+	return en.Rule.Cont == nil || e.contMatches(n, en.Rule.Cont, pseudo)
+}
+
 func (e *Engine) collect(n *html.Node, pseudo string) []*Entry {
 	out := e.scratch[:0]
 	try := func(list []*Entry) {
@@ -234,19 +282,7 @@ func (e *Engine) collect(n *html.Node, pseudo string) []*Entry {
 			if en.Pseudo != pseudo {
 				continue
 			}
-			var scopeEl *html.Node
-			if en.Rule.Scope != nil {
-				if scopeEl = scopeRootFor(n, en.Rule.Scope); scopeEl == nil {
-					continue
-				}
-				if scopeEl == n && !strings.Contains(en.key, ":scope") {
-					continue
-				}
-			}
-			if en.Sel.Match(n, scopeEl) {
-				if en.Rule.Cont != nil && !e.contMatches(n, en.Rule.Cont, pseudo) {
-					continue
-				}
+			if e.entryMatches(n, en, pseudo) {
 				out = append(out, en)
 			}
 		}

@@ -286,6 +286,7 @@ func (c *ctx) finishResult(rb *lbox) {
 	tk.lap("finish:fo")
 	c.buildBoxes()
 	tk.lap("finish:boxes")
+	c.prefetchPaintImages()
 	c.paintAll(rb)
 	tk.lap("finish:paint")
 	c.installHit(rb)

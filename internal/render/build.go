@@ -390,6 +390,9 @@ func (c *ctx) buildChildrenInto(n *html.Node, st *style.Computed, out *[]*lbox, 
 
 // makePseudo builds ::before / ::after boxes.
 func (c *ctx) makePseudo(n *html.Node, st *style.Computed, which string) []*lbox {
+	if !c.eng.HasGeneratedContent(n, which) {
+		return nil // no rule gives it content: it generates no box (its style would only be thrown away)
+	}
 	pst := c.eng.Compute(n, st, which)
 	if pst == nil || !pst.ContentSet || pst.ContentNone || pst.Display == "none" {
 		return nil

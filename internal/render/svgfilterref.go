@@ -3,6 +3,7 @@ package render
 import (
 	"container/list"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -106,6 +107,12 @@ func splitFilterTokens(v string) []string {
 
 // svgFilterRefs rewrites st when the element's filter list references SVG
 // filters.
+// filterURLDeclRE finds a filter declaration whose value holds a url(...) reference: only such a sheet can give
+// an HTML element an SVG filter reference. The words "url(" and "filter" both appear in most real sheets
+// (background images, the filter property for something else), and every element of the page then paid a
+// second cascade for nothing (a quarter of the layout time on a large Wikipedia article).
+var filterURLDeclRE = regexp.MustCompile(`(?i)filter\s*:[^;{}]*url\(`)
+
 func (c *ctx) svgFilterRefs(n *html.Node, st *style.Computed) *style.Computed {
 	if n.Namespace == "svg" {
 		return st
@@ -114,7 +121,7 @@ func (c *ctx) svgFilterRefs(n *html.Node, st *style.Computed) *style.Computed {
 	if c.urlFilterHint == 0 {
 		c.urlFilterHint = 2
 		for _, s := range c.opts.Sheets {
-			if !s.UserAgent && strings.Contains(s.Text, "url(") && strings.Contains(s.Text, "filter") {
+			if !s.UserAgent && strings.Contains(s.Text, "url(") && filterURLDeclRE.MatchString(s.Text) {
 				c.urlFilterHint = 1
 				break
 			}
