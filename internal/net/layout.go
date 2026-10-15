@@ -41,6 +41,9 @@ type Layout struct {
 	Hit func(x, y float64) *html.Node
 	Geo func(n *html.Node) (Geometry, bool)
 	Ext any // provider-private result (the engine keeps *render.Result here)
+	// Provisional: laid out without resources that were still on their way (a layout forced by script does
+	// not wait for them). Doc.Layout hands it out again only to a caller its provisionalOK accepts.
+	Provisional bool
 }
 
 // Geometry is the CSSOM View geometry of one element, in CSS px.
@@ -104,7 +107,8 @@ func (d *Doc) Layout(width int) *Layout {
 	d.layoutMu.Lock()
 	defer d.layoutMu.Unlock()
 	gen := d.layoutGen()
-	if d.layoutCache != nil && d.layoutCacheW == width && d.layoutCacheGen == gen {
+	if d.layoutCache != nil && d.layoutCacheW == width && d.layoutCacheGen == gen &&
+		(!d.layoutCache.Provisional || (d.provisionalOK != nil && d.provisionalOK())) {
 		return d.layoutCache
 	}
 	if d.layoutProvider != nil {

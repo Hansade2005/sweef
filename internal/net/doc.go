@@ -45,6 +45,14 @@ type Doc struct {
 	layoutCacheGen uint64
 	viewportW      atomic.Int64
 	layoutProvider func(width int) *Layout
+	provisionalOK  func() bool // Layout.Provisional; nil: never reuse a provisional layout
+}
+
+// SetProvisionalOK sets which callers may be answered with a cached provisional layout (Layout.Provisional).
+func (d *Doc) SetProvisionalOK(fn func() bool) {
+	d.layoutMu.Lock()
+	d.provisionalOK = fn
+	d.layoutMu.Unlock()
 }
 
 // SetLayoutProvider replaces the built-in flow layout with fn (the render

@@ -184,7 +184,10 @@ type Tab struct {
 
 	navSite atomic.Pointer[string] // schemeful site of the document being loaded (partition.go)
 
-	asyncImg   atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
+	asyncImg atomic.Bool // layout starts image fetches instead of waiting for them (SetAsyncImages)
+	// scriptGeom > 0 while a host call of the page's script runs: a layout it forces (getBoundingClientRect,
+	// offsetWidth, an observer) does not wait for the network, as in a browser (scriptForcedLayout)
+	scriptGeom atomic.Int32
 	imgSem     chan struct{}             // images fetched at once
 	preloadSem chan struct{}             // requests the preload scanner has in flight
 	imgTimer   atomic.Bool               // a relayout request for newly arrived images is scheduled

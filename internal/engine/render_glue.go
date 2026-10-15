@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/sweefbrowser/sweef/internal/font"
 	fnet "github.com/sweefbrowser/sweef/internal/net"
 	"github.com/sweefbrowser/sweef/internal/raster"
 	"github.com/sweefbrowser/sweef/internal/render"
@@ -52,6 +53,21 @@ type tabEnv struct {
 		res *render.Result
 		ix  *render.TextIndex
 	}
+	// parserLinks are the <link> elements of the document as parsed: their stylesheets block the page's
+	// scripts in a browser, so even a layout a script forces waits for them; a sheet a script inserted does
+	// not hold such a layout (sheetsLate: started in the background, the layout runs again when it is in)
+	parserLinks map[*html.Node]bool
+	sheetsLate  map[string]bool // background reads started, by URL (true: still running)
+}
+
+// scriptForcedLayout: the layout runs inside a host call of the page's script (a geometry read). Like a
+// browser it then does not wait for the network: images, web fonts and script-inserted stylesheets that are
+// not in yet are started in the background and the document lays out again when they arrive (Touch). The
+// layouts the headless commands ask for (snapshot, screenshot, text) still wait for everything, so their
+// results do not depend on how fast the network is.
+func (e *tabEnv) scriptForcedLayout() bool {
+	t := e.t
+	return t.scriptGeom.Load() > 0 && !t.asyncImg.Load() && t.policy() == (DataPolicy{}) && !t.IsOfflineMode()
 }
 
 func (e *tabEnv) source(n *html.Node) BitmapSource {
@@ -77,7 +93,7 @@ func (e *tabEnv) Image(u string) image.Image {
 			data = b
 		}
 	} else if !e.t.IsOfflineMode() || strings.HasPrefix(u, "file:") {
-		if e.asyncOK(u) {
+		if e.asyncOK(u) || (!strings.HasPrefix(u, "file:") && e.scriptForcedLayout()) {
 			e.startAsync(u)
 			return nil // not final: the layout runs again when the bytes are in
 		}
@@ -125,6 +141,14 @@ func (e *tabEnv) prefetchDocImages() {
 		}
 	})
 	if len(urls) > 1 {
+		if e.scriptForcedLayout() {
+			for _, u := range urls {
+				if !strings.HasPrefix(u, "file:") {
+					e.startAsync(u)
+				}
+			}
+			return
+		}
 		e.prefetch(urls)
 	}
 }
@@ -304,6 +328,7 @@ func (e *tabEnv) Focused() *html.Node { return nil }
 // sheets through the resource cache.
 func (e *tabEnv) pageSheets() []render.Sheet {
 	var out []render.Sheet
+	scriptForced := e.scriptForcedLayout()
 	base := e.doc.BaseURL()
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
@@ -330,7 +355,7 @@ func (e *tabEnv) pageSheets() []render.Sheet {
 				}
 				href := strings.TrimSpace(attrOf(n, "href"))
 				if isSheet && !alt && href != "" && attrOf(n, "disabled") == "" {
-					if abs, err := resolveURL(base, href); err == nil {
+					if abs, err := resolveURL(base, href); err == nil && !(scriptForced && e.lateSheet(n, abs)) {
 						if body, status, err := e.t.fetchResourceKind(abs, KindStyle); err == nil && status < 400 {
 							out = append(out, e.withImports(render.Sheet{Text: body, BaseURL: abs, Media: attrOf(n, "media")}, 0, map[string]bool{abs: true})...)
 						}
@@ -344,6 +369,63 @@ func (e *tabEnv) pageSheets() []render.Sheet {
 	}
 	walk(e.doc.Root)
 	return out
+}
+
+// resourcesPending: images, web fonts or stylesheets a layout went without are still on their way.
+func (e *tabEnv) resourcesPending(fonts *font.WebSet) bool {
+	if fonts != nil && fonts.Pending() > 0 {
+		return true
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.inflight) > 0 {
+		return true
+	}
+	for _, running := range e.sheetsLate {
+		if running {
+			return true
+		}
+	}
+	return false
+}
+
+// lateSheet reports whether a layout forced by script should go without the stylesheet of link n: one a
+// script inserted, not in the HTTP cache and not read for this document yet. Its read is then started in the
+// background, and the document lays out again when it is in.
+func (e *tabEnv) lateSheet(n *html.Node, abs string) bool {
+	if e.parserLinks[n] || e.t.knownSizeURL(abs) >= 0 {
+		return false
+	}
+	e.mu.Lock()
+	running, started := e.sheetsLate[abs]
+	if started && !running {
+		e.mu.Unlock()
+		return false // read once already: the cache answers (or the read failed and is not retried here)
+	}
+	if !started {
+		if e.sheetsLate == nil {
+			e.sheetsLate = map[string]bool{}
+		}
+		e.sheetsLate[abs] = true
+	}
+	e.mu.Unlock()
+	if !started {
+		t := e.t
+		go func() {
+			_, _, _ = t.fetchRes(abs, fetchOpts{kind: KindStyle, prefetch: true})
+			e.mu.Lock()
+			e.sheetsLate[abs] = false
+			e.mu.Unlock()
+			t.mu.RLock()
+			d := t.dom
+			t.mu.RUnlock()
+			if d == e.doc {
+				d.Touch()
+			}
+			t.wake()
+		}()
+	}
+	return true
 }
 
 // sheet reads a linked stylesheet. Under the saver levels a sheet is read once
@@ -388,7 +470,12 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 	if !renderEnabled() {
 		return
 	}
-	env := &tabEnv{t: t, doc: doc, imgs: map[string]image.Image{}, svgs: map[string]string{}}
+	env := &tabEnv{t: t, doc: doc, imgs: map[string]image.Image{}, svgs: map[string]string{}, parserLinks: map[*html.Node]bool{}}
+	walkNodes(doc.Root, func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "link" {
+			env.parserLinks[n] = true
+		}
+	})
 	if !noStyleCache {
 		env.sty = render.NewSession()
 	}
@@ -413,6 +500,7 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 		}()
 		env.prefetchDocImages()
 		fontRounds := 0
+		var fontSet *font.WebSet
 		for round := 0; ; round++ {
 			env.lz.resetHints()
 			sheets := env.pageSheets()
@@ -425,6 +513,7 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 				Fonts: env.fonts.sync(sheets, float64(width), float64(vh), dsf, t.ColorSchemeName()),
 			}
 			fgen := opts.Fonts.Gen()
+			fontSet = opts.Fonts
 			res = render.Layout(doc.Root, opts)
 			if layoutCheck && env.sty != nil {
 				// SWEEF_LAYOUT_CHECK: the cached pass must equal a from-scratch one
@@ -438,7 +527,7 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 			}
 			// Without a window the fonts the layout asked for are waited for, so the
 			// result does not depend on how fast the network is (webfonts.go)
-			if fontRounds < maxFontRounds && !t.asyncImg.Load() && env.fonts.settle(opts.Fonts, fgen) {
+			if fontRounds < maxFontRounds && !t.asyncImg.Load() && !env.scriptForcedLayout() && env.fonts.settle(opts.Fonts, fgen) {
 				fontRounds++
 				round--
 				continue
@@ -450,8 +539,11 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 			}
 		}
 		env.updateFrames(res, float64(vh))
-		return layoutFromRender(res, env)
+		l := layoutFromRender(res, env)
+		l.Provisional = env.scriptForcedLayout() && env.resourcesPending(fontSet)
+		return l
 	})
+	doc.SetProvisionalOK(env.scriptForcedLayout)
 }
 
 type renderExt struct {
