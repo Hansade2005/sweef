@@ -402,7 +402,7 @@ func (t *Tab) Press(sel, keys string) error {
 	// the submit event (implicit submission), which page code may cancel (React, Vue and Angular forms all do,
 	// then fetch). Submitting here as well sent the form a second time, as a plain GET, past the cancellation.
 	// Only a page without a VM (no scripts at all) is submitted from here.
-	if _, ok := t.jsCall("__swDispatchKey", bid, key); !ok && strings.EqualFold(key, "Enter") {
+	if _, ok := t.dispatchKeyCombo(bid, key); !ok && strings.EqualFold(key, "Enter") {
 		info := t.infoForBackend(bid)
 		if info != nil && strings.EqualFold(info.Name, "input") {
 			return t.SubmitFormFor(sel)
@@ -419,9 +419,78 @@ func (t *Tab) Keyboard(keys string) error {
 		return leaf.Keyboard(keys)
 	}
 	t.NoteUserActivation()
-	t.jsCall("__swDispatchKey", 0, keys)
+	t.dispatchKeyCombo(0, strings.TrimSpace(keys))
 	t.afterAction()
 	return nil
+}
+
+// KeyboardType types text into the focused element one key at a time (keydown,
+// keypress, beforeinput, input, keyup per character), like Playwright's keyboard.type.
+func (t *Tab) KeyboardType(text string, delay time.Duration) error {
+	if leaf := t.FocusedTab(); leaf != t {
+		return leaf.KeyboardType(text, delay)
+	}
+	t.mu.RLock()
+	noVM := t.js == nil
+	t.mu.RUnlock()
+	if noVM { // a page without scripts: no key events to fire, type into the focused field
+		return t.Type("[data-sw-focused]", text, delay)
+	}
+	t.NoteUserActivation()
+	for _, r := range text {
+		k := string(r)
+		if r == '\n' {
+			k = "Enter"
+		}
+		t.jsCall("__swDispatchKey", 0, k)
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+	}
+	t.afterAction()
+	return nil
+}
+
+// dispatchKeyCombo presses one key or a combination such as "Control+a" or
+// "Shift+Tab": the last part is the key, the others set the modifier flags.
+func (t *Tab) dispatchKeyCombo(bid int64, combo string) (any, bool) {
+	key, mods := splitKeyCombo(combo)
+	if mods == nil {
+		return t.jsCall("__swDispatchKey", bid, key)
+	}
+	return t.jsCall("__swDispatchKey", bid, key, mods)
+}
+
+func splitKeyCombo(s string) (string, map[string]any) {
+	if len(s) < 3 || !strings.Contains(s[:len(s)-1], "+") {
+		return s, nil
+	}
+	parts := strings.Split(s, "+")
+	key := parts[len(parts)-1]
+	if key == "" { // "Control++"
+		key = "+"
+		parts = parts[:len(parts)-1]
+	}
+	mods := map[string]any{}
+	for _, m := range parts[:len(parts)-1] {
+		switch strings.ToLower(m) {
+		case "control", "ctrl", "controlormeta":
+			mods["ctrlKey"] = true
+		case "shift":
+			mods["shiftKey"] = true
+		case "alt", "option":
+			mods["altKey"] = true
+		case "meta", "cmd", "command", "super":
+			mods["metaKey"] = true
+		case "":
+		default:
+			return s, nil // not a combination (a key name that contains '+')
+		}
+	}
+	if len(mods) == 0 {
+		return s, nil
+	}
+	return key, mods
 }
 
 // Fill sets a value instantly (Playwright fill fast-path). Works on inputs,

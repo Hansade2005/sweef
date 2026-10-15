@@ -3819,7 +3819,8 @@
     var ok = fire(el, 'keydown', init);
     if (!ok) { fire(el, 'keyup', Object.assign({}, init, { cancelable: false })); return false; }
     var editable = el.nodeType === 1 && ((el.localName === 'input' && PRINTABLE_INPUT.test(el.type)) || el.localName === 'textarea' || el.isContentEditable);
-    var printable = key.length === 1 || key === 'Enter' && (el.localName === 'textarea' || el.isContentEditable);
+    // a character with Control or Meta held is a shortcut (Control+a), not text
+    var printable = !(mods.ctrlKey || mods.metaKey) && (key.length === 1 || key === 'Enter' && (el.localName === 'textarea' || el.isContentEditable));
     var result = true, used = false, custom = typeof global.__swKeyDefault === 'function';
     if (printable) {
       ok = fire(el, 'keypress', Object.assign({}, init, { charCode: key.length === 1 ? key.charCodeAt(0) : 13 }));

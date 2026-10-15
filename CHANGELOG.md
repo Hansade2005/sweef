@@ -9,6 +9,18 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ## [Unreleased]
 
+### Agent interfaces: MCP, SDKs and CLI brought up to date, tested and benchmarked
+
+Measured in [bench/surfaces](bench/surfaces/README.md) on 2026-10-15 (4 vCPU Xeon, local fixture unless noted):
+
+- MCP (`sweef mcp`) against `@playwright/mcp` 0.0.83: cold start to first snapshot 20 ms vs 810 ms; the fixture flow (navigate, snapshot, click, snapshot, fill, evaluate, screenshot, back) 22.5 ms vs 1388 ms of call latency and 425 vs 856 text tokens; peak RSS 91 vs 945 MiB. Real script-heavy pages navigate slower in Sweef (GitHub 7.1 s vs 0.9 s, Wikipedia 2.4 s vs 1.0 s); see the report.
+- MCP replies are leaner: plain text instead of JSON wrappers, log lines with cursors, a 20k-character cap with an `offset` to continue, image-only screenshots (the Wikipedia text render was 32k tokens per screenshot), and after an action the snapshot lines that changed (`SWEEF_MCP_AUTO_DELTA=0` turns it off). `browser_snapshot` returns the YAML tree; new tools `browser_type`, `browser_scroll`, `browser_reload`, `browser_wait`, `browser_wait_for_url` and `browser_call` (any RPC method).
+- Fixed: `browser_emulate` ignored `kind`; armed dialogs were always dismissed (MCP, CLI and SDKs send `action: "accept"`); raw key presses and scrolling from the CLI, batch, MCP and SDKs were no-ops (parameter names); `sweef --json get url` was rejected; inline storage state was ignored.
+- Node SDK 0.2.0 (`@sweef/browser`) and Python SDK 0.2.0 (`sweef-browser`): `launch()`, `session()` (shares the CLI's daemon), batch, keyboard/mouse, `getBy*`, waits, routes, bindings, PNG screenshots, `call()`; the 0.1 SDKs called a method that does not exist (`url()`, `title()`) and read every `is*()` as false. Publish-ready, Apache-2.0, not yet published. SDK vs `playwright-core`: process start to first snapshot 77 vs 720 ms.
+- Session CLI against `agent-browser` 0.39.1: the flow in 445 ms vs 1554 ms with cold caches and 223 ms vs 1536 ms with warm ones; `eval` with a cold cache directory is slower (155 ms vs 7 ms). New `sweef rpc <Method> [json]`.
+- Engine: the first layout of a process no longer reads every system font file (lazy probe plus a font index in the cache directory: first screenshot 208 ms -> 68 ms cold, CLI screenshot 97 -> 35 ms warm); the warm JS VM pool builds in parallel and agent servers keep two ready (SDK evaluate 13.9 -> 0.84 ms); RPC frames are written unescaped in one write.
+- Tests: `internal/mcp` (handshake, schemas, a full flow, batch, errors, truncation), a session CLI smoke test, Node and Python SDK suites against a real `sweef serve` (`make test-sdk`, run in CI on Linux).
+
 ### Agent browsing: speed and reliability on real sites
 Measured on 47 tasks / 41 public sites, 3 fresh-process runs each with empty caches, against Playwright + Chromium 141
 (`bench/realsites/results/modea-2026-10-15*.md`): runs passed 95/141 -> 130/141 (Chromium 127/141); median cold time to

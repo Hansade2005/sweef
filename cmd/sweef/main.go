@@ -37,8 +37,7 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
-	cmd := os.Args[1]
-	args := os.Args[2:]
+	cmd, args := leadingGlobalFlags(os.Args[1:])
 
 	if isSessionCommand(cmd, args) {
 		cmdSession(cmd, args)
@@ -76,6 +75,28 @@ func main() {
 	}
 }
 
+// leadingGlobalFlags lets the session CLI's global flags come before the verb
+// (`sweef --json get url`, `sweef --session w open ...`): the verb is the first
+// argument that is not one of them, and the flags move after it.
+func leadingGlobalFlags(argv []string) (string, []string) {
+	var flags []string
+	i := 0
+	for i < len(argv) {
+		a := argv[i]
+		switch {
+		case a == "--json" || strings.HasPrefix(a, "--session=") || strings.HasPrefix(a, "--timeout="):
+			flags = append(flags, a)
+			i++
+		case (a == "--session" || a == "--timeout") && i+1 < len(argv):
+			flags = append(flags, a, argv[i+1])
+			i += 2
+		default:
+			return a, append(append([]string{}, argv[i+1:]...), flags...)
+		}
+	}
+	return "help", nil
+}
+
 func usage() {
 	fmt.Fprint(os.Stderr, `sweef - the agent browser that costs nothing to run
 
@@ -88,6 +109,9 @@ session commands (a daemon keeps the page alive between calls; refs come from sn
   sweef wait <sel|ms> | --text t | --url glob | --fn js | --load state
   sweef eval <js> | console | network | back | forward | reload | tab | screenshot [path]
   sweef find role button click --name "Sign in" | set viewport 390 844 | cookies | storage | state save f
+  sweef batch "open <url>" "fill #q hi" "click @e2" [--observe interactive|full|delta|text|none] [--continue]
+  sweef pdf [path] | downloads | download <url> | route <glob> --json v|--abort | unroute | bind | bindings | dialog accept
+  sweef rpc <Method> [params-json]       any RPC method against the session (Page.frames, Emulation.*, ...)
   sweef close                            stop the session daemon
   global flags: --session <name> --json --timeout 30s
 
@@ -98,7 +122,8 @@ one-shot and server commands:
   sweef shot <url> [--out page.png]      PNG render
   sweef mcp                              MCP server over stdio (for AI agents)
   sweef serve [--addr host:port|unix:path] [--idle-timeout 1h]
-  sweef call <Method> [params-json]      raw RPC against a running server
+  sweef call <Method> [params-json]      raw RPC against a running server (--addr)
+  sweef agent [-url u] [-json] "<task>"  run the built-in LLM agent on a task (needs ANTHROPIC_API_KEY)
   sweef gui [--headless --script f.json --out dir --size WxH --profile dir --incognito --stats] [url...]
   sweef version
 `)
@@ -122,7 +147,9 @@ func cmdMCP(args []string) {
 	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
 	addCommonFlags(fs)
 	_ = fs.Parse(args)
-	e := engine.New(engineOptsFrom(fs))
+	o := engineOptsFrom(fs)
+	o.WarmVMs = 2 // long-lived agent server: keep two JS VMs ready (engine vmPool)
+	e := engine.New(o)
 	defer e.Close()
 	srv := mcp.New(e, os.Stdout)
 	ctx, cancel := withSignals(context.Background())
@@ -139,7 +166,9 @@ func cmdServe(args []string) {
 	idle := fs.Duration("idle-timeout", 0, "exit after this long without a request (0 = never)")
 	addCommonFlags(fs)
 	_ = fs.Parse(args)
-	e := engine.New(engineOptsFrom(fs))
+	o := engineOptsFrom(fs)
+	o.WarmVMs = 2 // long-lived agent server: keep two JS VMs ready (engine vmPool)
+	e := engine.New(o)
 	defer e.Close()
 	srv := rpc.NewServer(e)
 	srv.IdleTimeout = *idle

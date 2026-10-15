@@ -2,7 +2,7 @@
 GO ?= go
 export CGO_ENABLED = 0
 
-.PHONY: all build vet fmt fmt-check embeds size test test-all check bench-gui run clean help
+.PHONY: all build vet fmt fmt-check embeds size test test-sdk test-all check bench-gui run clean help
 
 all: check
 
@@ -30,6 +30,11 @@ size: ## release-flags linux/amd64 build: size, headroom to the budget, and wher
 
 test: ## short tests (what CI runs on Linux)
 	$(GO) test -short -count=1 ./...
+
+test-sdk: ## Node and Python SDK tests against a freshly built sweef (local fixtures, no network)
+	$(GO) build -o $${TMPDIR:-/tmp}/sweef-sdk-test ./cmd/sweef
+	SWEEF_BIN=$${TMPDIR:-/tmp}/sweef-sdk-test node --test pkg/sdk/node/test/sdk.test.js
+	SWEEF_BIN=$${TMPDIR:-/tmp}/sweef-sdk-test python3 -m unittest discover -s pkg/sdk/py/tests
 
 test-all: ## including the slow, FATE-gated tests
 	$(GO) test -count=1 -timeout 60m ./...

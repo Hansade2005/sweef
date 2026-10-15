@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/protocol"
+	"github.com/sweefbrowser/sweef/internal/rpc"
 )
 
 var sessionCommands = map[string]bool{
@@ -39,7 +40,7 @@ var sessionCommands = map[string]bool{
 	"screenshot": true, "close": true, "quit": true, "exit": true, "stats": true, "set": true, "find": true,
 	"storage": true, "cookies": true, "state": true, "drag": true, "dialog": true,
 	"batch": true, "pdf": true, "downloads": true, "download": true, "route": true, "unroute": true,
-	"bind": true, "bindings": true,
+	"bind": true, "bindings": true, "rpc": true,
 }
 
 // isSessionCommand decides between the one-shot commands (snapshot <url>,
@@ -689,6 +690,19 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 		r, err := s.call("Browser.stats", nil)
 		return string(r), err
 
+	case "rpc": // any RPC method against the session: sweef rpc Page.frames '{"tab":"tab-1"}'
+		if err := need(args, 1, "rpc <Method> [params-json]"); err != nil {
+			return "", err
+		}
+		params := map[string]any{}
+		if len(args) > 1 {
+			if err := json.Unmarshal([]byte(args[1]), &params); err != nil {
+				return "", fmt.Errorf("rpc: params must be a JSON object: %v", err)
+			}
+		}
+		r, err := s.call(args[0], params)
+		return string(r), err
+
 	case "set":
 		return s.set(args)
 
@@ -1106,80 +1120,13 @@ func (s *cliSession) batch(args []string) (string, error) {
 	if s.jsonOut {
 		return string(r), nil
 	}
-	var out struct {
-		OK      bool   `json:"ok"`
-		TotalMs int64  `json:"totalMs"`
-		Ran     int    `json:"ran"`
-		Total   int    `json:"total"`
-		URL     string `json:"url"`
-		Title   string `json:"title"`
-		Obs     string `json:"observation"`
-		Steps   []struct {
-			Cmd   string `json:"cmd"`
-			OK    bool   `json:"ok"`
-			Ms    int64  `json:"ms"`
-			Error string `json:"error"`
-			Res   any    `json:"result"`
-		} `json:"steps"`
-	}
-	json.Unmarshal(r, &out)
-	var sb strings.Builder
-	for _, st := range out.Steps {
-		if st.OK {
-			sb.WriteString(fmt.Sprintf("✓ %s (%dms)", st.Cmd, st.Ms))
-			if v := shortResult(st.Res); v != "" {
-				sb.WriteString("  → " + v)
-			}
-			sb.WriteString("\n")
-		} else {
-			sb.WriteString(fmt.Sprintf("✗ %s (%dms): %s\n", st.Cmd, st.Ms, st.Error))
-		}
-	}
-	sb.WriteString(fmt.Sprintf("%d/%d steps in %dms  %s  %s\n", out.Ran, out.Total, out.TotalMs, out.Title, out.URL))
-	if out.Obs != "" {
-		sb.WriteString(out.Obs)
-	}
-	if !out.OK {
+	text, ok := rpc.FormatBatch(r, 120)
+	if !ok {
 		// Print the per-step report, then exit non-zero.
-		fmt.Print(sb.String())
+		fmt.Print(text)
 		return "", errBatchFailed
 	}
-	return sb.String(), nil
-}
-
-// shortResult renders a step result compactly for the human output.
-func shortResult(v any) string {
-	switch x := v.(type) {
-	case nil:
-		return ""
-	case map[string]any:
-		for _, k := range []string{"text", "title", "url", "value", "count", "visible", "enabled", "checked", "result"} {
-			if val, ok := x[k]; ok {
-				return truncateStr(fmt.Sprint(val), 120)
-			}
-		}
-		if len(x) == 1 {
-			if _, ok := x["ok"]; ok {
-				return ""
-			}
-		}
-		b, _ := json.Marshal(x)
-		return truncateStr(string(b), 120)
-	case string:
-		if strings.Contains(x, "\n") {
-			return "\n" + x
-		}
-		return truncateStr(x, 120)
-	}
-	b, _ := json.Marshal(v)
-	return truncateStr(string(b), 120)
-}
-
-func truncateStr(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
+	return text, nil
 }
 
 // shellSplit tokenises a command line with "double" and 'single' quotes.

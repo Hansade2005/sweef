@@ -397,12 +397,12 @@ func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
 // between agent commands; a VM is used for exactly one document, because
 // page scripts leave globals behind.
 type vmPool struct {
-	mu      sync.Mutex
-	ready   []*jsVM
-	size    int
-	filling bool
-	opts    Options
-	closed  bool
+	mu       sync.Mutex
+	ready    []*jsVM
+	size     int
+	building int // builders running
+	opts     Options
+	closed   bool
 }
 
 func newVMPool(o Options) *vmPool {
@@ -433,26 +433,18 @@ func (p *vmPool) refill() {
 	if p == nil {
 		return
 	}
+	// One builder per missing VM, in parallel: a VM takes ~40 ms to build, and a
+	// script driving pages back to back (an SDK flow, a batch) can use VMs faster
+	// than one builder makes them, which put the build back on the critical path.
 	p.mu.Lock()
-	if p.filling || p.closed || len(p.ready) >= p.size {
-		p.mu.Unlock()
-		return
-	}
-	p.filling = true
-	p.mu.Unlock()
-	go func() {
-		for {
-			p.mu.Lock()
-			if p.closed || len(p.ready) >= p.size {
-				p.filling = false
-				p.mu.Unlock()
-				return
-			}
-			p.mu.Unlock()
+	defer p.mu.Unlock()
+	for !p.closed && len(p.ready)+p.building < p.size {
+		p.building++
+		go func() {
 			j, err := buildVM(p.opts)
 			p.mu.Lock()
-			if err != nil || p.closed {
-				p.filling = false
+			p.building--
+			if err != nil || p.closed || len(p.ready) >= p.size {
 				p.mu.Unlock()
 				if j != nil {
 					j.close()
@@ -461,8 +453,8 @@ func (p *vmPool) refill() {
 			}
 			p.ready = append(p.ready, j)
 			p.mu.Unlock()
-		}
-	}()
+		}()
+	}
 }
 
 func (p *vmPool) close() {

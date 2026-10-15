@@ -1,0 +1,12 @@
+{
+  "name": "sweef-surfaces-bench",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Agent-surface benchmark: Sweef MCP/SDK/CLI vs @playwright/mcp, playwright-core and agent-browser. Uses the preinstalled Chromium; never run `playwright install`.",
+  "dependencies": {
+    "@playwright/mcp": "0.0.83",
+    "playwright-core": "1.56.1",
+    "agent-browser": "0.39.1"
+  }
+}

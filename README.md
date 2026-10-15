@@ -16,7 +16,7 @@ Sweef is not a fork of Chromium. It has its own CSS layout engine, rasterizer, s
 | Install | ~250 MB browser download | **35.5 MiB static binary** (37.2 MB stripped, linux/amd64, measured 2026-10-14; 4.5 MiB of the 40 MiB release budget left) |
 | Memory | ~90 to 150 MB idle, 1.1 GB process tree under agent-browser | **13 MB idle, 22 MB typical page, 52 MB peak on a script-heavy Wikipedia article** (measured 2026-10-11, before the WebRTC and WebAssembly work; an empty daemon is 3.4 MB resident today; not yet re-measured per page) |
 | CPU | 2 to 4 cores wanted | **1 core** |
-| Agent interface | CDP + language bindings | **MCP native**, plus a framed JSON-RPC socket and a Node SDK |
+| Agent interface | CDP + language bindings | **MCP native**, plus a session CLI, Node and Python SDKs over a framed JSON-RPC socket |
 | Page view for the model | DOM dumps or custom snapshots | **Playwright-format accessibility tree** with small `[ref=eN]` handles |
 | JavaScript | V8 | **QuickJS (ES2023)** via [modernc.org/quickjs](https://pkg.go.dev/modernc.org/quickjs), pure Go, no CGO |
 | Pixels, WebGL, media | Yes | **Yes**, pure Go: CSS layout within 1 px of Chromium on 99.5% of boxes, software WebGL 1/2, Canvas 2D, media and Web Audio |
@@ -251,19 +251,35 @@ go build -o sweef ./cmd/sweef          # pure Go; cross-compiles with GOOS/GOARC
 
 Every verb agent-browser has for driving a page, at a fraction of the latency: `open`, `snapshot [-i] [-c] [-d n] [-s sel] [--delta]`, `click`, `dblclick`, `fill`, `type`, `press`, `hover`, `focus`, `check`, `uncheck`, `select`, `scroll`, `drag`, `get text|html|value|attr|title|url|count|box`, `is visible|enabled|checked`, `wait <sel|ms> | --text | --url | --fn | --load`, `eval`, `console`, `network`, `back`, `forward`, `reload`, `tab`, `screenshot [--full]`, `pdf [path]`, `downloads`, `download <url>`, `route <glob> --json v | --abort | --continue …`, `unroute`, `bind <name> [reply]`, `bindings`, `batch`, `find role|text|label|placeholder|alt|testid … click|fill|text`, `set viewport|offline|headers|media|geo|ua`, `cookies`, `storage`, `state save|load`, `dialog`, `close`. Refs are accepted as `@e3`, `e3` or `ref=e3`. `--session <name>` isolates sessions, `--json` gives machine output. The daemon exits after an hour idle (`SWEEF_IDLE_TIMEOUT`).
 
-MCP configuration for any MCP host:
+MCP configuration for any MCP host (Claude Code: `claude mcp add sweef -- /usr/local/bin/sweef mcp`):
 
 ```json
 { "mcpServers": { "sweef": { "command": "/usr/local/bin/sweef", "args": ["mcp"] } } }
 ```
 
+SDKs (`sweef` binary on PATH or in `SWEEF_BIN`):
+
+```js
+const { Sweef } = require('@sweef/browser');           // npm install @sweef/browser
+const sw = await Sweef.launch(); const page = await sw.newPage('https://example.com');
+console.log(await page.snapshot({ interactiveOnly: true })); await sw.close();
+```
+
+```python
+from sweef import Sweef                                 # pip install sweef-browser
+with Sweef.launch() as sw:
+    print(sw.new_page("https://example.com").snapshot(interactive_only=True))
+```
+
+Setup for each MCP host, what the tools return, the SDK and CLI references and the RPC method list: [docs/sdk-mcp.md](docs/sdk-mcp.md). Measured against `@playwright/mcp`, `playwright-core` and `agent-browser` on each surface: [bench/surfaces](bench/surfaces/README.md).
+
 ### The agent loop
 
 ```text
 1. browser_navigate      {url}                       → title, final URL
-2. browser_aria_snapshot {}                          → YAML tree, controls carry [ref=eN]
-3. browser_click         {selector: "e12"}           → acts on exactly that element
-4. browser_aria_snapshot {interactiveOnly: true}     → re-read, cheaply
+2. browser_snapshot {}                              → YAML tree, controls carry [ref=eN]
+3. browser_click         {selector: "e12"}           → acts on exactly that element; the reply lists what changed
+4. browser_snapshot      {delta: true}               → only the lines changed since step 2
 ```
 
 A snapshot of the GitHub login page looks like this:
