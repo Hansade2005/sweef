@@ -1,0 +1,188 @@
+{
+ "when": "2026-10-15T19:12:21.092Z",
+ "network": "bench/replay (local recording)",
+ "runs": 5,
+ "sweef": "sweef 0.1.0",
+ "rows": [
+  {
+   "id": "gh-repo",
+   "url": "https://github.com/golang/go",
+   "sweef": {
+    "passed": 5,
+    "runs": 5,
+    "median": 7700.958943999998,
+    "min": 7661.131418999999,
+    "max": 8027.210152
+   },
+   "chromium": {
+    "passed": 5,
+    "runs": 5,
+    "median": 1172.0352449999991,
+    "min": 1095.1278119999988,
+    "max": 1348.8130610000007
+   }
+  },
+  {
+   "id": "gh-issue",
+   "url": "https://github.com/golang/go/issues/9",
+   "sweef": {
+    "passed": 5,
+    "runs": 5,
+    "median": 7494.832945000002,
+    "min": 6931.297759000008,
+    "max": 7920.761742000002
+   },
+   "chromium": {
+    "passed": 5,
+    "runs": 5,
+    "median": 1571.287909999999,
+    "min": 1512.2463879999996,
+    "max": 1729.2590439999985
+   }
+  },
+  {
+   "id": "wiki",
+   "url": "https://en.wikipedia.org/wiki/Go_(programming_language)",
+   "sweef": {
+    "passed": 5,
+    "runs": 5,
+    "median": 2067.70762500001,
+    "min": 1964.4069929999969,
+    "max": 2256.5474289999984
+   },
+   "chromium": {
+    "passed": 5,
+    "runs": 5,
+    "median": 1103.0814170000085,
+    "min": 956.061514999994,
+    "max": 1200.280178999994
+   }
+  },
+  {
+   "id": "mdn",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map",
+   "sweef": {
+    "passed": 5,
+    "runs": 5,
+    "median": 2812.0667609999946,
+    "min": 2754.5062759999855,
+    "max": 2930.50817500001
+   },
+   "chromium": {
+    "passed": 5,
+    "runs": 5,
+    "median": 844.8520209999988,
+    "min": 779.9890390000073,
+    "max": 901.2789340000018
+   }
+  },
+  {
+   "id": "nextjs",
+   "url": "https://nextjs.org/docs",
+   "sweef": {
+    "passed": 5,
+    "runs": 5,
+    "median": 5408.668329999986,
+    "min": 4697.506737999996,
+    "max": 7050.606724999991
+   },
+   "chromium": {
+    "passed": 5,
+    "runs": 5,
+    "median": 701.0371169999999,
+    "min": 609.5319929999823,
+    "max": 751.151045000006
+   }
+  },
+  {
+   "id": "pipilot",
+   "url": "https://www.pipilot.dev/",
+   "sweef": {
+    "passed": 5,
+    "runs": 5,
+    "median": 3252.8728709999996,
+    "min": 3176.364048999996,
+    "max": 3538.071469000017
+   },
+   "chromium": {
+    "passed": 5,
+    "runs": 5,
+    "median": 1149.1090320000076,
+    "min": 1066.4874199999904,
+    "max": 1259.447632000025
+   }
+  },
+  {
+   "id": "t3a",
+   "url": "https://the3rdacademy.com/",
+   "sweef": {
+    "passed": 5,
+    "runs": 5,
+    "median": 4038.419475999981,
+    "min": 3868.6637850000116,
+    "max": 4165.777925999981
+   },
+   "chromium": {
+    "passed": 5,
+    "runs": 5,
+    "median": 985.5109820000071,
+    "min": 955.2381319999986,
+    "max": 1082.0485829999961
+   }
+  },
+  {
+   "id": "react",
+   "url": "https://react.dev/learn",
+   "sweef": {
+    "passed": 5,
+    "runs": 5,
+    "median": 1629.8279579999798,
+    "min": 1578.4764319999958,
+    "max": 1706.7847220000112
+   },
+   "chromium": {
+    "passed": 5,
+    "runs": 5,
+    "median": 1722.651887999993,
+    "min": 1657.975001999992,
+    "max": 1743.7031169999973
+   }
+  },
+  {
+   "id": "pypi",
+   "url": "https://pypi.org/project/requests/",
+   "sweef": {
+    "passed": 5,
+    "runs": 5,
+    "median": 3641.741976999998,
+    "min": 3470.7858159999887,
+    "max": 3751.6729599999962
+   },
+   "chromium": {
+    "passed": 5,
+    "runs": 5,
+    "median": 956.8224120000086,
+    "min": 922.8606320000254,
+    "max": 1263.1311509999796
+   }
+  },
+  {
+   "id": "hn",
+   "url": "https://news.ycombinator.com/",
+   "sweef": {
+    "passed": 5,
+    "runs": 5,
+    "median": 262.4147980000125,
+    "min": 240.16160399996443,
+    "max": 304.4200949999795
+   },
+   "chromium": {
+    "passed": 5,
+    "runs": 5,
+    "median": 431.1973580000049,
+    "min": 398.20389300002716,
+    "max": 457.0698389999452
+   }
+  }
+ ]
+}

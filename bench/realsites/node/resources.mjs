@@ -13,11 +13,11 @@ import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 import { CHROMIUM, sleep, rmTree } from './lib.mjs';
 
-const opt = { sweef: 'sweef', runs: 3, out: '', idleMs: 5000, only: '', replay: '', ca: '' };
+const opt = { sweef: 'sweef', runs: 3, out: '', idleMs: 5000, only: '', replay: '', ca: '', tools: 'chromium,sweef' };
 for (let i = 2; i < process.argv.length; i++) {
   const a = process.argv[i], nx = () => process.argv[++i];
   if (a === '--sweef') opt.sweef = nx(); else if (a === '--runs') opt.runs = +nx(); else if (a === '--out') opt.out = nx();
-  else if (a === '--only') opt.only = nx(); else if (a === '--replay') opt.replay = nx(); else if (a === '--ca') opt.ca = nx();
+  else if (a === '--only') opt.only = nx(); else if (a === '--tools') opt.tools = nx(); else if (a === '--replay') opt.replay = nx(); else if (a === '--ca') opt.ca = nx();
 }
 const TICK = 100 / 1000 * 0 + (spawnSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).stdout.trim() | 0 || 100);
 const SITES = [
@@ -106,7 +106,7 @@ async function runSweef(site) {
 const med = (a) => { const b = a.filter((x) => x != null).sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : null; };
 const rows = [];
 for (const site of SITES) {
-  for (const tool of ['chromium', 'sweef']) {
+  for (const tool of opt.tools.split(',')) {
     const runs = [];
     for (let i = 0; i < opt.runs; i++) { runs.push(tool === 'sweef' ? await runSweef(site) : await runChromium(site)); await sleep(1000); }
     const m = {}; for (const k of Object.keys(runs[0])) if (typeof runs[0][k] === 'number') m[k] = med(runs.map((x) => x[k]));
