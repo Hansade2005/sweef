@@ -2297,13 +2297,16 @@
     } catch (e) { reportError(e); }
     runningTimer = null;
   }
-  function runTimers(now, withBg) {
+  function runTimers(now, withBg, budget) {
     now = +now; if (!(now >= 0)) now = nowMs(); if (now > lastNow) lastNow = now;
+    // budget (ms, 0 = none): stop starting timers once it is spent; the rest stay due for the next pump
+    var t0 = Date.now(); budget = +budget || 0;
     // Only timers that were pending when this pass started run now; timers armed
     // by callbacks (and re-armed intervals) wait for the next pump so microtasks
     // get flushed between macrotasks, as in a browser event loop.
     var startSeq = timerSeq;
     while (timers.length && timers[0].when <= now && timers[0].seq <= startSeq) {
+      if (budget > 0 && Date.now() - t0 >= budget) return 0;
       var t = timers.shift();
       runTimer(t);
       if (t.interval >= 0 && !t.cancelled) {
@@ -3878,7 +3881,7 @@
   // true once the page has registered a wheel listener that can cancel (not passive): the host then waits for the page's answer before scrolling
   exportFn('__swWheelNP', function () { return wheelNP; });
   exportFn('__swSetValueFromGo', function (id, value) { try { return setValueFromGo(id, value); } catch (e) { reportError(e); return false; } });
-  exportFn('__swRunTimers', function (now, withBg) { try { return runTimers(now, !!withBg); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
+  exportFn('__swRunTimers', function (now, withBg, budget) { try { return runTimers(now, !!withBg, budget); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
   exportFn('__swFlushMutationObservers', function () { try { flushMutationObservers(); } catch (e) { reportError(e); } return pendingObservers.length; });
   exportFn('__swSetHidden', function (h, quiet) { h = !!h; if (h === pageHidden) return false; pageHidden = h; if (!quiet) { try { fire(documentWrapper, 'visibilitychange', { bubbles: true }); } catch (e) { reportError(e); } } return true; });
   exportFn('__swFireLifecycle', function (name) { try { return fireLifecycle(name); } catch (e) { reportError(e); return true; } });

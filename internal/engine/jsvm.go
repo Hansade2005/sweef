@@ -13,6 +13,7 @@ package engine
 // the VM (see Tab.SetDocument and actions.go, which release it first).
 
 import (
+	"math"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/base64"
@@ -730,7 +731,13 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 			// A background tab under the Data Saver runs no timers (no polling, no
 			// animation frames) and no workers; promise jobs and results already
 			// delivered still flow, so an explicit evaluate does not hang.
-			next = j.runTimers()
+			// a batch of due timers stops at the deadline: on a page whose animation frames each force a
+			// layout, one batch could otherwise run for many seconds past the settle budget
+			var budget float64
+			if !deadline.IsZero() {
+				budget = math.Max(1, float64(time.Until(deadline))/float64(time.Millisecond))
+			}
+			next = j.runTimers(budget)
 		}
 		if j.drainAsync() {
 			delivered = true
@@ -878,8 +885,8 @@ func (t *Tab) settle(d time.Duration) {
 	}
 }
 
-func (j *jsVM) runTimers() float64 {
-	r, err := j.call("__swRunTimers", j.nowMs(), j.holdBG.Load())
+func (j *jsVM) runTimers(budgetMs float64) float64 {
+	r, err := j.call("__swRunTimers", j.nowMs(), j.holdBG.Load(), budgetMs)
 	if err != nil {
 		j.tab.LogConsole("error", jsErrorText(err, "timers"))
 		return -1
