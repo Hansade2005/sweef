@@ -526,16 +526,85 @@ func (p *cssParser) parseRules(s string) {
 }
 
 func (p *cssParser) addRule(prelude, body string) {
-	decls := parseDeclarations(body)
-	if len(decls) == 0 {
-		return
-	}
 	prelude = strings.Map(func(r rune) rune {
 		if r == '\r' || r == '\f' {
 			return ' '
 		}
 		return r
 	}, prelude)
+	p.addDecls(prelude, body)
+	if strings.IndexByte(body, '{') >= 0 {
+		p.addNested(prelude, body)
+	}
+}
+
+// addNested adds the rules nested in a style rule's body (CSS nesting): `@media Q { decls }` applies the
+// declarations to the parent selector when Q matches (Tailwind v4 writes every responsive variant this way:
+// `.lg\:block { @media (width >= 64rem) { display: block } }`), and `&:hover { }` / `.child { }` are rules
+// relative to the parent.
+func (p *cssParser) addNested(parent, body string) {
+	i := 0
+	for i < len(body) {
+		i = skipCSSWS(body, i)
+		if i >= len(body) {
+			return
+		}
+		text, end, term := readPrelude(body, i)
+		if term != '{' {
+			i = end
+			if term == '}' {
+				i++
+			}
+			continue
+		}
+		inner, after := readBlock(body, end)
+		i = after
+		if strings.HasPrefix(text, "@") {
+			j := 1
+			for j < len(text) && isNameChar(text[j]) {
+				j++
+			}
+			switch strings.ToLower(text[1:j]) {
+			case "media":
+				if evalMediaQuery(text[j:], p.vw, p.scheme) {
+					p.addRule(parent, inner)
+				}
+			case "layer", "scope", "starting-style":
+				p.addRule(parent, inner)
+			}
+			continue
+		}
+		p.addRule(nestSelector(parent, text), inner)
+	}
+}
+
+// nestSelector resolves a nested selector against its parent: `&` is the parent, and a selector without `&` is
+// a descendant of it.
+func nestSelector(parent, sel string) string {
+	par := strings.TrimSpace(parent)
+	if len(splitTopLevel(par, ',')) > 1 {
+		par = ":is(" + par + ")"
+	}
+	var out []string
+	for _, s := range splitTopLevel(sel, ',') {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if strings.Contains(s, "&") {
+			out = append(out, strings.ReplaceAll(s, "&", par))
+		} else {
+			out = append(out, par+" "+s)
+		}
+	}
+	return strings.Join(out, ", ")
+}
+
+func (p *cssParser) addDecls(prelude, body string) {
+	decls := parseDeclarations(body)
+	if len(decls) == 0 {
+		return
+	}
 	g, err := compileSelector(prelude)
 	if err != nil {
 		return
@@ -588,6 +657,9 @@ func readPrelude(s string, i int) (string, int, byte) {
 	depth := 0
 	for i < len(s) {
 		switch s[i] {
+		case '\\': // an escape (`.content-\[\'x\'\]`) is never a quote or a bracket
+			i += 2
+			continue
 		case '"', '\'':
 			i = skipString(s, i)
 			continue
@@ -622,6 +694,9 @@ func readBlock(s string, i int) (string, int) {
 	depth := 1
 	for i < len(s) {
 		switch s[i] {
+		case '\\':
+			i += 2
+			continue
 		case '"', '\'':
 			i = skipString(s, i)
 			continue
@@ -649,6 +724,9 @@ func stripCSSComments(s string) string {
 	for i < len(s) {
 		c := s[i]
 		switch {
+		case c == '\\' && i+1 < len(s):
+			b.WriteString(s[i : i+2])
+			i += 2
 		case c == '"' || c == '\'':
 			j := skipString(s, i)
 			b.WriteString(s[i:j])
