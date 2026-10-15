@@ -1289,7 +1289,7 @@
       rafId = 0;
       if (anim.playState !== 'running') return;
       var t = local();
-      if (isFinite(iters) && t >= endTime()) { finishNow(); return; }
+      if (isFinite(iters) && t >= endTime()) { apply(progressAt(endTime()) == null ? 1 : progressAt(endTime())); global.setTimeout(finishNow, 0); return; } // the finish event is a task after the frame, as in a browser
       var p = progressAt(t);
       if (p == null) { if (holdsBefore()) apply(progressAt(delay) || 0); } else apply(p);
       rafId = global.requestAnimationFrame(tick);
