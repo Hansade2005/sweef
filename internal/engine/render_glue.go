@@ -177,7 +177,25 @@ func (e *tabEnv) prefetchDocImagesEarly() {
 		go func(u string) {
 			t.imgSem <- struct{}{} // not preloadSem: the page's scripts and modules come first
 			defer func() { <-t.imgSem }()
-			_, _, _ = t.fetchRes(u, fetchOpts{kind: KindImage, prefetch: true})
+			body, status, err := t.fetchRes(u, fetchOpts{kind: KindImage, prefetch: true})
+			if err != nil || status >= 400 {
+				return // the layout's own read decides (and records) what a failure means
+			}
+			// decoded here, as a browser's image is complete once its bytes are in: a geometry read from the
+			// page's script (naturalWidth, offsetHeight) then sees it instead of starting a background load
+			im, _, _ := image.Decode(strings.NewReader(body))
+			markup := ""
+			if im == nil && strings.Contains(strings.ToLower(body), "<svg") {
+				markup = body
+			}
+			e.mu.Lock()
+			if _, ok := e.imgs[u]; !ok {
+				e.imgs[u] = im
+				if markup != "" {
+					e.svgs[u] = markup
+				}
+			}
+			e.mu.Unlock()
 		}(u)
 	})
 }
