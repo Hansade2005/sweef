@@ -336,6 +336,9 @@ func (p *Persist) compute(e *Engine, n *html.Node, parent *Computed, pseudo stri
 		ent.epoch = p.epoch
 		p.visited++
 		p.Hits++
+		if ent.dep {
+			e.cqLogOff = true // its container conditions were evaluated in an earlier pass, not logged in this one
+		}
 		if pseudo == "" && ent.c != nil && ent.c.ContainerType != "" {
 			e.noteContainer(n, ent.c) // containers are registered anew every pass (computeNoCache does it on a miss)
 		}
@@ -346,6 +349,9 @@ func (p *Persist) compute(e *Engine, n *html.Node, parent *Computed, pseudo stri
 	e.cqUsed, e.depTried = false, false
 	c := e.computeNoCache(n, parent, pseudo)
 	dep := e.cqEvals != ev0 || e.cqUsed || e.depTried
+	if e.cqUsed {
+		e.cqPassUnits = true
+	}
 	var sig uint64
 	if dep {
 		sig = p.depSig(e, n, pseudo)

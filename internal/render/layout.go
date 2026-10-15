@@ -80,6 +80,9 @@ func Layout(root *html.Node, o Options) *Result {
 		p, obs, has := layoutPass(root, o, used, cv)
 		if has {
 			for pass := 0; pass < 5 && !sameContSizes(used, obs); pass++ {
+				if p.c != nil && p.c.eng != nil && p.c.eng.ContainerResultsStable(obs) {
+					break // the next pass would compute the same styles at these sizes
+				}
 				used = obs
 				p.release()
 				p, obs, _ = layoutPass(root, o, used, cv)
@@ -226,7 +229,7 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 	c.layoutRoot(rb)
 	tk.lap("layout")
 	p := &pendingPass{c: c, rb: rb, tk: tk}
-	if !c.eng.HasContainerQueries() {
+	if !c.eng.HasContainerQueries() && !c.eng.UsedContainerUnits() {
 		return p, nil, false
 	}
 	obs := map[*html.Node]style.ContSize{}

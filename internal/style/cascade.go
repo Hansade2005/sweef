@@ -56,6 +56,10 @@ type Engine struct {
 	anc  map[*html.Node]snet.Bloom
 	ancN *html.Node
 	ancB snet.Bloom
+	// container conditions evaluated this pass (ContainerResultsStable); cqLogOff: the log is incomplete
+	cqLog       []cqRec
+	cqLogOff    bool
+	cqPassUnits bool // a container unit was resolved this pass
 }
 
 // BeginPass starts a style pass over a document that does not change until the next BeginPass: matching may
@@ -63,6 +67,7 @@ type Engine struct {
 func (e *Engine) BeginPass() {
 	e.anc = map[*html.Node]snet.Bloom{}
 	e.ancN = nil
+	e.cqLog, e.cqLogOff, e.cqPassUnits = nil, false, false
 }
 
 // ancBloom returns the union of NodeBloom over n's element ancestors.
