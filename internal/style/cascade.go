@@ -41,6 +41,9 @@ type Engine struct {
 	contSize   map[*html.Node]ContSize
 	conts      map[*html.Node]*contInfo
 	hasCQ      bool
+	cqEvals    uint64 // container conditions evaluated so far (Persist: which styles depend on container sizes)
+	cqUsed     bool   // a cq* unit was resolved since Persist last cleared it
+	depTried   bool   // collect tried a :has() entry since Persist last cleared it
 	curCont    *html.Node
 	persist    *Persist     // cross-pass style cache (persist.go); nil: none
 	web        *font.WebSet // the document's web fonts: declared families get scoped names (webfonts.go)
@@ -281,6 +284,9 @@ func (e *Engine) collect(n *html.Node, pseudo string) []*Entry {
 		for _, en := range list {
 			if en.Pseudo != pseudo {
 				continue
+			}
+			if en.dynamic {
+				e.depTried = true
 			}
 			if e.entryMatches(n, en, pseudo) {
 				out = append(out, en)
@@ -576,6 +582,7 @@ func (e *Engine) computeFrom(decls []Decl, parent *Computed, pseudo string) *Com
 	s := &cstate{c: c, p: parent, env: e.env, eng: e}
 	s.uc = unitCtx{em: parent.FontSize, rem: e.RootFont, vw: e.env.Width, vh: e.env.Height}
 	s.uc.containerW, s.uc.cqH = e.env.Width, e.env.Height
+	s.uc.cqUsed = &e.cqUsed
 	if e.curCont != nil {
 		sz := e.contSize[e.curCont]
 		s.uc.containerW, s.uc.cqH = sz.W, sz.H

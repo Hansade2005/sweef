@@ -500,6 +500,7 @@ func (cc *ContCond) needsBlock() bool {
 // pseudo-element, n is the originating element and the query may also
 // target n itself).
 func (e *Engine) contMatches(n *html.Node, cc *ContCond, pseudo string) bool {
+	e.cqEvals++
 	for ; cc != nil; cc = cc.Outer {
 		start := n
 		if pseudo != "" {

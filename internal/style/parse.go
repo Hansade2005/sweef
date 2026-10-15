@@ -35,6 +35,9 @@ type Entry struct {
 	Pseudo string // "", before, after, marker, first-line, first-letter, placeholder, ...
 	Rule   *Rule
 	key    string // bucket key (for debugging)
+	// dynamic: the selector uses :has(), so whether it matches depends on the element's descendants (or later
+	// siblings), which a cached style does not observe (persist.go)
+	dynamic bool
 }
 
 // Rule is a style rule with its declarations.
@@ -557,7 +560,7 @@ func (p *parser) addRule(selText string, decls []Decl) {
 			continue
 		}
 		for _, e := range cs.Entries() {
-			r.Entries = append(r.Entries, &Entry{Sel: e, Spec: e.Spec, Pseudo: pseudo, Rule: r, key: base})
+			r.Entries = append(r.Entries, &Entry{Sel: e, Spec: e.Spec, Pseudo: pseudo, Rule: r, key: base, dynamic: e.Features().Has})
 		}
 	}
 	if len(r.Entries) == 0 {
