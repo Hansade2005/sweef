@@ -32,11 +32,12 @@ type hitRec struct {
 }
 
 type painter struct {
-	c     *ctx
-	ops   []Op
-	clips []clipRec
-	m     [6]float64
-	hasM  bool
+	fixedDepth int // inside a position:fixed box (Result.FixedRanges)
+	c          *ctx
+	ops        []Op
+	clips      []clipRec
+	m          [6]float64
+	hasM       bool
 	// hp is the projective map (3x3, row-major) from the current local space to
 	// the page while inside a 3D layer; hasHP is false outside of one
 	hp    [9]float64
@@ -192,6 +193,16 @@ func (p *painter) addHit(b *lbox, rects ...Rect) {
 // paintSC paints a stacking context rooted at b.
 func (p *painter) paintSC(b *lbox, isRoot bool) {
 	st := b.st
+	if st.Position == "fixed" && p.fixedDepth == 0 {
+		p.fixedDepth++
+		start := len(p.ops)
+		defer func() {
+			p.fixedDepth--
+			if len(p.ops) > start {
+				p.c.res.FixedRanges = append(p.c.res.FixedRanges, [2]int{start, len(p.ops)})
+			}
+		}()
+	}
 	// clips from the containing-block chain
 	var chain []*lbox
 	if !isRoot {

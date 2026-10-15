@@ -516,6 +516,9 @@ func (t *Tab) paintPage(width, height int, dsf float64, full bool) (*image.RGBA,
 		}
 		list = kept
 	}
+	if !full {
+		list = scrolledList(list, ext.res.FixedRanges, float64(t.ScrollY()))
+	}
 	t.setPaintDSF(dsf)
 	return raster.Paint(list, width, height, dsf, raster.PaintEnv{
 		Bitmap:     ext.env.Bitmap,
@@ -533,3 +536,28 @@ var (
 	layoutCheck  = os.Getenv("SWEEF_LAYOUT_CHECK") != ""
 	noStyleCache = os.Getenv("SWEEF_NO_STYLE_CACHE") != ""
 )
+
+// scrolledList is the display list of the viewport scrolled down by y: everything moves up by y except the
+// ranges painted by position:fixed boxes, which the viewport keeps in place (a viewport screenshot of a
+// scrolled page showed the top of the page instead).
+func scrolledList(list []render.Op, fixed [][2]int, y float64) []render.Op {
+	if y <= 0 || len(list) == 0 {
+		return list
+	}
+	out := make([]render.Op, 0, len(list)+2+2*len(fixed))
+	out = append(out, render.PushTransform{M: [6]float64{1, 0, 0, 1, 0, -y}})
+	fi := 0
+	for i, op := range list {
+		for fi < len(fixed) && fixed[fi][1] <= i {
+			fi++
+		}
+		if fi < len(fixed) && fixed[fi][0] == i {
+			out = append(out, render.PushTransform{M: [6]float64{1, 0, 0, 1, 0, y}})
+		}
+		out = append(out, op)
+		if fi < len(fixed) && fixed[fi][1] == i+1 {
+			out = append(out, render.PopTransform{})
+		}
+	}
+	return append(out, render.PopTransform{})
+}

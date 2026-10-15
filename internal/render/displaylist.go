@@ -252,6 +252,10 @@ type Result struct {
 	Viewport      Rect
 	Boxes         map[*html.Node]*Box
 	List          []Op
+	// FixedRanges are the [start, end) ranges of List painted by position:fixed boxes (outermost only, in
+	// order): a screenshot of the page scrolled by y draws List moved up by y except these, which stay where
+	// the viewport has them.
+	FixedRanges [][2]int
 	// Text records every run of text that was painted, in paint order (see TextBox).
 	Text []TextBox
 	// Hit returns the topmost element at a document point, honoring paint
