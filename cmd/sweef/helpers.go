@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"time"
 
@@ -23,6 +24,7 @@ func addCommonFlags(fs *flag.FlagSet) {
 	fs.Int("settle-ms", opts.SettleMs, "JavaScript event-loop budget after load and after each action")
 	fs.Int("js-mem-mib", opts.JSMemoryMiB, "QuickJS heap cap per tab")
 	fs.Int("js-timeout-ms", opts.JSTimeoutMs, "single script evaluation timeout")
+	fs.Bool("allow-trackers", false, "load third-party ad, analytics and tracking requests (blocked by default for agents)")
 }
 
 // engineOptsFrom builds Options from the common flags registered by
@@ -40,6 +42,11 @@ func engineOptsFrom(fs *flag.FlagSet) engine.Options {
 	}
 	if f := fs.Lookup("user-agent"); f != nil {
 		opts.DefaultUserAgent = f.Value.String()
+	}
+	// agent-facing entry points block known trackers unless asked not to (engine trackers.go)
+	opts.BlockTrackers = os.Getenv("SWEEF_ALLOW_TRACKERS") == ""
+	if f := fs.Lookup("allow-trackers"); f != nil && f.Value.String() == "true" {
+		opts.BlockTrackers = false
 	}
 	for name, dst := range map[string]*int{"settle-ms": &opts.SettleMs, "js-mem-mib": &opts.JSMemoryMiB, "js-timeout-ms": &opts.JSTimeoutMs} {
 		if f := fs.Lookup(name); f != nil {

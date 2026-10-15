@@ -33,6 +33,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	verbose := fs.Bool("v", false, "print status events and debug lines")
 	thoughts := fs.Bool("thoughts", false, "request and print thought summaries")
 	noThink := fs.Bool("no-thinking", false, "disable thinking (valid at effort <= high)")
+	allowTrackers := fs.Bool("allow-trackers", false, "load third-party ad, analytics and tracking requests (blocked by default)")
 	jsonOut := fs.Bool("json", false, "machine-readable: print only one JSON object {answer,text,stop,stats} on stdout (for benchmarks)")
 	baseURL := fs.String("base-url", "", "API base URL (default $ANTHROPIC_BASE_URL or https://api.anthropic.com)")
 	fs.Usage = func() {
@@ -71,7 +72,9 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 		cfg.Logf = func(f string, a ...any) { fmt.Fprintf(out, "[debug] "+f+"\n", a...) }
 	}
 
-	eng := engine.New(engine.DefaultOptions())
+	eo := engine.DefaultOptions()
+	eo.BlockTrackers = !*allowTrackers && os.Getenv("SWEEF_ALLOW_TRACKERS") == "" // see engine/trackers.go
+	eng := engine.New(eo)
 	defer eng.Close()
 	be := NewRPCBackend(eng)
 	inR := bufio.NewReader(in)

@@ -399,7 +399,11 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		return &fetchResult{body: string(data), finalURL: u.String(), status: 200}, nil
 	}
 	t.swPrepareNavigation(u.String())
-	synth, method, target, hdrs, _, err := t.routedRequest("GET", u.String(), headers, "")
+	route := t.routedRequestNoBlock // the top-level document is never blocked; a frame's is a subresource
+	if t.isFrame() {
+		route = t.routedRequest
+	}
+	synth, method, target, hdrs, _, err := route("GET", u.String(), headers, "")
 	if err != nil {
 		t.dev.begin(t.documentKind(), "GET", u.String(), headers, "").fail(err.Error())
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": u.String(), "error": err.Error()}})
@@ -880,7 +884,7 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 		form.Set(k, v)
 	}
 	encoded := form.Encode()
-	synth, method, target, hdrs, newBody, err := t.routedRequest("POST", rawurl, nil, encoded)
+	synth, method, target, hdrs, newBody, err := t.routedRequestNoBlock("POST", rawurl, nil, encoded)
 	if err != nil {
 		return err
 	}

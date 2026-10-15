@@ -181,6 +181,14 @@ var errRouteAbort = errors.New("net::ERR_FAILED (aborted by route)")
 // synthetic response for fulfill, errRouteAbort for abort, or the (possibly
 // rewritten) request parameters for continue / no match.
 func (t *Tab) routedRequest(method, rawurl string, headers map[string]string, body string) (resp *http.Response, outMethod, outURL string, outHeaders map[string]string, outBody string, err error) {
+	if t.trackerBlocked(rawurl) {
+		return nil, "", "", nil, "", errTrackerBlocked
+	}
+	return t.routedRequestNoBlock(method, rawurl, headers, body)
+}
+
+// routedRequestNoBlock is routedRequest without the tracker blocker (the top-level document is never blocked).
+func (t *Tab) routedRequestNoBlock(method, rawurl string, headers map[string]string, body string) (resp *http.Response, outMethod, outURL string, outHeaders map[string]string, outBody string, err error) {
 	outMethod, outURL, outHeaders, outBody = method, rawurl, headers, body
 	t.recordRequestBody(method, rawurl, body)
 	rt := t // a frame's requests are routed by the page it is in
