@@ -3,7 +3,6 @@ package render
 import (
 	"container/list"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -107,11 +106,33 @@ func splitFilterTokens(v string) []string {
 
 // svgFilterRefs rewrites st when the element's filter list references SVG
 // filters.
-// filterURLDeclRE finds a filter declaration whose value holds a url(...) reference: only such a sheet can give
-// an HTML element an SVG filter reference. The words "url(" and "filter" both appear in most real sheets
-// (background images, the filter property for something else), and every element of the page then paid a
-// second cascade for nothing (a quarter of the layout time on a large Wikipedia article).
-var filterURLDeclRE = regexp.MustCompile(`(?i)filter\s*:[^;{}]*url\(`)
+// hasFilterURLDecl reports whether css holds a filter declaration whose value has a url(...) reference: only such
+// a sheet can give an HTML element an SVG filter reference. The words "url(" and "filter" both appear in most
+// real sheets (background images, the filter property for something else), and every element of the page then
+// paid a second cascade for nothing (a quarter of the layout time on a large Wikipedia article). A plain scan:
+// a regular expression over a multi-megabyte sheet on every layout cost more than it saved.
+func hasFilterURLDecl(css string) bool {
+	for i := 0; ; {
+		k := strings.Index(css[i:], "filter")
+		if k < 0 {
+			return false
+		}
+		j := i + k + len("filter")
+		for j < len(css) && (css[j] == ' ' || css[j] == '\t' || css[j] == '\n' || css[j] == '\r') {
+			j++
+		}
+		if j < len(css) && css[j] == ':' {
+			end := strings.IndexAny(css[j:], ";{}")
+			if end < 0 {
+				end = len(css) - j
+			}
+			if strings.Contains(css[j:j+end], "url(") {
+				return true
+			}
+		}
+		i = j
+	}
+}
 
 func (c *ctx) svgFilterRefs(n *html.Node, st *style.Computed) *style.Computed {
 	if n.Namespace == "svg" {
@@ -121,7 +142,7 @@ func (c *ctx) svgFilterRefs(n *html.Node, st *style.Computed) *style.Computed {
 	if c.urlFilterHint == 0 {
 		c.urlFilterHint = 2
 		for _, s := range c.opts.Sheets {
-			if !s.UserAgent && strings.Contains(s.Text, "url(") && filterURLDeclRE.MatchString(s.Text) {
+			if !s.UserAgent && hasFilterURLDecl(s.Text) {
 				c.urlFilterHint = 1
 				break
 			}

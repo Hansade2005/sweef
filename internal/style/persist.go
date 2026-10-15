@@ -362,14 +362,13 @@ func (p *Persist) compute(e *Engine, n *html.Node, parent *Computed, pseudo stri
 	return c
 }
 
-// depSig fingerprints what a dep entry's style was computed from beyond the keys: the rules that match n now
-// (the matcher evaluates :has() and the container conditions against the current tree and sizes) and the
-// sizes of the query containers its cq units resolve against.
+// depSig fingerprints what a dep entry's style was computed from beyond the keys: which of the :has() and
+// container-conditioned rules match n now (evaluated against the current tree and sizes) and the size of the
+// query container its cq units resolve against.
 func (p *Persist) depSig(e *Engine, n *html.Node, pseudo string) uint64 {
+	// the other entries' matches are fixed by the keys (own, anc, parent), so only these can differ
 	h := uint64(fnvOff)
-	for _, en := range e.collect(n, pseudo) {
-		h = hashMix(h, uint64(uintptr(unsafe.Pointer(en))))
-	}
+	e.collectDyn(n, pseudo, func(en *Entry) { h = hashMix(h, uint64(uintptr(unsafe.Pointer(en)))) })
 	if len(e.conts) > 0 {
 		an, _ := e.nearestContainer(n, "", false)
 		if pseudo != "" {

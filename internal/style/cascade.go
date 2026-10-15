@@ -278,6 +278,37 @@ func (e *Engine) entryMatches(n *html.Node, en *Entry, pseudo string) bool {
 	return en.Rule.Cont == nil || e.contMatches(n, en.Rule.Cont, pseudo)
 }
 
+// collectDyn is collect restricted to the entries whose match the style cache's keys do not determine (:has()
+// selectors, container conditions); see Persist.depSig.
+func (e *Engine) collectDyn(n *html.Node, pseudo string, visit func(*Entry)) {
+	try := func(list []*Entry) {
+		for _, en := range list {
+			if en.Pseudo != pseudo || !(en.dynamic || en.Rule.Cont != nil) {
+				continue
+			}
+			if e.entryMatches(n, en, pseudo) {
+				visit(en)
+			}
+		}
+	}
+	if id, ok := attrOf(n, "id"); ok && id != "" {
+		if e.Quirks {
+			id = strings.ToLower(id)
+		}
+		try(e.byID[id])
+	}
+	if cl, ok := attrOf(n, "class"); ok && cl != "" {
+		for _, c := range strings.Fields(cl) {
+			if e.Quirks {
+				c = strings.ToLower(c)
+			}
+			try(e.byClass[c])
+		}
+	}
+	try(e.byTag[n.Data])
+	try(e.univ)
+}
+
 func (e *Engine) collect(n *html.Node, pseudo string) []*Entry {
 	out := e.scratch[:0]
 	try := func(list []*Entry) {
