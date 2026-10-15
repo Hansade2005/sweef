@@ -1,5 +1,5 @@
 {
- "when": "2026-10-15T12:42:59.069Z",
+ "when": "2026-10-15T19:32:33.507Z",
  "settle_ms": 2000,
  "results": [
   {
@@ -65,7 +65,7 @@
     "check": true
    },
    "sweef": {
-    "url": "https://the3rdacademy.com/",
+    "url": "https://the3rdacademy.com/platform",
     "check": true
    },
    "diff": {
@@ -227,7 +227,7 @@
     "check": true
    },
    "sweef": {
-    "url": "https://www.pipilot.dev/",
+    "url": "https://www.pipilot.dev/pricing",
     "check": true
    },
    "diff": {
@@ -266,9 +266,9 @@
      1280,
      800
     ],
-    "diff_pct": 6.46,
-    "mae": 9.95,
-    "ssim": 0.8634
+    "diff_pct": 6.37,
+    "mae": 9.88,
+    "ssim": 0.8653
    },
    "parity": true
   },
