@@ -74,7 +74,7 @@ type Server struct {
 func New(e *engine.Engine, w io.Writer) *Server {
 	s := &Server{eng: e, rpcS: rpc.NewServer(e), w: w, snaps: map[string]*snapState{},
 		AutoDelta: os.Getenv("SWEEF_MCP_AUTO_DELTA") != "0"}
-	s.toolsJSON, _ = marshal(map[string]any{"tools": tools})
+	s.toolsJSON, _ = marshal(map[string]any{"tools": toolList()})
 	return s
 }
 

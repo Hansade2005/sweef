@@ -39,7 +39,7 @@ func errResult(msg string) map[string]any {
 
 // callTool runs one tool and returns the MCP tools/call result.
 func (s *Server) callTool(name string, args map[string]any) map[string]any {
-	td, ok := toolByName[name]
+	td, ok := toolByName()[name]
 	if !ok {
 		return errResult(fmt.Sprintf("unknown tool %q", name))
 	}

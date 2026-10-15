@@ -205,7 +205,7 @@ func TestToolsListSchemas(t *testing.T) {
 		}
 	}
 	// every tool maps onto an RPC method the server knows
-	for _, td := range tools {
+	for _, td := range toolList() {
 		if td.method == "" {
 			continue
 		}

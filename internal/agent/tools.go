@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -92,7 +91,7 @@ type actInput struct {
 	Note    string `json:"note"`
 }
 
-var refPat = regexp.MustCompile(`^e\d+$`)
+var refPat = lazyRE(`^e\d+$`)
 
 func cleanRef(r string) string {
 	r = strings.TrimSpace(r)
@@ -134,7 +133,7 @@ func needRef(s *Step) error {
 	if s.Ref == "" {
 		return fmt.Errorf("ref is required")
 	}
-	if !refPat.MatchString(s.Ref) {
+	if !refPat().MatchString(s.Ref) {
 		return fmt.Errorf("ref %q is not an element ref like e41 (use refs from the snapshot, not selectors)", s.Ref)
 	}
 	return nil

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -251,12 +250,12 @@ type Risk struct {
 }
 
 var (
-	rePayment = regexp.MustCompile(`(?i)\b(place (your |my )?order|pay( now| with| securely)?|buy( it)? now|purchase|complete (the )?(purchase|order|payment|booking)|confirm (the )?(order|payment|purchase|booking)|submit (the )?(order|payment)|subscribe|donate|start (a )?(free )?trial|book now|authori[sz]e payment|pay and)\b`)
-	reMessage = regexp.MustCompile(`(?i)\b(send|post|publish|reply|tweet|share|submit (comment|review|message|reply)|add comment)\b`)
-	reDelete  = regexp.MustCompile(`(?i)\b(delete|erase|destroy|deactivate|permanently|close (my |your )?account|cancel (my |your )?(subscription|membership|account|order)|unsubscribe|clear (all|history|data)|remove (my |your )?account|empty trash)\b`)
-	reCreds   = regexp.MustCompile(`(?i)\b((change|update|reset|set|create|save|add) (a |your |new |the )?(password|passcode|passkey|email address|phone number|2fa|two.factor|security (question|key)|recovery)|api key|revoke)\b`)
-	reCard    = regexp.MustCompile(`(?i)card|cvv|cvc|security code|iban|routing`)
-	reSecret  = regexp.MustCompile(`(?i)password|passcode|\bcvv\b|\bcvc\b|security code|card number|credit card|debit card|\bssn\b|social security|routing number|iban`)
+	rePayment = lazyRE(`(?i)\b(place (your |my )?order|pay( now| with| securely)?|buy( it)? now|purchase|complete (the )?(purchase|order|payment|booking)|confirm (the )?(order|payment|purchase|booking)|submit (the )?(order|payment)|subscribe|donate|start (a )?(free )?trial|book now|authori[sz]e payment|pay and)\b`)
+	reMessage = lazyRE(`(?i)\b(send|post|publish|reply|tweet|share|submit (comment|review|message|reply)|add comment)\b`)
+	reDelete  = lazyRE(`(?i)\b(delete|erase|destroy|deactivate|permanently|close (my |your )?account|cancel (my |your )?(subscription|membership|account|order)|unsubscribe|clear (all|history|data)|remove (my |your )?account|empty trash)\b`)
+	reCreds   = lazyRE(`(?i)\b((change|update|reset|set|create|save|add) (a |your |new |the )?(password|passcode|passkey|email address|phone number|2fa|two.factor|security (question|key)|recovery)|api key|revoke)\b`)
+	reCard    = lazyRE(`(?i)card|cvv|cvc|security code|iban|routing`)
+	reSecret  = lazyRE(`(?i)password|passcode|\bcvv\b|\bcvc\b|security code|card number|credit card|debit card|\bssn\b|social security|routing number|iban`)
 )
 
 var actionRoles = map[string]bool{"button": true, "link": true, "menuitem": true, "menuitemcheckbox": true, "option": true, "tab": true, "switch": true, "": true}
@@ -275,28 +274,28 @@ func classifyStep(s Step, ri refInfo, known bool, cur string) *Risk {
 		}
 		name := ri.Name
 		switch {
-		case rePayment.MatchString(name):
+		case rePayment().MatchString(name):
 			return &Risk{ConfirmPayment, "may submit a payment or order"}
-		case reDelete.MatchString(name):
+		case reDelete().MatchString(name):
 			return &Risk{ConfirmDelete, "may delete or cancel something"}
-		case reCreds.MatchString(name):
+		case reCreds().MatchString(name):
 			return &Risk{ConfirmCredentials, "may change account credentials"}
-		case reMessage.MatchString(name):
+		case reMessage().MatchString(name):
 			return &Risk{ConfirmMessage, "may send or publish a message"}
 		}
 	case OpType:
-		if known && reSecret.MatchString(label+" "+ri.Extra) {
+		if known && reSecret().MatchString(label+" "+ri.Extra) {
 			k := ConfirmCredentials
-			if reCard.MatchString(label) {
+			if reCard().MatchString(label) {
 				k = ConfirmPayment
 			}
 			return &Risk{k, "types into a sensitive field (" + clip(strings.TrimSpace(label), 40) + ")"}
 		}
-		if s.Submit && known && reMessage.MatchString(ri.Name) {
+		if s.Submit && known && reMessage().MatchString(ri.Name) {
 			return &Risk{ConfirmMessage, "submits a message"}
 		}
 	case OpPress:
-		if known && strings.EqualFold(s.Key, "Enter") && reMessage.MatchString(ri.Name) {
+		if known && strings.EqualFold(s.Key, "Enter") && reMessage().MatchString(ri.Name) {
 			return &Risk{ConfirmMessage, "submits a message"}
 		}
 	}
@@ -321,14 +320,14 @@ func newRunSafety(maxActions, maxNavs int) *runSafety {
 	return &runSafety{maxActions: maxActions, maxNavs: maxNavs, trusted: map[string]bool{}, confirmedCD: map[string]bool{}}
 }
 
-var domainTokenRe = regexp.MustCompile(`(?i)\b(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,})\b`)
+var domainTokenRe = lazyRE(`(?i)\b(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,})\b`)
 
 // seedTrusted adds the registrable domains the user's own text mentions.
 func (s *runSafety) seedTrusted(texts ...string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, t := range texts {
-		for _, m := range domainTokenRe.FindAllStringSubmatch(t, -1) {
+		for _, m := range domainTokenRe().FindAllStringSubmatch(t, -1) {
 			h := strings.ToLower(m[1])
 			if d, err := publicsuffix.EffectiveTLDPlusOne(h); err == nil {
 				s.trusted[d] = true

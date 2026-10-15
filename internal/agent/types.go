@@ -12,6 +12,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
+	"sync"
 	"time"
 )
 
@@ -263,5 +265,16 @@ func (c *Config) applyDefaults() {
 func (c *Config) logf(format string, args ...any) {
 	if c.Logf != nil {
 		c.Logf(format, args...)
+	}
+}
+
+// lazyRE compiles a regular expression on first use: compiled at package init they were a third of a
+// millisecond of every sweef command's start, agent or not.
+func lazyRE(expr string) func() *regexp.Regexp {
+	var once sync.Once
+	var re *regexp.Regexp
+	return func() *regexp.Regexp {
+		once.Do(func() { re = regexp.MustCompile(expr) })
+		return re
 	}
 }
