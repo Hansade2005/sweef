@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -49,5 +50,32 @@ func TestWaitForTimeoutRunsThePage(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), `"b"`) {
 		t.Fatalf("timer did not run during the wait: %s", raw)
+	}
+}
+
+// Between calls the session daemon keeps the page running for a while: a timer the page set fires without the
+// client calling anything.
+func TestBackgroundPumpRunsPagesBetweenCalls(t *testing.T) {
+	e := engine.New(engine.DefaultOptions())
+	defer e.Close()
+	s := NewServer(e)
+	s.BackgroundPump = true
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.backgroundPump(ctx)
+	if _, err := s.Call("Page.navigate", json.RawMessage(`{"url":"data:text/html,<p id=p>a</p><script>setTimeout(function(){window.firedAt=Date.now()},300)</script>"}`)); err != nil {
+		t.Fatalf("Page.navigate: %v", err)
+	}
+	time.Sleep(1500 * time.Millisecond) // no calls meanwhile
+	tabs := e.ListTabs()
+	if len(tabs) == 0 {
+		t.Fatal("no tab")
+	}
+	raw, err := tabs[0].Evaluate("window.firedAt ? Date.now() - window.firedAt > 600 : false") // fired well before this call
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != `true` {
+		t.Fatalf("the timer did not run between calls: %s", raw)
 	}
 }
