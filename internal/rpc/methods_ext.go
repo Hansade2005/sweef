@@ -563,5 +563,10 @@ func dur(p Params, k string, def time.Duration) time.Duration {
 	if ms, ok := p[k].(float64); ok && ms > 0 {
 		return time.Duration(ms) * time.Millisecond
 	}
+	// the CLI, the batch runner and the SDKs send "timeoutMs": reading only "timeout" made every wait run
+	// for the 30 s default, past the caller's own deadline (the CLI then failed with a socket i/o timeout)
+	if ms, ok := p[k+"Ms"].(float64); ok && ms > 0 {
+		return time.Duration(ms) * time.Millisecond
+	}
 	return def
 }
