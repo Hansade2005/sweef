@@ -861,7 +861,10 @@ func (s *cliSession) wait(args []string) (string, error) {
 		return "✓ " + *load, err
 	case len(rest) > 0:
 		if ms, err := strconv.Atoi(rest[0]); err == nil {
-			time.Sleep(time.Duration(ms) * time.Millisecond)
+			// the daemon runs the page meanwhile; a sleep here left timers and animations frozen
+			if _, err := s.call("Page.waitForTimeout", map[string]any{"ms": ms}); err != nil {
+				return "", err
+			}
 			return fmt.Sprintf("✓ waited %dms", ms), nil
 		}
 		_, err := s.call("Page.waitForSelector", map[string]any{"selector": normSel(rest[0]), "state": *state, "timeoutMs": to})

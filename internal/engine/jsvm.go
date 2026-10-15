@@ -190,6 +190,7 @@ func compiledPrelude() []byte {
 }
 
 type jsVM struct {
+	fullPump atomic.Bool // RunFor: pump for the whole duration (no quiet early stop)
 	holdBG    atomic.Bool // explicit waits also wait on background (media clock) timers
 	wakeMs    float64     // set by pumpUntil when a slice ends with a timer pending: ms until it is due
 	bcState   string      // bytecode cache outcome of the last runCached (hit, miss, small), for the load timeline
@@ -716,7 +717,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 	var quiet time.Duration
 	var lastGen uint64
 	lastChange := time.Now()
-	if soft.IsZero() && j.tab != nil && !j.tab.progMode.Load() {
+	if soft.IsZero() && j.tab != nil && !j.tab.progMode.Load() && !j.fullPump.Load() {
 		quiet = j.tab.settleQuiet()
 		lastGen = j.docGen()
 	}
@@ -796,6 +797,33 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		}
 		if wait > 0 {
 			time.Sleep(wait)
+		}
+	}
+}
+
+// RunFor runs the page's event loop for d (timers, animation frames, network callbacks) without the early
+// stop of a settle: the "wait <ms>" of an agent, after which an animation or a delayed render has progressed
+// as far as it would have in a browser.
+func (t *Tab) RunFor(d time.Duration) {
+	t.runTasks()
+	if t.beforeDCL() {
+		time.Sleep(d)
+		return
+	}
+	t.mu.RLock()
+	j := t.js
+	t.mu.RUnlock()
+	if j == nil {
+		time.Sleep(d)
+		return
+	}
+	j.fullPump.Store(true)
+	defer j.fullPump.Store(false)
+	end := time.Now().Add(d)
+	for time.Now().Before(end) {
+		j.pump(time.Until(end))
+		if rest := time.Until(end); rest > 0 {
+			time.Sleep(min(rest, 10*time.Millisecond)) // idle page: nothing due yet
 		}
 	}
 }

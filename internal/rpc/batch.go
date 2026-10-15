@@ -260,7 +260,9 @@ func (s *Server) runVerb(tab, verb string, args []string) (any, error) {
 		if ms > 30000 {
 			ms = 30000
 		}
-		time.Sleep(time.Duration(ms) * time.Millisecond)
+		if _, err := call("Page.waitForTimeout", map[string]any{"ms": ms}); err != nil { // the page runs meanwhile
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
 		return map[string]any{"slept": ms}, nil
 	case "snapshot":
 		mode := "full"

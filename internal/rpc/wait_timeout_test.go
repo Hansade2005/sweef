@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,5 +25,29 @@ func TestWaitHonoursTimeoutMs(t *testing.T) {
 	}
 	if d := time.Since(t0); d > 3*time.Second {
 		t.Fatalf("waited %v for a 300 ms timeout", d)
+	}
+}
+
+// A timed wait runs the page meanwhile: a timer due during the wait has fired when it returns.
+func TestWaitForTimeoutRunsThePage(t *testing.T) {
+	e := engine.New(engine.DefaultOptions())
+	defer e.Close()
+	s := NewServer(e)
+	if _, err := s.Call("Page.navigate", json.RawMessage(`{"url":"data:text/html,<p id=p>a</p><script>setTimeout(function(){document.getElementById('p').textContent='b'},700)</script>"}`)); err != nil {
+		t.Fatalf("Page.navigate: %v", err)
+	}
+	t0 := time.Now()
+	if _, err := s.Call("Page.waitForTimeout", json.RawMessage(`{"ms":1200}`)); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d < time.Second || d > 5*time.Second {
+		t.Fatalf("waited %v for 1200 ms", d)
+	}
+	raw, err := s.Call("Runtime.evaluate", json.RawMessage(`{"expression":"document.getElementById('p').textContent"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"b"`) {
+		t.Fatalf("timer did not run during the wait: %s", raw)
 	}
 }
