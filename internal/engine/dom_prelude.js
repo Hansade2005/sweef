@@ -1089,8 +1089,8 @@
       get: function () { return sw.outerHTML(this[ID]); },
       set: function (v) { var p = this.parentNode; if (!p || p.nodeType !== 1) throw DOMException("Failed to set the 'outerHTML' property on 'Element': This element has no parent node.", 'NoModificationAllowedError'); this.insertAdjacentHTML('afterend', toStr(v)); p.removeChild(this); }
     },
-    innerText: { get: function () { return sw.textContent(this[ID]); }, set: function (v) { this.textContent = v; } },
-    outerText: { get: function () { return sw.textContent(this[ID]); }, set: function (v) { var t = documentWrapper.createTextNode(toStr(v)); this.replaceWith(t); } },
+    innerText: { get: function () { return host('innerText') ? sw.innerText(this[ID]) : sw.textContent(this[ID]); }, set: function (v) { this.textContent = v; } },
+    outerText: { get: function () { return host('innerText') ? sw.innerText(this[ID]) : sw.textContent(this[ID]); }, set: function (v) { var t = documentWrapper.createTextNode(toStr(v)); this.replaceWith(t); } },
     nextElementSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; for (var i = k.indexOf(this) + 1; i < k.length; i++) if (k[i].nodeType === 1) return k[i]; return null; } return nextElement(this[ID], 'nextSibling'); } },
     previousElementSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; for (var i = k.indexOf(this) - 1; i >= 0; i--) if (k[i].nodeType === 1) return k[i]; return null; } return nextElement(this[ID], 'prevSibling'); } },
     shadowRoot: { get: function () { return slots(this).shadowRoot || null; } },

@@ -783,7 +783,7 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 		if quiet > 0 {
 			if g := j.docGen(); g != lastGen {
 				lastGen, lastChange = g, time.Now()
-			} else if time.Since(lastChange) >= quiet {
+			} else if time.Since(lastChange) >= quiet && !j.tab.framesBusy() { // a frame still loading is not quiet
 				return false, true
 			}
 		}
@@ -1265,6 +1265,7 @@ func (j *jsVM) registerHost() error {
 		{"nodeValue", doc(func(d *fnet.Doc, a []any) (any, error) { return d.NodeValue(argI(a, 0)), nil })},
 		{"setNodeValue", doc(func(d *fnet.Doc, a []any) (any, error) { d.SetNodeValue(argI(a, 0), argS(a, 1)); return nil, nil })},
 		{"textContent", doc(func(d *fnet.Doc, a []any) (any, error) { return d.TextContent(argI(a, 0)), nil })},
+		{"innerText", doc(func(d *fnet.Doc, a []any) (any, error) { return innerTextOf(d, argI(a, 0)), nil })},
 		{"setTextContent", doc(func(d *fnet.Doc, a []any) (any, error) { d.SetTextContent(argI(a, 0), argS(a, 1)); return nil, nil })},
 		{"innerHTML", doc(func(d *fnet.Doc, a []any) (any, error) {
 			s, err := d.InnerHTML(argI(a, 0))
