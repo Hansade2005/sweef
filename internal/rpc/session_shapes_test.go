@@ -97,3 +97,38 @@ func TestArmDialogActionAndCompactJSON(t *testing.T) {
 		t.Errorf("waitForTimeout{timeoutMs:50} took %v (the 1 s default?)", d)
 	}
 }
+
+// Input.keyboard takes text (typed into the focused element) and key (one key or a
+// combination); Input.scroll takes x/y as the CLI, batch and SDKs send them.
+func TestKeyboardAndScrollParams(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<title>K</title><input id=q><div id=log></div><div style="height:5000px">tall</div>
+<script>document.getElementById('q').addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'b') document.getElementById('log').textContent = 'ctrl-b'; });</script>`))
+	}))
+	defer srv.Close()
+	e := engine.New(engine.DefaultOptions())
+	defer e.Close()
+	s := NewServer(e)
+	call := func(method string, params map[string]any) string {
+		t.Helper()
+		raw, _ := json.Marshal(params)
+		res, rerr := s.Call(method, raw)
+		if rerr != nil {
+			t.Fatalf("%s: %v", method, rerr)
+		}
+		return string(res)
+	}
+	call("Page.navigate", map[string]any{"url": srv.URL})
+	call("Input.focus", map[string]any{"selector": "#q"})
+	call("Input.keyboard", map[string]any{"text": "hi"})
+	call("Input.keyboard", map[string]any{"key": "Control+b"})
+	if got := call("Runtime.evaluate", map[string]any{"expression": "document.getElementById('q').value + '|' + document.getElementById('log').textContent"}); got != `{"result":"hi|ctrl-b"}` {
+		t.Errorf("after typing hi and pressing Control+b: %s, want hi|ctrl-b", got)
+	}
+	call("Input.scroll", map[string]any{"x": 0, "y": 600})
+	if got := call("Runtime.evaluate", map[string]any{"expression": "window.scrollY > 0"}); got != `{"result":true}` {
+		t.Errorf("Input.scroll{y:600} did not scroll: %s", got)
+	}
+}

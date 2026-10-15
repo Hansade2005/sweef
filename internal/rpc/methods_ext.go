@@ -156,7 +156,12 @@ func init() {
 		if sel := str(p, "selector"); sel != "" {
 			return map[string]bool{"ok": true}, t.ScrollIntoView(sel)
 		}
-		return map[string]bool{"ok": true}, t.MouseWheel(int(num(p, "deltaX")), int(num(p, "deltaY")))
+		// the session CLI, batch and the SDKs send x/y; CDP-style callers send deltaX/deltaY
+		dx, dy := num(p, "deltaX"), num(p, "deltaY")
+		if dx == 0 && dy == 0 {
+			dx, dy = num(p, "x"), num(p, "y")
+		}
+		return map[string]bool{"ok": true}, t.MouseWheel(int(dx), int(dy))
 	})
 
 	registerExt("Input.keyboard", func(sv *Server, p Params) (any, error) {
@@ -164,7 +169,20 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return map[string]bool{"ok": true}, t.Keyboard(str(p, "keys"))
+		// text types characters into the focused element; key (or keys) presses one key or a
+		// combination ("Enter", "Control+a"). Reading only "keys" made the CLI's, batch's, MCP's
+		// and the SDKs' key presses (all of which send "key"/"text") no-ops.
+		if txt := str(p, "text"); txt != "" {
+			return map[string]bool{"ok": true}, t.KeyboardType(txt, time.Duration(num(p, "delayMs")*float64(time.Millisecond)))
+		}
+		k := str(p, "key")
+		if k == "" {
+			k = str(p, "keys")
+		}
+		if k == "" {
+			return nil, fmt.Errorf("Input.keyboard: give text (to type) or key (to press, e.g. Enter, Control+a)")
+		}
+		return map[string]bool{"ok": true}, t.Keyboard(k)
 	})
 
 	// ---- DOM getters ----
