@@ -12,6 +12,7 @@ package engine
 import (
 	"errors"
 	"net/url"
+	"strings"
 
 	"github.com/sweefbrowser/sweef/internal/app/privacy"
 )
@@ -33,6 +34,32 @@ func (t *Tab) trackerBlocked(raw string) bool {
 	if tu, err := url.Parse(top.URL()); err == nil && tu.Hostname() != "" && privacy.SameSite(tu.Hostname(), ru.Hostname()) {
 		return false
 	}
-	_, hit := privacy.SeedList().Match(ru.Hostname())
-	return hit
+	if _, hit := privacy.SeedList().Match(ru.Hostname()); hit {
+		return true
+	}
+	return selfHostedAnalytics(ru)
+}
+
+// selfHostedAnalytics recognizes third-party analytics no list names: a self-hosted Plausible, Matomo, Umami or
+// similar on its own analytics host (pypi.org loads analytics.python.org/js/pa-....js, which ran 0.66 s during
+// load, a forced layout included).
+func selfHostedAnalytics(u *url.URL) bool {
+	h := strings.ToLower(u.Hostname())
+	for _, p := range []string{"analytics.", "stats.", "metrics.", "plausible.", "umami.", "matomo.", "piwik.", "telemetry."} {
+		if strings.HasPrefix(h, p) {
+			return true
+		}
+	}
+	for _, d := range []string{"ethicalads.io", "carbonads.net", "carbonads.com", "buysellads.com", "buysellads.net"} {
+		if h == d || strings.HasSuffix(h, "."+d) { // developer-site ad networks (pypi.org: 0.4 s of ethicalads)
+			return true
+		}
+	}
+	path := strings.ToLower(u.Path)
+	for _, p := range []string{"/js/plausible", "/js/pa-", "/matomo.js", "/piwik.js", "/umami.js"} {
+		if strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
 }

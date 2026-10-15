@@ -4,7 +4,8 @@
 // (browser, renderer, GPU, utility processes); Sweef = the session daemon (the CLI client processes live a
 // few milliseconds per command and are not counted).
 //
-//   node resources.mjs --sweef /path/to/sweef [--runs 3] [--out ../results/resources-X.json]
+//   node resources.mjs --sweef /path/to/sweef [--runs 3] [--only id,id] [--out ../results/resources-X.json]
+//                      [--replay 127.0.0.1:8898 --ca bundle.pem]   (both browsers through bench/replay)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,16 +13,27 @@ import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 import { CHROMIUM, sleep, rmTree } from './lib.mjs';
 
-const opt = { sweef: 'sweef', runs: 3, out: '', idleMs: 5000 };
+const opt = { sweef: 'sweef', runs: 3, out: '', idleMs: 5000, only: '', replay: '', ca: '' };
 for (let i = 2; i < process.argv.length; i++) {
   const a = process.argv[i], nx = () => process.argv[++i];
   if (a === '--sweef') opt.sweef = nx(); else if (a === '--runs') opt.runs = +nx(); else if (a === '--out') opt.out = nx();
+  else if (a === '--only') opt.only = nx(); else if (a === '--replay') opt.replay = nx(); else if (a === '--ca') opt.ca = nx();
 }
 const TICK = 100 / 1000 * 0 + (spawnSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).stdout.trim() | 0 || 100);
 const SITES = [
   { id: 't3a', url: 'https://the3rdacademy.com/', steps: [{ click: 'header a[href="/platform"]' }, { scroll: 2400 }] },
   { id: 'pipilot', url: 'https://www.pipilot.dev/', steps: [{ click: 'a[href="/pricing"]' }, { scroll: 2400 }] },
-];
+  { id: 'gh-repo', url: 'https://github.com/golang/go', steps: [{ scroll: 2400 }] },
+  { id: 'gh-issue', url: 'https://github.com/golang/go/issues/9', steps: [{ scroll: 2400 }] },
+  { id: 'wiki', url: 'https://en.wikipedia.org/wiki/Go_(programming_language)', steps: [{ scroll: 2400 }] },
+  { id: 'mdn', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map', steps: [{ scroll: 2400 }] },
+  { id: 'nextjs', url: 'https://nextjs.org/docs', steps: [{ scroll: 2400 }] },
+  { id: 'react', url: 'https://react.dev/learn', steps: [{ scroll: 2400 }] },
+  { id: 'pypi', url: 'https://pypi.org/project/requests/', steps: [{ scroll: 2400 }] },
+  { id: 'hn', url: 'https://news.ycombinator.com/', steps: [{ scroll: 2400 }] },
+].filter((s) => !opt.only || opt.only.split(',').includes(s.id));
+const chrArgs = ['--no-sandbox', ...(opt.replay ? [`--proxy-server=http://${opt.replay}`, '--ignore-certificate-errors', '--proxy-bypass-list=<-loopback>'] : [])];
+const swEnv = opt.replay ? { HTTPS_PROXY: `http://${opt.replay}`, https_proxy: `http://${opt.replay}`, SSL_CERT_FILE: opt.ca } : {};
 
 function procs(match) { // pids whose command line contains match
   const out = [];
@@ -59,7 +71,7 @@ async function runChromium(site) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'res-chr-'));
   const s = sampler(dir);
   const t0 = performance.now();
-  const ctx = await chromium.launchPersistentContext(dir, { executablePath: CHROMIUM, headless: true, args: ['--no-sandbox'], viewport: { width: 1280, height: 800 } });
+  const ctx = await chromium.launchPersistentContext(dir, { executablePath: CHROMIUM, headless: true, args: chrArgs, ignoreHTTPSErrors: !!opt.replay, viewport: { width: 1280, height: 800 } });
   const page = ctx.pages()[0] || await ctx.newPage();
   await page.goto(site.url, { waitUntil: 'load', timeout: 30000 });
   const r = { load_wall_ms: performance.now() - t0, load_cpu_s: s.cpu() };
@@ -76,7 +88,7 @@ async function runChromium(site) {
 
 async function runSweef(site) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'res-sw-'));
-  const env = { ...process.env, SWEEF_HOME: home, SWEEF_CACHE_DIR: path.join(home, 'cache') };
+  const env = { ...process.env, SWEEF_HOME: home, SWEEF_CACHE_DIR: path.join(home, 'cache'), ...swEnv };
   const run = (...a) => spawnSync(opt.sweef, [...a, '--timeout', '30s'], { env, encoding: 'utf8' });
   const s = sampler(path.join(home, 'default.sock'));
   const t0 = performance.now();
@@ -102,5 +114,5 @@ for (const site of SITES) {
     console.error(`${site.id.padEnd(8)} ${tool.padEnd(9)} load ${Math.round(m.load_wall_ms)} ms ${m.load_cpu_s.toFixed(2)} s cpu | all ${Math.round(m.all_wall_ms)} ms ${m.all_cpu_s.toFixed(2)} s | idle ${m.idle_cpu_s.toFixed(2)} s/5s | peak ${Math.round(m.peak_rss_mib)} MiB`);
   }
 }
-const res = { when: new Date().toISOString(), host: `${os.cpus().length} CPUs (${os.cpus()[0].model}), ${(os.totalmem() / 2 ** 30).toFixed(1)} GB`, runs: opt.runs, idle_ms: opt.idleMs, rows };
+const res = { when: new Date().toISOString(), network: opt.replay ? 'bench/replay (local recording)' : 'live', host: `${os.cpus().length} CPUs (${os.cpus()[0].model}), ${(os.totalmem() / 2 ** 30).toFixed(1)} GB`, runs: opt.runs, idle_ms: opt.idleMs, rows };
 if (opt.out) fs.writeFileSync(opt.out, JSON.stringify(res, null, 1));

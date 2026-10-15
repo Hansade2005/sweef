@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -36,5 +37,19 @@ func TestTrackerBlocking(t *testing.T) {
 			t.Errorf("block=%v: got %s want %s", block, got, want)
 		}
 		e.Close()
+	}
+}
+
+func TestSelfHostedAnalytics(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"https://analytics.python.org/js/pa-Z-QY.js": true, "https://stats.example.org/x.js": true,
+		"https://cdn.example.org/js/plausible.outbound.js": true, "https://example.org/matomo.js": true,
+		"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js": false, "https://example.org/js/app.js": false,
+		"https://statistics.gov.example/data.js": false, "https://media.ethicalads.io/media/client/v1.4.0/ethicalads.min.js": true,
+	} {
+		u, _ := url.Parse(raw)
+		if got := selfHostedAnalytics(u); got != want {
+			t.Errorf("%s: %v, want %v", raw, got, want)
+		}
 	}
 }

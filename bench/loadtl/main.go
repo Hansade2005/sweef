@@ -32,6 +32,7 @@ func main() {
 		prog    = flag.Bool("progressive", false, "use the GUI's progressive loading path")
 		full    = flag.Bool("full", false, "print every mark, not only the long ones")
 		summary = flag.Bool("summary", false, "one line per page")
+		blockTr = flag.Bool("block-trackers", true, "block known trackers and analytics, as the CLI, MCP and agent do")
 		cache   = flag.String("cache", "off", "cache dir (off = none; a path keeps the bytecode and HTTP cache between runs)")
 		twice   = flag.Bool("twice", false, "load every page twice with the same cache dir (second visit)")
 		console = flag.Bool("console", false, "print the page's console messages (script errors) after the load")
@@ -78,6 +79,7 @@ func main() {
 	o := engine.DefaultOptions()
 	o.ViewportWidth, o.ViewportHeight = 1280, 760
 	o.SettleMs = *settle
+	o.BlockTrackers = *blockTr
 	o.CacheDir = *cache
 	if *cache != "off" && *cache != "" {
 		o.DiskCacheMiB = 50
