@@ -70,6 +70,10 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 		if _, set := args["observe"]; !set {
 			args["observe"] = "interactive"
 		}
+	case "browser_storage_state":
+		if p, _ := args["path"].(string); p != "" {
+			method = "BrowserContext.saveStorageState"
+		}
 	case "browser_screenshot":
 		if args["text"] != true {
 			args["noText"] = true

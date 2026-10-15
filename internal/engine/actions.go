@@ -430,6 +430,12 @@ func (t *Tab) KeyboardType(text string, delay time.Duration) error {
 	if leaf := t.FocusedTab(); leaf != t {
 		return leaf.KeyboardType(text, delay)
 	}
+	t.mu.RLock()
+	noVM := t.js == nil
+	t.mu.RUnlock()
+	if noVM { // a page without scripts: no key events to fire, type into the focused field
+		return t.Type("[data-sw-focused]", text, delay)
+	}
 	t.NoteUserActivation()
 	for _, r := range text {
 		k := string(r)

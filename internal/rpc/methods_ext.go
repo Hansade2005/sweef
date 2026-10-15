@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -463,7 +464,28 @@ func init() {
 				c = got
 			}
 		}
-		return map[string]bool{"ok": true}, c.LoadState(str(p, "path"))
+		path := str(p, "path")
+		if st, ok := p["state"]; ok && st != nil && st != "" {
+			// inline state (MCP browser_set_storage_state, the SDKs): a JSON string or object
+			var b []byte
+			if s, isStr := st.(string); isStr {
+				b = []byte(s)
+			} else {
+				b, _ = json.Marshal(st)
+			}
+			f, err := os.CreateTemp("", "sweef-state-*.json")
+			if err != nil {
+				return nil, err
+			}
+			defer os.Remove(f.Name())
+			f.Write(b)
+			f.Close()
+			path = f.Name()
+		}
+		if path == "" {
+			return nil, fmt.Errorf("BrowserContext.loadStorageState: give state (JSON) or path")
+		}
+		return map[string]bool{"ok": true}, c.LoadState(path)
 	})
 	registerExt("BrowserContext.addCookies", func(sv *Server, p Params) (any, error) {
 		c := sv.eng.DefaultContext()
