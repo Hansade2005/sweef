@@ -51,6 +51,10 @@ type Server struct {
 // pumpWindow is how long after the last call the background pump keeps pages running.
 const pumpWindow = 3 * time.Second
 
+// StartBackgroundPump runs the background pump (see Server.BackgroundPump) until ctx
+// ends, for servers that are not started through ServeTCP (the MCP server).
+func (s *Server) StartBackgroundPump(ctx context.Context) { go s.backgroundPump(ctx) }
+
 // backgroundPump runs until ctx ends (see Server.BackgroundPump).
 func (s *Server) backgroundPump(ctx context.Context) {
 	tick := time.NewTicker(25 * time.Millisecond)
@@ -345,7 +349,10 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		h := int(num(p, "height"))
 		dsf := num(p, "deviceScaleFactor")
 		format := strOr(p, "type", "png")
-		out := map[string]any{"text": t.Screenshot(w)}
+		out := map[string]any{}
+		if p["noText"] != true { // the text render costs a layout pass; image-only callers skip it
+			out["text"] = t.Screenshot(w)
+		}
 		if format == "png" {
 			var pb []byte
 			if p["fullPage"] == true { // one render, not a viewport shot thrown away first
