@@ -10,30 +10,30 @@
                   - /url: https://news.ycombinator.com
               - cell:
                 - link "Hacker News" [ref=e2]:
-                  - /url: news
+                  - /url: /news
                 - link "new" [ref=e3]:
-                  - /url: newest
+                  - /url: /newest
                 - text: "|"
                 - link "past" [ref=e4]:
-                  - /url: front
+                  - /url: /front
                 - text: "|"
                 - link "comments" [ref=e5]:
-                  - /url: newcomments
+                  - /url: /newcomments
                 - text: "|"
                 - link "ask" [ref=e6]:
-                  - /url: ask
+                  - /url: /ask
                 - text: "|"
                 - link "show" [ref=e7]:
-                  - /url: show
+                  - /url: /show
                 - text: "|"
                 - link "jobs" [ref=e8]:
-                  - /url: jobs
+                  - /url: /jobs
                 - text: "|"
                 - link "submit" [ref=e9]:
-                  - /url: submit
+                  - /url: /submit
               - cell:
                 - link "login" [ref=e10]:
-                  - /url: login?goto=news
+                  - /url: /login?goto=news
     - row:
       - cell:
         - table:
@@ -42,775 +42,775 @@
               - cell: 1.
               - cell:
                 - link [ref=e11]:
-                  - /url: vote?id=50040547&how=up&goto=news
+                  - /url: /vote?id=50040547&how=up&goto=news
               - cell:
                 - link "3rd Yandex Cloud Data Center Was Hit" [ref=e12]:
                   - /url: https://status.yandex.cloud/en/incidents/2136
                 - text: (
                 - link "yandex.cloud" [ref=e13]:
-                  - /url: from?site=yandex.cloud
+                  - /url: /from?site=yandex.cloud
                 - text: )
             - row:
               - cell:
                 - text: 145 points by
                 - link "defly" [ref=e14]:
-                  - /url: user?id=defly
+                  - /url: /user?id=defly
                 - link "1 hour ago" [ref=e15]:
-                  - /url: item?id=50040547
+                  - /url: /item?id=50040547
                 - text: "|"
                 - link "hide" [ref=e16]:
-                  - /url: hide?id=50040547&goto=news
+                  - /url: /hide?id=50040547&goto=news
                 - text: "|"
                 - link "161 comments" [ref=e17]:
-                  - /url: item?id=50040547
+                  - /url: /item?id=50040547
             - row:
               - cell: 2.
               - cell:
                 - link [ref=e18]:
-                  - /url: vote?id=50037949&how=up&goto=news
+                  - /url: /vote?id=50037949&how=up&goto=news
               - cell:
                 - link "Build your own decision model" [ref=e19]:
                   - /url: https://nishtahir.com/build-your-own-decision-model/
                 - text: (
                 - link "nishtahir.com" [ref=e20]:
-                  - /url: from?site=nishtahir.com
+                  - /url: /from?site=nishtahir.com
                 - text: )
             - row:
               - cell:
                 - text: 282 points by
                 - link "softwaredoug" [ref=e21]:
-                  - /url: user?id=softwaredoug
+                  - /url: /user?id=softwaredoug
                 - link "10 hours ago" [ref=e22]:
-                  - /url: item?id=50037949
+                  - /url: /item?id=50037949
                 - text: "|"
                 - link "hide" [ref=e23]:
-                  - /url: hide?id=50037949&goto=news
+                  - /url: /hide?id=50037949&goto=news
                 - text: "|"
                 - link "66 comments" [ref=e24]:
-                  - /url: item?id=50037949
+                  - /url: /item?id=50037949
             - row:
               - cell: 3.
               - cell:
                 - link [ref=e25]:
-                  - /url: vote?id=50040276&how=up&goto=news
+                  - /url: /vote?id=50040276&how=up&goto=news
               - cell:
                 - link "LineageOS 24.0" [ref=e26]:
                   - /url: https://lineageos.org/Changelog-32/
                 - text: (
                 - link "lineageos.org" [ref=e27]:
-                  - /url: from?site=lineageos.org
+                  - /url: /from?site=lineageos.org
                 - text: )
             - row:
               - cell:
                 - text: 19 points by
                 - link "timschumi" [ref=e28]:
-                  - /url: user?id=timschumi
+                  - /url: /user?id=timschumi
                 - link "2 hours ago" [ref=e29]:
-                  - /url: item?id=50040276
+                  - /url: /item?id=50040276
                 - text: "|"
                 - link "hide" [ref=e30]:
-                  - /url: hide?id=50040276&goto=news
+                  - /url: /hide?id=50040276&goto=news
                 - text: "|"
                 - link "3 comments" [ref=e31]:
-                  - /url: item?id=50040276
+                  - /url: /item?id=50040276
             - row:
               - cell: 4.
               - cell:
                 - link [ref=e32]:
-                  - /url: vote?id=49991852&how=up&goto=news
+                  - /url: /vote?id=49991852&how=up&goto=news
               - cell:
                 - link "2D Vehicles" [ref=e33]:
                   - /url: https://patkerr.co.uk/2d-vehicles/
                 - text: (
                 - link "patkerr.co.uk" [ref=e34]:
-                  - /url: from?site=patkerr.co.uk
+                  - /url: /from?site=patkerr.co.uk
                 - text: )
             - row:
               - cell:
                 - text: 452 points by
                 - link "Michelangelo11" [ref=e35]:
-                  - /url: user?id=Michelangelo11
+                  - /url: /user?id=Michelangelo11
                 - link "16 hours ago" [ref=e36]:
-                  - /url: item?id=49991852
+                  - /url: /item?id=49991852
                 - text: "|"
                 - link "hide" [ref=e37]:
-                  - /url: hide?id=49991852&goto=news
+                  - /url: /hide?id=49991852&goto=news
                 - text: "|"
                 - link "99 comments" [ref=e38]:
-                  - /url: item?id=49991852
+                  - /url: /item?id=49991852
             - row:
               - cell: 5.
               - cell:
                 - link [ref=e39]:
-                  - /url: vote?id=50028647&how=up&goto=news
+                  - /url: /vote?id=50028647&how=up&goto=news
               - cell:
                 - link "Decade-old RAM is making a comeback" [ref=e40]:
                   - /url: https://www.theverge.com/games/1009140/ram-shortage-intel-amd-ddr4-comeback
                 - text: (
                 - link "theverge.com" [ref=e41]:
-                  - /url: from?site=theverge.com
+                  - /url: /from?site=theverge.com
                 - text: )
             - row:
               - cell:
                 - text: 55 points by
                 - link "1potato" [ref=e42]:
-                  - /url: user?id=1potato
+                  - /url: /user?id=1potato
                 - link "5 hours ago" [ref=e43]:
-                  - /url: item?id=50028647
+                  - /url: /item?id=50028647
                 - text: "|"
                 - link "hide" [ref=e44]:
-                  - /url: hide?id=50028647&goto=news
+                  - /url: /hide?id=50028647&goto=news
                 - text: "|"
                 - link "38 comments" [ref=e45]:
-                  - /url: item?id=50028647
+                  - /url: /item?id=50028647
             - row:
               - cell: 6.
               - cell:
                 - link [ref=e46]:
-                  - /url: vote?id=50036864&how=up&goto=news
+                  - /url: /vote?id=50036864&how=up&goto=news
               - cell:
                 - link "A city-building game in which the city would prefer you didn't" [ref=e47]:
                   - /url: https://housing.over.pizza/
                 - text: (
                 - link "over.pizza" [ref=e48]:
-                  - /url: from?site=over.pizza
+                  - /url: /from?site=over.pizza
                 - text: )
             - row:
               - cell:
                 - text: 333 points by
                 - link "JumpCrisscross" [ref=e49]:
-                  - /url: user?id=JumpCrisscross
+                  - /url: /user?id=JumpCrisscross
                 - link "12 hours ago" [ref=e50]:
-                  - /url: item?id=50036864
+                  - /url: /item?id=50036864
                 - text: "|"
                 - link "hide" [ref=e51]:
-                  - /url: hide?id=50036864&goto=news
+                  - /url: /hide?id=50036864&goto=news
                 - text: "|"
                 - link "106 comments" [ref=e52]:
-                  - /url: item?id=50036864
+                  - /url: /item?id=50036864
             - row:
               - cell: 7.
               - cell:
                 - link [ref=e53]:
-                  - /url: vote?id=50017548&how=up&goto=news
+                  - /url: /vote?id=50017548&how=up&goto=news
               - cell:
                 - link "How big is a Git commit?" [ref=e54]:
                   - /url: https://ratfactor.com/cards/git-commit-size
                 - text: (
                 - link "ratfactor.com" [ref=e55]:
-                  - /url: from?site=ratfactor.com
+                  - /url: /from?site=ratfactor.com
                 - text: )
             - row:
               - cell:
                 - text: 29 points by
                 - link "theanonymousone" [ref=e56]:
-                  - /url: user?id=theanonymousone
+                  - /url: /user?id=theanonymousone
                 - link "4 hours ago" [ref=e57]:
-                  - /url: item?id=50017548
+                  - /url: /item?id=50017548
                 - text: "|"
                 - link "hide" [ref=e58]:
-                  - /url: hide?id=50017548&goto=news
+                  - /url: /hide?id=50017548&goto=news
                 - text: "|"
                 - link "10 comments" [ref=e59]:
-                  - /url: item?id=50017548
+                  - /url: /item?id=50017548
             - row:
               - cell: 8.
               - cell:
                 - link [ref=e60]:
-                  - /url: vote?id=50029487&how=up&goto=news
+                  - /url: /vote?id=50029487&how=up&goto=news
               - cell:
                 - link "The Lightbulb Computer" [ref=e61]:
                   - /url: https://lightbulbcomputer.com/
                 - text: (
                 - link "lightbulbcomputer.com" [ref=e62]:
-                  - /url: from?site=lightbulbcomputer.com
+                  - /url: /from?site=lightbulbcomputer.com
                 - text: )
             - row:
               - cell:
                 - text: 389 points by
                 - link "oskarth" [ref=e63]:
-                  - /url: user?id=oskarth
+                  - /url: /user?id=oskarth
                 - link "17 hours ago" [ref=e64]:
-                  - /url: item?id=50029487
+                  - /url: /item?id=50029487
                 - text: "|"
                 - link "hide" [ref=e65]:
-                  - /url: hide?id=50029487&goto=news
+                  - /url: /hide?id=50029487&goto=news
                 - text: "|"
                 - link "62 comments" [ref=e66]:
-                  - /url: item?id=50029487
+                  - /url: /item?id=50029487
             - row:
               - cell: 9.
               - cell:
                 - link [ref=e67]:
-                  - /url: vote?id=50038623&how=up&goto=news
+                  - /url: /vote?id=50038623&how=up&goto=news
               - cell:
                 - link "PSPi 6 – Raspberry Pi in a PSP" [ref=e68]:
                   - /url: https://github.com/othermod/PSPi-Version-6
                 - text: (
                 - link "github.com/othermod" [ref=e69]:
-                  - /url: from?site=github.com/othermod
+                  - /url: /from?site=github.com/othermod
                 - text: )
             - row:
               - cell:
                 - text: 79 points by
                 - link "therepanic" [ref=e70]:
-                  - /url: user?id=therepanic
+                  - /url: /user?id=therepanic
                 - link "8 hours ago" [ref=e71]:
-                  - /url: item?id=50038623
+                  - /url: /item?id=50038623
                 - text: "|"
                 - link "hide" [ref=e72]:
-                  - /url: hide?id=50038623&goto=news
+                  - /url: /hide?id=50038623&goto=news
                 - text: "|"
                 - link "7 comments" [ref=e73]:
-                  - /url: item?id=50038623
+                  - /url: /item?id=50038623
             - row:
               - cell: 10.
               - cell:
                 - link [ref=e74]:
-                  - /url: vote?id=50001234&how=up&goto=news
+                  - /url: /vote?id=50001234&how=up&goto=news
               - cell:
                 - link "Retrofitting language models to operate over bytes" [ref=e75]:
                   - /url: https://www.nature.com/articles/s41586-026-11111-4
                 - text: (
                 - link "nature.com" [ref=e76]:
-                  - /url: from?site=nature.com
+                  - /url: /from?site=nature.com
                 - text: )
             - row:
               - cell:
                 - text: 56 points by
                 - link "theanonymousone" [ref=e77]:
-                  - /url: user?id=theanonymousone
+                  - /url: /user?id=theanonymousone
                 - link "8 hours ago" [ref=e78]:
-                  - /url: item?id=50001234
+                  - /url: /item?id=50001234
                 - text: "|"
                 - link "hide" [ref=e79]:
-                  - /url: hide?id=50001234&goto=news
+                  - /url: /hide?id=50001234&goto=news
                 - text: "|"
                 - link "5 comments" [ref=e80]:
-                  - /url: item?id=50001234
+                  - /url: /item?id=50001234
             - row:
               - cell: 11.
               - cell:
                 - link [ref=e81]:
-                  - /url: vote?id=50017247&how=up&goto=news
+                  - /url: /vote?id=50017247&how=up&goto=news
               - cell:
                 - link "Nix wrote half of my debugger" [ref=e82]:
                   - /url: https://fzakaria.com/2026/10/07/nix-wrote-half-of-my-debugger
                 - text: (
                 - link "fzakaria.com" [ref=e83]:
-                  - /url: from?site=fzakaria.com
+                  - /url: /from?site=fzakaria.com
                 - text: )
             - row:
               - cell:
                 - text: 196 points by
                 - link "ingve" [ref=e84]:
-                  - /url: user?id=ingve
+                  - /url: /user?id=ingve
                 - link "14 hours ago" [ref=e85]:
-                  - /url: item?id=50017247
+                  - /url: /item?id=50017247
                 - text: "|"
                 - link "hide" [ref=e86]:
-                  - /url: hide?id=50017247&goto=news
+                  - /url: /hide?id=50017247&goto=news
                 - text: "|"
                 - link "44 comments" [ref=e87]:
-                  - /url: item?id=50017247
+                  - /url: /item?id=50017247
             - row:
               - cell: 12.
               - cell:
                 - link [ref=e88]:
-                  - /url: vote?id=50015833&how=up&goto=news
+                  - /url: /vote?id=50015833&how=up&goto=news
               - cell:
                 - link "Show HN: Happy Hangul Day! An RNN for Generating Korean Handwriting Strokes" [ref=e89]:
                   - /url: https://hangul.ink/blog/hangul-day
                 - text: (
                 - link "hangul.ink" [ref=e90]:
-                  - /url: from?site=hangul.ink
+                  - /url: /from?site=hangul.ink
                 - text: )
             - row:
               - cell:
                 - text: 44 points by
                 - link "jbaudanza" [ref=e91]:
-                  - /url: user?id=jbaudanza
+                  - /url: /user?id=jbaudanza
                 - link "7 hours ago" [ref=e92]:
-                  - /url: item?id=50015833
+                  - /url: /item?id=50015833
                 - text: "|"
                 - link "hide" [ref=e93]:
-                  - /url: hide?id=50015833&goto=news
+                  - /url: /hide?id=50015833&goto=news
                 - text: "|"
                 - link "8 comments" [ref=e94]:
-                  - /url: item?id=50015833
+                  - /url: /item?id=50015833
             - row:
               - cell: 13.
               - cell:
                 - link [ref=e95]:
-                  - /url: vote?id=50021899&how=up&goto=news
+                  - /url: /vote?id=50021899&how=up&goto=news
               - cell:
                 - link "Five months treating bugs like patients and coding agents like a medical team" [ref=e96]:
                   - /url: https://www.cockroachlabs.com/blog/experiment-running-hospital-code/
                 - text: (
                 - link "cockroachlabs.com" [ref=e97]:
-                  - /url: from?site=cockroachlabs.com
+                  - /url: /from?site=cockroachlabs.com
                 - text: )
             - row:
               - cell:
                 - text: 129 points by
                 - link "rafiss" [ref=e98]:
-                  - /url: user?id=rafiss
+                  - /url: /user?id=rafiss
                 - link "11 hours ago" [ref=e99]:
-                  - /url: item?id=50021899
+                  - /url: /item?id=50021899
                 - text: "|"
                 - link "hide" [ref=e100]:
-                  - /url: hide?id=50021899&goto=news
+                  - /url: /hide?id=50021899&goto=news
                 - text: "|"
                 - link "52 comments" [ref=e101]:
-                  - /url: item?id=50021899
+                  - /url: /item?id=50021899
             - row:
               - cell: 14.
               - cell:
                 - link [ref=e102]:
-                  - /url: vote?id=50034081&how=up&goto=news
+                  - /url: /vote?id=50034081&how=up&goto=news
               - cell:
                 - link "Knuth reward check" [ref=e103]:
                   - /url: https://www.thomas-huehn.com/knuth-reward-check/
                 - text: (
                 - link "thomas-huehn.com" [ref=e104]:
-                  - /url: from?site=thomas-huehn.com
+                  - /url: /from?site=thomas-huehn.com
                 - text: )
             - row:
               - cell:
                 - text: 192 points by
                 - link "Curiositry" [ref=e105]:
-                  - /url: user?id=Curiositry
+                  - /url: /user?id=Curiositry
                 - link "17 hours ago" [ref=e106]:
-                  - /url: item?id=50034081
+                  - /url: /item?id=50034081
                 - text: "|"
                 - link "hide" [ref=e107]:
-                  - /url: hide?id=50034081&goto=news
+                  - /url: /hide?id=50034081&goto=news
                 - text: "|"
                 - link "69 comments" [ref=e108]:
-                  - /url: item?id=50034081
+                  - /url: /item?id=50034081
             - row:
               - cell: 15.
               - cell:
                 - link [ref=e109]:
-                  - /url: vote?id=50031614&how=up&goto=news
+                  - /url: /vote?id=50031614&how=up&goto=news
               - cell:
                 - link "Talorys – A self-hosted personal AI agent on Cloudflare's free tier" [ref=e110]:
                   - /url: https://github.com/rociiu/talorys
                 - text: (
                 - link "github.com/rociiu" [ref=e111]:
-                  - /url: from?site=github.com/rociiu
+                  - /url: /from?site=github.com/rociiu
                 - text: )
             - row:
               - cell:
                 - text: 289 points by
                 - link "rociiu" [ref=e112]:
-                  - /url: user?id=rociiu
+                  - /url: /user?id=rociiu
                 - link "22 hours ago" [ref=e113]:
-                  - /url: item?id=50031614
+                  - /url: /item?id=50031614
                 - text: "|"
                 - link "hide" [ref=e114]:
-                  - /url: hide?id=50031614&goto=news
+                  - /url: /hide?id=50031614&goto=news
                 - text: "|"
                 - link "133 comments" [ref=e115]:
-                  - /url: item?id=50031614
+                  - /url: /item?id=50031614
             - row:
               - cell: 16.
               - cell:
                 - link [ref=e116]:
-                  - /url: vote?id=50016956&how=up&goto=news
+                  - /url: /vote?id=50016956&how=up&goto=news
               - cell:
                 - link "Mxc: Microsoft Execution Containers version 1.0.0" [ref=e117]:
                   - /url: https://blogs.windows.com/windowsdeveloper/2026/10/07/microsoft-execution-containers-policy-driven-containment-for-ai-agents/
                 - text: (
                 - link "windows.com" [ref=e118]:
-                  - /url: from?site=windows.com
+                  - /url: /from?site=windows.com
                 - text: )
             - row:
               - cell:
                 - text: 187 points by
                 - link "smokel" [ref=e119]:
-                  - /url: user?id=smokel
+                  - /url: /user?id=smokel
                 - link "21 hours ago" [ref=e120]:
-                  - /url: item?id=50016956
+                  - /url: /item?id=50016956
                 - text: "|"
                 - link "hide" [ref=e121]:
-                  - /url: hide?id=50016956&goto=news
+                  - /url: /hide?id=50016956&goto=news
                 - text: "|"
                 - link "48 comments" [ref=e122]:
-                  - /url: item?id=50016956
+                  - /url: /item?id=50016956
             - row:
               - cell: 17.
               - cell:
                 - link [ref=e123]:
-                  - /url: vote?id=50040625&how=up&goto=news
+                  - /url: /vote?id=50040625&how=up&goto=news
               - cell:
                 - link "I wish you the best in the Offline" [ref=e124]:
                   - /url: https://daverupert.com/2026/09/i-wish-you-the-best-in-the-offline/
                 - text: (
                 - link "daverupert.com" [ref=e125]:
-                  - /url: from?site=daverupert.com
+                  - /url: /from?site=daverupert.com
                 - text: )
             - row:
               - cell:
                 - text: 15 points by
                 - link "birdculture" [ref=e126]:
-                  - /url: user?id=birdculture
+                  - /url: /user?id=birdculture
                 - link "1 hour ago" [ref=e127]:
-                  - /url: item?id=50040625
+                  - /url: /item?id=50040625
                 - text: "|"
                 - link "hide" [ref=e128]:
-                  - /url: hide?id=50040625&goto=news
+                  - /url: /hide?id=50040625&goto=news
                 - text: "|"
                 - link "discuss" [ref=e129]:
-                  - /url: item?id=50040625
+                  - /url: /item?id=50040625
             - row:
               - cell: 18.
               - cell:
                 - link [ref=e130]:
-                  - /url: vote?id=50009451&how=up&goto=news
+                  - /url: /vote?id=50009451&how=up&goto=news
               - cell:
                 - link "The Marriage That Captures a High Point of American Art" [ref=e131]:
                   - /url: https://www.theatlantic.com/culture/2026/10/jackson-pollock-lee-krasner-met-review/688916
                 - text: (
                 - link "theatlantic.com" [ref=e132]:
-                  - /url: from?site=theatlantic.com
+                  - /url: /from?site=theatlantic.com
                 - text: )
             - row:
               - cell:
                 - text: 5 points by
                 - link "prismatic" [ref=e133]:
-                  - /url: user?id=prismatic
+                  - /url: /user?id=prismatic
                 - link "2 hours ago" [ref=e134]:
-                  - /url: item?id=50009451
+                  - /url: /item?id=50009451
                 - text: "|"
                 - link "hide" [ref=e135]:
-                  - /url: hide?id=50009451&goto=news
+                  - /url: /hide?id=50009451&goto=news
                 - text: "|"
                 - link "1 comment" [ref=e136]:
-                  - /url: item?id=50009451
+                  - /url: /item?id=50009451
             - row:
               - cell: 19.
               - cell:
                 - link [ref=e137]:
-                  - /url: vote?id=50024805&how=up&goto=news
+                  - /url: /vote?id=50024805&how=up&goto=news
               - cell:
                 - link "Deterministic Simulation Testing in Celld" [ref=e138]:
                   - /url: https://celld.dev/docs/engineering/deterministic-simulation-testing/
                 - text: (
                 - link "celld.dev" [ref=e139]:
-                  - /url: from?site=celld.dev
+                  - /url: /from?site=celld.dev
                 - text: )
             - row:
               - cell:
                 - text: 19 points by
                 - link "handfuloflight" [ref=e140]:
-                  - /url: user?id=handfuloflight
+                  - /url: /user?id=handfuloflight
                 - link "7 hours ago" [ref=e141]:
-                  - /url: item?id=50024805
+                  - /url: /item?id=50024805
                 - text: "|"
                 - link "hide" [ref=e142]:
-                  - /url: hide?id=50024805&goto=news
+                  - /url: /hide?id=50024805&goto=news
                 - text: "|"
                 - link "1 comment" [ref=e143]:
-                  - /url: item?id=50024805
+                  - /url: /item?id=50024805
             - row:
               - cell: 20.
               - cell:
                 - link [ref=e144]:
-                  - /url: vote?id=50006930&how=up&goto=news
+                  - /url: /vote?id=50006930&how=up&goto=news
               - cell:
                 - link "Show HN: Diffle, a keyboard-centric diff viewer with LSP support" [ref=e145]:
                   - /url: https://github.com/moritzwilksch/diffle
                 - text: (
                 - link "github.com/moritzwilksch" [ref=e146]:
-                  - /url: from?site=github.com/moritzwilksch
+                  - /url: /from?site=github.com/moritzwilksch
                 - text: )
             - row:
               - cell:
                 - text: 43 points by
                 - link "mwil1000" [ref=e147]:
-                  - /url: user?id=mwil1000
+                  - /url: /user?id=mwil1000
                 - link "9 hours ago" [ref=e148]:
-                  - /url: item?id=50006930
+                  - /url: /item?id=50006930
                 - text: "|"
                 - link "hide" [ref=e149]:
-                  - /url: hide?id=50006930&goto=news
+                  - /url: /hide?id=50006930&goto=news
                 - text: "|"
                 - link "5 comments" [ref=e150]:
-                  - /url: item?id=50006930
+                  - /url: /item?id=50006930
             - row:
               - cell: 21.
               - cell:
                 - link [ref=e151]:
-                  - /url: vote?id=49984349&how=up&goto=news
+                  - /url: /vote?id=49984349&how=up&goto=news
               - cell:
                 - link "OpenSCAD the Programmers Solid 3D CAD Modeller" [ref=e152]:
                   - /url: https://openscad.org/
                 - text: (
                 - link "openscad.org" [ref=e153]:
-                  - /url: from?site=openscad.org
+                  - /url: /from?site=openscad.org
                 - text: )
             - row:
               - cell:
                 - text: 145 points by
                 - link "b-man" [ref=e154]:
-                  - /url: user?id=b-man
+                  - /url: /user?id=b-man
                 - link "17 hours ago" [ref=e155]:
-                  - /url: item?id=49984349
+                  - /url: /item?id=49984349
                 - text: "|"
                 - link "hide" [ref=e156]:
-                  - /url: hide?id=49984349&goto=news
+                  - /url: /hide?id=49984349&goto=news
                 - text: "|"
                 - link "110 comments" [ref=e157]:
-                  - /url: item?id=49984349
+                  - /url: /item?id=49984349
             - row:
               - cell: 22.
               - cell:
                 - link [ref=e158]:
-                  - /url: vote?id=50039536&how=up&goto=news
+                  - /url: /vote?id=50039536&how=up&goto=news
               - cell:
                 - link "GameBoy on E-Paper ESP32 at 30FPS [video]" [ref=e159]:
                   - /url: https://www.youtube.com/watch?v=XiZmM6hwwAU
                 - text: (
                 - link "youtube.com" [ref=e160]:
-                  - /url: from?site=youtube.com
+                  - /url: /from?site=youtube.com
                 - text: )
             - row:
               - cell:
                 - text: 78 points by
                 - link "pizzaiolo" [ref=e161]:
-                  - /url: user?id=pizzaiolo
+                  - /url: /user?id=pizzaiolo
                 - link "5 hours ago" [ref=e162]:
-                  - /url: item?id=50039536
+                  - /url: /item?id=50039536
                 - text: "|"
                 - link "hide" [ref=e163]:
-                  - /url: hide?id=50039536&goto=news
+                  - /url: /hide?id=50039536&goto=news
                 - text: "|"
                 - link "20 comments" [ref=e164]:
-                  - /url: item?id=50039536
+                  - /url: /item?id=50039536
             - row:
               - cell: 23.
               - cell:
                 - link [ref=e165]:
-                  - /url: vote?id=50033357&how=up&goto=news
+                  - /url: /vote?id=50033357&how=up&goto=news
               - cell:
                 - link "Unikernels were hard. key word: were" [ref=e166]:
                   - /url: https://ghuntley.com/unikernels/
                 - text: (
                 - link "ghuntley.com" [ref=e167]:
-                  - /url: from?site=ghuntley.com
+                  - /url: /from?site=ghuntley.com
                 - text: )
             - row:
               - cell:
                 - text: 154 points by
                 - link "ghuntley" [ref=e168]:
-                  - /url: user?id=ghuntley
+                  - /url: /user?id=ghuntley
                 - link "18 hours ago" [ref=e169]:
-                  - /url: item?id=50033357
+                  - /url: /item?id=50033357
                 - text: "|"
                 - link "hide" [ref=e170]:
-                  - /url: hide?id=50033357&goto=news
+                  - /url: /hide?id=50033357&goto=news
                 - text: "|"
                 - link "68 comments" [ref=e171]:
-                  - /url: item?id=50033357
+                  - /url: /item?id=50033357
             - row:
               - cell: 24.
               - cell:
                 - link [ref=e172]:
-                  - /url: vote?id=50029830&how=up&goto=news
+                  - /url: /vote?id=50029830&how=up&goto=news
               - cell:
                 - link "Food processing influences metabolism and brain activity" [ref=e173]:
                   - /url: https://news.vt.edu/articles/2026/10/research_fralinbiomed_upfhutelin.html
                 - text: (
                 - link "vt.edu" [ref=e174]:
-                  - /url: from?site=vt.edu
+                  - /url: /from?site=vt.edu
                 - text: )
             - row:
               - cell:
                 - text: 148 points by
                 - link "gmays" [ref=e175]:
-                  - /url: user?id=gmays
+                  - /url: /user?id=gmays
                 - link "22 hours ago" [ref=e176]:
-                  - /url: item?id=50029830
+                  - /url: /item?id=50029830
                 - text: "|"
                 - link "hide" [ref=e177]:
-                  - /url: hide?id=50029830&goto=news
+                  - /url: /hide?id=50029830&goto=news
                 - text: "|"
                 - link "117 comments" [ref=e178]:
-                  - /url: item?id=50029830
+                  - /url: /item?id=50029830
             - row:
               - cell: 25.
               - cell:
                 - link [ref=e179]:
-                  - /url: vote?id=50020901&how=up&goto=news
+                  - /url: /vote?id=50020901&how=up&goto=news
               - cell:
                 - link "Getting old Macromedia Director Games to run on modern Hardware" [ref=e180]:
                   - /url: https://werwolv.net/posts/macromedia_copy_protection/
                 - text: (
                 - link "werwolv.net" [ref=e181]:
-                  - /url: from?site=werwolv.net
+                  - /url: /from?site=werwolv.net
                 - text: )
             - row:
               - cell:
                 - text: 76 points by
                 - link "speckx" [ref=e182]:
-                  - /url: user?id=speckx
+                  - /url: /user?id=speckx
                 - link "15 hours ago" [ref=e183]:
-                  - /url: item?id=50020901
+                  - /url: /item?id=50020901
                 - text: "|"
                 - link "hide" [ref=e184]:
-                  - /url: hide?id=50020901&goto=news
+                  - /url: /hide?id=50020901&goto=news
                 - text: "|"
                 - link "15 comments" [ref=e185]:
-                  - /url: item?id=50020901
+                  - /url: /item?id=50020901
             - row:
               - cell: 26.
               - cell:
                 - link [ref=e186]:
-                  - /url: vote?id=50005743&how=up&goto=news
+                  - /url: /vote?id=50005743&how=up&goto=news
               - cell:
                 - link "C for Rust programmers" [ref=e187]:
                   - /url: https://bd103.dev/blog/2026-10-07-c-for-rust-programmers/
                 - text: (
                 - link "bd103.dev" [ref=e188]:
-                  - /url: from?site=bd103.dev
+                  - /url: /from?site=bd103.dev
                 - text: )
             - row:
               - cell:
                 - text: 144 points by
                 - link "xyproto" [ref=e189]:
-                  - /url: user?id=xyproto
+                  - /url: /user?id=xyproto
                 - link "21 hours ago" [ref=e190]:
-                  - /url: item?id=50005743
+                  - /url: /item?id=50005743
                 - text: "|"
                 - link "hide" [ref=e191]:
-                  - /url: hide?id=50005743&goto=news
+                  - /url: /hide?id=50005743&goto=news
                 - text: "|"
                 - link "135 comments" [ref=e192]:
-                  - /url: item?id=50005743
+                  - /url: /item?id=50005743
             - row:
               - cell: 27.
               - cell:
                 - link [ref=e193]:
-                  - /url: vote?id=50039092&how=up&goto=news
+                  - /url: /vote?id=50039092&how=up&goto=news
               - cell:
                 - link "500B Tokens Later: Letting AI Agents Decompile a First-Person Shooter" [ref=e194]:
                   - /url: https://momo5502.com/posts/2026-10-09-game-decompilation/
                 - text: (
                 - link "momo5502.com" [ref=e195]:
-                  - /url: from?site=momo5502.com
+                  - /url: /from?site=momo5502.com
                 - text: )
             - row:
               - cell:
                 - text: 89 points by
                 - link "davikr" [ref=e196]:
-                  - /url: user?id=davikr
+                  - /url: /user?id=davikr
                 - link "6 hours ago" [ref=e197]:
-                  - /url: item?id=50039092
+                  - /url: /item?id=50039092
                 - text: "|"
                 - link "hide" [ref=e198]:
-                  - /url: hide?id=50039092&goto=news
+                  - /url: /hide?id=50039092&goto=news
                 - text: "|"
                 - link "67 comments" [ref=e199]:
-                  - /url: item?id=50039092
+                  - /url: /item?id=50039092
             - row:
               - cell: 28.
               - cell:
                 - link [ref=e200]:
-                  - /url: vote?id=50039063&how=up&goto=news
+                  - /url: /vote?id=50039063&how=up&goto=news
               - cell:
                 - link "European Alternatives" [ref=e201]:
                   - /url: https://buy-european.net/en/alternatives
                 - text: (
                 - link "buy-european.net" [ref=e202]:
-                  - /url: from?site=buy-european.net
+                  - /url: /from?site=buy-european.net
                 - text: )
             - row:
               - cell:
                 - text: 8 points by
                 - link "doener" [ref=e203]:
-                  - /url: user?id=doener
+                  - /url: /user?id=doener
                 - link "7 hours ago" [ref=e204]:
-                  - /url: item?id=50039063
+                  - /url: /item?id=50039063
                 - text: "|"
                 - link "hide" [ref=e205]:
-                  - /url: hide?id=50039063&goto=news
+                  - /url: /hide?id=50039063&goto=news
                 - text: "|"
                 - link "3 comments" [ref=e206]:
-                  - /url: item?id=50039063
+                  - /url: /item?id=50039063
             - row:
               - cell: 29.
               - cell:
                 - link [ref=e207]:
-                  - /url: vote?id=49980880&how=up&goto=news
+                  - /url: /vote?id=49980880&how=up&goto=news
               - cell:
                 - link "Grieving the loss of details" [ref=e208]:
                   - /url: https://purplesyringa.moe/blog/grieving-the-loss-of-details/
                 - text: (
                 - link "purplesyringa.moe" [ref=e209]:
-                  - /url: from?site=purplesyringa.moe
+                  - /url: /from?site=purplesyringa.moe
                 - text: )
             - row:
               - cell:
                 - text: 435 points by
                 - link "signa11" [ref=e210]:
-                  - /url: user?id=signa11
+                  - /url: /user?id=signa11
                 - link "17 hours ago" [ref=e211]:
-                  - /url: item?id=49980880
+                  - /url: /item?id=49980880
                 - text: "|"
                 - link "hide" [ref=e212]:
-                  - /url: hide?id=49980880&goto=news
+                  - /url: /hide?id=49980880&goto=news
                 - text: "|"
                 - link "347 comments" [ref=e213]:
-                  - /url: item?id=49980880
+                  - /url: /item?id=49980880
             - row:
               - cell: 30.
               - cell:
                 - link [ref=e214]:
-                  - /url: vote?id=49986919&how=up&goto=news
+                  - /url: /vote?id=49986919&how=up&goto=news
               - cell:
                 - link "Chernobyl particles reveal unexpectedly stable nuclear fuel after 40 years" [ref=e215]:
                   - /url: https://phys.org/news/2026-10-chernobyl-particles-reveal-unexpectedly-stable.html
                 - text: (
                 - link "phys.org" [ref=e216]:
-                  - /url: from?site=phys.org
+                  - /url: /from?site=phys.org
                 - text: )
             - row:
               - cell:
                 - text: 155 points by
                 - link "geox" [ref=e217]:
-                  - /url: user?id=geox
+                  - /url: /user?id=geox
                 - link "1 day ago" [ref=e218]:
-                  - /url: item?id=49986919
+                  - /url: /item?id=49986919
                 - text: "|"
                 - link "hide" [ref=e219]:
-                  - /url: hide?id=49986919&goto=news
+                  - /url: /hide?id=49986919&goto=news
                 - text: "|"
                 - link "67 comments" [ref=e220]:
-                  - /url: item?id=49986919
+                  - /url: /item?id=49986919
             - row:
               - cell:
                 - link "More" [ref=e221]:
-                  - /url: "?p=2"
+                  - /url: /?p=2
     - row:
       - cell:
         - img
         - link "Consider applying for YC's Winter 2027 batch! Applications are open till November 2." [ref=e222]:
           - /url: https://www.ycombinator.com/apply/
         - link "Guidelines" [ref=e223]:
-          - /url: newsguidelines.html
+          - /url: /newsguidelines.html
         - text: "|"
         - link "FAQ" [ref=e224]:
-          - /url: newsfaq.html
+          - /url: /newsfaq.html
         - text: "|"
         - link "Lists" [ref=e225]:
-          - /url: lists
+          - /url: /lists
         - text: "|"
         - link "API" [ref=e226]:
           - /url: https://github.com/HackerNews/API
         - text: "|"
         - link "Security" [ref=e227]:
-          - /url: security.html
+          - /url: /security.html
         - text: "|"
         - link "Legal" [ref=e228]:
           - /url: https://www.ycombinator.com/legal/

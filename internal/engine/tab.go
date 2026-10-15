@@ -306,6 +306,14 @@ func (t *Tab) navigate(rawurl string, headers map[string]string, progressive boo
 	if t.sw.noNav {
 		return fmt.Errorf("navigation is not available here")
 	}
+	// a path-only URL (snapshots show same-origin links that way) is relative to the current page
+	if r := strings.TrimSpace(rawurl); (strings.HasPrefix(r, "/") && !strings.HasPrefix(r, "//")) || strings.HasPrefix(r, "?") {
+		if cur, err := url.Parse(t.URL()); err == nil && (cur.Scheme == "http" || cur.Scheme == "https") {
+			if abs, err := cur.Parse(r); err == nil {
+				rawurl = abs.String()
+			}
+		}
+	}
 	u, err := url.Parse(rawurl)
 	if err != nil {
 		return fmt.Errorf("bad url %q: %w", rawurl, err)

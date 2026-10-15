@@ -2,6 +2,7 @@ package net
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -547,7 +548,7 @@ func (d *Doc) buildSnap(n *html.Node, o *SnapshotOptions, depth int) []*snapNode
 		sn.attrs = append(sn.attrs, "current")
 	}
 	if role == "link" {
-		sn.href = attr(n, "href")
+		sn.href = d.shortHref(attr(n, "href"))
 	}
 	switch n.Data {
 	case "input", "textarea", "select":
@@ -842,5 +843,38 @@ func (d *Doc) SnapshotInfos() []*Info {
 		}
 	}
 	walk(nodes)
+	return out
+}
+
+// shortHref is a link's URL as the snapshot shows it: resolved against the document, then written as a path
+// when it stays on the document's origin ("/wiki/Ada_Lovelace" rather than
+// "https://en.wikipedia.org/wiki/Ada_Lovelace"): link-heavy pages are mostly URLs, and the origin is in the
+// observation's header. Other origins, and anything that does not parse, are left as they are.
+func (d *Doc) shortHref(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(raw, "#") || strings.HasPrefix(strings.ToLower(raw), "javascript:") {
+		return raw
+	}
+	base, err := url.Parse(d.base)
+	if err != nil || base.Host == "" {
+		return raw
+	}
+	u, err := base.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	if u.Scheme != base.Scheme || u.Host != base.Host || u.User != nil {
+		return u.String()
+	}
+	out := u.EscapedPath()
+	if out == "" {
+		out = "/"
+	}
+	if u.RawQuery != "" || u.ForceQuery {
+		out += "?" + u.RawQuery
+	}
+	if u.Fragment != "" {
+		out += "#" + u.EscapedFragment()
+	}
 	return out
 }

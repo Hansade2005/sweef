@@ -261,7 +261,9 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 			return s.ok(r, "✓ browser ready"), err
 		}
 		u := args[0]
-		if !looksLikeURL(u) && !strings.HasPrefix(u, "about:") {
+		// a bare host gets https://; data:, about:, blob: URLs and paths of the current page go as they are
+		if !looksLikeURL(u) && !strings.HasPrefix(u, "about:") && !strings.HasPrefix(u, "data:") && !strings.HasPrefix(u, "blob:") &&
+			!strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "?") {
 			u = "https://" + u
 		}
 		r, err := s.call("Page.navigate", map[string]any{"url": u})

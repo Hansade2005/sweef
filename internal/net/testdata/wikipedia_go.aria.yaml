@@ -25,7 +25,7 @@
           - /url: /wiki/Wikipedia:About
       - listitem:
         - link "Contact us" [ref=e10]:
-          - /url: //en.wikipedia.org/wiki/Wikipedia:Contact_us
+          - /url: https://en.wikipedia.org/wiki/Wikipedia:Contact_us
     - text: Contribute
     - list:
       - listitem:
@@ -439,7 +439,7 @@
           - /url: /wiki/Special:RecentChangesLinked/Go_(programming_language)
       - listitem:
         - link "Upload file" [ref=e150]:
-          - /url: //en.wikipedia.org/wiki/Wikipedia:File_Upload_Wizard
+          - /url: https://en.wikipedia.org/wiki/Wikipedia:File_Upload_Wizard
       - listitem:
         - link "Permanent link" [ref=e151]:
           - /url: /w/index.php?title=Go_(programming_language)&oldid=1375187723
@@ -1040,7 +1040,7 @@
           - /url: https://en.wikipedia.org/wiki/Open_source
         - text: launch of the language.
         - link "Renée French" [ref=e323]:
-          - /url: https://en.wikipedia.org/wiki/Renée_French
+          - /url: https://en.wikipedia.org/wiki/Ren%C3%A9e_French
         - text: ", who had designed the rabbit mascot for"
         - link "Plan 9" [ref=e324]:
           - /url: https://en.wikipedia.org/wiki/Plan_9_from_Bell_Labs
@@ -1448,5 +1448,4 @@
           - /url: https://en.wikipedia.org/wiki/UTF-8
         - text: encoding/decoding.
         - superscript:
-          - link "[ 63 ]" [ref=e404]:
 - …truncated: 2615 more nodes; pass selector= to scope or interactiveOnly=true

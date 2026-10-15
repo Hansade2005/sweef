@@ -278,6 +278,7 @@ func (a *Agent) execAct(ctx context.Context, rs *runState, c *call) *toolOut {
 		s.Tab = tab
 		switch s.Op {
 		case OpNavigate:
+			s.URL = resolveAgainst(cur, s.URL)
 			s.URL = normalizeNavURL(s.URL)
 			if err := checkNavigable(s.URL); err != nil {
 				return errOut(fmt.Sprintf("step %d (navigate): %v", i+1, err))

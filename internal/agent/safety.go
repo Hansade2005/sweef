@@ -95,6 +95,24 @@ func isInternalURL(raw string) bool {
 }
 
 // normalizeNavURL adds https:// when no scheme is present.
+// resolveAgainst resolves a path-only URL ("/wiki/Ada", "?q=x", "#top"), as snapshots show same-origin links,
+// against the page the agent is on; anything else is returned unchanged.
+func resolveAgainst(page, raw string) string {
+	r := strings.TrimSpace(raw)
+	if r == "" || page == "" || !(strings.HasPrefix(r, "/") && !strings.HasPrefix(r, "//") || strings.HasPrefix(r, "?") || strings.HasPrefix(r, "#")) {
+		return raw
+	}
+	b, err := url.Parse(page)
+	if err != nil || (b.Scheme != "http" && b.Scheme != "https") {
+		return raw
+	}
+	u, err := b.Parse(r)
+	if err != nil {
+		return raw
+	}
+	return u.String()
+}
+
 func normalizeNavURL(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
