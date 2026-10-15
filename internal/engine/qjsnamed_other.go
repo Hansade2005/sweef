@@ -22,3 +22,6 @@ func withImportMetaURL(src, url string) string {
 	q, _ := json.Marshal(url) // a JS string literal (strconv.Quote may write \U escapes)
 	return "import.meta.url=" + string(q) + ";" + src
 }
+
+// pendingDynamicImports is unavailable here (see qjsnamed.go): queued import() calls load one at a time.
+func pendingDynamicImports(vm *quickjs.VM) [][2]string { return nil }

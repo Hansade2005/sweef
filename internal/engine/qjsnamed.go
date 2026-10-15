@@ -145,3 +145,63 @@ func withImportMetaURL(src, url string) string {
 	q, _ := json.Marshal(url) // a JS string literal (strconv.Quote may write \U escapes)
 	return "import.meta.url=" + string(q) + ";" + src
 }
+
+// maxPendingImports bounds how many queued import() jobs one loader call looks at.
+const maxPendingImports = 256
+
+// pendingDynamicImports lists the (base, specifier) of the import() calls whose jobs are queued in vm's runtime
+// and not yet run. QuickJS loads a dynamic import from its job, one job at a time, so the chunks of a
+// Promise.all over import() calls (how webpack and rspack load a route) would download one after another; the
+// loader prefetches these instead. A dynamic-import job is the one whose arguments are (resolve, reject,
+// base string, specifier string, attributes); other jobs never carry two strings there.
+func pendingDynamicImports(vm *quickjs.VM) [][2]string {
+	if vm == nil || !qjsOffsets() {
+		return nil
+	}
+	base := unsafe.Pointer(vm)
+	ctx := *(*uintptr)(unsafe.Add(base, qjsCtxOff))
+	r := *(*unsafe.Pointer)(unsafe.Add(base, qjsRtOff))
+	if ctx == 0 || r == nil {
+		return nil
+	}
+	tls := *(**libc.TLS)(unsafe.Add(r, qjsTLSOff))
+	crt := (*lib.TJSContext)(cmem(ctx)).Frt
+	if tls == nil || crt == 0 {
+		return nil
+	}
+	head := crt + unsafe.Offsetof(lib.TJSRuntime{}.Fjob_list)
+	entSize := unsafe.Sizeof(lib.TJSJobEntry{})
+	valSize := unsafe.Sizeof(lib.TJSValue{})
+	str := func(v lib.TJSValue) (string, bool) {
+		if v.Ftag != lib.EJS_TAG_STRING {
+			return "", false
+		}
+		p := lib.XJS_ToCStringLen2(tls, ctx, 0, v, 0)
+		if p == 0 {
+			return "", false
+		}
+		s := libc.GoString(p)
+		lib.XJS_FreeCString(tls, ctx, p)
+		return s, true
+	}
+	var out [][2]string
+	n := 0
+	for p := (*lib.Tlist_head)(cmem(head)).Fnext; p != 0 && p != head && n < maxPendingImports; p = (*lib.Tlist_head)(cmem(p)).Fnext {
+		n++
+		e := (*lib.TJSJobEntry)(cmem(p))
+		if e.Fargc != 5 || e.Frealm != ctx {
+			continue
+		}
+		argv := p + entSize
+		b, ok1 := str(*(*lib.TJSValue)(cmem(argv + 2*valSize)))
+		spec, ok2 := str(*(*lib.TJSValue)(cmem(argv + 3*valSize)))
+		if ok1 && ok2 {
+			out = append(out, [2]string{b, spec})
+		}
+	}
+	return out
+}
+
+// cmem is the address of QuickJS's C-heap memory (allocated by modernc.org/libc, never moved or collected by Go)
+// as a pointer to read it through.
+func cmem(p uintptr) unsafe.Pointer { return *(*unsafe.Pointer)(unsafe.Pointer(&p)) }

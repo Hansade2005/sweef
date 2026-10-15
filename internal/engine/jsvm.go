@@ -1132,9 +1132,16 @@ func normalizeJS(v any) any {
 // ---- module loader ---------------------------------------------------------------
 
 func (j *jsVM) installModuleLoader(docURL string) {
-	j.vm.SetModuleLoader(func(_ *quickjs.VM, name string) (string, error) {
+	j.vm.SetModuleLoader(func(vm *quickjs.VM, name string) (string, error) {
 		if !strings.HasPrefix(name, "http://") && !strings.HasPrefix(name, "https://") {
 			return "", fmt.Errorf("cannot resolve bare module specifier %q", name)
+		}
+		// the other import() calls already queued (Promise.all over a bundler's chunks) download now, in
+		// parallel, instead of one round trip each as QuickJS gets to their jobs
+		for _, d := range pendingDynamicImports(vm) {
+			if u, err := j.resolveModule(d[0], d[1], docURL); err == nil {
+				j.prefetchModule(u)
+			}
 		}
 		body, status, err := j.tab.fetchResourceKind(name, KindScript)
 		if err != nil {
@@ -1146,29 +1153,34 @@ func (j *jsVM) installModuleLoader(docURL string) {
 		j.prefetchModuleDeps(name, body)
 		return withImportMetaURL(body, name), nil
 	}, func(_ *quickjs.VM, base, name string) (string, error) {
-		if strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://") {
-			return name, nil
-		}
-		b := base
+		return j.resolveModule(base, name, docURL)
+	})
+}
+
+// resolveModule is the module name a specifier imported from base resolves to.
+func (j *jsVM) resolveModule(base, name, docURL string) (string, error) {
+	if strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://") {
+		return name, nil
+	}
+	b := base
+	if !strings.HasPrefix(b, "http://") && !strings.HasPrefix(b, "https://") {
+		// the importing script has no module name of its own (QuickJS names every evaluated source "<eval>"):
+		// relative specifiers resolve against the script being run, as the browser does, else the document
+		b = j.curBase
 		if !strings.HasPrefix(b, "http://") && !strings.HasPrefix(b, "https://") {
-			// the importing script has no module name of its own (QuickJS names every evaluated source "<eval>"):
-			// relative specifiers resolve against the script being run, as the browser does, else the document
-			b = j.curBase
-			if !strings.HasPrefix(b, "http://") && !strings.HasPrefix(b, "https://") {
-				b = j.tab.URL()
-				if b == "about:blank" {
-					b = docURL
-				}
+			b = j.tab.URL()
+			if b == "about:blank" {
+				b = docURL
 			}
 		}
-		if strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../") || strings.HasPrefix(name, "/") {
-			return resolveURL(b, name)
-		}
-		if u, ok := j.mapImport(name); ok {
-			return u, nil
-		}
-		return "", fmt.Errorf("bare module specifier %q is not supported (no import map entry)", name)
-	})
+	}
+	if strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../") || strings.HasPrefix(name, "/") {
+		return resolveURL(b, name)
+	}
+	if u, ok := j.mapImport(name); ok {
+		return u, nil
+	}
+	return "", fmt.Errorf("bare module specifier %q is not supported (no import map entry)", name)
 }
 
 // addImportMap reads a <script type="importmap"> body: its "imports" table maps bare specifiers (and
@@ -1945,23 +1957,32 @@ func (j *jsVM) prefetchModuleDeps(base, src string) {
 		if !(strings.HasPrefix(abs, "http://") || strings.HasPrefix(abs, "https://")) {
 			continue
 		}
-		j.modMu.Lock() // not j.mu: the loader runs inside an evaluation that holds it
-		if j.modSeen == nil {
-			j.modSeen = map[string]bool{}
-		}
-		dup := j.modSeen[abs] || len(j.modSeen) >= maxPrefetchedModules
-		j.modSeen[abs] = true
-		j.modMu.Unlock()
-		if dup {
-			continue
-		}
-		go func(abs string) {
-			t.preloadSem <- struct{}{}
-			body, status, err := t.fetchRes(abs, fetchOpts{kind: KindScript, prefetch: true})
-			<-t.preloadSem
-			if err == nil && status < 400 {
-				j.prefetchModuleDeps(abs, body)
-			}
-		}(abs)
+		j.prefetchModule(abs)
 	}
+}
+
+// prefetchModule starts reading one module (and then its static imports) unless it was already started.
+func (j *jsVM) prefetchModule(abs string) {
+	t := j.tab
+	if t == nil || t.policy().ScriptMaxBytes > 0 || !(strings.HasPrefix(abs, "http://") || strings.HasPrefix(abs, "https://")) {
+		return
+	}
+	j.modMu.Lock() // not j.mu: the loader runs inside an evaluation that holds it
+	if j.modSeen == nil {
+		j.modSeen = map[string]bool{}
+	}
+	dup := j.modSeen[abs] || len(j.modSeen) >= maxPrefetchedModules
+	j.modSeen[abs] = true
+	j.modMu.Unlock()
+	if dup {
+		return
+	}
+	go func() {
+		t.preloadSem <- struct{}{}
+		body, status, err := t.fetchRes(abs, fetchOpts{kind: KindScript, prefetch: true})
+		<-t.preloadSem
+		if err == nil && status < 400 {
+			j.prefetchModuleDeps(abs, body)
+		}
+	}()
 }
