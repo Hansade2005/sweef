@@ -13,6 +13,7 @@ package engine
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"modernc.org/libc"
@@ -21,6 +22,9 @@ import (
 )
 
 var bcLoaders sync.Map // C runtime -> *jsVM
+
+// bcLoaderReads counts modules the loader read from bytecode (tests).
+var bcLoaderReads atomic.Int64
 
 func qjsRuntime(vm *quickjs.VM) (crt uintptr, tls *libc.TLS, ok bool) {
 	if vm == nil || !qjsOffsets() {
@@ -129,6 +133,7 @@ func swModuleLoader(tls *libc.TLS, ctx uintptr, moduleName uintptr, opaque uintp
 				if m.Ftag == lib.EJS_TAG_MODULE {
 					ptr := *(*uintptr)(unsafe.Pointer(&m.Fu))
 					lib.XFreeValue(tls, ctx, m)
+					bcLoaderReads.Add(1)
 					return ptr
 				}
 				if m.Ftag == lib.EJS_TAG_EXCEPTION {
