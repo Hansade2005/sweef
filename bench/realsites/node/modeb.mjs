@@ -96,6 +96,7 @@ async function runSweefAgent(task) {
     const j = JSON.parse(r.out.trim().split('\n').pop());
     const s = j.stats;
     out.stop = j.stop; out.answer = j.answer || j.text || ''; out.text = j.text || '';
+    if (j.error) out.error = String(j.error).slice(0, 300).split(apiKey).join('[redacted]'); // why stop=error
     out.turns = s.turns; out.requests = s.requests; out.retries = s.retries; out.tool_calls = s.toolCalls;
     out.tool_ms = s.toolTotalMs; out.model_ms = null; out.snapshots = s.fullSnapshots + s.deltaSnapshots; out.delta_snapshots = s.deltaSnapshots;
     out.usage = { input_tokens: s.usage.input_tokens, output_tokens: s.usage.output_tokens, cache_read_input_tokens: s.usage.cache_read_input_tokens, cache_creation_input_tokens: s.usage.cache_creation_input_tokens };

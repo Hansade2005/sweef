@@ -416,6 +416,11 @@ func TestStripThinkingRecovery(t *testing.T) {
 			}
 		}
 	}
+	// a stripped history with thinking still on is rejected again (the turn that owns pending tool results
+	// must start with a thinking block): the rest of the run asks for no thinking
+	if !strings.Contains(string(reqs[len(reqs)-1]), `"thinking":{"type":"disabled"}`) {
+		t.Fatal("thinking should be disabled after stripping it")
+	}
 }
 
 func TestDeltaObservationsAfterFirstFull(t *testing.T) {

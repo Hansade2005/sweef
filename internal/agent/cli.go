@@ -117,7 +117,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	exit := 0
 	midline := false
 	var textBuf strings.Builder
-	var doneText string
+	var doneText, errText string
 	st, _ := ag.Run(ctx, task, func(e Event) {
 		outMu.Lock()
 		defer outMu.Unlock()
@@ -157,6 +157,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 				midline = false
 			}
 			fmt.Fprintf(out, "\nerror: %s\n", e.Text)
+			errText = e.Text
 			exit = 1
 		}
 	})
@@ -166,8 +167,9 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 			Answer string   `json:"answer"` // the done-tool summary (what the user reads)
 			Text   string   `json:"text"`   // all assistant text
 			Stop   string   `json:"stop"`
+			Error  string   `json:"error,omitempty"` // why a run with stop "error" ended (the API's message)
 			Stats  RunStats `json:"stats"`
-		}{doneText, textBuf.String(), final.Stop, final})
+		}{doneText, textBuf.String(), final.Stop, errText, final})
 		fmt.Fprintln(realOut, string(b))
 		return exit
 	}
