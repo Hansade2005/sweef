@@ -21,7 +21,8 @@ func addCommonFlags(fs *flag.FlagSet) {
 	fs.Int("max-rss-mib", opts.MaxRSSMiB, "soft resident-memory budget")
 	fs.Bool("no-js", false, "disable JavaScript entirely (fetch+DOM only)")
 	fs.String("user-agent", opts.DefaultUserAgent, "default UA string")
-	fs.Int("settle-ms", opts.SettleMs, "JavaScript event-loop budget after load and after each action")
+	fs.Int("settle-ms", opts.SettleMs, "JavaScript event-loop budget after each action (an action settles for a third of it)")
+	fs.Int("nav-settle-ms", 600, "JavaScript event-loop budget of a page load: half before the load event, all after (at most settle-ms)")
 	fs.Int("js-mem-mib", opts.JSMemoryMiB, "QuickJS heap cap per tab")
 	fs.Int("js-timeout-ms", opts.JSTimeoutMs, "single script evaluation timeout")
 	fs.Bool("allow-trackers", false, "load third-party ad, analytics and tracking requests (blocked by default for agents)")
@@ -50,7 +51,7 @@ func engineOptsFrom(fs *flag.FlagSet) engine.Options {
 	if f := fs.Lookup("allow-trackers"); f != nil && f.Value.String() == "true" {
 		opts.BlockTrackers = false
 	}
-	for name, dst := range map[string]*int{"settle-ms": &opts.SettleMs, "js-mem-mib": &opts.JSMemoryMiB, "js-timeout-ms": &opts.JSTimeoutMs} {
+	for name, dst := range map[string]*int{"settle-ms": &opts.SettleMs, "nav-settle-ms": &opts.NavSettleMs, "js-mem-mib": &opts.JSMemoryMiB, "js-timeout-ms": &opts.JSTimeoutMs} {
 		if f := fs.Lookup(name); f != nil {
 			if n, err := strconv.Atoi(f.Value.String()); err == nil {
 				*dst = n

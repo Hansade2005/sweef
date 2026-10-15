@@ -44,7 +44,8 @@ type Options struct {
 	AcceptLanguage   string // Accept-Language of every request (default "en-US,en;q=0.9"); see Engine.SetAcceptLanguage
 	ViewportWidth    int    // default viewport width (px) for text rendering
 	ViewportHeight   int    // default viewport height (px)
-	SettleMs         int    // event-loop budget after load and after actions (default 1500)
+	SettleMs         int    // event-loop budget after actions (default 1500; an action settles for a third of it)
+	NavSettleMs      int    // event-loop budget of a headless load: half before the load event, all after (default 600, at most SettleMs)
 	SettleQuietMs    int    // a headless settle ends early once only timers are left and the document has not changed for this long (0 = default 300; negative = off, pump to SettleMs)
 	JSMemoryMiB      int    // QuickJS heap cap per tab (default 256: YouTube's player and its BotGuard script need more than 64)
 	JSTimeoutMs      int    // single-eval timeout; a looping script is interrupted (default 30000: a real page's longest tasks, YouTube's first render among them, run past 5 s on a loaded machine, and an interrupted task leaves the page half-built)

@@ -157,7 +157,7 @@ func (p *progLoad) preBudget() time.Duration {
 	if p.progressive {
 		return p.t.settleBudget() / 4
 	}
-	return p.t.settleBudget() / 2
+	return p.t.navSettleBudget() / 2
 }
 
 func (p *progLoad) pumpStage(soft time.Time) (done, navigated bool) {
@@ -241,7 +241,11 @@ func (p *progLoad) step(slice time.Duration) bool {
 				t.finishLoad(p.url)
 			}
 			p.stage = stSettle
-			p.deadline = time.Now().Add(t.settleBudget())
+			if p.progressive {
+				p.deadline = time.Now().Add(t.settleBudget())
+			} else {
+				p.deadline = time.Now().Add(t.navSettleBudget())
+			}
 		case stSettle:
 			tp := time.Now()
 			fin, nav := p.pumpStage(soft)
