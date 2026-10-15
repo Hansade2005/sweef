@@ -237,6 +237,10 @@ func compiledPrelude() []byte {
 				return
 			}
 		}
+		if b := embeddedPrelude(); b != nil { // built in (prelude_embed.go)
+			preludeBytecode = b
+			return
+		}
 		vm, err := quickjs.NewVM()
 		if err != nil {
 			return
@@ -366,7 +370,7 @@ func buildVM(o Options) (*jsVM, error) {
 // current document. Returns nil (and logs) when no VM can be created, in
 // which case the tab works in fetch+DOM mode.
 func newJSVM(t *Tab, doc *fnet.Doc, docURL string) *jsVM {
-	j := t.eng.vms.take()
+	j := t.eng.vms.takeWait(500 * time.Millisecond)
 	if j == nil {
 		var err error
 		if j, err = buildVM(t.eng.opts); err != nil {
@@ -404,6 +408,7 @@ type vmPool struct {
 	building int // builders running
 	opts     Options
 	closed   bool
+	built    chan struct{} // closed and replaced whenever a builder finishes (takeWait)
 }
 
 func newVMPool(o Options) *vmPool {
@@ -411,7 +416,7 @@ func newVMPool(o Options) *vmPool {
 	if o.DisableJS {
 		size = 0
 	}
-	p := &vmPool{size: size, opts: o}
+	p := &vmPool{size: size, opts: o, built: make(chan struct{})}
 	p.refill()
 	return p
 }
@@ -430,6 +435,40 @@ func (p *vmPool) take() *jsVM {
 	return j
 }
 
+// takeWait is take, but when no VM is ready and one is being built it waits for that build (up to max)
+// rather than building another beside it: right after the engine starts its first builds are under way, and
+// a third build competing with them for the cores made the first eval of a fresh session wait longer.
+func (p *vmPool) takeWait(max time.Duration) *jsVM {
+	if p == nil {
+		return nil
+	}
+	deadline := time.Now().Add(max)
+	for {
+		p.mu.Lock()
+		if n := len(p.ready); n > 0 {
+			j := p.ready[n-1]
+			p.ready = p.ready[:n-1]
+			p.mu.Unlock()
+			return j
+		}
+		if p.building == 0 || p.closed {
+			p.mu.Unlock()
+			return nil
+		}
+		ch := p.built
+		p.mu.Unlock()
+		left := time.Until(deadline)
+		if left <= 0 {
+			return nil
+		}
+		select {
+		case <-ch:
+		case <-time.After(left):
+			return nil
+		}
+	}
+}
+
 func (p *vmPool) refill() {
 	if p == nil {
 		return
@@ -445,6 +484,8 @@ func (p *vmPool) refill() {
 			j, err := buildVM(p.opts)
 			p.mu.Lock()
 			p.building--
+			close(p.built)
+			p.built = make(chan struct{})
 			if err != nil || p.closed || len(p.ready) >= p.size {
 				p.mu.Unlock()
 				if j != nil {
