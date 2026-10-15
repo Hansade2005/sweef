@@ -700,6 +700,15 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 		}
 		c.Close()
 		s.call("Browser.shutdown", nil)
+		// wait for the daemon to be gone: one still shutting down when the next command starts a new daemon
+		// removed that daemon's socket on its way out, and the command after got a fresh session ("no such tab")
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			c, err := s.dial()
+			if err != nil {
+				break
+			}
+			c.Close()
+		}
 		os.Remove(s.sock)
 		return "✓ session closed", nil
 	}

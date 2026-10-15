@@ -246,10 +246,16 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 		if typ == "submit" || typ == "image" || (typ == "" && strings.EqualFold(info.Name, "button")) {
 			inForm := false
 			_ = t.withDoc(func(d *fnet.Doc) error { inForm = d.FormOf(bid) != 0; return nil })
-			if inForm {
-				return t.SubmitFormBackend(bid)
+			if !inForm {
+				return nil
 			}
-			return nil
+			// with a VM the form is submitted the way a browser does it: a cancelable submit event first (the
+			// page's own handler usually takes over: React/Vue/Angular forms, fetch-based logins), then the
+			// navigation. Posting it from here skipped the event: saucedemo's login went out as a plain GET.
+			if _, ok := t.jsCall("__swDefaultAction", bid); ok {
+				return nil
+			}
+			return t.SubmitFormBackend(bid)
 		}
 		if typ == "checkbox" || typ == "radio" {
 			_ = t.withDoc(func(d *fnet.Doc) error { return d.SetChecked(bid, !(info.Checked)) })
@@ -367,11 +373,11 @@ func (t *Tab) Press(sel, keys string) error {
 		return err
 	}
 	key := strings.TrimSpace(keys)
-	proceed := true
-	if r, ok := t.jsCall("__swDispatchKey", bid, key); ok {
-		proceed = truthyAny(r)
-	}
-	if proceed && strings.EqualFold(key, "Enter") {
+	// With a VM the page's key handling owns the default action: Enter in a field submits its form through
+	// the submit event (implicit submission), which page code may cancel (React, Vue and Angular forms all do,
+	// then fetch). Submitting here as well sent the form a second time, as a plain GET, past the cancellation.
+	// Only a page without a VM (no scripts at all) is submitted from here.
+	if _, ok := t.jsCall("__swDispatchKey", bid, key); !ok && strings.EqualFold(key, "Enter") {
 		info := t.infoForBackend(bid)
 		if info != nil && strings.EqualFold(info.Name, "input") {
 			return t.SubmitFormFor(sel)

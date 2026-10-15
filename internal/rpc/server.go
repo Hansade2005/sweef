@@ -495,8 +495,19 @@ func (s *Server) ServeTCP(ctx context.Context, addr string) error {
 	}
 	defer ln.Close()
 	if network == "unix" {
-		defer os.Remove(addr)
 		_ = os.Chmod(addr, 0o600)
+		// remove the socket only while it is still this listener's: once a new daemon has bound the same
+		// path (the old one still shutting down), removing it would strand the new one's clients
+		if mine, err := os.Stat(addr); err == nil {
+			defer func() {
+				if cur, err := os.Stat(addr); err == nil && os.SameFile(mine, cur) {
+					_ = os.Remove(addr)
+				}
+			}()
+		}
+		if ul, ok := ln.(*net.UnixListener); ok {
+			ul.SetUnlinkOnClose(false) // the deferred check above decides
+		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
