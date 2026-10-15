@@ -54,6 +54,7 @@ const pumpWindow = 3 * time.Second
 func (s *Server) backgroundPump(ctx context.Context) {
 	tick := time.NewTicker(25 * time.Millisecond)
 	defer tick.Stop()
+	var rest time.Time // no pump before this (duty-cycle limit)
 	for {
 		select {
 		case <-ctx.Done():
@@ -63,13 +64,17 @@ func (s *Server) backgroundPump(ctx context.Context) {
 		if time.Since(time.Unix(0, s.lastActivity.Load())) > pumpWindow || s.inCall.Load() > 0 {
 			continue
 		}
-		if !s.drive.TryLock() {
+		if time.Now().Before(rest) || !s.drive.TryLock() {
 			continue
 		}
+		t0 := time.Now()
 		for _, t := range s.eng.ListTabs() {
 			t.Settle(15 * time.Millisecond) // returns at once when nothing is due
 		}
 		s.drive.Unlock()
+		// at most a quarter of one core: a page whose every animation frame forces an expensive layout would
+		// otherwise keep the daemon busy for the whole window while the agent thinks
+		rest = time.Now().Add(3 * time.Since(t0))
 	}
 }
 
