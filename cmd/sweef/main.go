@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/sweefbrowser/sweef/internal/agent"
+	"github.com/sweefbrowser/sweef/internal/cliclient"
 	"os"
 	"os/signal"
 	"runtime/pprof"
@@ -38,10 +39,10 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
-	cmd, args := leadingGlobalFlags(os.Args[1:])
+	cmd, args := cliclient.LeadingGlobalFlags(os.Args[1:])
 
-	if isSessionCommand(cmd, args) {
-		cmdSession(cmd, args)
+	if cliclient.IsSessionCommand(cmd, args) {
+		cliclient.Run(cmd, args)
 		return
 	}
 	switch cmd {
@@ -74,28 +75,6 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
-}
-
-// leadingGlobalFlags lets the session CLI's global flags come before the verb
-// (`sweef --json get url`, `sweef --session w open ...`): the verb is the first
-// argument that is not one of them, and the flags move after it.
-func leadingGlobalFlags(argv []string) (string, []string) {
-	var flags []string
-	i := 0
-	for i < len(argv) {
-		a := argv[i]
-		switch {
-		case a == "--json" || strings.HasPrefix(a, "--session=") || strings.HasPrefix(a, "--timeout="):
-			flags = append(flags, a)
-			i++
-		case (a == "--session" || a == "--timeout") && i+1 < len(argv):
-			flags = append(flags, a, argv[i+1])
-			i += 2
-		default:
-			return a, append(append([]string{}, argv[i+1:]...), flags...)
-		}
-	}
-	return "help", nil
 }
 
 func usage() {

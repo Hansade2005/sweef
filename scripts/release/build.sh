@@ -108,6 +108,10 @@ build_one() { # os arch outdir
       die "$os/$arch binary is dynamically linked (INTERP/NEEDED present); Linux builds must be static"
     fi
   fi
+  # sweef-cli: the session commands without the engine linked in, so each command starts in half the time
+  # (cmd/sweef-cli); it runs the sweef binary next to it as the daemon
+  ( cd "$ROOT" && GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags "-s -w -buildid=" -o "$out/sweef-cli$ext" ./cmd/sweef-cli ) \
+    || die "sweef-cli build failed for $os/$arch"
   if [ "$CDM_HOST" = 1 ]; then
     # The helper dlopen's the user's Widevine CDM, so unlike sweef it is built to be dynamically linked on Linux
     # (purego's loader import). It never ships a CDM. The browser binary must stay static: see

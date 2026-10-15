@@ -1,4 +1,4 @@
-package main
+package cliclient
 
 // agentcli.go — the session CLI agents drive one command at a time:
 //
@@ -28,8 +28,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sweefbrowser/sweef/internal/batchfmt"
 	"github.com/sweefbrowser/sweef/internal/protocol"
-	"github.com/sweefbrowser/sweef/internal/rpc"
 )
 
 var sessionCommands = map[string]bool{
@@ -45,6 +45,39 @@ var sessionCommands = map[string]bool{
 
 // isSessionCommand decides between the one-shot commands (snapshot <url>,
 // eval <url> <expr>) and the daemon-backed session verbs.
+// IsSessionCommand reports whether cmd (with its arguments) is a session command: one the daemon serves.
+func IsSessionCommand(cmd string, args []string) bool { return isSessionCommand(cmd, args) }
+
+// Run runs a session command against the session daemon (starting it when needed) and exits non-zero on
+// failure.
+func Run(cmd string, args []string) { cmdSession(cmd, args) }
+
+// DaemonExe is the executable started as the session daemon ("<exe> serve ..."): the running binary in
+// sweef itself; the engine-free client (cmd/sweef-cli) points it at the sweef binary next to it.
+var DaemonExe = os.Executable
+
+// LeadingGlobalFlags lets the session CLI's global flags come before the verb
+// (`sweef --json get url`, `sweef --session w open ...`): the verb is the first
+// argument that is not one of them, and the flags move after it.
+func LeadingGlobalFlags(argv []string) (string, []string) {
+	var flags []string
+	i := 0
+	for i < len(argv) {
+		a := argv[i]
+		switch {
+		case a == "--json" || strings.HasPrefix(a, "--session=") || strings.HasPrefix(a, "--timeout="):
+			flags = append(flags, a)
+			i++
+		case (a == "--session" || a == "--timeout") && i+1 < len(argv):
+			flags = append(flags, a, argv[i+1])
+			i += 2
+		default:
+			return a, append(append([]string{}, argv[i+1:]...), flags...)
+		}
+	}
+	return "help", nil
+}
+
 func isSessionCommand(cmd string, args []string) bool {
 	if !sessionCommands[cmd] {
 		return false
@@ -126,7 +159,7 @@ func (s *cliSession) ensureDaemon() error {
 		return err
 	}
 	os.Remove(s.sock)
-	self, err := os.Executable()
+	self, err := DaemonExe()
 	if err != nil {
 		return err
 	}
@@ -1120,7 +1153,7 @@ func (s *cliSession) batch(args []string) (string, error) {
 	if s.jsonOut {
 		return string(r), nil
 	}
-	text, ok := rpc.FormatBatch(r, 120)
+	text, ok := batchfmt.Format(r, 120)
 	if !ok {
 		// Print the per-step report, then exit non-zero.
 		fmt.Print(text)
