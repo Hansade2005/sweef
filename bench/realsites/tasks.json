@@ -374,7 +374,7 @@
       "category": "login-form",
       "url": "https://the-internet.herokuapp.com/dynamic_loading/2",
       "goal": "Click the Start button and wait for the result. What text appears?",
-      "snapshot_check": "Dynamic Loading",
+      "snapshot_check": "Dynamically Loaded",
       "steps": [
         {
           "op": "click",
