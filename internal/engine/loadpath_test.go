@@ -1165,3 +1165,36 @@ func TestHeadlessLoadFetchesImagesEarly(t *testing.T) {
 		t.Errorf("image and script: %s", v)
 	}
 }
+
+// An animation loop that rewrites a style every frame does not hold a headless settle for its whole budget:
+// only content mutations (nodes, text, other attributes) keep it from going quiet.
+func TestSettleIgnoresEndlessStyleAnimation(t *testing.T) {
+	o := DefaultOptions()
+	o.SettleMs = 3000
+	o.CacheDir = "off"
+	e := New(o)
+	defer e.Close()
+	tab, err := e.NewTab("about:blank")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><div id=spin>x</div><script>
+var a = 0;
+(function f() { a++; document.getElementById('spin').style.transform = 'rotate(' + a + 'deg)'; requestAnimationFrame(f); })();
+setTimeout(function () { var p = document.createElement('p'); p.textContent = 'late content'; document.body.appendChild(p); }, 150);
+</script>`)
+	}))
+	defer srv.Close()
+	t0 := time.Now()
+	if err := tab.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d > 1500*time.Millisecond {
+		t.Errorf("Navigate took %v: the style animation held the settle", d)
+	}
+	if v := mustEval(t, tab, `document.body.textContent.indexOf('late content') >= 0 && a > 3`); v != "true" {
+		t.Errorf("content added at 150 ms missing or the animation never ran: %s", v)
+	}
+}

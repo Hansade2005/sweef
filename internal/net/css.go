@@ -162,6 +162,12 @@ func (d *Doc) cssLocked() *cssState {
 
 // invalidateStyles drops the computed-style cache. Called on every mutation.
 func (d *Doc) invalidateStyles() {
+	d.contentGen.Add(1)
+	d.invalidateStylesOnly()
+}
+
+// invalidateStylesOnly is invalidateStyles for a mutation that does not count as a content change (ContentGen).
+func (d *Doc) invalidateStylesOnly() {
 	d.mutGen.Add(1)
 	d.cssMu.Lock()
 	if d.css != nil {

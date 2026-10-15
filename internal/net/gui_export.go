@@ -7,6 +7,11 @@ import "golang.org/x/net/html"
 // a tab needs repainting (damage tracking) without polling the DOM.
 func (d *Doc) MutationGen() uint64 { return d.mutGen.Load() }
 
+// ContentGen counts the tree mutations other than style attribute writes and event notes: a headless settle
+// waits for it to stop moving, and a page that animates for ever (a carousel, a marquee, a framer-motion
+// entrance loop) moves only MutationGen.
+func (d *Doc) ContentGen() uint64 { return d.contentGen.Load() }
+
 // TouchPaint marks that pixels drawn into the document from outside the tree
 // changed (a new video frame) without touching layout: the cached layout stays
 // valid, only PaintGen moves, and a repaint is needed.

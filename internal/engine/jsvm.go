@@ -932,7 +932,8 @@ func (t *Tab) RunFor(d time.Duration) {
 	}
 }
 
-// docGen is the mutation counter of the tab's document (0 without one).
+// docGen is the content mutation counter of the tab's document (0 without one): style attribute writes do not
+// move it (fnet.Doc.ContentGen), so an endless animation does not keep a settle from going quiet.
 func (j *jsVM) docGen() uint64 {
 	t := j.tab
 	t.mu.RLock()
@@ -941,7 +942,7 @@ func (j *jsVM) docGen() uint64 {
 	if d == nil {
 		return 0
 	}
-	return d.MutationGen()
+	return d.ContentGen()
 }
 
 // Settle pumps the page's event loop for up to d (exported for RPC waits).

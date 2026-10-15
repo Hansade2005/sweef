@@ -34,7 +34,10 @@ type Doc struct {
 	css   *cssState
 
 	// mutGen counts tree mutations; layout results are cached per value.
-	mutGen         atomic.Uint64
+	mutGen atomic.Uint64
+	// contentGen counts the mutations that can change what the page says: all but style attribute writes
+	// (an animation loop rewrites a transform or an opacity every frame), see ContentGen
+	contentGen     atomic.Uint64
 	paintGen       atomic.Uint64 // repaint-only changes (video frames), see TouchPaint
 	layoutMu       sync.Mutex
 	layoutCache    *Layout
@@ -90,7 +93,11 @@ func (d *Doc) SetMutationListener(fn func(Mutation)) {
 }
 
 func (d *Doc) note(m Mutation) {
-	d.invalidateStyles()
+	if ((m.Op == "set-attr" || m.Op == "remove-attr") && (m.Key == "style" || m.Key == "data-sw-anim")) || m.Op == "event" {
+		d.invalidateStylesOnly()
+	} else {
+		d.invalidateStyles()
+	}
 	d.mu.RLock()
 	ls := append([]func(Mutation){}, d.listeners...)
 	d.mu.RUnlock()
