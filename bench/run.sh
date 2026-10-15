@@ -35,6 +35,7 @@ trap 'kill $SITE_PID 2>/dev/null || true; "$SWEEF" close >/dev/null 2>&1 || true
 CGO_ENABLED=0 go build -ldflags='-s -w' -o "$WORK/sweef" ./cmd/sweef || exit 1  # release build: static, stripped
 SWEEF="$WORK/sweef"
 export SWEEF_HOME="$WORK/sweef-home"
+export SWEEF_CACHE_DIR="$WORK/sweef-cache" # empty bytecode/HTTP caches per run, not the shared ~/.cache/sweef
 
 # fixture site: a landing page, a form page, a React counter
 go run ./bench/site -addr 127.0.0.1:18080 >/dev/null 2>&1 &

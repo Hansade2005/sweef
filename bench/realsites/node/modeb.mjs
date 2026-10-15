@@ -88,7 +88,7 @@ async function runSweefAgent(task) {
   if (opt.thinking === 'disabled') a.push('-no-thinking');
   if (opt.baseUrl) a.push('-base-url', opt.baseUrl);
   a.push(promptFor(task));
-  const env = { ...process.env, SWEEF_HOME: home };
+  const env = { ...process.env, SWEEF_HOME: home, SWEEF_CACHE_DIR: path.join(home, 'cache') }; // empty caches, like the fresh Chromium profile
   const r = await execp(opt.sweef, a, env, TMS);
   fs.rmSync(home, { recursive: true, force: true });
   const out = { tool: 'sweef-agent', wall_ms: r.ms, exit: r.code };

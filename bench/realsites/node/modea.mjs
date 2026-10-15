@@ -52,7 +52,11 @@ function cliAdapter(kind) {
   const bin = kind === 'sweef' ? opt.sweef : opt.ab;
   return async function runCli(task) {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), kind + '-home-'));
-    const env = { ...process.env, SWEEF_HOME: home, AGENT_BROWSER_EXECUTABLE_PATH: CHROMIUM, AGENT_BROWSER_SESSION: 'bench' + process.pid };
+    // A cold run starts with empty caches, as the Playwright side does (a fresh Chromium profile): Sweef's
+    // bytecode and HTTP caches default to ~/.cache/sweef, which every earlier run (and day) had filled, so
+    // until 2026-10-15 Sweef's "cold" runs replayed cached bytecode and responses. The warm visit below runs
+    // in the same session and so still sees what the cold visit cached.
+    const env = { ...process.env, SWEEF_HOME: home, SWEEF_CACHE_DIR: path.join(home, 'cache'), AGENT_BROWSER_EXECUTABLE_PATH: CHROMIUM, AGENT_BROWSER_SESSION: 'bench' + process.pid };
     const tf = `${TMS / 1000}s`;
     const run = (a) => exec(bin, a, env, TMS + 15000);
     const res = { tool: kind, steps: [], ok: false };
