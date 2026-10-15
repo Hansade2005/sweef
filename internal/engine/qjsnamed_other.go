@@ -25,3 +25,8 @@ func withImportMetaURL(src, url string) string {
 
 // pendingDynamicImports is unavailable here (see qjsnamed.go): queued import() calls load one at a time.
 func pendingDynamicImports(vm *quickjs.VM) [][2]string { return nil }
+
+// preludeStripsSource: the prelude keeps its source here; nativeToStringJS makes it print as native code.
+func preludeStripsSource() bool { return false }
+
+func stripSource(vm *quickjs.VM) (restore func()) { return func() {} }

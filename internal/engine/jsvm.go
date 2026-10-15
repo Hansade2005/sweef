@@ -111,11 +111,20 @@ func fullPrelude() string {
 			b.WriteString(zpack.String(preludeZExtras[n]))
 		}
 	}
-	b.WriteString("\n")
-	b.WriteString(nativeToStringJS)
+	if !preludeStripsSource() {
+		b.WriteString("\n")
+		b.WriteString(nativeToStringJS)
+	}
 	return b.String()
 }
 
+// The platform the preludes build prints as built-in code, "function f() { [native code] }", the way a browser's
+// platform does. Pages tell their own code from the platform's that way: Optimizely's "Cleanse" deletes every
+// non-native accessor from HTMLElement.prototype (so element.style was gone on the-internet.herokuapp.com and
+// jQuery failed to start), and lodash, core-js and others test for native implementations the same way. The
+// prelude is compiled without its source text (QuickJS then prints functions as native code, and the bytecode
+// is smaller); where the C API is out of reach (preludeStripsSource false) nativeToStringJS does it instead.
+//
 // nativeToStringJS runs after every prelude: the platform the preludes built (constructors, prototype methods,
 // accessors, functions on globals such as console or CSS) prints as built-in code, "function f() { [native
 // code] }", the way a browser's platform does. Pages tell their own code from the platform's that way: Optimizely's
@@ -178,7 +187,11 @@ func preludeKey() [32]byte {
 	}
 	part("z", "dom", domPreludeZ)
 	part("z", "domext", domPreludeExtZ)
-	part("r", "native-tostring", nativeToStringJS)
+	if preludeStripsSource() {
+		part("strip", "source", "")
+	} else {
+		part("r", "native-tostring", nativeToStringJS)
+	}
 	for _, n := range preludeNames() {
 		if src, ok := preludeExtras[n]; ok {
 			part("r", n, src)
@@ -229,7 +242,10 @@ func compiledPrelude() []byte {
 			return
 		}
 		defer vm.Close()
-		if bc, err := vm.Compile(fullPrelude(), quickjs.EvalGlobal); err == nil {
+		restore := stripSource(vm)
+		bc, err := vm.Compile(fullPrelude(), quickjs.EvalGlobal)
+		restore()
+		if err == nil {
 			preludeBytecode = bc
 			if file != "" {
 				tmp := file + ".tmp"
@@ -328,7 +344,10 @@ func buildVM(o Options) (*jsVM, error) {
 		}
 	}
 	if !loaded {
-		if _, err := vm.Eval(fullPrelude(), quickjs.EvalGlobal); err != nil {
+		restore := stripSource(vm)
+		_, err := vm.Eval(fullPrelude(), quickjs.EvalGlobal)
+		restore()
+		if err != nil {
 			vm.Close()
 			return nil, fmt.Errorf("prelude: %w", err)
 		}

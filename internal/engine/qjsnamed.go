@@ -205,3 +205,28 @@ func pendingDynamicImports(vm *quickjs.VM) [][2]string {
 // cmem is the address of QuickJS's C-heap memory (allocated by modernc.org/libc, never moved or collected by Go)
 // as a pointer to read it through.
 func cmem(p uintptr) unsafe.Pointer { return *(*unsafe.Pointer)(unsafe.Pointer(&p)) }
+
+// preludeStripsSource reports whether the prelude is compiled without its source text (stripSource works here).
+func preludeStripsSource() bool { return qjsOffsets() }
+
+// stripSource makes vm's runtime compile functions without their source text until the returned func is
+// called (JS_SetStripInfo): such functions print as "[native code]", as a browser's built-ins do.
+func stripSource(vm *quickjs.VM) (restore func()) {
+	if vm == nil || !qjsOffsets() {
+		return func() {}
+	}
+	base := unsafe.Pointer(vm)
+	ctx := *(*uintptr)(unsafe.Add(base, qjsCtxOff))
+	r := *(*unsafe.Pointer)(unsafe.Add(base, qjsRtOff))
+	if ctx == 0 || r == nil {
+		return func() {}
+	}
+	tls := *(**libc.TLS)(unsafe.Add(r, qjsTLSOff))
+	crt := (*lib.TJSContext)(cmem(ctx)).Frt
+	if tls == nil || crt == 0 {
+		return func() {}
+	}
+	old := lib.XJS_GetStripInfo(tls, crt)
+	lib.XJS_SetStripInfo(tls, crt, old|lib.MJS_STRIP_SOURCE)
+	return func() { lib.XJS_SetStripInfo(tls, crt, old) }
+}

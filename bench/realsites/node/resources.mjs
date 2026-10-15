@@ -9,8 +9,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { chromium, rmTree } from 'playwright-core';
-import { CHROMIUM, sleep } from './lib.mjs';
+import { chromium } from 'playwright-core';
+import { CHROMIUM, sleep, rmTree } from './lib.mjs';
 
 const opt = { sweef: 'sweef', runs: 3, out: '', idleMs: 5000 };
 for (let i = 2; i < process.argv.length; i++) {
