@@ -1165,10 +1165,152 @@
     attachShadow: function (init) { var s = slots(this); if (s.shadowRoot) throw DOMException('Shadow root cannot be created on a host which already hosts a shadow tree.', 'NotSupportedError'); s.shadowRoot = this; return this; },
     requestFullscreen: function () { return Promise.resolve(); },
     requestPointerLock: function () { }, setPointerCapture: function () { }, releasePointerCapture: function () { }, hasPointerCapture: function () { return false; },
-    animate: function () { return { cancel: function () { }, finish: function () { }, pause: function () { }, play: function () { }, finished: Promise.resolve(), onfinish: null, currentTime: 0, playState: 'finished' }; },
-    getAnimations: function () { return []; },
+    animate: function (keyframes, options) { return waapiAnimate(this, keyframes, options); },
+    getAnimations: function () { var el = this; return waapiAll.filter(function (a) { return a.effect && a.effect.target === el && a.playState !== 'finished' && a.playState !== 'idle'; }); },
     checkVisibility: function () { return this.isConnected; }
   });
+  // ---- Web Animations (Element.animate) ----
+  // A working subset: keyframes (array or property-indexed form, offsets), duration, delay, iterations,
+  // direction, fill and linear timing, run in real time on animation frames. Values are written to the
+  // element's inline style while the animation is in effect (the value the page would compute) and the
+  // previous inline value comes back when it stops having an effect (fill none / cancel). Numbers inside
+  // values with the same shape interpolate (opacity, lengths, transforms with the same functions, rgb()
+  // colours); other values switch at the midpoint. finish/cancel events and the finished/ready promises
+  // follow the spec closely enough for animation libraries (Framer Motion commits its final values when an
+  // animation finishes: with the old stub nothing ever finished, and content animated in from opacity 0
+  // stayed invisible in screenshots).
+  var waapiAll = [];
+  function waapiKebab(p) { return p === 'cssFloat' ? 'float' : p.indexOf('--') === 0 ? p : p.replace(/[A-Z]/g, function (c) { return '-' + c.toLowerCase(); }); }
+  function waapiFrames(kf) {
+    var frames = [];
+    if (Array.isArray(kf)) frames = kf.map(function (f) { return Object.assign({}, f); });
+    else if (kf && typeof kf === 'object') {
+      var props = Object.keys(kf).filter(function (k) { return k !== 'offset' && k !== 'easing' && k !== 'composite'; }), n = 0;
+      props.forEach(function (k) { n = Math.max(n, Array.isArray(kf[k]) ? kf[k].length : 1); });
+      for (var i = 0; i < n; i++) {
+        var f = {};
+        props.forEach(function (k) { var v = Array.isArray(kf[k]) ? kf[k] : [kf[k]]; if (i < v.length) f[k] = v[i]; });
+        if (Array.isArray(kf.offset) && kf.offset[i] != null) f.offset = kf.offset[i];
+        frames.push(f);
+      }
+    }
+    var m = frames.length;
+    frames.forEach(function (f, i) { if (f.offset == null) f.offset = m <= 1 ? 1 : i / (m - 1); });
+    return frames;
+  }
+  function waapiLerp(a, b, t) {
+    a = String(a); b = String(b);
+    if (t <= 0) return a; if (t >= 1) return b;
+    var na = a.match(/-?\d*\.?\d+(e-?\d+)?/gi) || [], nb = b.match(/-?\d*\.?\d+(e-?\d+)?/gi) || [];
+    var sa = a.replace(/-?\d*\.?\d+(e-?\d+)?/gi, '#'), sb = b.replace(/-?\d*\.?\d+(e-?\d+)?/gi, '#');
+    if (sa !== sb || na.length !== nb.length || !na.length) return t < 0.5 ? a : b;
+    var i = 0;
+    return sa.replace(/#/g, function () { var x = +na[i], y = +nb[i]; i++; var v = x + (y - x) * t; return String(Math.round(v * 10000) / 10000); });
+  }
+  // The animated values of an element live in the host attribute data-sw-anim, which the style engine applies
+  // after the element's normal declarations, inline style included (the animation origin of the cascade):
+  // page writes to inline style never fight an animation, and getComputedStyle shows the animated value.
+  function waapiEffect(el, anim, vals) {
+    var sl = slots(el), list = sl.anims || (sl.anims = []), i;
+    for (i = 0; i < list.length && list[i].a !== anim; i++) {}
+    if (vals) { if (i < list.length) list[i].v = vals; else list.push({ a: anim, v: vals }); } else if (i < list.length) list.splice(i, 1);
+    var merged = {}; list.forEach(function (e) { Object.keys(e.v).forEach(function (k) { merged[k] = e.v[k]; }); });
+    var text = Object.keys(merged).map(function (k) { return k + ': ' + merged[k]; }).join('; ');
+    if (text === (sl.animText || '')) return;
+    sl.animText = text;
+    try { if (text) sw.setAttr(el[ID], 'data-sw-anim', text); else sw.removeAttr(el[ID], 'data-sw-anim'); } catch (e) { /* detached */ }
+  }
+  function waapiAnimate(el, keyframes, options) {
+    var o = typeof options === 'number' ? { duration: options } : Object.assign({}, options || {});
+    var dur = o.duration === 'auto' || o.duration == null ? 0 : Math.max(0, +o.duration || 0);
+    var delay = +o.delay || 0, endDelay = +o.endDelay || 0, iters = o.iterations == null ? 1 : +o.iterations;
+    if (!(iters >= 0)) iters = 1;
+    var fill = o.fill || 'auto', dir = o.direction || 'normal';
+    var frames = waapiFrames(keyframes), props = {};
+    frames.forEach(function (f) { Object.keys(f).forEach(function (k) { if (k !== 'offset' && k !== 'easing' && k !== 'composite') props[k] = 1; }); });
+    props = Object.keys(props);
+    var resolveFin, rejectFin, rafId = 0, holdTime = null, rate = +o.playbackRate || 1;
+    var anim = {
+      id: o.id || '', playState: 'running', pending: false, replaceState: 'active', playbackRate: rate, timeline: documentWrapper.timeline || null,
+      startTime: nowMs(), onfinish: null, oncancel: null, onremove: null, _listeners: {},
+      effect: {
+        target: el, pseudoElement: o.pseudoElement || null, composite: o.composite || 'replace',
+        getKeyframes: function () { return frames.map(function (f) { return Object.assign({ computedOffset: f.offset, easing: 'linear', composite: 'auto' }, f); }); },
+        setKeyframes: function (k) { frames = waapiFrames(k); },
+        getTiming: function () { return { delay: delay, endDelay: endDelay, duration: dur, iterations: iters, direction: dir, fill: fill, easing: o.easing || 'linear' }; },
+        getComputedTiming: function () { var ct = local(); return { localTime: ct, progress: progressAt(ct), currentIteration: 0, activeDuration: dur * iters, endTime: delay + dur * iters + endDelay, duration: dur, delay: delay, iterations: iters, direction: dir, fill: fill }; },
+        updateTiming: function (t) { if (t) { if (t.duration != null) dur = +t.duration; if (t.delay != null) delay = +t.delay; if (t.iterations != null) iters = +t.iterations; if (t.fill) fill = t.fill; } }
+      },
+      addEventListener: function (t, f) { (this._listeners[t] = this._listeners[t] || []).push(f); },
+      removeEventListener: function (t, f) { var l = this._listeners[t]; if (l) { var i = l.indexOf(f); if (i >= 0) l.splice(i, 1); } },
+      dispatchEvent: function (e) { var l = (this._listeners[e.type] || []).slice(); l.forEach(function (f) { try { f.call(anim, e); } catch (x) { reportError(x); } }); return true; }
+    };
+    anim.finished = new Promise(function (res, rej) { resolveFin = res; rejectFin = rej; });
+    anim.finished.catch(function () { });
+    anim.ready = Promise.resolve(anim);
+    function local() { return holdTime != null ? holdTime : (nowMs() - anim.startTime) * rate; }
+    function endTime() { return delay + dur * iters; }
+    function progressAt(t) {
+      if (t < delay) return null;
+      if (!isFinite(iters) || dur <= 0 && iters > 0) { if (dur <= 0) return 1; }
+      var act = Math.min(t - delay, dur * iters);
+      var it = dur > 0 ? act / dur : iters, cur = Math.floor(it), p = it - cur;
+      if (act >= dur * iters && iters > 0) { p = iters % 1 || 1; cur = Math.ceil(iters) - 1; }
+      var rev = dir === 'reverse' || (dir === 'alternate' && cur % 2 === 1) || (dir === 'alternate-reverse' && cur % 2 === 0);
+      return rev ? 1 - p : p;
+    }
+    function valueAt(prop, p) {
+      var fs = frames.filter(function (f) { return f[prop] != null; });
+      if (!fs.length) return null;
+      if (fs.length === 1) { var under = el.style.getPropertyValue(waapiKebab(prop)) || getComputedStyle(el).getPropertyValue(waapiKebab(prop)); return fs[0].offset >= 1 ? waapiLerp(under, fs[0][prop], p) : fs[0][prop]; }
+      if (p <= fs[0].offset) return fs[0][prop];
+      for (var i = 1; i < fs.length; i++) if (p <= fs[i].offset) { var a = fs[i - 1], b = fs[i], span = b.offset - a.offset; return waapiLerp(a[prop], b[prop], span > 0 ? (p - a.offset) / span : 1); }
+      return fs[fs.length - 1][prop];
+    }
+    var effectOn = false;
+    function apply(p) {
+      var vals = {};
+      props.forEach(function (k) { var v = valueAt(k, p); if (v != null) vals[waapiKebab(k)] = String(v); });
+      effectOn = true; waapiEffect(el, anim, vals);
+    }
+    function restore() { if (effectOn) { effectOn = false; waapiEffect(el, anim, null); } }
+    function holdsAfter() { return fill === 'forwards' || fill === 'both'; }
+    function holdsBefore() { return fill === 'backwards' || fill === 'both'; }
+    function fire(type) { var e = { type: type, target: anim, currentTime: local(), timelineTime: nowMs() }; var h = anim['on' + type]; if (typeof h === 'function') { try { h.call(anim, e); } catch (x) { reportError(x); } } anim.dispatchEvent(e); }
+    function finishNow() {
+      if (anim.playState === 'finished') return;
+      anim.playState = 'finished';
+      if (holdsAfter()) apply(progressAt(endTime()) == null ? 1 : progressAt(endTime())); else restore();
+      var i = waapiAll.indexOf(anim); if (i >= 0 && !holdsAfter()) waapiAll.splice(i, 1);
+      resolveFin(anim);
+      fire('finish');
+    }
+    function tick() {
+      rafId = 0;
+      if (anim.playState !== 'running') return;
+      var t = local();
+      if (isFinite(iters) && t >= endTime()) { finishNow(); return; }
+      var p = progressAt(t);
+      if (p == null) { if (holdsBefore()) apply(progressAt(delay) || 0); } else apply(p);
+      rafId = global.requestAnimationFrame(tick);
+    }
+    anim.play = function () { if (anim.playState === 'finished') { anim.startTime = nowMs(); holdTime = null; } else if (holdTime != null) { anim.startTime = nowMs() - holdTime / rate; holdTime = null; } anim.playState = 'running'; if (!rafId) rafId = global.requestAnimationFrame(tick); };
+    anim.pause = function () { if (anim.playState === 'running') { holdTime = local(); anim.playState = 'paused'; } };
+    anim.finish = function () { finishNow(); };
+    anim.cancel = function () { if (anim.playState === 'idle') return; anim.playState = 'idle'; restore(); var i = waapiAll.indexOf(anim); if (i >= 0) waapiAll.splice(i, 1); var e = DOMException('The user aborted a request.', 'AbortError'); rejectFin(e); anim.finished = new Promise(function (res, rej) { resolveFin = res; rejectFin = rej; }); anim.finished.catch(function () { }); fire('cancel'); };
+    anim.reverse = function () { rate = -rate; anim.playbackRate = rate; };
+    anim.updatePlaybackRate = function (r) { var t = local(); rate = +r || 1; anim.playbackRate = rate; anim.startTime = nowMs() - t / rate; };
+    anim.commitStyles = function () { var p = progressAt(local()); if (p == null) p = 1; props.forEach(function (k) { var v = valueAt(k, p); if (v != null) el.style.setProperty(waapiKebab(k), String(v)); }); };
+    anim.persist = function () { anim.replaceState = 'persisted'; };
+    Object.defineProperty(anim, 'currentTime', { get: function () { return anim.playState === 'idle' ? null : local(); }, set: function (v) { if (v == null) return; if (anim.playState === 'running') anim.startTime = nowMs() - (+v) / rate; else holdTime = +v; var p = progressAt(+v); if (p != null) apply(p); }, configurable: true });
+    waapiAll.push(anim);
+    var p0 = progressAt(0);
+    if (p0 != null) apply(p0); else if (holdsBefore()) apply(progressAt(delay) || 0);
+    if (dur * iters + delay <= 0 && isFinite(iters)) Promise.resolve().then(finishNow); // zero-length: finishes in the next microtask
+    else rafId = global.requestAnimationFrame(tick);
+    return anim;
+  }
+
   function attrName(el, name) { name = toStr(name); return el[NS] && el[NS] !== XHTML_NS ? name : name.toLowerCase(); }
   function insertAdjacent(el, position, node) {
     position = String(position).toLowerCase();

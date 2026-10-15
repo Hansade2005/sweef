@@ -225,6 +225,9 @@ func bucketKey(sel string) (byte, string) {
 	return 0, ""
 }
 
+// AnimAttr is the host attribute holding an element's Web Animations values ("prop: value; ...").
+const AnimAttr = "data-sw-anim"
+
 func identChar(s string, i int) bool {
 	c := s[i]
 	return c == '-' || c == '_' || c == '\\' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= 0x80
@@ -389,7 +392,7 @@ func (e *Engine) compute(n *html.Node, parent *Computed, pseudo string) *Compute
 	var hasStyle bool
 	if pseudo == "" {
 		styleAttr, hasStyle = attrOf(n, "style")
-		if !hasStyle && !needsHints(n) {
+		if _, anim := attrOf(n, AnimAttr); !hasStyle && !anim && !needsHints(n) {
 			canShare = true
 		}
 	}
@@ -488,6 +491,22 @@ func (e *Engine) compute(n *html.Node, parent *Computed, pseudo string) *Compute
 		for _, d := range inl {
 			if !d.Imp {
 				normal = append(normal, d)
+			}
+		}
+	}
+	// Web Animations: the element's animated values (the engine keeps them in AnimAttr) come after its normal
+	// declarations, inline style included, as the animation origin of the cascade does
+	if pseudo == "" {
+		if av, ok := attrOf(n, AnimAttr); ok && av != "" {
+			ad, ok := e.inline[av]
+			if !ok {
+				ad = ParseInline(av)
+				e.inline[av] = ad
+			}
+			for _, d := range ad {
+				if !d.Imp {
+					normal = append(normal, d)
+				}
 			}
 		}
 	}

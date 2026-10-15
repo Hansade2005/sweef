@@ -105,7 +105,7 @@ var dbgPersist = os.Getenv("SWEEF_PERSIST_DEBUG") != ""
 // presentational attributes read by the hint code (ua.go) and needsHints.
 var hintAttrs = []string{"width", "height", "bgcolor", "align", "valign", "border", "cellpadding", "cellspacing", "nowrap", "color",
 	"face", "size", "text", "link", "background", "hspace", "vspace", "type", "dir", "frameborder", "marginwidth", "marginheight",
-	"rows", "cols", "span", "noshade", "start", "value", "bordercolor", "leftmargin", "topmargin", "style", "class", "id", "lang"}
+	"rows", "cols", "span", "noshade", "start", "value", "bordercolor", "leftmargin", "topmargin", "style", "class", "id", "lang", AnimAttr}
 
 func sheetsEqual(a, b []SheetIn) bool {
 	if len(a) != len(b) {
