@@ -95,7 +95,7 @@ type Params = map[string]any
 
 func str(p Params, k string) string { v, _ := p[k].(string); return v }
 func num(p Params, k string) float64 {
-	if v, ok := p[k].(float64); ok {
+	if v, ok := numMs(p[k]); ok {
 		return v
 	}
 	return 0

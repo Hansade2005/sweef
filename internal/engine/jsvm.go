@@ -1624,6 +1624,28 @@ func (j *jsVM) registerHost() error {
 			j.tab.setURLOnly(u)
 			return nil, nil
 		}},
+		// setUrl: history.pushState/replaceState and same-document traversals moved the document's URL. The
+		// prelude has called it from the start but no host function had the name, so Tab.URL (and with it
+		// get url, wait --url, expect url and the agent's observation header) kept the URL the document was
+		// loaded from on every client-side route change. The session history itself stays in the page.
+		{"setUrl", func(a []any) (any, error) {
+			u, err := resolveURL(j.tab.URL(), argS(a, 0))
+			if err != nil {
+				return nil, err
+			}
+			pu, err := url.Parse(u)
+			if err != nil {
+				return nil, err
+			}
+			t := j.tab
+			t.mu.Lock()
+			t.url = pu
+			if t.hIdx >= 0 && t.hIdx < len(t.history) {
+				t.history[t.hIdx] = pu
+			}
+			t.mu.Unlock()
+			return nil, nil
+		}},
 		{"userAgent", func(a []any) (any, error) { return j.tab.UserAgent(), nil }},
 		{"viewport", func(a []any) (any, error) {
 			w, h, dsf, mobile, _ := j.tab.Viewport()

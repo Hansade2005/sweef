@@ -3,6 +3,8 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -77,5 +79,40 @@ func TestBackgroundPumpRunsPagesBetweenCalls(t *testing.T) {
 	}
 	if string(raw) != `true` {
 		t.Fatalf("the timer did not run between calls: %s", raw)
+	}
+}
+
+// The batch runner passes its timeouts as Go ints: a batch "wait 200" slept the 1 s default and a batch
+// "wait url" that never matched ran 30 s instead of 10 s. A client-side route change (pushState) moves
+// the tab's URL, so "wait url" sees it.
+func TestBatchWaitsUseTheirTimeoutsAndSeePushState(t *testing.T) {
+	e := engine.New(engine.DefaultOptions())
+	defer e.Close()
+	s := NewServer(e)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<p>shop</p>"))
+	}))
+	defer srv.Close()
+	if _, err := s.Call("Page.navigate", json.RawMessage(`{"url":"`+srv.URL+`/"}`)); err != nil {
+		t.Fatal(err)
+	}
+	run := func(steps string) (time.Duration, string) {
+		t0 := time.Now()
+		r, err := s.Call("Batch.run", json.RawMessage(`{"steps":`+steps+`,"stopOnError":true,"observe":"none"}`))
+		b, _ := json.Marshal(r)
+		if err != nil {
+			b = []byte(err.Error())
+		}
+		return time.Since(t0), string(b)
+	}
+	if d, out := run(`[{"cmd":"wait","args":["200"]}]`); d > 800*time.Millisecond {
+		t.Errorf("wait 200 took %v: %s", d, out)
+	}
+	if d, out := run(`[{"cmd":"eval","args":["history.pushState(null,'','/inventory.html')"]},{"cmd":"wait","args":["url","**/inventory.html"]}]`); d > 3*time.Second || !strings.Contains(out, `"ok":true`) {
+		t.Errorf("wait url after pushState: %v %s", d, out)
+	}
+	if d, _ := run(`[{"cmd":"wait","args":["url","**/never.html"]}]`); d > 15*time.Second {
+		t.Errorf("a wait url that never matches took %v (want its 10 s timeout)", d)
 	}
 }

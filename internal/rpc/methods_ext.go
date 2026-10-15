@@ -300,12 +300,12 @@ func init() {
 	})
 	registerExt("Page.waitForTimeout", func(sv *Server, p Params) (any, error) {
 		d := time.Second
-		if ms, ok := p["ms"].(float64); ok && ms >= 0 {
-			d = time.Duration(ms) * time.Millisecond
-		} else if ms, ok := p["timeout"].(float64); ok && ms >= 0 {
-			d = time.Duration(ms) * time.Millisecond
-		} else if ms, ok := p["timeoutMs"].(float64); ok && ms >= 0 { // the SDKs' spelling
-			d = time.Duration(ms) * time.Millisecond
+		if ms, ok := numMs(p["ms"]); ok && ms >= 0 {
+			d = time.Duration(ms * float64(time.Millisecond))
+		} else if ms, ok := numMs(p["timeout"]); ok && ms >= 0 {
+			d = time.Duration(ms * float64(time.Millisecond))
+		} else if ms, ok := numMs(p["timeoutMs"]); ok && ms >= 0 { // the SDKs' spelling
+			d = time.Duration(ms * float64(time.Millisecond))
 		}
 		if d > 60*time.Second {
 			d = 60 * time.Second
@@ -618,13 +618,27 @@ func predicate(fn func(*engine.Locator) (bool, error)) func(*Server, Params) (an
 }
 
 func dur(p Params, k string, def time.Duration) time.Duration {
-	if ms, ok := p[k].(float64); ok && ms > 0 {
-		return time.Duration(ms) * time.Millisecond
+	if ms, ok := numMs(p[k]); ok && ms > 0 {
+		return time.Duration(ms * float64(time.Millisecond))
 	}
 	// the CLI, the batch runner and the SDKs send "timeoutMs": reading only "timeout" made every wait run
 	// for the 30 s default, past the caller's own deadline (the CLI then failed with a socket i/o timeout)
-	if ms, ok := p[k+"Ms"].(float64); ok && ms > 0 {
-		return time.Duration(ms) * time.Millisecond
+	if ms, ok := numMs(p[k+"Ms"]); ok && ms > 0 {
+		return time.Duration(ms * float64(time.Millisecond))
 	}
 	return def
+}
+
+// numMs reads a number as JSON decodes it (float64) or as Go callers pass it (the batch runner builds its
+// params in Go: an int "timeoutMs" was ignored and every batch wait and expect-less wait ran 30 s).
+func numMs(v any) (float64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return x, true
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	}
+	return 0, false
 }
