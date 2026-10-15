@@ -122,6 +122,8 @@ function cliAdapter(kind) {
         for (;;) {
           const r = await evalJs('location.href + "\\n" + document.body.innerText');
           txt = r.code === 0 ? r.out : '';
+          // sweef eval prints the value as JSON: decode it, or line breaks reach the regex as the two characters \n
+          try { const v = JSON.parse(txt.trim()); if (typeof v === 'string') txt = v; } catch { /* not JSON: keep the raw text */ }
           if (fc.test(txt) || performance.now() - tf0 > USABLE_MAX_MS) break;
           await sleep(USABLE_POLL_MS);
         }
