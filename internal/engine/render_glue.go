@@ -129,6 +129,35 @@ func (e *tabEnv) prefetchDocImages() {
 	}
 }
 
+// prefetchDocImagesEarly starts downloading the <img> images of a document that was just parsed, for a
+// headless load: the first layout comes only after the page's scripts have run, and it then waited for every
+// image of the page (30 on a Wikipedia article, half a second). Started here the downloads overlap the
+// scripts, as a browser's preload scanner makes them, and that layout's reads join them in the request table.
+// The same images prefetchDocImages would fetch, under the same conditions.
+func (e *tabEnv) prefetchDocImagesEarly() {
+	t := e.t
+	if t.asyncImg.Load() || t.policy() != (DataPolicy{}) || t.IsOfflineMode() {
+		return
+	}
+	base := e.doc.BaseURL()
+	seen := map[string]bool{}
+	walkNodes(e.doc.Root, func(n *html.Node) {
+		if n.Type != html.ElementNode || n.Data != "img" {
+			return
+		}
+		u := imgURL(base, n)
+		if u == "" || seen[u] || strings.HasPrefix(u, "data:") || strings.HasPrefix(u, "file:") {
+			return
+		}
+		seen[u] = true
+		go func(u string) {
+			t.imgSem <- struct{}{} // not preloadSem: the page's scripts and modules come first
+			defer func() { <-t.imgSem }()
+			_, _, _ = t.fetchRes(u, fetchOpts{kind: KindImage, prefetch: true})
+		}(u)
+	})
+}
+
 // PrefetchImages implements render.ImagePrefetcher: the headless commands wait for every image a layout asks
 // for, so the CSS images of the page start downloading together (through the request table, which the
 // synchronous read in Image then joins) rather than one after another. Windows load images in the background

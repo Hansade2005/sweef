@@ -562,6 +562,11 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	}
 	t.pl.Store(nil) // load work of the previous document is void
 	t.installRender(doc)
+	if !progressive {
+		if env := t.ds.env.Load(); env != nil && env.doc == doc {
+			env.prefetchDocImagesEarly()
+		}
+	}
 	ts := time.Now()
 	t.applyStyles(doc)
 	t.tspan("styles.ready", "", ts)

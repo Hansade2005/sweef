@@ -1126,3 +1126,42 @@ fetch('/slow?api=1').then(function (r) { return r.text(); }).then(function (v) {
 		t.Errorf("the prefetch answer never reached the page: %q", v)
 	}
 }
+
+// A headless load starts downloading the document's images when it is parsed, not at the first layout after
+// the scripts: here the image request arrives while the blocking script is still being served.
+func TestHeadlessLoadFetchesImagesEarly(t *testing.T) {
+	var imgAt, scriptDone atomic.Int64
+	t0 := time.Now()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><img src="/a.gif" id="i"><img src="/b.gif"><script src="/slow.js"></script>`)
+	})
+	mux.HandleFunc("/slow.js", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(600 * time.Millisecond)
+		scriptDone.Store(int64(time.Since(t0)))
+		fmt.Fprint(w, `window.ran = 1`)
+	})
+	gif := []byte("GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
+	img := func(w http.ResponseWriter, r *http.Request) {
+		imgAt.CompareAndSwap(0, int64(time.Since(t0)))
+		w.Header().Set("Content-Type", "image/gif")
+		w.Write(gif)
+	}
+	mux.HandleFunc("/a.gif", img)
+	mux.HandleFunc("/b.gif", img)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	t0 = time.Now()
+	if err := tab.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	if imgAt.Load() == 0 || imgAt.Load() >= scriptDone.Load() {
+		t.Errorf("first image request at %v, blocking script served at %v: images waited for the scripts",
+			time.Duration(imgAt.Load()), time.Duration(scriptDone.Load()))
+	}
+	if v := mustEval(t, tab, `document.getElementById('i').naturalWidth + ',' + window.ran`); !strings.Contains(v, "1,1") {
+		t.Errorf("image and script: %s", v)
+	}
+}
