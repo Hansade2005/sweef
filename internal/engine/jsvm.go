@@ -552,11 +552,16 @@ func (j *jsVM) runModule(src, name string) error {
 		j.bcState = "hit"
 	}
 	if bc == nil && named {
-		// named after its URL: its relative imports, import.meta.url and its identity in the module map
-		// are right (qjsnamed.go)
-		if b, err := compileNamed(j.vm, src, name, quickjs.EvalModule); err == nil {
-			bc = b
-			cache.put(key, bc)
+		// compiled and run under its URL: its relative imports, import.meta.url and its identity in the module
+		// map are right (qjsnamed.go)
+		if b, err, ok := runModuleNamed(j.vm, src, name); ok {
+			if len(b) > 0 {
+				cache.put(key, b)
+			}
+			if err != nil {
+				j.tab.LogConsole("error", jsErrorText(err, name))
+			}
+			return err
 		}
 	}
 	if bc == nil {

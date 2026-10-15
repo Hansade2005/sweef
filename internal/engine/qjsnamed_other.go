@@ -4,15 +4,14 @@ package engine
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 
 	"modernc.org/quickjs"
 )
 
-// compileNamed is unavailable where QuickJS values are NaN-boxed; callers compile unnamed (see qjsnamed.go).
-func compileNamed(vm *quickjs.VM, src, name string, flags int) ([]byte, error) {
-	return nil, errors.New("named compile unavailable")
+// runModuleNamed is unavailable where QuickJS values are NaN-boxed; callers run modules unnamed (qjsnamed.go).
+func runModuleNamed(vm *quickjs.VM, src, name string) (bc []byte, err error, handled bool) {
+	return nil, nil, false
 }
 
 // withImportMetaURL: see qjsnamed.go.

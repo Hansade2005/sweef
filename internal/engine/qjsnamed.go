@@ -26,11 +26,10 @@ import (
 )
 
 var (
-	qjsOffOnce             sync.Once
-	qjsCtxOff, qjsRtOff    uintptr
-	qjsTLSOff              uintptr
-	qjsOffOK               bool
-	errNamedCompileUnavail = errors.New("named compile unavailable")
+	qjsOffOnce          sync.Once
+	qjsCtxOff, qjsRtOff uintptr
+	qjsTLSOff           uintptr
+	qjsOffOK            bool
 )
 
 func qjsOffsets() bool {
@@ -50,61 +49,89 @@ func qjsOffsets() bool {
 	return qjsOffOK
 }
 
-// compileNamed compiles src as a module (or script) named name and returns its bytecode. On any failure,
-// including a syntax error, it returns an error and the caller compiles the usual way (which reports the error).
-//
-// The compile runs in a scratch VM of its own: compiling a module registers it in the context's module list,
-// and the copy the page VM then reads back from the bytecode would be a second module of the same name (a chunk
-// importing the entry module would find the first one, never evaluated, and run the module again).
-func compileNamed(_ *quickjs.VM, src, name string, flags int) ([]byte, error) {
-	if !qjsOffsets() {
-		return nil, errNamedCompileUnavail
+// runModuleNamed compiles src as the module name in vm and runs it, as EvalBytecode does for a module (resolve,
+// import.meta, evaluate, await), returning its bytecode for the cache. handled is false when it could not
+// compile (a syntax error, or the C API is out of reach): nothing ran, and the caller compiles the usual way,
+// which reports the error. The compile happens in vm itself because compiling a module resolves its static
+// imports through the VM's loader; the compiled module is then run directly rather than read back from its
+// bytecode, which would register a second module of the same name.
+func runModuleNamed(vm *quickjs.VM, src, name string) (bc []byte, err error, handled bool) {
+	if vm == nil || !qjsOffsets() {
+		return nil, nil, false
 	}
-	vm, err := quickjs.NewVM()
-	if err != nil {
-		return nil, err
-	}
-	defer vm.Close()
 	base := unsafe.Pointer(vm)
 	ctx := *(*uintptr)(unsafe.Add(base, qjsCtxOff))
 	rt := *(*unsafe.Pointer)(unsafe.Add(base, qjsRtOff))
 	if ctx == 0 || rt == nil {
-		return nil, errNamedCompileUnavail
+		return nil, nil, false
 	}
 	tls := *(**libc.TLS)(unsafe.Add(rt, qjsTLSOff))
 	if tls == nil {
-		return nil, errNamedCompileUnavail
+		return nil, nil, false
 	}
-	ps, err := libc.CString(src)
-	if err != nil {
-		return nil, err
+	ps, cerr := libc.CString(src)
+	if cerr != nil {
+		return nil, nil, false
 	}
 	defer libc.Xfree(tls, ps)
-	pn, err := libc.CString(name)
-	if err != nil {
-		return nil, err
+	pn, cerr := libc.CString(name)
+	if cerr != nil {
+		return nil, nil, false
 	}
 	defer libc.Xfree(tls, pn)
-	v := lib.XJS_Eval(tls, ctx, ps, libc.Tsize_t(len(src)), pn, int32(flags|lib.MJS_EVAL_FLAG_COMPILE_ONLY))
+	v := lib.XJS_Eval(tls, ctx, ps, libc.Tsize_t(len(src)), pn, int32(quickjs.EvalModule|lib.MJS_EVAL_FLAG_COMPILE_ONLY))
 	if v.Ftag == lib.EJS_TAG_EXCEPTION {
-		lib.XFreeValue(tls, ctx, lib.XJS_GetException(tls, ctx)) // the caller's plain compile reports it
-		return nil, errNamedCompileUnavail
+		lib.XFreeValue(tls, ctx, lib.XJS_GetException(tls, ctx))
+		return nil, nil, false
 	}
-	defer lib.XFreeValue(tls, ctx, v)
+	// bytecode for the next visit (a fresh VM reads it back once, named)
 	usize := int(unsafe.Sizeof(libc.Tsize_t(0)))
 	plen := tls.Alloc(usize)
-	defer tls.Free(usize)
-	p := lib.XJS_WriteObject(tls, ctx, plen, v, int32(lib.MJS_WRITE_OBJ_BYTECODE))
-	if p == 0 {
-		return nil, errNamedCompileUnavail
+	if p := lib.XJS_WriteObject(tls, ctx, plen, v, int32(lib.MJS_WRITE_OBJ_BYTECODE)); p != 0 {
+		var n uint64
+		for i, b := range libc.GoBytes(plen, usize) { // size_t, little-endian on every target
+			n |= uint64(b) << (8 * i)
+		}
+		bc = append([]byte(nil), libc.GoBytes(p, int(n))...) // GoBytes aliases C memory: copy before freeing it
+		lib.Xjs_free(tls, ctx, p)
 	}
-	var n uint64
-	for i, b := range libc.GoBytes(plen, usize) { // size_t, little-endian on every target
-		n |= uint64(b) << (8 * i)
+	tls.Free(usize)
+	// run it the way EvalBytecodeValue runs a module
+	if lib.XJS_ResolveModule(tls, ctx, v) < 0 {
+		lib.XFreeValue(tls, ctx, v)
+		return bc, takeException(vm, tls, ctx), true
 	}
-	out := append([]byte(nil), libc.GoBytes(p, int(n))...) // GoBytes aliases C memory: copy before freeing it
-	lib.Xjs_free(tls, ctx, p)
-	return out, nil
+	lib.Xjs_module_set_import_meta(tls, ctx, v, 0, 1)
+	_, _ = vm.Eval("0", quickjs.EvalGlobal) // arms the VM's evaluation timeout from now, as its own Eval* calls do
+	r := lib.XJS_EvalFunction(tls, ctx, v) // takes v
+	r = lib.Xjs_std_await(tls, ctx, r)
+	if r.Ftag == lib.EJS_TAG_EXCEPTION {
+		lib.XFreeValue(tls, ctx, r)
+		return bc, takeException(vm, tls, ctx), true
+	}
+	lib.XFreeValue(tls, ctx, r)
+	return bc, nil, true
+}
+
+// takeException turns the pending exception into the *quickjs.Error the public API returns, by rethrowing it
+// from script.
+func takeException(vm *quickjs.VM, tls *libc.TLS, ctx uintptr) error {
+	exc := lib.XJS_GetException(tls, ctx)
+	g := lib.XJS_GetGlobalObject(tls, ctx)
+	key, err := libc.CString("__swModErr")
+	if err != nil {
+		lib.XFreeValue(tls, ctx, exc)
+		lib.XFreeValue(tls, ctx, g)
+		return errors.New("module evaluation failed")
+	}
+	lib.XJS_SetPropertyStr(tls, ctx, g, key, exc) // takes exc
+	libc.Xfree(tls, key)
+	lib.XFreeValue(tls, ctx, g)
+	_, rerr := vm.Eval("(function(){var e=globalThis.__swModErr; delete globalThis.__swModErr; throw e;})()", quickjs.EvalGlobal)
+	if rerr == nil {
+		rerr = errors.New("module evaluation failed")
+	}
+	return rerr
 }
 
 // withImportMetaURL gives a module's import.meta its url. QuickJS leaves import.meta empty unless the host fills

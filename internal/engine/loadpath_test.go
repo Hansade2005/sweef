@@ -1014,11 +1014,13 @@ func TestEntryModuleKeepsItsURL(t *testing.T) {
 <script type="module" src="/assets/main.js"></script>
 <script src="/third/party.js"></script>`)
 	})
-	js("/assets/main.js", `window.runs = (window.runs || 0) + 1;
-export const tag = 'main';
+	js("/assets/main.js", `import { dep } from './dep.js';
+window.runs = (window.runs || 0) + 1;
+export const tag = dep;
 window.metaURL = import.meta.url;
 setTimeout(function () { import('./chunk.js').then(function (m) { document.getElementById('out').textContent = m.v; }, function (e) { document.getElementById('out').textContent = 'ERR ' + e; }); }, 20);`)
 	js("/assets/chunk.js", `import { tag } from './main.js'; export const v = 'chunk:' + tag;`)
+	js("/assets/dep.js", `export const dep = 'main';`) // a static import: compiling the entry module resolves it
 	js("/third/party.js", `window.third = 1;`)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
