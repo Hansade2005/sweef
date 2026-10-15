@@ -14,6 +14,9 @@ func runModuleNamed(vm *quickjs.VM, src, name string) (bc []byte, err error, han
 	return nil, nil, false
 }
 
+// compileModuleNamed is unavailable here too; the precompiler then leaves modules alone.
+func compileModuleNamed(vm *quickjs.VM, src, name string) ([]byte, bool) { return nil, false }
+
 // withImportMetaURL: see qjsnamed.go.
 func withImportMetaURL(src, url string) string {
 	if strings.HasPrefix(src, "#!") {

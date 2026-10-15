@@ -179,6 +179,7 @@ type Engine struct {
 	res        *httpCache
 	acceptLang atomic.Value // string: Engine.SetAcceptLanguage
 	code       *codeCache
+	pc         *precompiler // background compiles into code (precompile.go)
 
 	wm winRegistry // window ids and the embedder's popup / close / focus hooks (windows.go)
 	// frameRead decides whether the content of a frame document may be read through the
@@ -210,6 +211,7 @@ func New(opts Options) *Engine {
 		cacheDir = ""
 	}
 	e.code = newCodeCache(cacheDir)
+	e.pc = newPrecompiler(e.code)
 	setPreludeCacheDir(e.code.dir)
 	e.res = newHTTPCache(opts.MaxCacheMiB, cacheDir, opts.DiskCacheMiB)
 	e.vms = newVMPool(opts)
@@ -348,6 +350,7 @@ func (e *Engine) Close() error {
 	if !e.closed.CompareAndSwap(false, true) {
 		return nil
 	}
+	e.pc.close()
 	e.mu.Lock()
 	tabs := make([]*Tab, 0, len(e.tabs))
 	for _, t := range e.tabs {

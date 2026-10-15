@@ -113,6 +113,55 @@ func runModuleNamed(vm *quickjs.VM, src, name string) (bc []byte, err error, han
 	return bc, nil, true
 }
 
+// compileModuleNamed compiles src as the module name without running it and returns its bytecode (for the
+// precompiler, precompile.go). The VM's loader is asked for the module's static imports, as QuickJS resolves
+// them while compiling; the precompiler's VMs answer with empty stand-ins, which the bytecode does not keep.
+func compileModuleNamed(vm *quickjs.VM, src, name string) ([]byte, bool) {
+	if vm == nil || !qjsOffsets() {
+		return nil, false
+	}
+	base := unsafe.Pointer(vm)
+	ctx := *(*uintptr)(unsafe.Add(base, qjsCtxOff))
+	rt := *(*unsafe.Pointer)(unsafe.Add(base, qjsRtOff))
+	if ctx == 0 || rt == nil {
+		return nil, false
+	}
+	tls := *(**libc.TLS)(unsafe.Add(rt, qjsTLSOff))
+	if tls == nil {
+		return nil, false
+	}
+	ps, cerr := libc.CString(src)
+	if cerr != nil {
+		return nil, false
+	}
+	defer libc.Xfree(tls, ps)
+	pn, cerr := libc.CString(name)
+	if cerr != nil {
+		return nil, false
+	}
+	defer libc.Xfree(tls, pn)
+	v := lib.XJS_Eval(tls, ctx, ps, libc.Tsize_t(len(src)), pn, int32(quickjs.EvalModule|lib.MJS_EVAL_FLAG_COMPILE_ONLY))
+	if v.Ftag == lib.EJS_TAG_EXCEPTION {
+		lib.XFreeValue(tls, ctx, lib.XJS_GetException(tls, ctx))
+		return nil, false
+	}
+	defer lib.XFreeValue(tls, ctx, v)
+	usize := int(unsafe.Sizeof(libc.Tsize_t(0)))
+	plen := tls.Alloc(usize)
+	defer tls.Free(usize)
+	p := lib.XJS_WriteObject(tls, ctx, plen, v, int32(lib.MJS_WRITE_OBJ_BYTECODE))
+	if p == 0 {
+		return nil, false
+	}
+	var n uint64
+	for i, b := range libc.GoBytes(plen, usize) {
+		n |= uint64(b) << (8 * i)
+	}
+	bc := append([]byte(nil), libc.GoBytes(p, int(n))...)
+	lib.Xjs_free(tls, ctx, p)
+	return bc, true
+}
+
 // takeException turns the pending exception into the *quickjs.Error the public API returns, by rethrowing it
 // from script.
 func takeException(vm *quickjs.VM, tls *libc.TLS, ctx uintptr) error {

@@ -259,6 +259,7 @@ func compiledPrelude() []byte {
 }
 
 type jsVM struct {
+	modDocURL string      // the document URL bare module specifiers resolve against (installModuleLoader)
 	fullPump  atomic.Bool // RunFor: pump for the whole duration (no quiet early stop)
 	holdBG    atomic.Bool // explicit waits also wait on background (media clock) timers
 	wakeMs    float64     // set by pumpUntil when a slice ends with a timer pending: ms until it is due
@@ -475,6 +476,7 @@ func (j *jsVM) close() {
 	if j == nil {
 		return
 	}
+	uninstallBytecodeLoader(j)
 	// A script that is blocked (Atomics.wait, a wasm thread waiting on a futex) holds j.mu and would hold up this
 	// close for ever: wake it first, without the lock.
 	j.sabInterrupt()
@@ -554,6 +556,8 @@ func (j *jsVM) runCached(src, name string) (any, error) {
 	j.bcState = "miss"
 	if fromCache {
 		j.bcState = "hit"
+	} else if bc = j.tab.eng.pc.wait(key); bc != nil {
+		fromCache, j.bcState = true, "precompiled"
 	}
 	if bc == nil {
 		var err error
@@ -613,6 +617,10 @@ func (j *jsVM) runModule(src, name string) error {
 	j.bcState = "miss"
 	if fromCache {
 		j.bcState = "hit"
+	} else if named {
+		if bc = j.tab.eng.pc.wait(key); bc != nil {
+			fromCache, j.bcState = true, "precompiled"
+		}
 	}
 	if bc == nil && named {
 		// compiled and run under its URL: its relative imports, import.meta.url and its identity in the module
@@ -1175,29 +1183,37 @@ func normalizeJS(v any) any {
 // ---- module loader ---------------------------------------------------------------
 
 func (j *jsVM) installModuleLoader(docURL string) {
+	j.modDocURL = docURL
 	j.vm.SetModuleLoader(func(vm *quickjs.VM, name string) (string, error) {
-		if !strings.HasPrefix(name, "http://") && !strings.HasPrefix(name, "https://") {
-			return "", fmt.Errorf("cannot resolve bare module specifier %q", name)
-		}
-		// the other import() calls already queued (Promise.all over a bundler's chunks) download now, in
-		// parallel, instead of one round trip each as QuickJS gets to their jobs
-		for _, d := range pendingDynamicImports(vm) {
-			if u, err := j.resolveModule(d[0], d[1], docURL); err == nil {
-				j.prefetchModule(u)
-			}
-		}
-		body, status, err := j.tab.fetchResourceKind(name, KindScript)
-		if err != nil {
-			return "", err
-		}
-		if status >= 400 {
-			return "", fmt.Errorf("module %s: HTTP %d", name, status)
-		}
-		j.prefetchModuleDeps(name, body)
-		return withImportMetaURL(body, name), nil
+		return j.loadModuleSource(name)
 	}, func(_ *quickjs.VM, base, name string) (string, error) {
 		return j.resolveModule(base, name, docURL)
 	})
+	// the same loader, reading precompiled bytecode when there is some (qjsloader.go)
+	installBytecodeLoader(j)
+}
+
+// loadModuleSource fetches the module name and returns the source to compile (with its import.meta.url).
+func (j *jsVM) loadModuleSource(name string) (string, error) {
+	if !strings.HasPrefix(name, "http://") && !strings.HasPrefix(name, "https://") {
+		return "", fmt.Errorf("cannot resolve bare module specifier %q", name)
+	}
+	// the other import() calls already queued (Promise.all over a bundler's chunks) download now, in
+	// parallel, instead of one round trip each as QuickJS gets to their jobs
+	for _, d := range pendingDynamicImports(j.vm) {
+		if u, err := j.resolveModule(d[0], d[1], j.modDocURL); err == nil {
+			j.prefetchModule(u)
+		}
+	}
+	body, status, err := j.tab.fetchResourceKind(name, KindScript)
+	if err != nil {
+		return "", err
+	}
+	if status >= 400 {
+		return "", fmt.Errorf("module %s: HTTP %d", name, status)
+	}
+	j.prefetchModuleDeps(name, body)
+	return withImportMetaURL(body, name), nil
 }
 
 // resolveModule is the module name a specifier imported from base resolves to.
@@ -2146,6 +2162,7 @@ func (j *jsVM) prefetchModule(abs string) {
 		body, status, err := t.fetchRes(abs, fetchOpts{kind: KindScript, prefetch: true})
 		<-t.preloadSem
 		if err == nil && status < 400 {
+			t.eng.pc.submitModule(abs, body)
 			j.prefetchModuleDeps(abs, body)
 		}
 	}()
