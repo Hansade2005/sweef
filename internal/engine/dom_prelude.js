@@ -2197,6 +2197,33 @@
   setTag(MutationObserver, 'MutationObserver'); global.MutationObserver = MutationObserver; global.WebKitMutationObserver = MutationObserver;
 
   // IntersectionObserver / ResizeObserver: report every observed element once, as visible.
+  // Notifications are batched the way a browser's rendering step delivers them: the observe() calls of a task
+  // are answered by one timer that measures every target first (a single layout, since nothing changes the tree
+  // between the measurements) and then calls each observer once with its entries. One timer per target made a
+  // page that observes fifty links lay out fifty times, every callback's DOM change invalidating the next.
+  var obsPending = [], obsScheduled = false;
+  function obsQueue(obs, el, make) {
+    obsPending.push({ obs: obs, el: el, make: make });
+    if (!obsScheduled) { obsScheduled = true; setTimeoutImpl(obsFlush, [], 0, false); }
+  }
+  function obsFlush() {
+    obsScheduled = false;
+    var batch = obsPending; obsPending = [];
+    var groups = [], i, j;
+    for (i = 0; i < batch.length; i++) {
+      var p = batch[i];
+      if (p.obs._targets.indexOf(p.el) < 0) continue;
+      var rect = p.el.getBoundingClientRect ? p.el.getBoundingClientRect() : new DOMRect();
+      for (j = 0; j < groups.length && groups[j].obs !== p.obs; j++) {}
+      if (j === groups.length) groups.push({ obs: p.obs, entries: [] });
+      groups[j].entries.push(p.make(p.el, rect));
+    }
+    for (i = 0; i < groups.length; i++) {
+      var g = groups[i], live = [];
+      for (j = 0; j < g.entries.length; j++) if (g.obs._targets.indexOf(g.entries[j].target) >= 0) live.push(g.entries[j]);
+      if (live.length) { try { g.obs._cb(live, g.obs); } catch (e) { reportError(e); } }
+    }
+  }
   function IntersectionObserver(cb, options) {
     if (typeof cb !== 'function') throw new TypeError('callback must be a function');
     this._cb = cb; this._targets = []; options = options || {};
@@ -2207,13 +2234,9 @@
     observe: function (el) {
       if (this._targets.indexOf(el) >= 0) return;
       this._targets.push(el);
-      var self = this;
-      setTimeoutImpl(function () {
-        if (self._targets.indexOf(el) < 0) return;
-        var rect = el.getBoundingClientRect ? el.getBoundingClientRect() : new DOMRect();
-        var entry = { target: el, time: nowMs(), isIntersecting: true, intersectionRatio: 1, boundingClientRect: rect, intersectionRect: rect, rootBounds: new DOMRect(0, 0, viewport().width, viewport().height), isVisible: true };
-        try { self._cb([entry], self); } catch (e) { reportError(e); }
-      }, [], 0, false);
+      obsQueue(this, el, function (el, rect) {
+        return { target: el, time: nowMs(), isIntersecting: true, intersectionRatio: 1, boundingClientRect: rect, intersectionRect: rect, rootBounds: new DOMRect(0, 0, viewport().width, viewport().height), isVisible: true };
+      });
     },
     unobserve: function (el) { var i = this._targets.indexOf(el); if (i >= 0) this._targets.splice(i, 1); },
     disconnect: function () { this._targets = []; },
@@ -2230,13 +2253,10 @@
     observe: function (el) {
       if (this._targets.indexOf(el) >= 0) return;
       this._targets.push(el);
-      var self = this;
-      setTimeoutImpl(function () {
-        if (self._targets.indexOf(el) < 0) return;
-        var rect = el.getBoundingClientRect ? el.getBoundingClientRect() : new DOMRect();
+      obsQueue(this, el, function (el, rect) {
         var size = [{ inlineSize: rect.width, blockSize: rect.height }];
-        try { self._cb([{ target: el, contentRect: rect, borderBoxSize: size, contentBoxSize: size, devicePixelContentBoxSize: size }], self); } catch (e) { reportError(e); }
-      }, [], 0, false);
+        return { target: el, contentRect: rect, borderBoxSize: size, contentBoxSize: size, devicePixelContentBoxSize: size };
+      });
     },
     unobserve: IntersectionObserver.prototype.unobserve,
     disconnect: IntersectionObserver.prototype.disconnect
