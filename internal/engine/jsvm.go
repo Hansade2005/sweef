@@ -13,7 +13,6 @@ package engine
 // the VM (see Tab.SetDocument and actions.go, which release it first).
 
 import (
-	"math"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/base64"
@@ -21,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
