@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -33,7 +34,15 @@ func TestMain(m *testing.M) {
 // screenshot, dialog, close.
 func TestSessionCLISmoke(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("the session daemon's detach and socket handling are exercised on Unix")
+		// the session daemon listens on an AF_UNIX socket, which Windows has since 10 1803 (Go supports it);
+		// a runner without it skips rather than fails
+		probe := filepath.Join(os.TempDir(), fmt.Sprintf("swprobe-%d.sock", os.Getpid()))
+		l, err := net.Listen("unix", probe)
+		if err != nil {
+			t.Skipf("no AF_UNIX sockets on this Windows: %v", err)
+		}
+		l.Close()
+		os.Remove(probe)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
