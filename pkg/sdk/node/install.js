@@ -23,7 +23,7 @@ const MAX_MEMBER = 1024 * 1024 * 1024;
 
 class SweefInstallError extends Error {}
 
-const MANUAL = 'Install it manually from https://github.com/sweefbrowser/sweef/releases (or `go install github.com/sweefbrowser/sweef/cmd/sweef@latest`), then put it on PATH, set SWEEF_BIN, or pass { binary }.';
+const MANUAL = 'Install it manually from https://github.com/sweefbrowser/sweef/releases (or build it from a clone: `go build -o sweef ./cmd/sweef`), then put it on PATH, set SWEEF_BIN, or pass { binary }.';
 
 // ---- platform ---------------------------------------------------------------------------
 

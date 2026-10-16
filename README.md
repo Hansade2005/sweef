@@ -228,7 +228,13 @@ sweef batch "open https://acme.test/login" "fill label=Email ada@example.com" "c
 
 ## Quick start
 
+Get the engine one of three ways: a prebuilt binary from the [Releases page](https://github.com/sweefbrowser/sweef/releases)
+([docs/install.md](docs/install.md)); the SDKs (`npm install @sweef/browser`, `pip install sweef-browser`), which
+download it on first use; or `go build` from a clone, as below. (`go install ...@latest` does not work: go.mod has
+`replace` directives for the trimmed audio modules in `third_party/`.)
+
 ```bash
+git clone https://github.com/sweefbrowser/sweef && cd sweef
 go build -o sweef ./cmd/sweef          # pure Go; cross-compiles with GOOS/GOARCH
 ./sweef version
 
