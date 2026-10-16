@@ -31,7 +31,7 @@ var (
 
 // Options tune the whole browser instance for low-memory machines.
 type Options struct {
-	MaxRSSMiB        int  // soft budget; GC pressure + eviction kicks in above this
+	MaxRSSMiB        int  // soft resident-memory budget (memgov.go): GC pressure, ring trimming and memory returned to the OS above it
 	MaxCacheMiB      int  // HTTP memory cache ceiling (default 32)
 	DiskCacheMiB     int  // profile-level on-disk HTTP cache cap under CacheDir/http (0 = 100, negative = memory only)
 	Headless         bool // always true today; "headful" streams to a thin client
@@ -63,7 +63,7 @@ type Options struct {
 
 func DefaultOptions() Options {
 	return Options{
-		MaxRSSMiB:        48,
+		MaxRSSMiB:        DefaultMaxRSSMiB,
 		MaxCacheMiB:      32,
 		Headless:         true,
 		ConsoleRingSize:  512,
@@ -216,6 +216,7 @@ func New(opts Options) *Engine {
 	setPreludeCacheDir(e.code.dir)
 	e.res = newHTTPCache(opts.MaxCacheMiB, cacheDir, opts.DiskCacheMiB)
 	e.vms = newVMPool(opts)
+	e.startMemGovernor()
 	return e
 }
 

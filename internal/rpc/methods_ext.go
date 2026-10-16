@@ -117,6 +117,9 @@ func init() {
 			return nil, err
 		}
 		d := time.Duration(num(p, "delayMs") * float64(time.Millisecond))
+		if strings.TrimSpace(str(p, "selector")) == "" { // no target: the focused element (click, then type)
+			return map[string]bool{"ok": true}, t.KeyboardType(str(p, "text"), d)
+		}
 		return map[string]bool{"ok": true}, t.Type(str(p, "selector"), str(p, "text"), d)
 	})
 

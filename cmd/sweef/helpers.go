@@ -18,7 +18,7 @@ import (
 // same knobs: --max-rss-mib, --no-js, --user-agent.
 func addCommonFlags(fs *flag.FlagSet) {
 	opts := engine.DefaultOptions()
-	fs.Int("max-rss-mib", opts.MaxRSSMiB, "soft resident-memory budget")
+	fs.Int("max-rss-mib", opts.MaxRSSMiB, "soft resident-memory budget in MiB: above it the engine collects, returns memory to the OS and trims event logs (not a hard cap)")
 	fs.Bool("no-js", false, "disable JavaScript entirely (fetch+DOM only)")
 	fs.String("user-agent", opts.DefaultUserAgent, "default UA string")
 	fs.Int("settle-ms", opts.SettleMs, "JavaScript event-loop budget after each action (an action settles for a third of it)")

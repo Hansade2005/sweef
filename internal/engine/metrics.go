@@ -21,16 +21,14 @@ type Metrics struct {
 
 func NewMetrics(maxRSSMiB int) *Metrics {
 	if maxRSSMiB <= 0 {
-		maxRSSMiB = 48
+		maxRSSMiB = DefaultMaxRSSMiB
 	}
 	return &Metrics{maxRSSMiB: maxRSSMiB, started: time.Now()}
 }
 
 // Sample records current heap+stack in-use MiB. Returns true when over budget.
 func (m *Metrics) Sample() bool {
-	var ms runtime.MemStats
-	runtime.ReadMemStats(&ms)
-	mib := float64(ms.HeapInuse+ms.StackInuse+ms.Sys) / (1 << 20)
+	mib := processMiB()
 	m.mu.Lock()
 	m.lastMiB = mib
 	if mib > m.peakMiB {
@@ -42,9 +40,6 @@ func (m *Metrics) Sample() bool {
 		m.evictions++
 	}
 	m.mu.Unlock()
-	if over {
-		runtime.GC() // pressure valve: reclaim before evicting state
-	}
 	return over
 }
 
@@ -60,17 +55,5 @@ func (m *Metrics) Snapshot() map[string]any {
 		"uptimeSec":    time.Since(m.started).Seconds(),
 		"goVersion":    runtime.Version(),
 		"numGoroutine": runtime.NumGoroutine(),
-	}
-}
-
-// Watch runs periodic sampling until stop is closed; on over-budget it calls
-// evict (engine passes a func that trims rings / drops cached docs).
-func (m *Metrics) Watch(interval time.Duration, evict func()) {
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-	for range tick.C {
-		if m.Sample() && evict != nil {
-			evict()
-		}
 	}
 }

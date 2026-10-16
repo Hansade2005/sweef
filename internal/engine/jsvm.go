@@ -1472,6 +1472,7 @@ func (j *jsVM) registerHost() error {
 		})},
 		{"removeAttr", doc(func(d *fnet.Doc, a []any) (any, error) { d.RemoveAttr(argI(a, 0), argS(a, 1)); return nil, nil })},
 		{"hasAttr", doc(func(d *fnet.Doc, a []any) (any, error) { _, ok := d.GetAttr(argI(a, 0), argS(a, 1)); return ok, nil })},
+		{"nextTabStop", doc(func(d *fnet.Doc, a []any) (any, error) { return d.NextTabStop(argI(a, 0), argB(a, 1)), nil })},
 		{"attrNames", doc(func(d *fnet.Doc, a []any) (any, error) {
 			names := d.AttrNames(argI(a, 0))
 			out := make([]any, len(names))

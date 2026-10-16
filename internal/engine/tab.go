@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/net/html"
 
@@ -81,6 +82,9 @@ func (r *Ring) Trim() {
 	defer r.mu.Unlock()
 	if r.n > 1 {
 		drop := r.n / 2
+		for i := 0; i < drop; i++ { // clear the slots too, or the events they hold stay reachable
+			r.items[(r.head+i)%r.size] = Event{}
+		}
 		r.head = (r.head + drop) % r.size
 		r.n -= drop
 	}
@@ -121,7 +125,8 @@ type Tab struct {
 	title      string
 	url        *url.URL
 	html       string
-	dom        *fnet.Doc // parsed tree held by our DOM layer
+	dom        *fnet.Doc                   // parsed tree held by our DOM layer
+	kbdFocus   atomic.Pointer[kbdFocusRec] // focused element of a page without a VM (kbdfocus.go)
 	scripts    []*CompiledScript
 
 	consoleRing *Ring
@@ -266,7 +271,7 @@ func (t *Tab) URL() string {
 	if t.url == nil {
 		return "about:blank"
 	}
-	return t.url.String()
+	return CleanTabURL(t.url.String())
 }
 
 // Title reads the live <title> so changes made by page scripts are visible.
@@ -275,10 +280,55 @@ func (t *Tab) Title() string {
 	defer t.mu.RUnlock()
 	if t.dom != nil {
 		if s := t.dom.Title(); s != "" || t.title == "" {
-			return s
+			return CleanTabTitle(s)
 		}
 	}
-	return t.title
+	return CleanTabTitle(t.title)
+}
+
+// badTabRune reports the characters tab-state consumers must never see in a
+// title or URL: C0 controls, DEL, C1 controls and the Unicode line and
+// paragraph separators. (Anthropic's browser_state block rejects a request
+// whose tab title holds one with HTTP 400, and they break line-based output.)
+func badTabRune(r rune) bool {
+	return r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) || r == 0x2028 || r == 0x2029
+}
+
+// CleanTabTitle is document.title made safe for tab-state output: the
+// characters badTabRune rejects become spaces, then whitespace is stripped and
+// collapsed as document.title does.
+func CleanTabTitle(s string) string {
+	if strings.IndexFunc(s, badTabRune) < 0 && !strings.Contains(s, "  ") && strings.TrimSpace(s) == s {
+		return s
+	}
+	s = strings.Map(func(r rune) rune {
+		if badTabRune(r) {
+			return ' '
+		}
+		return r
+	}, s)
+	return fnet.StripCollapseASCIIWhitespace(s)
+}
+
+// CleanTabURL percent-encodes the characters badTabRune rejects (a URL
+// String() already escapes them; this guards the other ways a URL reaches
+// tab state).
+func CleanTabURL(s string) string {
+	if strings.IndexFunc(s, badTabRune) < 0 {
+		return s
+	}
+	var sb strings.Builder
+	for _, r := range s {
+		if !badTabRune(r) {
+			sb.WriteRune(r)
+			continue
+		}
+		var buf [4]byte
+		for _, b := range buf[:utf8.EncodeRune(buf[:], r)] {
+			fmt.Fprintf(&sb, "%%%02X", b)
+		}
+	}
+	return sb.String()
 }
 
 func (t *Tab) emit(kind EventKind, data any) {
@@ -587,6 +637,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	old := t.js
 	t.js = nil
 	t.mu.Unlock()
+	dropBitmapSourcesExcept(t.ID, doc)
 	t.swDocumentCommitted(finalURL)
 	// Freeing every object the previous page allocated takes milliseconds;
 	// nothing can reach the old VM any more, so do it off the critical path.
