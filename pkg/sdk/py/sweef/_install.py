@@ -23,14 +23,14 @@ import urllib.request
 import zipfile
 from typing import Callable, Dict, Mapping, Optional
 
-DEFAULT_VERSION = "0.1.0-alpha.5"
+DEFAULT_VERSION = "0.1.0-alpha.6"
 # sha256 of the release archives for DEFAULT_VERSION (pinned in this SDK release; other versions use SHA256SUMS).
 PINNED_SHA256: Dict[str, str] = {
-    "sweef_0.1.0-alpha.5_darwin_universal.zip": "7bf211216085afd631ba90a3c98adec235c759b720c0de995022395b95db21f8",
-    "sweef_0.1.0-alpha.5_linux_amd64.tar.gz": "2089d242bbe8e8cd071263601f7bbcba9526b4cd188983dab9778e89806e4091",
-    "sweef_0.1.0-alpha.5_linux_arm64.tar.gz": "d8fbe2a733277da2e1a7e10ff27c3a60ce03059ec10f6649b3f9a49a1083db8e",
-    "sweef_0.1.0-alpha.5_windows_amd64.zip": "cfee0a4157ff770cbc9cb3e636b8e8e2d947a055d04f54deba6292a1c21a8758",
-    "sweef_0.1.0-alpha.5_windows_arm64.zip": "1c0411891f591c479bbf054c43c76d76cec92cb287549d5ddae387c526830ccc",
+    "sweef_0.1.0-alpha.6_darwin_universal.zip": "c0066f3f13715fdd4a79f484f9441124d30fa0a63b8ebf2bf271897c67ff55b4",
+    "sweef_0.1.0-alpha.6_linux_amd64.tar.gz": "7c67f1b5ae5cc1d4a204a8346932599316702ab516d8ce82f3609a6b1ef4231b",
+    "sweef_0.1.0-alpha.6_linux_arm64.tar.gz": "cc78f33e76c6a2d78d87fcb3a1bfc9d42e56927d4ff8653937529e5803a16912",
+    "sweef_0.1.0-alpha.6_windows_amd64.zip": "c799f65a669897e5382b2e6cef0bb1ac5ba81255f992bf3f00d9c723ecd2a0e4",
+    "sweef_0.1.0-alpha.6_windows_arm64.zip": "a4ef911a033ba93214f5a68996ac3f12c93e65d0673506ad65006e7ba3aed565",
 }
 DEFAULT_BASE = "https://github.com/sweefbrowser/sweef/releases/download"
 LAUNCHER_MARKER = "sweef.cli"
