@@ -371,6 +371,8 @@ async function downloadEngine(opts = {}) {
     const hit = ready();
     if (hit) return hit;
     fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
+    // a failed download must not leave an empty version directory behind (rmdir only removes an empty one)
+    const cleanup = () => { try { fs.rmdirSync(dir); } catch (_) { /* not empty, or gone */ } };
     return withLock(dir, ready, async () => {
       const base = (opts.base || process.env.SWEEF_DOWNLOAD_BASE || DEFAULT_BASE).replace(/\/+$/, '');
       const rel = `${base}/v${version}`;
@@ -396,7 +398,7 @@ async function downloadEngine(opts = {}) {
       } finally {
         for (const f of [tmp, `${tmp}.bin`]) { try { fs.unlinkSync(f); } catch (_) { /* absent */ } }
       }
-    });
+    }).catch((e) => { cleanup(); throw e; });
   })();
   inflight.set(key, p);
   try { return await p; } finally { inflight.delete(key); }

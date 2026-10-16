@@ -152,7 +152,8 @@ class TestDownload(Hermetic):
         _, f, _ = self.serve(tamper=True)
         with self.assertRaisesRegex(inst.SweefInstallError, "checksum mismatch"):
             inst.ensure_binary(base=f.base, log=self.quiet)
-        self.assertEqual(os.listdir(os.path.join(os.environ["SWEEF_ENGINE_CACHE"], VER)), [])
+        self.assertFalse(os.path.exists(os.path.join(os.environ["SWEEF_ENGINE_CACHE"], VER)),
+                         "a failed download leaves no version directory behind")
 
     @POSIX
     def test_pin_wins_over_sums(self):

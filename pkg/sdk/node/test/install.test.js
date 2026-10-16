@@ -139,7 +139,7 @@ test('checksum mismatch is rejected and nothing is installed', posixOnly, async 
   try {
     await assert.rejects(inst.ensureBinary({ base: f.base, ...quiet }), /checksum mismatch/);
     const dir = path.join(process.env.SWEEF_ENGINE_CACHE, VER);
-    assert.deepEqual(fs.readdirSync(dir), []);
+    assert.equal(fs.existsSync(dir), false, 'a failed download leaves no version directory behind');
   } finally { f.srv.close(); }
 }));
 

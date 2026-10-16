@@ -338,7 +338,13 @@ def download_engine(version: Optional[str] = None, base: Optional[str] = None, c
                 with contextlib.suppress(OSError):
                     os.remove(p)
 
-    return _with_lock(directory, ready, work)
+    try:
+        return _with_lock(directory, ready, work)
+    except BaseException:
+        # a failed download must not leave an empty version directory behind (rmdir only removes an empty one)
+        with contextlib.suppress(OSError):
+            os.rmdir(directory)
+        raise
 
 
 def ensure_binary(binary: Optional[str] = None, **kw: object) -> str:
