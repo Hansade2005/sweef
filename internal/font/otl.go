@@ -403,10 +403,10 @@ type otCache struct {
 
 func (f *Face) loadOT() *otCache {
 	f.ot.once.Do(func() {
-		if g := findTable(f.data, f.idx, "GPOS"); g != nil {
+		if g := findTable(f.Data(), f.idx, "GPOS"); g != nil {
 			f.ot.kern = newLayout(g, map[string]bool{"kern": true})
 		}
-		if g := findTable(f.data, f.idx, "GSUB"); g != nil {
+		if g := findTable(f.Data(), f.idx, "GSUB"); g != nil {
 			f.ot.liga = newLayout(g, map[string]bool{"liga": true, "clig": true, "rlig": true})
 		}
 	})

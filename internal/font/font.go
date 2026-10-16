@@ -34,7 +34,19 @@ type Style struct {
 // Face is one loaded font file.
 // Data returns the raw sfnt bytes this face reads glyph tables from. The slice
 // is shared; callers must not modify it.
-func (f *Face) Data() []byte { return f.data }
+func (f *Face) Data() []byte {
+	f.dataOnce.Do(func() {
+		if f.data != nil || f.raw == nil {
+			return
+		}
+		if d, ok := extractSFNT(f.raw, f.rawIdx); ok {
+			f.data = d
+		} else {
+			f.data = f.raw
+		}
+	})
+	return f.data
+}
 
 type Face struct {
 	Family string
@@ -45,13 +57,19 @@ type Face struct {
 	buf    sfnt.Buffer
 	upm    int
 	data   []byte
-	adv    map[rune]float64 // advance in font units (-1 = no glyph)
-	kern   map[[2]rune]float64
-	gids   map[rune]int
-	idx    int
-	ot     otCache
-	mOK    bool
-	mU     [5]float64
+	// raw and rawIdx hold a font collection the face reads in place (sfnt.ParseCollection over the mapped
+	// file); the standalone copy in data is built on first use (Data), so probing a collection for a glyph
+	// (Fallback over every system font) no longer copies tens of MB of CJK fonts into the heap.
+	raw      []byte
+	rawIdx   int
+	dataOnce sync.Once
+	adv      map[rune]float64 // advance in font units (-1 = no glyph)
+	kern     map[[2]rune]float64
+	gids     map[rune]int
+	idx      int
+	ot       otCache
+	mOK      bool
+	mU       [5]float64
 	// ur, when set, limits the face to the code points of its @font-face
 	// unicode-range; a character outside it is treated as absent.
 	ur []URange
@@ -78,6 +96,18 @@ func newFace(family string, st Style, data []byte, mono bool) (*Face, error) {
 }
 
 func newFaceIdx(family string, st Style, data []byte, mono bool, idx int) (*Face, error) {
+	if len(data) >= 4 && string(data[:4]) == "ttcf" {
+		if c, err := sfnt.ParseCollection(data); err == nil {
+			i := idx
+			if i < 0 {
+				i = 0
+			}
+			if f, err := c.Font(i); err == nil {
+				return &Face{Family: family, Style: st, Mono: mono, font: f, upm: int(f.UnitsPerEm()), raw: data, rawIdx: idx,
+					adv: map[rune]float64{}, kern: map[[2]rune]float64{}, idx: -1}, nil
+			}
+		}
+	}
 	f, data, err := parseSFNT(data, idx)
 	if err != nil {
 		return nil, err
@@ -208,7 +238,7 @@ func (f *Face) RawMetrics() (ascent, descent, lineGap, avgChar, maxAdvance float
 		ascent, descent = float64(m.Ascent)/64, float64(m.Descent)/64
 		lineGap = float64(m.Height-m.Ascent-m.Descent) / 64
 	}
-	avgChar, maxAdvance = tableAvgMax(f.data)
+	avgChar, maxAdvance = tableAvgMax(f.Data())
 	if a := f.sa(); a != 1 {
 		ascent, descent, lineGap, avgChar, maxAdvance = ascent*a, descent*a, lineGap*a, avgChar*a, maxAdvance*a
 	}
@@ -217,7 +247,7 @@ func (f *Face) RawMetrics() (ascent, descent, lineGap, avgChar, maxAdvance float
 
 // BBoxWidth is the width of the font's global bounding box (head xMax-xMin) in font units.
 func (f *Face) BBoxWidth() float64 {
-	d := f.data
+	d := f.Data()
 	if len(d) < 12 {
 		return 0
 	}
@@ -844,7 +874,7 @@ func Families() []string {
 // unrounded; ok is false when the face has no usable OS/2 table. Chromium
 // derives the canvas "top", "middle" and "bottom" text baselines from them.
 func (f *Face) TypoMetrics(size float64) (asc, desc float64, ok bool) {
-	os2 := findTable(f.data, f.idx, "OS/2")
+	os2 := findTable(f.Data(), f.idx, "OS/2")
 	if len(os2) < 72 {
 		return 0, 0, false
 	}

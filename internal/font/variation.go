@@ -59,14 +59,14 @@ func parseVariation(f *Face) (vr *variation) {
 			vr = nil
 		}
 	}()
-	fv := findTable(f.data, -1, "fvar")
-	gv := findTable(f.data, -1, "gvar")
-	glyf := findTable(f.data, -1, "glyf")
-	loca := findTable(f.data, -1, "loca")
-	head := findTable(f.data, -1, "head")
-	hhea := findTable(f.data, -1, "hhea")
-	hmtx := findTable(f.data, -1, "hmtx")
-	maxp := findTable(f.data, -1, "maxp")
+	fv := findTable(f.Data(), -1, "fvar")
+	gv := findTable(f.Data(), -1, "gvar")
+	glyf := findTable(f.Data(), -1, "glyf")
+	loca := findTable(f.Data(), -1, "loca")
+	head := findTable(f.Data(), -1, "head")
+	hhea := findTable(f.Data(), -1, "hhea")
+	hmtx := findTable(f.Data(), -1, "hmtx")
+	maxp := findTable(f.Data(), -1, "maxp")
 	if fv == nil || gv == nil || glyf == nil || loca == nil || len(head) < 54 || len(hhea) < 36 || len(maxp) < 6 {
 		return nil
 	}
@@ -117,7 +117,7 @@ func parseVariation(f *Face) (vr *variation) {
 	for i := 0; i < v.nShared*nAx; i++ {
 		v.sharedTuples = append(v.sharedTuples, f2dot14(g.i16(shOff+2*i)))
 	}
-	if av := findTable(f.data, -1, "avar"); len(av) >= 8 {
+	if av := findTable(f.Data(), -1, "avar"); len(av) >= 8 {
 		a := otTable(av)
 		if a.u16(0) == 1 && a.u16(6) == nAx {
 			off := 8
@@ -141,7 +141,7 @@ func parseVariation(f *Face) (vr *variation) {
 			}
 		}
 	}
-	if hv := findTable(f.data, -1, "HVAR"); hv != nil {
+	if hv := findTable(f.Data(), -1, "HVAR"); hv != nil {
 		v.hvar = parseHVAR(hv, nAx)
 	}
 	return v

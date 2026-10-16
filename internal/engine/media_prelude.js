@@ -2278,7 +2278,7 @@
     }
   }
   function installObserver() {
-    try { var mo = new global.MutationObserver(onMutations); mo.observe(global.document, { childList: true, subtree: true }); } catch (e) { /* ignore */ }
+    try { var mo = new global.MutationObserver(onMutations); Object.defineProperty(mo, '__swMedia', { value: true }); mo.observe(global.document, { childList: true, subtree: true }); } catch (e) { /* ignore */ }
   }
   installObserver();
 

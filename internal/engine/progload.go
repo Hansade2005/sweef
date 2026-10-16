@@ -160,7 +160,20 @@ func (p *progLoad) preBudget() time.Duration {
 	return p.t.navSettleBudget() / 2
 }
 
+// preLoadQuiet caps the quiet window of a headless load's pre-load pump (see pumpStage).
+const preLoadQuiet = 10 * time.Millisecond
+
 func (p *progLoad) pumpStage(soft time.Time) (done, navigated bool) {
+	if !p.progressive && (p.stage == stPre || p.stage == stSettle) && p.t.eng.opts.NavQuietMs > 0 {
+		q := p.t.navQuiet()
+		if p.stage == stPre && q > preLoadQuiet {
+			// a browser fires load once the subresources are in, without waiting for a quiet period: only timers
+			// due almost at once (a script inserting a lazily loaded chunk) still run first
+			q = preLoadQuiet
+		}
+		p.j.quietOverride = q
+		defer func() { p.j.quietOverride = 0 }()
+	}
 	nav, fin := p.j.pumpUntil(p.deadline, soft)
 	return fin, nav
 }
@@ -244,7 +257,7 @@ func (p *progLoad) step(slice time.Duration) bool {
 			if p.progressive {
 				p.deadline = time.Now().Add(t.settleBudget())
 			} else {
-				p.deadline = time.Now().Add(t.navSettleBudget())
+				p.deadline = time.Now().Add(t.navPostLoadBudget())
 			}
 		case stSettle:
 			tp := time.Now()
