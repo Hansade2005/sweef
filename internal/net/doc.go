@@ -1157,6 +1157,13 @@ func (d *Doc) ByTestId(id string) []*Info {
 // text=..., text="exact", role=button[name="Ok"], label=..., placeholder=...,
 // alt=..., testid=..., and engine prefixes css=/xpath-less variants.
 func (d *Doc) ResolveEngine(sel string) ([]*Info, error) {
+	if parts := splitChain(sel); len(parts) > 1 {
+		return d.resolveChain(sel, parts)
+	}
+	return d.resolveEngineOne(sel)
+}
+
+func (d *Doc) resolveEngineOne(sel string) ([]*Info, error) {
 	s := strings.TrimSpace(sel)
 	// ref handles from AriaSnapshotYAML: "e42", "ref=e42", or "backend://e42"
 	refStr := ""
