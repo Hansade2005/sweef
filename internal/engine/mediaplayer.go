@@ -706,6 +706,13 @@ func (p *mediaPlayer) videoLoop() {
 		}
 		forced := p.force.Swap(false)
 
+		if playing && !forced && haveShown && p.tab != nil && p.tab.eng.opts.NoAutoplay {
+			// agent mode (Options.NoAutoplay): the first picture is on screen and the clock runs, but the rest of
+			// the video is not decoded: nobody watches it, and software decoding a background video took two
+			// cores and ~150 MB of frames (pipilot.dev). A seek or a frame step still decodes (forced).
+			nap(100 * time.Millisecond)
+			continue
+		}
 		if playing && !forced && haveShown && haveDec {
 			// steady playback
 			best := -1

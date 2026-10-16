@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sweefbrowser/sweef/internal/engine"
 	"github.com/sweefbrowser/sweef/internal/ui"
@@ -29,8 +30,9 @@ const (
 	// which about 9 KB are copy in strings.js). The chrome page's eager set went from about 122 KB to
 	// about 134 KB: the meter chip is eager (tiny), the popover is lazy, and the copy deck is shared.
 	// +1.5 KB (152 KB + 256 B): the now-playing button and its icons are eager, the controls are lazy (media.js); +256 B: the popup mark in the tab strip.
-	budgetPage  = 152*1024 + 256
-	budgetTotal = 342 * 1024 // raised from 334 (+4 KB: the now-playing control of the page's Media Session, lazy with the capture popover; +4 KB merged from the popup/frames work); earlier: from 324 (+10 KB: notification permission prompt, site-info entry, DND, Settings > Notifications; mostly lazy)
+	// +2 KB (154 KB + 256 B) for the context-menu lazy-load stub, +1.8 KB for the Developer tools entry; both panels are lazy.
+	budgetPage  = 156 * 1024
+	budgetTotal = 434 * 1024 // raised from 342: +22 KB context menus, +68 KB Developer Tools (lazy; see docs/context-menus.md, docs/devtools.md)
 )
 
 // pageWeight sums the JS and CSS an HTML page loads eagerly.
@@ -1018,5 +1020,345 @@ func TestOmniboxWaitsForSyncHost(t *testing.T) {
 	r.run(s, `__send('omni.suggestions',{id:SW.omniSeq,items:[{type:'bookmark',title:'GitLab',url:'https://gitlab.com/'}]})`)
 	if !strings.Contains(evalS(t, s, `SW.$('#od').textContent`).(string), "GitLab") {
 		t.Errorf("the late answer was dropped")
+	}
+}
+
+// ---- Developer Tools panel (chrome/devtools.js), driven by preview/devtools_mock.js ----------------------------
+
+func dtRows(t *testing.T, s *preview.Session, sel string) []string {
+	t.Helper()
+	v := evalS(t, s, `SW.$$("`+sel+`").map(function(r){return r.textContent})`)
+	var out []string
+	for _, x := range v.([]any) {
+		out = append(out, x.(string))
+	}
+	return out
+}
+
+func dtReqs(s *preview.Session) []string {
+	var out []string
+	for _, p := range s.Posts() {
+		if len(p) == 2 && p[0] == "devtools.req" {
+			m, _ := p[1].(map[string]any)
+			b, _ := json.Marshal(m["p"])
+			out = append(out, fmt.Sprint(m["m"])+" "+string(b))
+		}
+	}
+	return out
+}
+
+func TestDevToolsConsolePanel(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.openSet("devtools-console-light")
+	r.run(s, typeInto)
+	rows := dtRows(t, s, "#devtools .dt-cr")
+	all := strings.Join(rows, "\n")
+	if len(rows) != 5 { // the two identical "app booted" lines fold into one row with a count
+		t.Fatalf("rows %d:\n%s", len(rows), all)
+	}
+	for _, want := range []string{"app booted in 41ms", "Deprecated API", "analytics disabled", "TypeError: cannot read properties", "at render", "app.min.js:12", "404"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("console lacks %q:\n%s", want, all)
+		}
+	}
+	if n := evalS(t, s, `SW.$$("#devtools .dt-rep").map(function(x){return x.textContent}).join()`); n != "2" {
+		t.Errorf("repeat count %v", n)
+	}
+	// the tab shows the number of errors
+	if b := evalS(t, s, `SW.$('#devtools .dt-badge').textContent`); b != "2" {
+		t.Errorf("badge %v", b)
+	}
+	// level filter, then text filter
+	r.run(s, `SW.$$("#devtools .dt-panel:not(.hide) .dt-chip")[1].click()`) // Errors
+	if n := len(dtRows(t, s, "#devtools .dt-cr")); n != 2 {
+		t.Errorf("errors only: %d rows", n)
+	}
+	r.run(s, `SW.$$("#devtools .dt-panel:not(.hide) .dt-chip")[2].click()`) // Warnings
+	if n := len(dtRows(t, s, "#devtools .dt-cr")); n != 1 {
+		t.Errorf("warnings only: %d rows", n)
+	}
+	r.run(s, `SW.$$("#devtools .dt-panel:not(.hide) .dt-chip")[0].click(); var f=SW.$("#devtools .dt-panel:not(.hide) .dt-filter"); f.value="analytics"; f.dispatchEvent(new Event("input",{bubbles:true}))`)
+	if got := dtRows(t, s, "#devtools .dt-cr"); len(got) != 1 || !strings.Contains(got[0], "analytics disabled") {
+		t.Errorf("text filter: %v", got)
+	}
+	r.run(s, `var f=SW.$("#devtools .dt-panel:not(.hide) .dt-filter"); f.value=""; f.dispatchEvent(new Event("input",{bubbles:true}))`)
+	// clear
+	r.run(s, `SW.$("#devtools .dt-panel:not(.hide) .dt-tools .ibtn").click()`)
+	if n := len(dtRows(t, s, "#devtools .dt-cr")); n != 0 {
+		t.Errorf("after clear: %d rows", n)
+	}
+	// prompt: Enter runs it in the page, the result is printed, Up recalls it
+	r.run(s, `var p=SW.$("#devtools .dt-prompt"); p.value="1 + 2"; __key(p,"Enter")`)
+	if !strings.Contains(strings.Join(dtRows(t, s, "#devtools .dt-cr"), "|"), "3") {
+		t.Errorf("prompt result: %v", dtRows(t, s, "#devtools .dt-cr"))
+	}
+	if q := dtReqs(s); !strings.Contains(strings.Join(q, "\n"), `console.eval {"expr":"1 + 2"}`) {
+		t.Errorf("requests: %v", q)
+	}
+	r.run(s, `var p=SW.$("#devtools .dt-prompt"); __key(p,"ArrowUp")`)
+	if v := evalS(t, s, `SW.$("#devtools .dt-prompt").value`); v != "1 + 2" {
+		t.Errorf("history: %v", v)
+	}
+	r.run(s, `var p=SW.$("#devtools .dt-prompt"); p.value="nope.x"; __key(p,"Enter")`)
+	if !strings.Contains(strings.Join(dtRows(t, s, "#devtools .dt-cr.error"), "|"), "ReferenceError") {
+		t.Errorf("an error result must print as an error: %v", dtRows(t, s, "#devtools .dt-cr"))
+	}
+	if e := s.Errors(); len(e) > 0 {
+		t.Errorf("page errors: %v", e)
+	}
+}
+
+func TestDevToolsNetworkPanel(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.openSet("devtools-network-dark")
+	r.run(s, typeInto)
+	rows := dtRows(t, s, "#devtools .dt-nr")
+	all := strings.Join(rows, "\n")
+	// the previous navigation's request is hidden unless the log is preserved
+	if len(rows) != 9 || strings.Contains(all, "old") {
+		t.Fatalf("rows %d:\n%s", len(rows), all)
+	}
+	for _, want := range []string{"app.min.js", "(cache)", "404", "(blocked)", "(pending)", "pixel.gif"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("network lacks %q:\n%s", want, all)
+		}
+	}
+	// a click opened the blocked entry: its reason is shown
+	det := evalS(t, s, `SW.$("#devtools .dt-ndet:not(.hide)").textContent`).(string)
+	for _, want := range []string{"Blocked", "tracker blocker", "https://tracker.adnet.example/pixel.gif"} {
+		if !strings.Contains(det, want) {
+			t.Errorf("details lack %q: %s", want, det)
+		}
+	}
+	if cls := evalS(t, s, `SW.$$("#devtools .dt-nr.bad").length`); cls.(float64) < 2 {
+		t.Errorf("blocked and failed rows are marked: %v", cls)
+	}
+	// type filter
+	r.run(s, `SW.$$("#devtools .dt-panel:not(.hide) .dt-chip").filter(function(c){return c.textContent==="JS"})[0].click()`)
+	if got := dtRows(t, s, "#devtools .dt-nr"); len(got) != 1 || !strings.Contains(got[0], "app.min.js") {
+		t.Errorf("JS filter: %v", got)
+	}
+	r.run(s, `SW.$$("#devtools .dt-panel:not(.hide) .dt-chip").filter(function(c){return c.textContent==="All"})[0].click()`)
+	// text filter
+	r.run(s, `var fi=SW.$("#devtools .dt-panel:not(.hide) .dt-filter"); fi.value="api/rec"; fi.dispatchEvent(new Event("input",{bubbles:true}))`)
+	if got := dtRows(t, s, "#devtools .dt-nr"); len(got) != 1 || !strings.Contains(got[0], "recommendations") {
+		t.Errorf("text filter: %v", got)
+	}
+	r.run(s, `SW.$$("#devtools .dt-panel:not(.hide) .dt-filter").forEach(function(f){f.value=""; f.dispatchEvent(new Event("input",{bubbles:true}))})`)
+	// preserve log shows the earlier navigation again
+	r.run(s, `var c=SW.$("#devtools .dt-panel:not(.hide) .dt-check input"); c.checked=true; c.dispatchEvent(new Event("change",{bubbles:true}))`)
+	if n := len(dtRows(t, s, "#devtools .dt-nr")); n != 10 {
+		t.Errorf("preserve log: %d rows, want 10", n)
+	}
+	// the JSON response previews pretty-printed, the image as an image
+	r.run(s, `SW.$$("#devtools .dt-nr").filter(function(r){return r.textContent.indexOf("currency")>=0})[0].click()`)
+	r.run(s, `SW.$$("#devtools .dt-ndet .dt-dtab")[1].click()`)
+	if pre := evalS(t, s, `(SW.$("#devtools .dt-ndet .dt-pre")||{textContent:""}).textContent`).(string); !strings.Contains(pre, "\"sku\": \"A1\"") {
+		t.Errorf("json preview: %q", pre)
+	}
+	r.run(s, `SW.$$("#devtools .dt-nr").filter(function(r){return r.textContent.indexOf("hero.png")>=0})[0].click()`)
+	if n := evalS(t, s, `SW.$$("#devtools .dt-ndet img.dt-img").length`); n.(float64) != 1 {
+		t.Errorf("image preview: %v", n)
+	}
+	// clear asks Go to forget the log
+	s.ClearPosts()
+	r.run(s, `SW.$("#devtools .dt-panel:not(.hide) .dt-tools .ibtn").click()`)
+	if q := strings.Join(dtReqs(s), "\n"); !strings.Contains(q, "net.clear") {
+		t.Errorf("clear: %v", q)
+	}
+	if e := s.Errors(); len(e) > 0 {
+		t.Errorf("page errors: %v", e)
+	}
+}
+
+func TestDevToolsElementsPanel(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.openSet("devtools-elements-light")
+	r.run(s, typeInto)
+	tree := strings.Join(dtRows(t, s, "#devtools .dt-er"), "\n")
+	for _, want := range []string{"<!DOCTYPE html>", `<html lang="en">`, `<body class="cart">`, `id="cart"`, "Free shipping over $35.", `</body>`} {
+		if !strings.Contains(tree, want) {
+			t.Errorf("tree lacks %q:\n%s", want, tree)
+		}
+	}
+	// selecting #cart highlights it on the page and shows its rules, with the losing declaration struck through
+	if reqs := strings.Join(dtReqs(s), "\n"); !strings.Contains(reqs, `dom.highlight {"id":11}`) || !strings.Contains(reqs, `dom.style {"id":11}`) {
+		t.Errorf("selecting did not highlight and load the style: %v", reqs)
+	}
+	side := evalS(t, s, `SW.$("#devtools .dt-eside").textContent`).(string)
+	for _, want := range []string{"element.style", ".big", "color: purple !important", ".card", "app.min.css:14", "@media (min-width: 100px)", "#cart", "<style> 1:2"} {
+		if !strings.Contains(side, want) {
+			t.Errorf("styles pane lacks %q: %s", want, side)
+		}
+	}
+	if n := evalS(t, s, `SW.$$("#devtools .dt-decl.over").length`); n.(float64) != 2 {
+		t.Errorf("overridden declarations: %v", n)
+	}
+	// expand the node: the children appear
+	r.run(s, `SW.$$("#devtools .dt-er").filter(function(r){return r.textContent.indexOf('id="cart"')>=0})[0].querySelector(".dt-arrow").click()`)
+	tree = strings.Join(dtRows(t, s, "#devtools .dt-er"), "\n")
+	if !strings.Contains(tree, "Your cart") || !strings.Contains(tree, "promo slot") || !strings.Contains(tree, "</div>") {
+		t.Errorf("expanded tree:\n%s", tree)
+	}
+	// hovering another row highlights that node on the page; the pointer leaving the tree goes back to the selection
+	s.ClearPosts()
+	r.run(s, `var rr=SW.$$("#devtools .dt-er").filter(function(r){return r.textContent.indexOf('class="note"')>=0})[0]; rr.dispatchEvent(new MouseEvent("mouseenter",{bubbles:false}))`)
+	time.Sleep(120 * time.Millisecond)
+	r.run(s, `0`)
+	if q := strings.Join(dtReqs(s), "\n"); !strings.Contains(q, `dom.highlight {"id":12}`) {
+		t.Errorf("hover highlight: %v", q)
+	}
+	s.ClearPosts()
+	r.run(s, `SW.$("#devtools .dt-ebox").dispatchEvent(new MouseEvent("mouseleave",{bubbles:false}))`)
+	time.Sleep(120 * time.Millisecond)
+	r.run(s, `0`)
+	if q := strings.Join(dtReqs(s), "\n"); !strings.Contains(q, `dom.highlight {"id":11}`) {
+		t.Errorf("highlight should return to the selected node: %v", q)
+	}
+	// toggling an inline declaration rewrites the style attribute
+	s.ClearPosts()
+	r.run(s, `var c=SW.$$("#devtools .dt-decl .dt-ck")[0]; c.checked=false; c.dispatchEvent(new Event("change",{bubbles:true}))`)
+	if q := strings.Join(dtReqs(s), "\n"); !strings.Contains(q, `dom.setAttr {"id":11,"name":"style","value":"color: red;"}`) {
+		t.Errorf("disabling margin-top: %v", q)
+	}
+	// editing an attribute value: double click, type, Enter
+	s.ClearPosts()
+	r.run(s, `var v=SW.$$("#devtools .dt-av").filter(function(x){return x.textContent==="2"})[0]; v.dispatchEvent(new MouseEvent("dblclick",{bubbles:true}))`)
+	r.run(s, `var i=SW.$("#devtools input.dt-edit"); i.value="3"; __key(i,"Enter")`)
+	if q := strings.Join(dtReqs(s), "\n"); !strings.Contains(q, `dom.setAttr {"id":11,"name":"data-count","value":"3"}`) {
+		t.Errorf("attribute edit: %v", q)
+	}
+	// computed and layout panes
+	r.run(s, `SW.$$("#devtools .dt-eside .dt-dtab")[1].click()`)
+	if c := evalS(t, s, `SW.$("#devtools .dt-eside").textContent`).(string); !strings.Contains(c, "font-size") || !strings.Contains(c, "rgb(128, 0, 128)") {
+		t.Errorf("computed: %s", c)
+	}
+	r.run(s, `SW.$$("#devtools .dt-eside .dt-dtab")[2].click()`)
+	if c := evalS(t, s, `SW.$("#devtools .dt-box").textContent`).(string); !strings.Contains(c, "1190 × 88") || !strings.Contains(c, "margin") || !strings.Contains(c, "padding") {
+		t.Errorf("box model: %s", c)
+	}
+	// the Delete key removes the selected node
+	s.ClearPosts()
+	r.run(s, `__key(SW.$("#devtools .dt-ebox"), "Delete")`)
+	if q := strings.Join(dtReqs(s), "\n"); !strings.Contains(q, `dom.remove {"id":11}`) {
+		t.Errorf("delete: %v", q)
+	}
+	if e := s.Errors(); len(e) > 0 {
+		t.Errorf("page errors: %v", e)
+	}
+}
+
+func TestDevToolsSourcesAndApplication(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.openSet("devtools-sources-dark")
+	list := strings.Join(dtRows(t, s, "#devtools .dt-si"), "|")
+	for _, want := range []string{"cart", "app.min.js", "(inline script 1)", "app.min.css", "(inline style 1)"} {
+		if !strings.Contains(list, want) {
+			t.Errorf("source list lacks %q: %s", want, list)
+		}
+	}
+	// minified: one line; pretty print turns it into many, with line numbers
+	if n := len(dtRows(t, s, "#devtools .dt-ln")); n != 1 {
+		t.Fatalf("minified source shows %d lines", n)
+	}
+	r.run(s, `SW.$$("#devtools .dt-sbar .dt-chip")[0].click()`)
+	rows := dtRows(t, s, "#devtools .dt-ln")
+	if len(rows) < 8 {
+		t.Fatalf("pretty print: %d lines: %v", len(rows), rows)
+	}
+	joined := strings.Join(rows, "\n")
+	if !strings.Contains(joined, "function render(c) {") || !strings.Contains(joined, "for(var i=0;") {
+		t.Errorf("pretty print output:\n%s", joined)
+	}
+	if !strings.HasPrefix(rows[0], "1") || !strings.HasPrefix(rows[1], "2") {
+		t.Errorf("line numbers: %q %q", rows[0], rows[1])
+	}
+	// the stylesheet
+	r.run(s, `SW.$$("#devtools .dt-si").filter(function(r){return r.textContent.indexOf("app.min.css")>=0})[0].click()`)
+	if n := len(dtRows(t, s, "#devtools .dt-ln")); n < 5 {
+		t.Errorf("pretty css: %d lines", n)
+	}
+	// a long line scrolls sideways with Shift and the wheel
+	left := func() string { return evalS(t, s, `SW.$$("#devtools .dt-lt > span")[0].style.marginLeft`).(string) }
+	r.run(s, `SW.$$("#devtools .dt-si").filter(function(r){return r.textContent.indexOf("app.min.js")>=0})[0].click()`)
+	r.run(s, `SW.$$("#devtools .dt-sbar .dt-chip")[0].click()`) // pretty print off: one long line
+	if len(dtRows(t, s, "#devtools .dt-ln")) != 1 {
+		t.Fatalf("expected the minified line")
+	}
+	r.run(s, `SW.$("#devtools .dt-code").dispatchEvent(new WheelEvent("wheel", {deltaY: 120, shiftKey: true, bubbles: true, cancelable: true}))`)
+	if left() != "-120px" {
+		t.Errorf("shift+wheel: margin %q, want -120px", left())
+	}
+	// application
+	a := r.openSet("devtools-application-light")
+	app := evalS(t, a, `SW.$("#devtools .dt-app").textContent`).(string)
+	for _, want := range []string{"Cookies (2)", "session", "abc123", "HttpOnly Secure Lax", "Local storage (2)", "theme", "Session storage (1)", "t-91"} {
+		if !strings.Contains(app, want) {
+			t.Errorf("application lacks %q: %s", want, app)
+		}
+	}
+	if e := s.Errors(); len(e) > 0 {
+		t.Errorf("page errors: %v", e)
+	}
+	if e := a.Errors(); len(e) > 0 {
+		t.Errorf("page errors: %v", e)
+	}
+}
+
+// The panel makes no timers of its own: it is told what changed (devtools.dirty), so an open panel on an idle page
+// costs nothing.
+func TestDevToolsPanelRunsNoTimers(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.openSet("devtools-console-light")
+	if n := evalS(t, s, `__swTimerCount()`); n.(float64) != 0 {
+		t.Errorf("%v timers pending with the panel open", n)
+	}
+	s.ClearPosts()
+	r.run(s, `__send("devtools.dirty", {con: true})`)
+	if q := dtReqs(s); len(q) == 0 {
+		t.Error("a dirty message should make the console fetch")
+	}
+}
+
+// Menu, More tools, Developer tools asks the app to open the panel; the command palette has the same command.
+func TestDevToolsMenuAndPalette(t *testing.T) {
+	r, done := newRig(t)
+	defer done()
+	s := r.openSet("chrome-light-empty")
+	r.run(s, `document.getElementById("menubtn").click()`)
+	if v := evalS(t, s, `SW.$$(".moresub .mi").length`); v.(float64) != 1 {
+		t.Fatalf("the More tools group is missing: %v", v)
+	}
+	if hidden := evalS(t, s, `SW.$(".moresub").classList.contains("hide")`); hidden != true {
+		t.Error("the Developer tools entry should be tucked under More tools")
+	}
+	r.run(s, `SW.$(".moretools > .mi").click()`)
+	if hidden := evalS(t, s, `SW.$(".moresub").classList.contains("hide")`); hidden != false {
+		t.Fatal("More tools did not expand")
+	}
+	if txt := evalS(t, s, `SW.$(".moresub .mi").textContent`).(string); !strings.Contains(txt, "Developer tools") || !strings.Contains(txt, "F12") {
+		t.Errorf("entry %q", txt)
+	}
+	s.ClearPosts()
+	r.run(s, `SW.$(".moresub .mi").click()`)
+	if post(s, "devtools.open") == nil {
+		t.Errorf("posts: %v", s.Posts())
+	}
+	// the palette's command toggles it
+	s.ClearPosts()
+	r.run(s, `SW.chrome.run("devtools.toggle")`)
+	if post(s, "devtools.open") == nil {
+		t.Errorf("palette command: %v", s.Posts())
+	}
+	r.run(s, `__send("state.patch", {devtools: {open: true, tab: "t1"}})`)
+	s.ClearPosts()
+	r.run(s, `SW.chrome.run("devtools.toggle")`)
+	if post(s, "devtools.close") == nil {
+		t.Errorf("palette command while open: %v", s.Posts())
 	}
 }

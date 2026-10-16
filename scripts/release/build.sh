@@ -11,7 +11,7 @@
 #
 # Output layout:
 #   dist/bin/<os>_<arch>/sweef[.exe]        the browser/CLI
-#   dist/bin/<os>_<arch>/Sweef[.exe]        GUI launcher (darwin, windows): runs `sweef gui`
+#   dist/bin/<os>_<arch>/SweefLauncher[.exe]      GUI launcher (darwin, windows): runs `sweef gui`
 #   dist/bin/<os>_<arch>/sweef-cdm[.exe]    CDM host helper (Widevine); the only binary that may be dynamically linked, docs/drm.md
 #   dist/bin/SHA256SUMS                     checksums of everything above
 set -euo pipefail
@@ -79,10 +79,10 @@ prepare_windows_resources() {
     local dst="$ROOT/${MAIN_PKG#./}/sweef_windows_$arch.syso"
     cp "$DIST/windows-resources/rsrc_windows_$arch.syso" "$dst"
     SYSO_FILES+=("$dst")
-    # the GUI launcher (Sweef.exe) gets the same icon/manifest and its own version strings
+    # the GUI launcher (SweefLauncher.exe) gets the same icon/manifest and its own version strings
     "$PT" syso -arch "$arch" -o "$DIST/windows-resources/launcher_windows_$arch.syso" \
       -manifest "$mf" -ico "$DIST/icons/sweef.ico" -version "$VERSION4" -display-version "$VERSION" \
-      -name Sweef -desc "Sweef Browser launcher" -company "Sweef" -original Sweef.exe $pre
+      -name Sweef -desc "Sweef Browser launcher" -company "Sweef" -original SweefLauncher.exe $pre
     dst="$ROOT/packaging/tools/launcher/sweef_windows_$arch.syso"
     cp "$DIST/windows-resources/launcher_windows_$arch.syso" "$dst"
     SYSO_FILES+=("$dst")
@@ -98,7 +98,7 @@ build_one() { # os arch outdir
   if [ "$LAUNCHERS" = 1 ] && { [ "$os" = darwin ] || [ "$os" = windows ]; }; then
     local lf="-s -w -buildid="
     [ "$os" = windows ] && lf="$lf -H=windowsgui"
-    ( cd "$ROOT" && GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags "$lf" -o "$out/Sweef$ext" ./packaging/tools/launcher ) \
+    ( cd "$ROOT" && GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags "$lf" -o "$out/SweefLauncher$ext" ./packaging/tools/launcher ) \
       || die "launcher build failed for $os/$arch"
   fi
   # Sweef is one static binary: no libc, no dynamic loader (it must run on Alpine/musl and in scratch containers).
@@ -108,6 +108,10 @@ build_one() { # os arch outdir
       die "$os/$arch binary is dynamically linked (INTERP/NEEDED present); Linux builds must be static"
     fi
   fi
+  # sweef-cli: the session commands without the engine linked in, so each command starts in half the time
+  # (cmd/sweef-cli); it runs the sweef binary next to it as the daemon
+  ( cd "$ROOT" && GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags "-s -w -buildid=" -o "$out/sweef-cli$ext" ./cmd/sweef-cli ) \
+    || die "sweef-cli build failed for $os/$arch"
   if [ "$CDM_HOST" = 1 ]; then
     # The helper dlopen's the user's Widevine CDM, so unlike sweef it is built to be dynamically linked on Linux
     # (purego's loader import). It never ships a CDM. The browser binary must stay static: see

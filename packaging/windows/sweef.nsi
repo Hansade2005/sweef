@@ -30,7 +30,7 @@ ManifestSupportedOS Win10
 !define APPNAME     "Sweef"
 !define COMPANY     "Sweef"
 !define EXE_CLI     "sweef.exe"
-!define EXE_GUI     "Sweef.exe"
+!define EXE_GUI     "SweefLauncher.exe"
 !define UNINST_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
 !define CLIENT_KEY  "Software\Clients\StartMenuInternet\${APPNAME}"
 !define CAPS_KEY    "${CLIENT_KEY}\Capabilities"

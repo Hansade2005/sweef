@@ -65,7 +65,7 @@ func hostStatTake() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "host=%d calls %.2fms:", totc, ms(tot))
 	for i, x := range all {
-		if i >= 6 {
+		if i >= 12 {
 			break
 		}
 		fmt.Fprintf(&sb, " %s=%d/%.2fms", x.n, x.c, ms(x.d))

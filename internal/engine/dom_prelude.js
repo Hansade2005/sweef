@@ -41,8 +41,19 @@
     if (host('box')) { var b = sw.box(id); if (b) return b; }
     return { x: 0, y: 0, width: 0, height: 0 };
   }
+  // where the viewport is scrolled to ([x, y] in CSS px): geometry the page sees is relative to the viewport
+  function scrollPos() { if (host('scrollPos')) { var p = sw.scrollPos(); if (p) return p; } return [0, 0]; }
   function hostMutation(op, id) { if (host('mutation')) { try { sw.mutation(op, id); } catch (e) { /* ignore */ } } }
-  function hostLog(level, text) { try { sw.log(level, text); } catch (e) { /* ignore */ } }
+  function hostLog(level, text, loc) { try { sw.log(level, text, loc || ''); } catch (e) { /* ignore */ } }
+  // where a console call came from: "line:col" of the caller (the frame after this function and the console method),
+  // for Developer Tools; the host adds the name of the script whose top level is running
+  function callerLoc() {
+    try {
+      var f = String(new Error().stack || '').split('\n')[2] || '', m = /<eval>:(\d+:\d+)\)?\s*$/.exec(f);
+      return m ? m[1] : '';
+    } catch (e) { /* ignore */ }
+    return '';
+  }
 
   function def(obj, name, desc) {
     desc.configurable = true;
@@ -124,9 +135,14 @@
     if (!type) return null;
     var tag = type === 1 ? sw.tagName(id) : '';
     w = makeWrapper(id, classFor(id, type, tag));
-    if (type === 1 && tag.indexOf('-') > 0) maybeUpgrade(w, tag);
+    if (type === 1) {
+      if (tag === 'template') sawTemplate = true;
+      else if (tag.indexOf('-') > 0) maybeUpgrade(w, tag);
+    }
     return w;
   }
+  // Developer Tools edits a node the way page script would, so MutationObservers and custom elements see the change
+  def(global, '__swDevNode', { value: function (id) { return wrap(+id); }, enumerable: false });
   function wrapAll(ids) { var out = []; if (ids) for (var i = 0; i < ids.length; i++) { var w = wrap(ids[i]); if (w) out.push(w); } return out; }
   function requireNode(v, what) {
     if (!isNodeObj(v)) throw new TypeError("Failed to execute '" + what + "': parameter 1 is not of type 'Node'.");
@@ -136,9 +152,26 @@
   // custom elements (filled by CustomElementRegistry later)
   var ceDefinitions = new Map(); // name -> {ctor, observed}
   var ceUpgrading = null;
+  // Template contents are inert: their elements belong to a document without a custom element registry, so a script that
+  // walks template.content (Polymer parses its templates that way) must not construct them, with bindings such as
+  // shown-items="[[shownItems]]" still in their attributes. The contents sit in the host tree under the <template>
+  // (until .content moves them into a fragment), so check both homes.
+  // Elements made by an inert document (the template contents owner document, document.implementation.createHTMLDocument)
+  // are not upgraded either, until they are inserted into a connected tree.
+  var INERT = Symbol('inertFragment'), INERT_EL = Symbol('inertElement');
+  var sawTemplate = false, templateDocument = null, noUpgrade = false;
+  function inTemplateContent(w) {
+    if (w[INERT] || w[FRAG] && w[FRAG][INERT]) return true;
+    for (var p = sw.parent(w[ID]); p; p = sw.parent(p)) {
+      if (sw.tagName(p) === 'template') return true;
+      var pw = wrappers.get(p);
+      if (pw && pw[FRAG] && pw[FRAG][INERT]) return true;
+    }
+    return false;
+  }
   function maybeUpgrade(w, tag) {
     var d = ceDefinitions.get(tag);
-    if (!d || Object.getPrototypeOf(w) === d.ctor.prototype) return;
+    if (!d || noUpgrade || w[INERT_EL] || Object.getPrototypeOf(w) === d.ctor.prototype || inTemplateContent(w)) return;
     Object.setPrototypeOf(w, d.ctor.prototype);
     var prev = ceUpgrading; ceUpgrading = w;
     try { new d.ctor(); } catch (e) { reportError(e); } finally { ceUpgrading = prev; }
@@ -146,18 +179,23 @@
   }
   function ceConnected(w) {
     if (!w || w.nodeType !== 1) return;
-    if (typeof w.connectedCallback === 'function' && ceDefinitions.has(w.localName)) { try { w.connectedCallback(); } catch (e) { reportError(e); } }
+    if (w[INERT_EL]) delete w[INERT_EL];
+    var d = ceDefinitions.get(w.localName);
+    if (d && Object.getPrototypeOf(w) !== d.ctor.prototype) maybeUpgrade(w, w.localName); // adopted out of a template: upgrade now (also runs connectedCallback)
+    else if (d && typeof w.connectedCallback === 'function') { try { w.connectedCallback(); } catch (e) { reportError(e); } }
     var kids = sw.children(w[ID]);
     for (var i = 0; i < kids.length; i++) { var k = wrappers.get(kids[i]); if (k) ceConnected(k); }
   }
   function ceDisconnected(w) {
     if (!w || w.nodeType !== 1) return;
+    if (popoverOpen(w)) hidePopoverImpl(w, false, false); // a popover that leaves the document closes without events
     if (typeof w.disconnectedCallback === 'function' && ceDefinitions.has(w.localName)) { try { w.disconnectedCallback(); } catch (e) { reportError(e); } }
     var kids = sw.children(w[ID]);
     for (var i = 0; i < kids.length; i++) { var k = wrappers.get(kids[i]); if (k) ceDisconnected(k); }
   }
 
   // ==== 3. Events ==========================================================
+  var wheelNP = false; // a non-passive wheel listener has been added
   var LISTENERS = Symbol('listeners'); // target[LISTENERS] = { type: [ {fn, capture, once, passive, removed} ] }
 
   function Event(type, init) {
@@ -218,7 +256,9 @@
     BeforeUnloadEvent: ['Event', {}],
     CloseEvent: ['Event', { wasClean: false, code: 0, reason: '' }],
     SubmitEvent: ['Event', { submitter: null }],
-    ClipboardEvent: ['Event', { clipboardData: null }]
+    ClipboardEvent: ['Event', { clipboardData: null }],
+    ToggleEvent: ['Event', { oldState: '', newState: '' }],
+    BeforeToggleEvent: ['ToggleEvent', {}]
   };
   var eventFieldsOf = { Event: {} };
   (function buildEventClasses() {
@@ -315,9 +355,9 @@
     return m;
   }
   function normOptions(options) {
-    if (typeof options === 'boolean') return { capture: options, once: false, passive: false, signal: null };
+    if (typeof options === 'boolean') return { capture: options, once: false, passive: false, passiveUnset: true, signal: null };
     options = options || {};
-    return { capture: !!options.capture, once: !!options.once, passive: !!options.passive, signal: options.signal || null };
+    return { capture: !!options.capture, once: !!options.once, passive: !!options.passive, passiveUnset: options.passive === undefined, signal: options.signal || null };
   }
   EventTarget.prototype = {
     constructor: EventTarget,
@@ -326,7 +366,9 @@
       if (!listener || (typeof listener !== 'function' && typeof listener !== 'object')) return;
       var list = listenerMap(this)[type] || (listenerMap(this)[type] = []);
       for (var i = 0; i < list.length; i++) if (list[i].fn === listener && list[i].capture === o.capture) return;
+      if (o.passiveUnset && /^(wheel|mousewheel|touchstart|touchmove)$/.test(type) && (this === global || this === documentWrapper || this === documentWrapper.documentElement || this === documentWrapper.body)) o.passive = true; // the default of window, document and body listeners
       var rec = { fn: listener, capture: o.capture, once: o.once, passive: o.passive, removed: false };
+      if (!o.passive && /^(wheel|mousewheel)$/.test(type)) wheelNP = true;
       list.push(rec);
       if (o.signal) {
         if (o.signal.aborted) { rec.removed = true; list.splice(list.indexOf(rec), 1); return; }
@@ -367,7 +409,9 @@
   // Inline event handler attributes (onclick="..."): compiled on first use and again when the attribute changes.
   // The scope is the element, then the document, as in browsers (the form owner is left out).
   var attrHandlers = new WeakMap();
+  var scriptsBlocked = false; // a frame sandboxed without allow-scripts: its markup's inline handlers must not run
   function attributeHandler(el, type) {
+    if (scriptsBlocked) return undefined;
     var src = el.getAttribute('on' + type);
     if (src === null || src === undefined) return undefined;
     var per = attrHandlers.get(el);
@@ -431,10 +475,28 @@
   function fire(target, type, init) { return dispatch(target, makeEventFor(type, init)); }
 
   // Errors from listeners/timers/microtasks: log + window 'error' event, never throw.
+  // Text for an uncaught value. The engine's stacks carry no "Name: message" header, so an Error is printed as
+  // "Name: message" and then its stack (a stack that already shows the message is kept as is); anything else that can
+  // be thrown (a string, a number, null, a plain object) has no stack, so say what it is and what its type is.
+  function describeThrown(e) {
+    try {
+      if (e instanceof Error || (e !== null && typeof e === 'object' && typeof e.name === 'string' && typeof e.message === 'string')) {
+        var head = String(e.name || 'Error') + ': ' + String(e.message), stack = typeof e.stack === 'string' ? e.stack : '';
+        if (!stack) return head;
+        return e.message !== '' && stack.indexOf(String(e.message)) >= 0 ? stack : head + '\n' + stack;
+      }
+      if (e !== null && (typeof e === 'object' || typeof e === 'function')) {
+        var shown;
+        try { shown = JSON.stringify(e); } catch (x) { /* circular */ }
+        if (shown === undefined) { try { shown = String(e); } catch (x) { shown = Object.prototype.toString.call(e); } }
+        return 'non-Error ' + typeof e + ' thrown (' + ((e.constructor && e.constructor.name) || 'Object') + '): ' + shown + (typeof e.stack === 'string' ? '\n' + e.stack : '');
+      }
+      return 'non-Error ' + typeof e + ' thrown: ' + (typeof e === 'string' ? JSON.stringify(e) : String(e));
+    } catch (x) { return 'unprintable value thrown'; }
+  }
   var reportingError = false;
   function reportError(e) {
-    var msg = (e && e.stack) ? String(e.stack) : String(e && e.message !== undefined ? e.name + ': ' + e.message : e);
-    hostLog('error', 'Uncaught ' + msg);
+    hostLog('error', 'Uncaught ' + describeThrown(e), '');
     if (reportingError) return;
     reportingError = true;
     try {
@@ -627,13 +689,25 @@
   setTag(NamedNodeMap, 'NamedNodeMap'); global.NamedNodeMap = NamedNodeMap;
   function namedNodeMap(el) {
     var m = Object.create(NamedNodeMap.prototype);
-    Object.defineProperty(m, '_el', { value: el });
+    Object.defineProperty(m, '_el', { value: el, configurable: true });
+    // The index properties have to be visible to `in`, Object.keys and getOwnPropertyDescriptor, not only to `get`:
+    // Array.prototype.map/forEach/slice.call(el.attributes) skip an index that `in` denies, and returned empty arrays.
     return new Proxy(m, {
       get: function (t, k) {
         if (k === 'length') return t._names().length;
         if (typeof k === 'string' && /^\d+$/.test(k)) return t.item(+k);
         if (typeof k === 'string' && !(k in t) && sw.hasAttr(el[ID], k)) return attrOf(el, k);
         return t[k];
+      },
+      has: function (t, k) {
+        if (k === 'length') return true;
+        if (typeof k === 'string' && /^\d+$/.test(k)) return +k < t._names().length;
+        return k in t;
+      },
+      ownKeys: function (t) { var keys = [], n = t._names().length; for (var i = 0; i < n; i++) keys.push(String(i)); return keys; },
+      getOwnPropertyDescriptor: function (t, k) {
+        if (typeof k === 'string' && /^\d+$/.test(k)) { var a = t.item(+k); return a ? { value: a, configurable: true, enumerable: true, writable: false } : undefined; }
+        return Object.getOwnPropertyDescriptor(t, k);
       }
     });
   }
@@ -750,6 +824,8 @@
   var NS = Symbol('namespace'), ORIG_TAG = Symbol('origTag'), FRAG = Symbol('fragmentParent'), SLOT = Symbol('slots');
   function slots(w) { var s = w[SLOT]; if (!s) { s = {}; Object.defineProperty(w, SLOT, { value: s }); } return s; }
 
+  // live Range objects follow the tree (edit_prelude.js turns __swRangesLive on when the first one is made)
+  function rn(kind, a, b, c, d) { if (global.__swRangesLive) global.__swRangeNotify(kind, a, b, c, d); }
   // --- tree mutation helpers (every write funnels through here) -----------
   function hostParentOf(node) { return node[ID] > 0 ? sw.parent(node[ID]) : 0; }
   function detach(node) {
@@ -783,7 +859,9 @@
     var oldParent = child[FRAG] ? detach(child) : wrap(hostParentOf(child));
     var connectedBefore = wasConnected(child);
     var prev = ref ? ref.previousSibling : parent.lastChild;
+    if (global.__swRangesLive && oldParent && oldParent.nodeType !== 11 && !child[FRAG]) { var oi = oldParent.childNodes.length ? Array.prototype.indexOf.call(oldParent.childNodes, child) : -1; if (oi >= 0) rn('remove', child, oldParent, oi); }
     if (ref) sw.insertBefore(parent[ID], child[ID], ref[ID]); else sw.appendChild(parent[ID], child[ID]);
+    if (global.__swRangesLive) rn('insert', parent, ref ? Array.prototype.indexOf.call(parent.childNodes, child) : parent.childNodes.length - 1, 1);
     if (oldParent && oldParent !== parent && oldParent.nodeType !== 11) recordMutation(oldParent, 'childList', { removedNodes: [child] });
     recordMutation(parent, 'childList', { addedNodes: [child], previousSibling: prev, nextSibling: ref || null });
     hostMutation('insert', child[ID]);
@@ -799,7 +877,9 @@
     var prev = child.previousSibling, next = child.nextSibling;
     var connected = wasConnected(child);
     if (connected && activeElement && (activeElement === child || child.contains(activeElement))) activeElement = null;
+    var ri = global.__swRangesLive ? Array.prototype.indexOf.call(parent.childNodes, child) : -1;
     sw.removeChild(parent[ID], child[ID]);
+    if (ri >= 0) rn('remove', child, parent, ri);
     recordMutation(parent, 'childList', { removedNodes: [child], previousSibling: prev, nextSibling: next });
     hostMutation('remove', child[ID]);
     if (connected) ceDisconnected(child);
@@ -837,17 +917,20 @@
   var Node = makeClass('Node', EventTarget);
   var NODE_CONSTS = { ELEMENT_NODE: 1, ATTRIBUTE_NODE: 2, TEXT_NODE: 3, CDATA_SECTION_NODE: 4, ENTITY_REFERENCE_NODE: 5, ENTITY_NODE: 6, PROCESSING_INSTRUCTION_NODE: 7, COMMENT_NODE: 8, DOCUMENT_NODE: 9, DOCUMENT_TYPE_NODE: 10, DOCUMENT_FRAGMENT_NODE: 11, NOTATION_NODE: 12, DOCUMENT_POSITION_DISCONNECTED: 1, DOCUMENT_POSITION_PRECEDING: 2, DOCUMENT_POSITION_FOLLOWING: 4, DOCUMENT_POSITION_CONTAINS: 8, DOCUMENT_POSITION_CONTAINED_BY: 16, DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC: 32 };
   for (var nc in NODE_CONSTS) { constant(Node, nc, NODE_CONSTS[nc]); constant(Node.prototype, nc, NODE_CONSTS[nc]); }
+  // A DocumentFragment is a JS-only container (negative id, children in _kids). The Node.prototype accessors below have to
+  // work on one too: scripts such as the Shady DOM polyfill capture Node.prototype's descriptors and call them on any node.
+  function isFrag(n) { return n[ID] < 0; }
   getters(Node.prototype, {
-    nodeType: { get: function () { return sw.nodeType(this[ID]); } },
-    nodeName: { get: function () { var t = this.nodeType; return t === 1 ? this.tagName : t === 3 ? '#text' : t === 8 ? '#comment' : t === 9 ? '#document' : t === 10 ? (sw.tagName(this[ID]) || 'html') : '#node'; } },
-    parentNode: { get: function () { return this[FRAG] || wrap(sw.parent(this[ID])); } },
+    nodeType: { get: function () { return isFrag(this) ? 11 : sw.nodeType(this[ID]); } },
+    nodeName: { get: function () { var t = this.nodeType; return t === 11 ? '#document-fragment' : t === 1 ? this.tagName : t === 3 ? '#text' : t === 8 ? '#comment' : t === 9 ? '#document' : t === 10 ? (sw.tagName(this[ID]) || 'html') : '#node'; } },
+    parentNode: { get: function () { return isFrag(this) ? null : this[FRAG] || wrap(sw.parent(this[ID])); } },
     parentElement: { get: function () { var p = this.parentNode; return p && p.nodeType === 1 ? p : null; } },
-    childNodes: { get: function () { var self = this; var s = slots(this); return s.childNodes || (s.childNodes = liveList(NodeList, genCached(function () { return wrapAll(sw.children(self[ID])); }))); } },
-    firstChild: { get: function () { return wrap(sw.firstChild(this[ID])); } },
-    lastChild: { get: function () { return wrap(sw.lastChild(this[ID])); } },
-    nextSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; return k[k.indexOf(this) + 1] || null; } return wrap(sw.nextSibling(this[ID])); } },
-    previousSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; return k[k.indexOf(this) - 1] || null; } return wrap(sw.prevSibling(this[ID])); } },
-    ownerDocument: { get: function () { return this.nodeType === 9 ? null : documentWrapper; } },
+    childNodes: { get: function () { var self = this; var s = slots(this); return s.childNodes || (s.childNodes = isFrag(this) ? liveList(NodeList, function () { return self._kids.slice(); }) : liveList(NodeList, genCached(function () { return wrapAll(sw.children(self[ID])); }))); } },
+    firstChild: { get: function () { return isFrag(this) ? this._kids[0] || null : wrap(sw.firstChild(this[ID])); } },
+    lastChild: { get: function () { return isFrag(this) ? this._kids[this._kids.length - 1] || null : wrap(sw.lastChild(this[ID])); } },
+    nextSibling: { get: function () { if (isFrag(this)) return null; if (this[FRAG]) { var k = this[FRAG]._kids; return k[k.indexOf(this) + 1] || null; } return wrap(sw.nextSibling(this[ID])); } },
+    previousSibling: { get: function () { if (isFrag(this)) return null; if (this[FRAG]) { var k = this[FRAG]._kids; return k[k.indexOf(this) - 1] || null; } return wrap(sw.prevSibling(this[ID])); } },
+    ownerDocument: { get: function () { return this.nodeType === 9 ? null : sawTemplate && inTemplateContent(this) ? templateOwnerDocument() : documentWrapper; } },
     isConnected: { get: function () { return this[ID] > 0 && sw.attached(this[ID]); } },
     baseURI: { get: function () { return currentURL(); } },
     nodeValue: {
@@ -855,23 +938,27 @@
       set: function (v) { var t = this.nodeType; if (t === 3 || t === 8) setCharacterData(this, toStr(v)); }
     },
     textContent: {
-      get: function () { var t = this.nodeType; if (t === 9 || t === 10) return null; if (t === 3 || t === 8) return sw.nodeValue(this[ID]); return sw.textContent(this[ID]); },
+      get: function () { var t = this.nodeType; if (t === 9 || t === 10) return null; if (t === 3 || t === 8) return sw.nodeValue(this[ID]); if (t === 11) return this._kids.map(function (k) { return k.nodeType === 8 ? '' : k.textContent; }).join(''); return sw.textContent(this[ID]); },
       set: function (v) {
         var t = this.nodeType; v = v === null || v === undefined ? '' : String(v);
+        if (t === 11) { while (this._kids.length) this.removeChild(this._kids[0]); if (v !== '') this.appendChild(documentWrapper.createTextNode(v)); return; }
         if (t === 3 || t === 8) { setCharacterData(this, v); return; }
         if (t !== 1 && t !== 9) return;
         var removed = wrapAll(sw.children(this[ID]));
         removed.forEach(function (n) { if (wasConnected(n)) ceDisconnected(n); });
         sw.setTextContent(this[ID], v);
+        if (global.__swRangesLive) { var self0 = this; removed.forEach(function (n) { rn('remove', n, self0, 0); }); }
         var added = wrapAll(sw.children(this[ID]));
+        if (global.__swRangesLive) rn('insert', this, 0, added.length);
         recordMutation(this, 'childList', { addedNodes: added, removedNodes: removed });
         hostMutation('text', this[ID]);
       }
     }
   });
-  function setCharacterData(node, v) {
+  function setCharacterData(node, v, off, count, newLen) {
     var old = sw.nodeValue(node[ID]);
     sw.setNodeValue(node[ID], v);
+    if (global.__swRangesLive && off !== -1) { if (off === undefined) rn('data', node, 0, old.length, v.length); else rn('data', node, off, count, newLen); }
     recordMutation(node, 'characterData', { oldValue: old });
     hostMutation('data', node[ID]);
   }
@@ -990,7 +1077,9 @@
         var removed = wrapAll(sw.children(this[ID]));
         removed.forEach(function (n) { if (wasConnected(n)) ceDisconnected(n); });
         sw.setInnerHTML(this[ID], v);
+        if (global.__swRangesLive) { var self1 = this; removed.forEach(function (n) { rn('remove', n, self1, 0); }); }
         var added = wrapAll(sw.children(this[ID]));
+        if (global.__swRangesLive) rn('insert', this, 0, added.length);
         recordMutation(this, 'childList', { addedNodes: added, removedNodes: removed });
         hostMutation('innerHTML', this[ID]);
         if (wasConnected(this)) added.forEach(function (n) { ceConnected(n); afterConnect(n); });
@@ -1000,8 +1089,8 @@
       get: function () { return sw.outerHTML(this[ID]); },
       set: function (v) { var p = this.parentNode; if (!p || p.nodeType !== 1) throw DOMException("Failed to set the 'outerHTML' property on 'Element': This element has no parent node.", 'NoModificationAllowedError'); this.insertAdjacentHTML('afterend', toStr(v)); p.removeChild(this); }
     },
-    innerText: { get: function () { return sw.textContent(this[ID]); }, set: function (v) { this.textContent = v; } },
-    outerText: { get: function () { return sw.textContent(this[ID]); }, set: function (v) { var t = documentWrapper.createTextNode(toStr(v)); this.replaceWith(t); } },
+    innerText: { get: function () { return host('innerText') ? sw.innerText(this[ID]) : sw.textContent(this[ID]); }, set: function (v) { this.textContent = v; } },
+    outerText: { get: function () { return host('innerText') ? sw.innerText(this[ID]) : sw.textContent(this[ID]); }, set: function (v) { var t = documentWrapper.createTextNode(toStr(v)); this.replaceWith(t); } },
     nextElementSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; for (var i = k.indexOf(this) + 1; i < k.length; i++) if (k[i].nodeType === 1) return k[i]; return null; } return nextElement(this[ID], 'nextSibling'); } },
     previousElementSibling: { get: function () { if (this[FRAG]) { var k = this[FRAG]._kids; for (var i = k.indexOf(this) - 1; i >= 0; i--) if (k[i].nodeType === 1) return k[i]; return null; } return nextElement(this[ID], 'prevSibling'); } },
     shadowRoot: { get: function () { return slots(this).shadowRoot || null; } },
@@ -1012,8 +1101,8 @@
     clientTop: { get: function () { return 0; } }, clientLeft: { get: function () { return 0; } },
     scrollWidth: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.sw : b.width); } },
     scrollHeight: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.sh : b.height); } },
-    scrollTop: { get: function () { return slots(this).scrollTop || 0; }, set: function (v) { slots(this).scrollTop = +v || 0; } },
-    scrollLeft: { get: function () { return slots(this).scrollLeft || 0; }, set: function (v) { slots(this).scrollLeft = +v || 0; } }
+    scrollTop: { get: function () { return scrollGet(this, 1); }, set: function (v) { scrollSetPos(this, undefined, +v || 0, 'instant'); } },
+    scrollLeft: { get: function () { return scrollGet(this, 0); }, set: function (v) { scrollSetPos(this, +v || 0, undefined, 'instant'); } }
   });
   methods(Element.prototype, {
     getAttribute: function (name) { var v = sw.getAttr(this[ID], attrName(this, name)); return v === undefined ? null : v; },
@@ -1070,15 +1159,158 @@
     insertAdjacentElement: function (position, el) { return insertAdjacent(this, position, el); },
     insertAdjacentText: function (position, text) { insertAdjacent(this, position, documentWrapper.createTextNode(toStr(text))); },
     getBoundingClientRect: function () { return domRect(hostBox(this[ID])); },
-    getClientRects: function () { var hb = hostBox(this[ID]); var list = hb.precise && hb.frags && hb.frags.length ? hb.frags.map(function (f) { return new DOMRect(f[0], f[1], f[2], f[3]); }) : [this.getBoundingClientRect()]; list.item = function (i) { return list[i] || null; }; return list; },
-    scrollIntoView: function () { }, scrollIntoViewIfNeeded: function () { }, scroll: function () { }, scrollTo: function () { }, scrollBy: function () { },
+    getClientRects: function () { var hb = hostBox(this[ID]); var list = hb.precise && hb.frags && hb.frags.length ? hb.frags.map(function (f) { var p = scrollPos(); return new DOMRect(f[0] - p[0], f[1] - p[1], f[2], f[3]); }) : [this.getBoundingClientRect()]; list.item = function (i) { return list[i] || null; }; return list; },
+    scrollIntoView: function (arg) { scrollIntoViewImpl(this, arg); }, scrollIntoViewIfNeeded: function (center) { scrollIntoViewImpl(this, { block: center === false ? 'nearest' : 'center', inline: 'nearest' }); },
+    scroll: function (a, b) { scrollToArgs(this, a, b, false); }, scrollTo: function (a, b) { scrollToArgs(this, a, b, false); }, scrollBy: function (a, b) { scrollToArgs(this, a, b, true); },
     attachShadow: function (init) { var s = slots(this); if (s.shadowRoot) throw DOMException('Shadow root cannot be created on a host which already hosts a shadow tree.', 'NotSupportedError'); s.shadowRoot = this; return this; },
     requestFullscreen: function () { return Promise.resolve(); },
     requestPointerLock: function () { }, setPointerCapture: function () { }, releasePointerCapture: function () { }, hasPointerCapture: function () { return false; },
-    animate: function () { return { cancel: function () { }, finish: function () { }, pause: function () { }, play: function () { }, finished: Promise.resolve(), onfinish: null, currentTime: 0, playState: 'finished' }; },
-    getAnimations: function () { return []; },
+    animate: function (keyframes, options) { return waapiAnimate(this, keyframes, options); },
+    getAnimations: function () { var el = this; return waapiAll.filter(function (a) { return a.effect && a.effect.target === el && a.playState !== 'finished' && a.playState !== 'idle'; }); },
     checkVisibility: function () { return this.isConnected; }
   });
+  // ---- Web Animations (Element.animate) ----
+  // A working subset: keyframes (array or property-indexed form, offsets), duration, delay, iterations,
+  // direction, fill and linear timing, run in real time on animation frames. Values are written to the
+  // element's inline style while the animation is in effect (the value the page would compute) and the
+  // previous inline value comes back when it stops having an effect (fill none / cancel). Numbers inside
+  // values with the same shape interpolate (opacity, lengths, transforms with the same functions, rgb()
+  // colours); other values switch at the midpoint. finish/cancel events and the finished/ready promises
+  // follow the spec closely enough for animation libraries (Framer Motion commits its final values when an
+  // animation finishes: with the old stub nothing ever finished, and content animated in from opacity 0
+  // stayed invisible in screenshots).
+  var waapiAll = [];
+  function waapiKebab(p) { return p === 'cssFloat' ? 'float' : p.indexOf('--') === 0 ? p : p.replace(/[A-Z]/g, function (c) { return '-' + c.toLowerCase(); }); }
+  function waapiFrames(kf) {
+    var frames = [];
+    if (Array.isArray(kf)) frames = kf.map(function (f) { return Object.assign({}, f); });
+    else if (kf && typeof kf === 'object') {
+      var props = Object.keys(kf).filter(function (k) { return k !== 'offset' && k !== 'easing' && k !== 'composite'; }), n = 0;
+      props.forEach(function (k) { n = Math.max(n, Array.isArray(kf[k]) ? kf[k].length : 1); });
+      for (var i = 0; i < n; i++) {
+        var f = {};
+        props.forEach(function (k) { var v = Array.isArray(kf[k]) ? kf[k] : [kf[k]]; if (i < v.length) f[k] = v[i]; });
+        if (Array.isArray(kf.offset) && kf.offset[i] != null) f.offset = kf.offset[i];
+        frames.push(f);
+      }
+    }
+    var m = frames.length;
+    frames.forEach(function (f, i) { if (f.offset == null) f.offset = m <= 1 ? 1 : i / (m - 1); });
+    return frames;
+  }
+  function waapiLerp(a, b, t) {
+    a = String(a); b = String(b);
+    if (t <= 0) return a; if (t >= 1) return b;
+    var na = a.match(/-?\d*\.?\d+(e-?\d+)?/gi) || [], nb = b.match(/-?\d*\.?\d+(e-?\d+)?/gi) || [];
+    var sa = a.replace(/-?\d*\.?\d+(e-?\d+)?/gi, '#'), sb = b.replace(/-?\d*\.?\d+(e-?\d+)?/gi, '#');
+    if (sa !== sb || na.length !== nb.length || !na.length) return t < 0.5 ? a : b;
+    var i = 0;
+    return sa.replace(/#/g, function () { var x = +na[i], y = +nb[i]; i++; var v = x + (y - x) * t; return String(Math.round(v * 10000) / 10000); });
+  }
+  // The animated values of an element live in the host attribute data-sw-anim, which the style engine applies
+  // after the element's normal declarations, inline style included (the animation origin of the cascade):
+  // page writes to inline style never fight an animation, and getComputedStyle shows the animated value.
+  function waapiEffect(el, anim, vals) {
+    var sl = slots(el), list = sl.anims || (sl.anims = []), i;
+    for (i = 0; i < list.length && list[i].a !== anim; i++) {}
+    if (vals) { if (i < list.length) list[i].v = vals; else list.push({ a: anim, v: vals }); } else if (i < list.length) list.splice(i, 1);
+    var merged = {}; list.forEach(function (e) { Object.keys(e.v).forEach(function (k) { merged[k] = e.v[k]; }); });
+    var text = Object.keys(merged).map(function (k) { return k + ': ' + merged[k]; }).join('; ');
+    if (text === (sl.animText || '')) return;
+    sl.animText = text;
+    try { if (text) sw.setAttr(el[ID], 'data-sw-anim', text); else sw.removeAttr(el[ID], 'data-sw-anim'); } catch (e) { /* detached */ }
+  }
+  function waapiAnimate(el, keyframes, options) {
+    var o = typeof options === 'number' ? { duration: options } : Object.assign({}, options || {});
+    var dur = o.duration === 'auto' || o.duration == null ? 0 : Math.max(0, +o.duration || 0);
+    var delay = +o.delay || 0, endDelay = +o.endDelay || 0, iters = o.iterations == null ? 1 : +o.iterations;
+    if (!(iters >= 0)) iters = 1;
+    var fill = o.fill || 'auto', dir = o.direction || 'normal';
+    var frames = waapiFrames(keyframes), props = {};
+    frames.forEach(function (f) { Object.keys(f).forEach(function (k) { if (k !== 'offset' && k !== 'easing' && k !== 'composite') props[k] = 1; }); });
+    props = Object.keys(props);
+    var resolveFin, rejectFin, rafId = 0, holdTime = null, rate = +o.playbackRate || 1;
+    var anim = {
+      id: o.id || '', playState: 'running', pending: false, replaceState: 'active', playbackRate: rate, timeline: documentWrapper.timeline || null,
+      startTime: nowMs(), onfinish: null, oncancel: null, onremove: null, _listeners: {},
+      effect: {
+        target: el, pseudoElement: o.pseudoElement || null, composite: o.composite || 'replace',
+        getKeyframes: function () { return frames.map(function (f) { return Object.assign({ computedOffset: f.offset, easing: 'linear', composite: 'auto' }, f); }); },
+        setKeyframes: function (k) { frames = waapiFrames(k); },
+        getTiming: function () { return { delay: delay, endDelay: endDelay, duration: dur, iterations: iters, direction: dir, fill: fill, easing: o.easing || 'linear' }; },
+        getComputedTiming: function () { var ct = local(); return { localTime: ct, progress: progressAt(ct), currentIteration: 0, activeDuration: dur * iters, endTime: delay + dur * iters + endDelay, duration: dur, delay: delay, iterations: iters, direction: dir, fill: fill }; },
+        updateTiming: function (t) { if (t) { if (t.duration != null) dur = +t.duration; if (t.delay != null) delay = +t.delay; if (t.iterations != null) iters = +t.iterations; if (t.fill) fill = t.fill; } }
+      },
+      addEventListener: function (t, f) { (this._listeners[t] = this._listeners[t] || []).push(f); },
+      removeEventListener: function (t, f) { var l = this._listeners[t]; if (l) { var i = l.indexOf(f); if (i >= 0) l.splice(i, 1); } },
+      dispatchEvent: function (e) { var l = (this._listeners[e.type] || []).slice(); l.forEach(function (f) { try { f.call(anim, e); } catch (x) { reportError(x); } }); return true; }
+    };
+    anim.finished = new Promise(function (res, rej) { resolveFin = res; rejectFin = rej; });
+    anim.finished.catch(function () { });
+    anim.ready = Promise.resolve(anim);
+    function local() { return holdTime != null ? holdTime : (nowMs() - anim.startTime) * rate; }
+    function endTime() { return delay + dur * iters; }
+    function progressAt(t) {
+      if (t < delay) return null;
+      if (!isFinite(iters) || dur <= 0 && iters > 0) { if (dur <= 0) return 1; }
+      var act = Math.min(t - delay, dur * iters);
+      var it = dur > 0 ? act / dur : iters, cur = Math.floor(it), p = it - cur;
+      if (act >= dur * iters && iters > 0) { p = iters % 1 || 1; cur = Math.ceil(iters) - 1; }
+      var rev = dir === 'reverse' || (dir === 'alternate' && cur % 2 === 1) || (dir === 'alternate-reverse' && cur % 2 === 0);
+      return rev ? 1 - p : p;
+    }
+    function valueAt(prop, p) {
+      var fs = frames.filter(function (f) { return f[prop] != null; });
+      if (!fs.length) return null;
+      if (fs.length === 1) { var under = el.style.getPropertyValue(waapiKebab(prop)) || getComputedStyle(el).getPropertyValue(waapiKebab(prop)); return fs[0].offset >= 1 ? waapiLerp(under, fs[0][prop], p) : fs[0][prop]; }
+      if (p <= fs[0].offset) return fs[0][prop];
+      for (var i = 1; i < fs.length; i++) if (p <= fs[i].offset) { var a = fs[i - 1], b = fs[i], span = b.offset - a.offset; return waapiLerp(a[prop], b[prop], span > 0 ? (p - a.offset) / span : 1); }
+      return fs[fs.length - 1][prop];
+    }
+    var effectOn = false;
+    function apply(p) {
+      var vals = {};
+      props.forEach(function (k) { var v = valueAt(k, p); if (v != null) vals[waapiKebab(k)] = String(v); });
+      effectOn = true; waapiEffect(el, anim, vals);
+    }
+    function restore() { if (effectOn) { effectOn = false; waapiEffect(el, anim, null); } }
+    function holdsAfter() { return fill === 'forwards' || fill === 'both'; }
+    function holdsBefore() { return fill === 'backwards' || fill === 'both'; }
+    function fire(type) { var e = { type: type, target: anim, currentTime: local(), timelineTime: nowMs() }; var h = anim['on' + type]; if (typeof h === 'function') { try { h.call(anim, e); } catch (x) { reportError(x); } } anim.dispatchEvent(e); }
+    function finishNow() {
+      if (anim.playState === 'finished') return;
+      anim.playState = 'finished';
+      if (holdsAfter()) apply(progressAt(endTime()) == null ? 1 : progressAt(endTime())); else restore();
+      var i = waapiAll.indexOf(anim); if (i >= 0 && !holdsAfter()) waapiAll.splice(i, 1);
+      resolveFin(anim);
+      fire('finish');
+    }
+    function tick() {
+      rafId = 0;
+      if (anim.playState !== 'running') return;
+      var t = local();
+      if (isFinite(iters) && t >= endTime()) { apply(progressAt(endTime()) == null ? 1 : progressAt(endTime())); global.setTimeout(finishNow, 0); return; } // the finish event is a task after the frame, as in a browser
+      var p = progressAt(t);
+      if (p == null) { if (holdsBefore()) apply(progressAt(delay) || 0); } else apply(p);
+      rafId = global.requestAnimationFrame(tick);
+    }
+    anim.play = function () { if (anim.playState === 'finished') { anim.startTime = nowMs(); holdTime = null; } else if (holdTime != null) { anim.startTime = nowMs() - holdTime / rate; holdTime = null; } anim.playState = 'running'; if (!rafId) rafId = global.requestAnimationFrame(tick); };
+    anim.pause = function () { if (anim.playState === 'running') { holdTime = local(); anim.playState = 'paused'; } };
+    anim.finish = function () { finishNow(); };
+    anim.cancel = function () { if (anim.playState === 'idle') return; anim.playState = 'idle'; restore(); var i = waapiAll.indexOf(anim); if (i >= 0) waapiAll.splice(i, 1); var e = DOMException('The user aborted a request.', 'AbortError'); rejectFin(e); anim.finished = new Promise(function (res, rej) { resolveFin = res; rejectFin = rej; }); anim.finished.catch(function () { }); fire('cancel'); };
+    anim.reverse = function () { rate = -rate; anim.playbackRate = rate; };
+    anim.updatePlaybackRate = function (r) { var t = local(); rate = +r || 1; anim.playbackRate = rate; anim.startTime = nowMs() - t / rate; };
+    anim.commitStyles = function () { var p = progressAt(local()); if (p == null) p = 1; props.forEach(function (k) { var v = valueAt(k, p); if (v != null) el.style.setProperty(waapiKebab(k), String(v)); }); };
+    anim.persist = function () { anim.replaceState = 'persisted'; };
+    Object.defineProperty(anim, 'currentTime', { get: function () { return anim.playState === 'idle' ? null : local(); }, set: function (v) { if (v == null) return; if (anim.playState === 'running') anim.startTime = nowMs() - (+v) / rate; else holdTime = +v; var p = progressAt(+v); if (p != null) apply(p); }, configurable: true });
+    waapiAll.push(anim);
+    var p0 = progressAt(0);
+    if (p0 != null) apply(p0); else if (holdsBefore()) apply(progressAt(delay) || 0);
+    if (dur * iters + delay <= 0 && isFinite(iters)) Promise.resolve().then(finishNow); // zero-length: finishes in the next microtask
+    else rafId = global.requestAnimationFrame(tick);
+    return anim;
+  }
+
   function attrName(el, name) { name = toStr(name); return el[NS] && el[NS] !== XHTML_NS ? name : name.toLowerCase(); }
   function insertAdjacent(el, position, node) {
     position = String(position).toLowerCase();
@@ -1101,7 +1333,118 @@
   method(DOMRect.prototype, 'toJSON', function () { return { x: this.x, y: this.y, width: this.width, height: this.height, top: this.top, right: this.right, bottom: this.bottom, left: this.left }; });
   DOMRect.fromRect = function (r) { r = r || {}; return new DOMRect(r.x, r.y, r.width, r.height); };
   setTag(DOMRect, 'DOMRect'); global.DOMRect = DOMRect; global.DOMRectReadOnly = DOMRect;
-  function domRect(b) { return new DOMRect(b.x, b.y, b.width, b.height); }
+  // ---- scrolling: elements with overflow, and the viewport (the root element)
+  var pendingScroll = [], scrollTimer = null, scrollEndTimer = null;
+  function isRootScroller(el) { return el === documentWrapper.documentElement || (el === documentWrapper.body && sw.quirks()); }
+  function scrollGet(el, axis) {
+    if (isRootScroller(el)) return scrollPos()[axis];
+    var b = hostBox(el[ID]);
+    return b.precise ? (axis ? b.st : b.sl) || 0 : 0;
+  }
+  function flushScrollEvents() {
+    scrollTimer = null;
+    var list = pendingScroll; pendingScroll = [];
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i];
+      if (t === documentWrapper) fire(documentWrapper, 'scroll', { bubbles: true, cancelable: false });
+      else fire(t, 'scroll', { bubbles: false, cancelable: false });
+    }
+    if (scrollEndTimer) global.clearTimeout(scrollEndTimer);
+    scrollEndTimer = global.setTimeout(function () {
+      scrollEndTimer = null;
+      for (var j = 0; j < list.length; j++) fire(list[j], 'scrollend', { bubbles: list[j] === documentWrapper, cancelable: false });
+    }, 120);
+  }
+  function queueScrollEvent(target) {
+    if (pendingScroll.indexOf(target) < 0) pendingScroll.push(target);
+    if (scrollTimer === null) scrollTimer = global.setTimeout(flushScrollEvents, 0);
+  }
+  // behavior: 'smooth' | 'instant' | 'auto' (the scroll-behavior of the element decides)
+  function scrollSetPos(el, x, y, behavior) {
+    if (isRootScroller(el)) { windowScroll(x, y, false, behavior); return; }
+    var cur = hostBox(el[ID]);
+    var nx = x === undefined ? (cur.sl || 0) : x, ny = y === undefined ? (cur.st || 0) : y;
+    if (!host('scrollSet')) return;
+    var r = sw.scrollSet(el[ID], nx, ny);
+    if (r && r[2]) queueScrollEvent(el);
+  }
+  function scrollToArgs(el, a, b, relative) {
+    var x, y, behavior = 'auto';
+    if (a !== null && typeof a === 'object') {
+      x = a.left === undefined ? undefined : +a.left; y = a.top === undefined ? undefined : +a.top;
+      if (a.behavior) behavior = String(a.behavior);
+    } else if (arguments.length >= 3 || a !== undefined) { x = a === undefined ? undefined : +a; y = b === undefined ? undefined : +b; if (arguments.length < 4) { /* scrollTo(x, y) */ } }
+    if (x !== undefined && isNaN(x)) x = 0;
+    if (y !== undefined && isNaN(y)) y = 0;
+    if (isRootScroller(el)) { windowScroll(x, y, relative, behavior); return; }
+    var cx = scrollGet(el, 0), cy = scrollGet(el, 1);
+    scrollSetPos(el, x === undefined ? undefined : (relative ? cx + x : x), y === undefined ? undefined : (relative ? cy + y : y), behavior);
+  }
+  // window.scrollTo / scrollBy / scroll and the root element's scrollTop: the viewport belongs to the window
+  function windowScroll(x, y, relative, behavior) {
+    var p = scrollPos();
+    var nx = x === undefined ? p[0] : (relative ? p[0] + x : x), ny = y === undefined ? p[1] : (relative ? p[1] + y : y);
+    if (!host('scrollWindow')) return;
+    var applied = sw.scrollWindow(nx, ny, String(behavior || 'auto'));
+    if (applied) queueScrollEvent(documentWrapper);
+  }
+  global.__swScrollEvent = function (target) { queueScrollEvent(target === 'document' ? documentWrapper : target); };
+  function scrollWinArgs(relative) {
+    return function (a, b) {
+      var x, y, behavior = 'auto';
+      if (a !== null && typeof a === 'object') { x = a.left === undefined ? undefined : +a.left; y = a.top === undefined ? undefined : +a.top; if (a.behavior) behavior = String(a.behavior); }
+      else if (arguments.length >= 2) { x = +a; y = +b; } else if (arguments.length === 1) { throw new TypeError("Failed to execute 'scrollTo' on 'Window': parameter 1 is not of type 'ScrollToOptions'."); }
+      if (x !== undefined && isNaN(x)) x = 0;
+      if (y !== undefined && isNaN(y)) y = 0;
+      windowScroll(x, y, relative, behavior);
+    };
+  }
+  function scrollIntoViewImpl(el, arg) {
+    var block = 'start', inline = 'nearest', behavior = 'auto';
+    if (arg === false) block = 'end';
+    else if (arg && typeof arg === 'object') {
+      if (arg.block) block = String(arg.block); if (arg.inline) inline = String(arg.inline); if (arg.behavior) behavior = String(arg.behavior);
+    }
+    if (!el.isConnected) return;
+    function delta(lo, hi, vlo, vhi, align) { // how far to scroll so [lo,hi] sits in [vlo,vhi] as asked
+      var size = hi - lo, vsize = vhi - vlo;
+      switch (align) {
+        case 'start': return lo - vlo;
+        case 'end': return hi - vhi;
+        case 'center': return lo + size / 2 - (vlo + vsize / 2);
+        default: // nearest
+          if (lo >= vlo && hi <= vhi) return 0;
+          if (size > vsize) return lo < vlo ? hi - vhi : lo - vlo; // bigger than the view: the nearest edge
+          return lo < vlo ? lo - vlo : hi - vhi;
+      }
+    }
+    for (var a = el.parentElement; a; a = a.parentElement) {
+      if (a === documentWrapper.documentElement || a === documentWrapper.body && !sw.quirks()) continue;
+      var b = hostBox(a[ID]);
+      if (!b.precise) continue;
+      var maxX = (b.sw || 0) - (b.cw || 0), maxY = (b.sh || 0) - (b.ch || 0);
+      if (maxX < 1 && maxY < 1) continue;
+      var er = el.getBoundingClientRect(), ar = a.getBoundingClientRect();
+      var dy = maxY >= 1 ? delta(er.top, er.bottom, ar.top, ar.top + b.ch, block) : 0;
+      var dx = maxX >= 1 ? delta(er.left, er.right, ar.left, ar.left + b.cw, inline) : 0;
+      if (dx || dy) scrollSetPos(a, (b.sl || 0) + dx, (b.st || 0) + dy, behavior);
+    }
+    var r = el.getBoundingClientRect(), vp = viewport();
+    var vdy = delta(r.top, r.bottom, 0, vp.height, block), vdx = 0;
+    if (vdy || vdx) windowScroll(vdx, vdy, true, behavior);
+  }
+  // the element a URL fragment names (id, then a[name]); an empty or #top fragment is the top of the page
+  function scrollToFragment() {
+    var h = ''; try { h = String(global.location.hash || ''); } catch (e) { return; }
+    if (h.length < 2) { if (h === '' || h === '#') return; }
+    var id = h.slice(1); try { id = decodeURIComponent(id); } catch (e) { /* keep as is */ }
+    var el = documentWrapper.getElementById(id);
+    if (!el) { var named = documentWrapper.getElementsByName ? documentWrapper.getElementsByName(id) : []; for (var i = 0; i < named.length; i++) if (named[i].localName === 'a') { el = named[i]; break; } }
+    if (el) scrollIntoViewImpl(el, { block: 'start', inline: 'nearest' });
+    else if (id.toLowerCase() === 'top') windowScroll(0, 0, false, 'auto');
+  }
+  global.__swScrollToFragment = scrollToFragment;
+  function domRect(b) { var p = scrollPos(); return new DOMRect(b.x - p[0], b.y - p[1], b.width, b.height); }
   function ceAttributeChanged(el, name, oldV, newV) {
     var d = ceDefinitions.get(el.localName);
     if (!d || !d.observed || d.observed.indexOf(name) < 0 || typeof el.attributeChangedCallback !== 'function') return;
@@ -1131,24 +1474,109 @@
     offsetLeft: { get: function () { var b = hostBox(this[ID]); return Math.round(b.precise ? b.ox : b.x); } },
     offsetParent: { get: function () { return this.isConnected && this.localName !== 'body' && this.localName !== 'html' ? (this.parentElement && this.parentElement.closest('body') ? documentWrapper.body : null) : null; } },
     isContentEditable: { get: function () { var v = this.getAttribute('contenteditable'); return v === '' || v === 'true' || v === 'plaintext-only'; } },
-    nonce: { get: function () { return this.getAttribute('nonce') || ''; }, set: function (v) { this.setAttribute('nonce', toStr(v)); } },
-    form: { get: function () { return this.closest('form'); } },
-    labels: { get: function () { var id = this.id; return nodeListOf(id ? queryAll(documentWrapper, 'label[for="' + cssStr(id) + '"]') : []); } },
-    validity: { get: function () { return { valid: true, valueMissing: false, typeMismatch: false, patternMismatch: false, tooLong: false, tooShort: false, rangeUnderflow: false, rangeOverflow: false, stepMismatch: false, badInput: false, customError: false }; } },
-    validationMessage: { get: function () { return ''; } },
-    willValidate: { get: function () { return true; } }
+    nonce: { get: function () { return this.getAttribute('nonce') || ''; }, set: function (v) { this.setAttribute('nonce', toStr(v)); } }
   });
   methods(HTMLElement.prototype, {
     focus: function () { focusElement(this); },
     blur: function () { if (activeElement === this) blurActive(null); },
     click: function () { clickElement(this); },
-    checkValidity: function () { return true; }, reportValidity: function () { return true; }, setCustomValidity: function () { },
-    showPopover: function () { }, hidePopover: function () { }, togglePopover: function () { return false; }
+    showPopover: function () { showPopoverImpl(this); },
+    hidePopover: function () { hidePopoverImpl(this, true, true); },
+    togglePopover: function (force) {
+      var open = popoverOpen(this);
+      if (force === undefined ? open : !force) hidePopoverImpl(this, true, true); else showPopoverImpl(this);
+      return popoverOpen(this);
+    }
   });
+  getters(HTMLElement.prototype, {
+    popover: {
+      get: function () { var v = this.getAttribute('popover'); if (v === null) return null; v = v.toLowerCase(); return v === '' || v === 'auto' ? 'auto' : 'manual'; },
+      set: function (v) { if (v === null || v === undefined) this.removeAttribute('popover'); else this.setAttribute('popover', toStr(v)); }
+    }
+  });
+  // ---- Popover API. The open state lives in the host attribute data-sw-popover-open (the way focus and fullscreen are
+  // carried to the style engine), which `:popover-open` and the UA style sheet's display:none for closed popovers read.
+  var popoverStack = [], popoverDismissInstalled = false;
+  function popoverType(el) { var v = el.getAttribute('popover'); if (v === null) return null; v = v.toLowerCase(); return v === '' || v === 'auto' ? 'auto' : 'manual'; }
+  function popoverOpen(el) { var s = el[SLOT]; return !!(s && s.popoverOpen); }
+  function setPopoverOpen(el, on) {
+    slots(el).popoverOpen = on;
+    try { if (on) sw.setAttr(el[ID], 'data-sw-popover-open', ''); else sw.removeAttr(el[ID], 'data-sw-popover-open'); } catch (e) { /* ignore */ }
+    hostMutation('attr', el[ID]);
+  }
+  // The toggle event is queued as a task; opening and closing again before it runs coalesces into one task that keeps the
+  // first old state, and nothing fires when the popover ended up where it started.
+  function popoverToggleEvents(el, oldState) {
+    var s = slots(el);
+    if (s.toggleTask) { oldState = s.toggleTask.old; clearTimer(s.toggleTask.id); }
+    var task = s.toggleTask = { old: oldState };
+    task.id = setTimeoutImpl(function () {
+      s.toggleTask = null;
+      var now = popoverOpen(el) ? 'open' : 'closed';
+      if (now === task.old) return;
+      try { el.dispatchEvent(new global.ToggleEvent('toggle', { oldState: task.old, newState: now })); } catch (e) { reportError(e); }
+    }, [], 0, false);
+  }
+  function requirePopover(el, what) {
+    if (!popoverType(el)) throw DOMException("Failed to execute '" + what + "' on 'HTMLElement': The element does not have a 'popover' attribute defined.", 'NotSupportedError');
+  }
+  function showPopoverImpl(el) {
+    requirePopover(el, 'showPopover');
+    if (popoverOpen(el)) return;
+    if (!el.isConnected) throw DOMException("Failed to execute 'showPopover' on 'HTMLElement': Invalid on disconnected popover elements.", 'InvalidStateError');
+    var type = popoverType(el);
+    var before = new global.BeforeToggleEvent('beforetoggle', { cancelable: true, oldState: 'closed', newState: 'open' });
+    el.dispatchEvent(before);
+    if (before.defaultPrevented || popoverOpen(el) || !el.isConnected || popoverType(el) !== type) return;
+    if (type === 'auto') {
+      // opening an auto popover closes the other auto popovers that do not contain it
+      popoverStack.slice().forEach(function (o) { if (o !== el && !o.contains(el) && popoverOpen(o)) hidePopoverImpl(o, true, false); });
+      popoverStack.push(el);
+      installPopoverDismiss();
+    }
+    setPopoverOpen(el, true);
+    popoverToggleEvents(el, 'closed');
+  }
+  function hidePopoverImpl(el, events, check) {
+    if (check) requirePopover(el, 'hidePopover');
+    if (!popoverOpen(el)) return;
+    var i = popoverStack.indexOf(el);
+    if (i >= 0) popoverStack.splice(i).slice(1).forEach(function (o) { if (popoverOpen(o)) hidePopoverImpl(o, events, false); });
+    if (events) el.dispatchEvent(new global.BeforeToggleEvent('beforetoggle', { oldState: 'open', newState: 'closed' }));
+    if (!popoverOpen(el)) return;
+    setPopoverOpen(el, false);
+    if (events) popoverToggleEvents(el, 'open');
+  }
+  function installPopoverDismiss() {
+    if (popoverDismissInstalled) return;
+    popoverDismissInstalled = true;
+    var downTarget = null;
+    var topAuto = function () { return popoverStack.length ? popoverStack[popoverStack.length - 1] : null; };
+    documentWrapper.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !e.defaultPrevented && topAuto()) hidePopoverImpl(topAuto(), true, false); }, false);
+    documentWrapper.addEventListener('pointerdown', function (e) { downTarget = e.target; }, true);
+    documentWrapper.addEventListener('mousedown', function (e) { downTarget = e.target; }, true);
+    documentWrapper.addEventListener('click', function (e) {
+      var t = e.target, d = downTarget; downTarget = null;
+      // light dismiss: a press and release outside every open auto popover (and not on a button that invokes one) closes them
+      var invokes = function (n) { var b = n && n.closest ? n.closest('[popovertarget]') : null; return !!b; };
+      popoverStack.slice().reverse().forEach(function (p) { if (popoverOpen(p) && !p.contains(t) && !(d && p.contains(d)) && !invokes(t)) hidePopoverImpl(p, true, false); });
+    }, false);
+  }
+  function popoverInvoker(el) {
+    var id = el.getAttribute('popovertarget'); if (id === null) return false;
+    var t = el.getRootNode && el.getRootNode().getElementById ? el.getRootNode().getElementById(id) : documentWrapper.getElementById(id);
+    if (!t || !popoverType(t)) return true;
+    var action = (el.getAttribute('popovertargetaction') || 'toggle').toLowerCase();
+    if (action !== 'show' && action !== 'hide') action = 'toggle';
+    var open = popoverOpen(t);
+    if (open && action !== 'show') hidePopoverImpl(t, true, false); else if (!open && action !== 'hide') { try { showPopoverImpl(t); } catch (e) { /* not connected */ } }
+    return true;
+  }
   function focusable(el) { return el && el.nodeType === 1; }
   function blurActive(next) {
     var prev = activeElement;
     activeElement = null;
+    if (host('setFocus')) { try { sw.setFocus(0); } catch (e) { /* ignore */ } }
     if (prev && prev.isConnected) { fire(prev, 'blur', { bubbles: false, cancelable: false, relatedTarget: next }); fire(prev, 'focusout', { bubbles: true, cancelable: false, relatedTarget: next }); }
   }
   function focusElement(el) {
@@ -1156,6 +1584,7 @@
     var prev = activeElement;
     blurActive(el);
     activeElement = el;
+    if (host('setFocus')) { try { sw.setFocus(el[ID]); } catch (e) { /* ignore */ } }
     fire(el, 'focus', { bubbles: false, cancelable: false, relatedTarget: prev });
     fire(el, 'focusin', { bubbles: true, cancelable: false, relatedTarget: prev });
   }
@@ -1176,6 +1605,10 @@
   function defaultAction(el) {
     if (!el || el.nodeType !== 1) return;
     var tag = el.localName;
+    if ((tag === 'button' || tag === 'input') && el.hasAttribute('popovertarget') && !el.hasAttribute('disabled')) {
+      var itype = (el.getAttribute('type') || (tag === 'button' ? 'submit' : 'text')).toLowerCase();
+      if (tag === 'button' || itype === 'button' || itype === 'submit' || itype === 'reset' || itype === 'image') popoverInvoker(el);
+    }
     if (tag === 'input') {
       var type = (el.getAttribute('type') || 'text').toLowerCase();
       if (type === 'checkbox' || type === 'radio') { fire(el, 'input', { bubbles: true, cancelable: false }); fire(el, 'change', { bubbles: true, cancelable: false }); return; }
@@ -1249,6 +1682,29 @@
     var C = makeClass(name, sup, function () { return Reflect.construct(HTMLElement, arguments, new.target || C); });
     HTML_CLASSES[name].forEach(function (tag) { TAG_CLASS[tag] = C; });
   });
+  // form, labels and the constraint validation API belong to the form-associated elements only, not to every HTMLElement:
+  // a script that probes `'labels' in el` or `'form' in el` to tell native properties from its own must see the real shape.
+  (function () {
+    var formG = { get: function () { return this.closest('form'); } };
+    var labelsG = { get: function () { var id = this.id; return nodeListOf(id ? queryAll(documentWrapper, 'label[for="' + cssStr(id) + '"]') : []); } };
+    var validation = { checkValidity: function () { return true; }, reportValidity: function () { return true; }, setCustomValidity: function () { } };
+    var constraint = {
+    validity: { get: function () { return { valid: true, valueMissing: false, typeMismatch: false, patternMismatch: false, tooLong: false, tooShort: false, rangeUnderflow: false, rangeOverflow: false, stepMismatch: false, badInput: false, customError: false }; } },
+      validationMessage: { get: function () { return ''; } },
+      willValidate: { get: function () { return true; } }
+    };
+    ['HTMLInputElement', 'HTMLSelectElement', 'HTMLTextAreaElement', 'HTMLButtonElement', 'HTMLFieldSetElement', 'HTMLOutputElement', 'HTMLObjectElement'].forEach(function (n) {
+      if (!global[n]) return;
+      var P = global[n].prototype;
+      getters(P, { form: formG });
+      getters(P, constraint);
+      methods(P, validation);
+    });
+    ['HTMLInputElement', 'HTMLSelectElement', 'HTMLTextAreaElement', 'HTMLButtonElement', 'HTMLOutputElement', 'HTMLMeterElement', 'HTMLProgressElement'].forEach(function (n) {
+      if (global[n]) getters(global[n].prototype, { labels: labelsG });
+    });
+    ['HTMLLabelElement', 'HTMLLegendElement'].forEach(function (n) { if (global[n]) getters(global[n].prototype, { form: formG }); });
+  })();
   var SVGElement = makeClass('SVGElement', Element);
   getters(SVGElement.prototype, { style: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'style'), dataset: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'dataset'), ownerSVGElement: { get: function () { var p = this.parentNode; return p && p.closest ? p.closest('svg') : null; } }, viewportElement: { get: function () { return this.ownerSVGElement; } } });
   methods(SVGElement.prototype, { focus: HTMLElement.prototype.focus, blur: HTMLElement.prototype.blur, getBBox: function () { return this.getBoundingClientRect(); }, getScreenCTM: function () { return null; }, getCTM: function () { return null; }, createSVGPoint: function () { return { x: 0, y: 0, matrixTransform: function () { return this; } }; } });
@@ -1411,7 +1867,7 @@
     content: {
       get: function () {
         var s = slots(this);
-        if (!s.content) s.content = documentWrapper.createDocumentFragment();
+        if (!s.content) { s.content = documentWrapper.createDocumentFragment(); Object.defineProperty(s.content, INERT, { value: true }); }
         var kids = wrapAll(sw.children(this[ID]));
         var self = this;
         kids.forEach(function (k) { sw.removeChild(self[ID], k[ID]); s.content._kids.push(k); k[FRAG] = s.content; });
@@ -1460,14 +1916,14 @@
   methods(CharacterData.prototype, ChildNodeMethods);
   methods(CharacterData.prototype, {
     substringData: function (o, c) { return this.data.substr(o, c); },
-    appendData: function (s) { this.data = this.data + toStr(s); },
-    insertData: function (o, s) { var d = this.data; this.data = d.slice(0, o) + toStr(s) + d.slice(o); },
-    deleteData: function (o, c) { var d = this.data; this.data = d.slice(0, o) + d.slice(o + c); },
-    replaceData: function (o, c, s) { var d = this.data; this.data = d.slice(0, o) + toStr(s) + d.slice(o + c); }
+    appendData: function (s) { var d = this.data; s = toStr(s); if (this.nodeType === 3 || this.nodeType === 8) setCharacterData(this, d + s, d.length, 0, s.length); else this.data = d + s; },
+    insertData: function (o, s) { var d = this.data; if (o > d.length) throw DOMException('The offset ' + o + ' is greater than the node\'s length (' + d.length + ').', 'IndexSizeError'); s = toStr(s); setCharacterData(this, d.slice(0, o) + s + d.slice(o), o, 0, s.length); },
+    deleteData: function (o, c) { var d = this.data; if (o > d.length) throw DOMException('The offset ' + o + ' is greater than the node\'s length (' + d.length + ').', 'IndexSizeError'); c = Math.min(c, d.length - o); setCharacterData(this, d.slice(0, o) + d.slice(o + c), o, c, 0); },
+    replaceData: function (o, c, s) { var d = this.data; if (o > d.length) throw DOMException('The offset ' + o + ' is greater than the node\'s length (' + d.length + ').', 'IndexSizeError'); c = Math.min(c, d.length - o); s = toStr(s); setCharacterData(this, d.slice(0, o) + s + d.slice(o + c), o, c, s.length); }
   });
   var Text = makeClass('Text', CharacterData, function Text(data) { var id = sw.createText(arguments.length ? toStr(data) : ''); var w = makeWrapper(id, new.target || Text); return w; });
   getters(Text.prototype, { wholeText: { get: function () { var s = this.data; for (var n = this.previousSibling; n && n.nodeType === 3; n = n.previousSibling) s = n.data + s; for (n = this.nextSibling; n && n.nodeType === 3; n = n.nextSibling) s += n.data; return s; } }, assignedSlot: { get: function () { return null; } } });
-  methods(Text.prototype, { splitText: function (offset) { var d = this.data; if (offset > d.length) throw DOMException('The offset is larger than the length.', 'IndexSizeError'); var t = new Text(d.slice(offset)); this.data = d.slice(0, offset); var p = this.parentNode; if (p) p.insertBefore(t, this.nextSibling); return t; } });
+  methods(Text.prototype, { splitText: function (offset) { var d = this.data; if (offset > d.length) throw DOMException('The offset is larger than the length.', 'IndexSizeError'); var t = new Text(d.slice(offset)); var p = this.parentNode; if (p) { p.insertBefore(t, this.nextSibling); rn('split', this, offset, t); } setCharacterData(this, d.slice(0, offset), -1); return t; } });
   var Comment = makeClass('Comment', CharacterData, function Comment(data) { var id = sw.createComment(arguments.length ? toStr(data) : ''); return makeWrapper(id, new.target || Comment); });
   var DocumentType = makeClass('DocumentType', Node);
   getters(DocumentType.prototype, { name: { get: function () { return sw.tagName(this[ID]) || 'html'; } }, publicId: { get: function () { return ''; } }, systemId: { get: function () { return ''; } } });
@@ -1483,16 +1939,6 @@
     Object.defineProperty(f, '_kids', { value: [] });
     return f;
   });
-  getters(DocumentFragment.prototype, {
-    nodeType: { get: function () { return 11; } }, nodeName: { get: function () { return '#document-fragment'; } },
-    parentNode: { get: function () { return null; } }, parentElement: { get: function () { return null; } },
-    childNodes: { get: function () { var self = this; var s = slots(this); return s.childNodes || (s.childNodes = liveList(NodeList, function () { return self._kids.slice(); })); } },
-    firstChild: { get: function () { return this._kids[0] || null; } }, lastChild: { get: function () { return this._kids[this._kids.length - 1] || null; } },
-    nextSibling: { get: function () { return null; } }, previousSibling: { get: function () { return null; } },
-    isConnected: { get: function () { return false; } }, nodeValue: { get: function () { return null; }, set: function () { } },
-    textContent: { get: function () { return this._kids.map(function (k) { return k.nodeType === 8 ? '' : k.textContent; }).join(''); }, set: function (v) { this.replaceChildren(); if (v !== '' && v !== null && v !== undefined) this.appendChild(new Text(toStr(v))); } },
-    host: { get: function () { return null; } }, mode: { get: function () { return 'open'; } }
-  });
   getters(DocumentFragment.prototype, ParentNodeGetters);
   methods(DocumentFragment.prototype, ParentNodeMethods);
   methods(DocumentFragment.prototype, {
@@ -1501,6 +1947,9 @@
     getElementsByClassName: function (cls) { return collectionOf(queryAll(this, '.' + String(cls).trim().split(/\s+/).join('.'))); }
   });
   global.ShadowRoot = makeClass('ShadowRoot', DocumentFragment);
+  // host and mode belong to ShadowRoot, not DocumentFragment: a script that subclasses DocumentFragment (the Shady DOM
+  // polyfill's own ShadowRoot) assigns this.host, which a getter-only accessor inherited from DocumentFragment would swallow.
+  getters(global.ShadowRoot.prototype, { host: { get: function () { return null; } }, mode: { get: function () { return 'open'; } } });
 
   // --- Document -------------------------------------------------------------
   var Document = makeClass('Document', Node, function Document() { return createDetachedDocument(); });
@@ -1563,6 +2012,8 @@
     all: { get: function () { return collectionOf(queryAll(this, '*')); } },
     timeline: { get: function () { return { currentTime: nowMs() }; } }
   });
+  // The "template contents owner document": the document every template's content belongs to.
+  function templateOwnerDocument() { return templateDocument || (templateDocument = createDetachedDocument()); }
   var domImplementation = {
     createHTMLDocument: function (title) { var d = createDetachedDocument(); if (title !== undefined) d.title = title; return d; },
     createDocument: function () { return createDetachedDocument(); },
@@ -1578,8 +2029,12 @@
       var lower = tag.toLowerCase();
       var is = options && typeof options === 'object' ? options.is : undefined;
       var id = sw.createElement(lower);
-      var w = wrap(id);
-      if (is) w.setAttribute('is', is);
+      var inert = this._detachedRoot !== undefined; // an inert document has no custom element registry: nothing is constructed
+      if (inert) noUpgrade = true;
+      var w;
+      try { w = wrap(id); } finally { noUpgrade = false; }
+      if (inert) Object.defineProperty(w, INERT_EL, { value: true, configurable: true });
+      if (is) slots(w).isValue = String(is); // the "is value" is not an attribute: getAttribute('is') stays null
       hostMutation('create', id);
       return w;
     },
@@ -1618,7 +2073,7 @@
     importNode: function (node, deep) { requireNode(node, 'importNode'); return node.cloneNode(!!deep); },
     adoptNode: function (node) { requireNode(node, 'adoptNode'); if (node.parentNode) node.parentNode.removeChild(node); return node; },
     hasFocus: function () { return true; },
-    elementFromPoint: function (x, y) { if (host('elementFromPoint')) return wrap(sw.elementFromPoint(+x || 0, +y || 0)); return this.body; },
+    elementFromPoint: function (x, y) { var p = scrollPos(); if (host('elementFromPoint')) return wrap(sw.elementFromPoint((+x || 0) + p[0], (+y || 0) + p[1])); return this.body; },
     elementsFromPoint: function (x, y) { var e = this.elementFromPoint(x, y); var out = []; for (; e; e = e.parentElement) out.push(e); return out; },
     caretRangeFromPoint: function () { return null; }, caretPositionFromPoint: function () { return null; },
     getSelection: function () { return global.getSelection(); },
@@ -1698,19 +2153,75 @@
   // ==== 6. Reflected attributes (generated) ================================
   // "prop" or "prop=attr" with a kind suffix: ":b" boolean, ":i" integer
   // (":i=default"), ":u" URL-resolved, ":e" enumerated-string, default string.
-  var REFLECT = ('title lang dir=dir:e hidden:b tabIndex=tabindex:i=-1 accessKey=accesskey draggable=draggable:tb spellcheck=spellcheck:tb translate=translate:yb ' +
-    'contentEditable=contenteditable:e inert:b popover autofocus:b role=role:n ' +
-    'href=href:n src=src:n type name alt placeholder disabled:b selected:b lang htmlFor=for for=for action method target rel download ' +
-    'width:i height:i loading srcset sizes content charset async:b defer:b crossOrigin=crossorigin:n integrity referrerPolicy=referrerpolicy ' +
-    'autocomplete required:b readOnly=readonly:b multiple:b min max step pattern maxLength=maxlength:i=-1 minLength=minlength:i=-1 size:i=20 rows:i=2 cols:i=20 wrap ' +
-    'colSpan=colspan:i=1 rowSpan=rowspan:i=1 scope headers open:b label default:b cite dateTime=datetime data ' +
-    'controls:b autoplay:b loop:b muted:b poster preload playsInline=playsinline:b kind srclang isMap=ismap:b useMap=usemap shape coords ping hreflang ' +
-    'media sandbox allow allowFullscreen=allowfullscreen:b scrolling frameBorder=frameborder align vAlign=valign valign bgColor=bgcolor border cellPadding=cellpadding cellSpacing=cellspacing ' +
-    'noValidate=novalidate:b formAction=formaction formMethod=formmethod formTarget=formtarget formNoValidate=formnovalidate:b formEnctype=formenctype enctype encoding=enctype acceptCharset=accept-charset accept capture dirName=dirname ' +
-    'inputMode=inputmode list=list:skip nonce:skip slot:skip part:skip id:skip className:skip value=value:v checked:skip start:i=1 reversed:b span:i=1 abbr axis char charOff=charoff compact:b declare:b ' +
-    'noWrap=nowrap:b longDesc=longdesc lowsrc marginHeight=marginheight marginWidth=marginwidth noHref=nohref:b noResize=noresize:b noShade=noshade:b standby summary version vspace:i hspace:i ' +
-    'httpEquiv=http-equiv scheme optimum:i low:i high:i decoding fetchPriority=fetchpriority enterKeyHint=enterkeyhint virtualKeyboardPolicy=virtualkeyboardpolicy autocapitalize elementTiming=elementtiming ' +
-    'blocking is=is:n itemId=itemid itemProp=itemprop itemRef=itemref itemScope=itemscope:b itemType=itemtype').split(/\s+/);
+  // Each reflected property lives on the interface(s) that own it, as in the HTML spec: `'href' in div` and `'data' in el` are
+  // false, `'labels' in input` is true. Scripts tell native properties from their own with exactly these probes (Polymer
+  // Resin sanitises every property that exists on a freshly made element, and must see none on a custom element).
+  // Targets are tag names, HTML*Element interface names, or '*' for HTMLElement itself.
+  var REFLECT = [
+    ['*', 'title lang dir=dir:e hidden:b tabIndex=tabindex:i=-1 accessKey=accesskey draggable=draggable:tb spellcheck=spellcheck:tb translate=translate:yb contentEditable=contenteditable:e inert:b autofocus:b role=role:n enterKeyHint=enterkeyhint inputMode=inputmode virtualKeyboardPolicy=virtualkeyboardpolicy autocapitalize nonce:skip slot:skip part:skip id:skip className:skip'],
+    ['a area link base', 'href=href:n'],
+    ['img script iframe embed source track input HTMLMediaElement', 'src=src:n'],
+    ['a link script source style button input ol li ul embed object', 'type'],
+    ['a img iframe form input select textarea button fieldset output object meta map slot embed details', 'name'],
+    ['img area input', 'alt'],
+    ['input textarea', 'placeholder'],
+    ['input select textarea button fieldset optgroup option link', 'disabled:b'],
+    ['option', 'selected:b'],
+    ['label', 'htmlFor=for'],
+    ['form', 'action method noValidate=novalidate:b enctype encoding=enctype acceptCharset=accept-charset'],
+    ['a area base form', 'target'],
+    ['a area link', 'rel'],
+    ['a area', 'download ping'],
+    ['a area link', 'hreflang'],
+    ['img canvas video iframe embed object input source', 'width:i height:i'],
+    ['img iframe', 'loading'],
+    ['img source', 'srcset sizes'],
+    ['meta', 'content httpEquiv=http-equiv scheme'],
+    ['meta script', 'charset'],
+    ['script', 'async:b defer:b'],
+    ['img script link HTMLMediaElement', 'crossOrigin=crossorigin:n'],
+    ['script link', 'integrity'],
+    ['a area img iframe link script', 'referrerPolicy=referrerpolicy'],
+    ['input select textarea form', 'autocomplete'],
+    ['input select textarea', 'required:b'],
+    ['input textarea', 'readOnly=readonly:b maxLength=maxlength:i=-1 minLength=minlength:i=-1 dirName=dirname'],
+    ['input select', 'multiple:b'],
+    ['input meter', 'min'],
+    ['input meter progress', 'max'],
+    ['input', 'step pattern size:i=20 accept capture'],
+    ['select', 'size:i=0'],
+    ['textarea', 'rows:i=2 cols:i=20 wrap'],
+    ['td th', 'colSpan=colspan:i=1 rowSpan=rowspan:i=1 headers abbr axis'],
+    ['th', 'scope'],
+    ['details dialog', 'open:b'],
+    ['option optgroup track', 'label'],
+    ['track', 'default:b kind srclang'],
+    ['blockquote q ins del', 'cite'],
+    ['ins del time', 'dateTime=datetime'],
+    ['object', 'data declare:b standby'],
+    ['HTMLMediaElement', 'controls:b autoplay:b loop:b muted:b preload'],
+    ['video', 'poster playsInline=playsinline:b'],
+    ['img', 'isMap=ismap:b decoding longDesc=longdesc lowsrc'],
+    ['img object', 'useMap=usemap border vspace:i hspace:i'],
+    ['area', 'shape coords noHref=nohref:b'],
+    ['link source style', 'media'],
+    ['iframe', 'sandbox allow allowFullscreen=allowfullscreen:b scrolling frameBorder=frameborder marginHeight=marginheight marginWidth=marginwidth'],
+    ['div p hr table caption col colgroup tbody thead tfoot tr td th iframe img object embed legend input h1 h2 h3 h4 h5 h6', 'align'],
+    ['tr td th tbody thead tfoot col colgroup', 'vAlign=valign char charOff=charoff'],
+    ['body table tr td th', 'bgColor=bgcolor'],
+    ['table', 'border cellPadding=cellpadding cellSpacing=cellspacing summary'],
+    ['button input', 'formAction=formaction formMethod=formmethod formTarget=formtarget formNoValidate=formnovalidate:b formEnctype=formenctype'],
+    ['li button data param meter progress', 'value=value:v'],
+    ['ol', 'start:i=1 reversed:b'],
+    ['col colgroup', 'span:i=1'],
+    ['td th', 'noWrap=nowrap:b'],
+    ['ul ol dl menu', 'compact:b'],
+    ['hr', 'noShade=noshade:b'],
+    ['html', 'version'],
+    ['meter', 'optimum:i low:i high:i'],
+    ['img link script iframe', 'fetchPriority=fetchpriority'],
+    ['script link style', 'blocking']
+  ];
   // Props that specialised prototypes already own (never clobber those).
   var _unusedProtos = [InputP, TextAreaP, SelectP, OptionP, FormP, global.HTMLButtonElement.prototype, global.HTMLAnchorElement.prototype, global.HTMLAreaElement.prototype, global.HTMLLinkElement.prototype, global.HTMLBaseElement.prototype, ImgP, global.HTMLCanvasElement.prototype, global.HTMLDetailsElement.prototype, global.HTMLDialogElement.prototype, global.HTMLProgressElement.prototype, global.HTMLMeterElement.prototype, global.HTMLTimeElement.prototype, global.HTMLLIElement.prototype, global.HTMLDataElement.prototype, global.HTMLOutputElement.prototype, global.HTMLScriptElement.prototype, global.HTMLIFrameElement.prototype, global.HTMLSourceElement.prototype, global.HTMLEmbedElement.prototype, global.HTMLTrackElement.prototype, global.HTMLMediaElement.prototype, global.HTMLObjectElement.prototype];
   function reflectDescriptor(attr, kind, dflt) {
@@ -1725,18 +2236,27 @@
       default: return { get: function () { var v = sw.getAttr(this[ID], attr); return v === null || v === undefined ? '' : v; }, set: function (v) { this.setAttribute(attr, toStr(v)); } };
     }
   }
-  REFLECT.forEach(function (spec) {
-    var m = /^([A-Za-z]+)(?:=([a-z-]+))?(?::([a-z]+)(?:=(-?\d+))?)?$/.exec(spec);
-    if (!m) throw new Error('bad reflect spec ' + spec);
-    var prop = m[1], attr = m[2] || prop.toLowerCase(), kind = m[3] || 's', dflt = m[4];
-    if (kind === 'skip') return;
-    if (hasOwn.call(HTMLElement.prototype, prop)) return;
-    var d = reflectDescriptor(attr, kind, dflt);
-    def(HTMLElement.prototype, prop, { get: d.get, set: d.set, enumerable: true });
-    // SVG elements share the string reflectors for the few that make sense
-    if (/^(tabIndex|role|hidden|title|lang|dataset|type|href|target|download|name)$/.test(prop) && !hasOwn.call(SVGElement.prototype, prop)) def(SVGElement.prototype, prop, { get: d.get, set: d.set, enumerable: true });
+  REFLECT.forEach(function (entry) {
+    var targets = [];
+    entry[0].split(' ').forEach(function (t) {
+      var C = t === '*' ? HTMLElement : /^HTML/.test(t) ? global[t] : TAG_CLASS[t];
+      if (C && targets.indexOf(C) < 0) targets.push(C);
+    });
+    entry[1].split(' ').forEach(function (spec) {
+      var m = /^([A-Za-z]+)(?:=([a-z-]+))?(?::([a-z]+)(?:=(-?\d+))?)?$/.exec(spec);
+      if (!m) throw new Error('bad reflect spec ' + spec);
+      var prop = m[1], attr = m[2] || prop.toLowerCase(), kind = m[3] || 's', dflt = m[4];
+      if (kind === 'skip') return;
+      var d = reflectDescriptor(attr, kind, dflt);
+      targets.forEach(function (C) {
+        if (hasOwn.call(C.prototype, prop)) return;
+        def(C.prototype, prop, { get: d.get, set: d.set, enumerable: true });
+      });
+      // SVG elements share the string reflectors for the few that make sense
+      if (/^(tabIndex|role|hidden|title|lang|dataset|type|href|target|download|name)$/.test(prop) && !hasOwn.call(SVGElement.prototype, prop)) def(SVGElement.prototype, prop, { get: d.get, set: d.set, enumerable: true });
+    });
   });
-  // `value` on plain HTMLElement reflects the attribute; input/textarea/select own live accessors above.
+  // input/textarea/select own live `value` accessors above; the others in the `value` row reflect the attribute.
   _unusedProtos.length = 0;
   getters(Element.prototype, { role: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'role') });
   // ARIA reflection: ariaLabel <-> aria-label etc.
@@ -1819,6 +2339,33 @@
   setTag(MutationObserver, 'MutationObserver'); global.MutationObserver = MutationObserver; global.WebKitMutationObserver = MutationObserver;
 
   // IntersectionObserver / ResizeObserver: report every observed element once, as visible.
+  // Notifications are batched the way a browser's rendering step delivers them: the observe() calls of a task
+  // are answered by one timer that measures every target first (a single layout, since nothing changes the tree
+  // between the measurements) and then calls each observer once with its entries. One timer per target made a
+  // page that observes fifty links lay out fifty times, every callback's DOM change invalidating the next.
+  var obsPending = [], obsScheduled = false;
+  function obsQueue(obs, el, make) {
+    obsPending.push({ obs: obs, el: el, make: make });
+    if (!obsScheduled) { obsScheduled = true; setTimeoutImpl(obsFlush, [], 0, false); }
+  }
+  function obsFlush() {
+    obsScheduled = false;
+    var batch = obsPending; obsPending = [];
+    var groups = [], i, j;
+    for (i = 0; i < batch.length; i++) {
+      var p = batch[i];
+      if (p.obs._targets.indexOf(p.el) < 0) continue;
+      var rect = p.el.getBoundingClientRect ? p.el.getBoundingClientRect() : new DOMRect();
+      for (j = 0; j < groups.length && groups[j].obs !== p.obs; j++) {}
+      if (j === groups.length) groups.push({ obs: p.obs, entries: [] });
+      groups[j].entries.push(p.make(p.el, rect));
+    }
+    for (i = 0; i < groups.length; i++) {
+      var g = groups[i], live = [];
+      for (j = 0; j < g.entries.length; j++) if (g.obs._targets.indexOf(g.entries[j].target) >= 0) live.push(g.entries[j]);
+      if (live.length) { try { g.obs._cb(live, g.obs); } catch (e) { reportError(e); } }
+    }
+  }
   function IntersectionObserver(cb, options) {
     if (typeof cb !== 'function') throw new TypeError('callback must be a function');
     this._cb = cb; this._targets = []; options = options || {};
@@ -1829,13 +2376,9 @@
     observe: function (el) {
       if (this._targets.indexOf(el) >= 0) return;
       this._targets.push(el);
-      var self = this;
-      setTimeoutImpl(function () {
-        if (self._targets.indexOf(el) < 0) return;
-        var rect = el.getBoundingClientRect ? el.getBoundingClientRect() : new DOMRect();
-        var entry = { target: el, time: nowMs(), isIntersecting: true, intersectionRatio: 1, boundingClientRect: rect, intersectionRect: rect, rootBounds: new DOMRect(0, 0, viewport().width, viewport().height), isVisible: true };
-        try { self._cb([entry], self); } catch (e) { reportError(e); }
-      }, [], 0, false);
+      obsQueue(this, el, function (el, rect) {
+        return { target: el, time: nowMs(), isIntersecting: true, intersectionRatio: 1, boundingClientRect: rect, intersectionRect: rect, rootBounds: new DOMRect(0, 0, viewport().width, viewport().height), isVisible: true };
+      });
     },
     unobserve: function (el) { var i = this._targets.indexOf(el); if (i >= 0) this._targets.splice(i, 1); },
     disconnect: function () { this._targets = []; },
@@ -1852,13 +2395,10 @@
     observe: function (el) {
       if (this._targets.indexOf(el) >= 0) return;
       this._targets.push(el);
-      var self = this;
-      setTimeoutImpl(function () {
-        if (self._targets.indexOf(el) < 0) return;
-        var rect = el.getBoundingClientRect ? el.getBoundingClientRect() : new DOMRect();
+      obsQueue(this, el, function (el, rect) {
         var size = [{ inlineSize: rect.width, blockSize: rect.height }];
-        try { self._cb([{ target: el, contentRect: rect, borderBoxSize: size, contentBoxSize: size, devicePixelContentBoxSize: size }], self); } catch (e) { reportError(e); }
-      }, [], 0, false);
+        return { target: el, contentRect: rect, borderBoxSize: size, contentBoxSize: size, devicePixelContentBoxSize: size };
+      });
     },
     unobserve: IntersectionObserver.prototype.unobserve,
     disconnect: IntersectionObserver.prototype.disconnect
@@ -1899,13 +2439,16 @@
     } catch (e) { reportError(e); }
     runningTimer = null;
   }
-  function runTimers(now, withBg) {
+  function runTimers(now, withBg, budget) {
     now = +now; if (!(now >= 0)) now = nowMs(); if (now > lastNow) lastNow = now;
+    // budget (ms, 0 = none): stop starting timers once it is spent; the rest stay due for the next pump
+    var t0 = Date.now(); budget = +budget || 0;
     // Only timers that were pending when this pass started run now; timers armed
     // by callbacks (and re-armed intervals) wait for the next pump so microtasks
     // get flushed between macrotasks, as in a browser event loop.
     var startSeq = timerSeq;
     while (timers.length && timers[0].when <= now && timers[0].seq <= startSeq) {
+      if (budget > 0 && Date.now() - t0 >= budget) return 0;
       var t = timers.shift();
       runTimer(t);
       if (t.interval >= 0 && !t.cancelled) {
@@ -1996,10 +2539,11 @@
     innerWidth: { get: function () { return viewport().width; }, set: function () { } }, innerHeight: { get: function () { return viewport().height; }, set: function () { } },
     outerWidth: { get: function () { return viewport().width; }, set: function () { } }, outerHeight: { get: function () { return viewport().height; }, set: function () { } },
     devicePixelRatio: { get: function () { return viewport().dsf; }, set: function () { } },
-    scrollX: { get: function () { return 0; } }, scrollY: { get: function () { return 0; } }, pageXOffset: { get: function () { return 0; } }, pageYOffset: { get: function () { return 0; } },
+    scrollX: { get: function () { return scrollPos()[0]; } }, scrollY: { get: function () { return scrollPos()[1]; } }, pageXOffset: { get: function () { return scrollPos()[0]; } }, pageYOffset: { get: function () { return scrollPos()[1]; } },
     screenX: { get: function () { return 0; } }, screenY: { get: function () { return 0; } }, screenLeft: { get: function () { return 0; } }, screenTop: { get: function () { return 0; } }
   });
-  global.scrollTo = global.scroll = global.scrollBy = function () { };
+  global.scrollTo = global.scroll = scrollWinArgs(false);
+  global.scrollBy = scrollWinArgs(true);
   global.moveTo = global.moveBy = global.resizeTo = global.resizeBy = global.focus = global.blur = global.print = global.stop = function () { };
   global.close = function () { };
   global.open = function (url) { if (url) sw.navigate(String(new global.URL(url, currentURL()))); return null; };
@@ -2024,7 +2568,8 @@
   global.matchMedia = function matchMedia(query) {
     query = String(query);
     var matches = false, m;
-    if (/prefers-color-scheme\s*:\s*dark/.test(query)) matches = viewport().dark;
+    if (host('mediaMatches')) matches = !!sw.mediaMatches(query); // the stylesheets' evaluator: CSS and script agree
+    else if (/prefers-color-scheme\s*:\s*dark/.test(query)) matches = viewport().dark;
     else if (/prefers-color-scheme\s*:\s*light/.test(query)) matches = !viewport().dark;
     else if ((m = /\(\s*(min|max)-width\s*:\s*(\d+(?:\.\d+)?)px\s*\)/.exec(query))) matches = m[1] === 'min' ? viewport().width >= +m[2] : viewport().width <= +m[2];
     else if (/prefers-reduced-motion\s*:\s*reduce/.test(query)) matches = true;
@@ -2050,7 +2595,7 @@
   LOC_PARTS.forEach(function (part) {
     def(Location.prototype, part, {
       get: function () { if (part === 'origin') return docOriginStr(); try { return new global.URL(currentURL())[part]; } catch (e) { return ''; } },
-      set: function (v) { if (part === 'origin') return; var u = new global.URL(currentURL()); u[part] = v; if (part === 'hash') { var old = currentURL(); if (u.href === old) return; urlOverride = u.href; histRecord('push', u.href, null); historyState = null; fire(global, 'hashchange', { oldURL: old, newURL: u.href }); fire(global, 'popstate', { state: null }); } else sw.navigate(u.href); },
+      set: function (v) { if (part === 'origin') return; var u = new global.URL(currentURL()); u[part] = v; if (part === 'hash') { var old = currentURL(); if (u.href === old) return; urlOverride = u.href; histRecord('push', u.href, null); historyState = null; fire(global, 'hashchange', { oldURL: old, newURL: u.href }); fire(global, 'popstate', { state: null }); scrollToFragment(); } else sw.navigate(u.href); },
       enumerable: true
     });
   });
@@ -2283,7 +2828,7 @@
     return out.join(' ');
   }
   var consoleIndent = '', counts = {}, consoleTimers = {};
-  function logAt(level) { return function () { hostLog(level, consoleIndent + formatArgs(slice.call(arguments))); }; }
+  function logAt(level) { return function () { hostLog(level, consoleIndent + formatArgs(slice.call(arguments)), callerLoc()); }; }
   var consoleObj = {
     log: logAt('log'), info: logAt('info'), warn: logAt('warn'), error: logAt('error'), debug: logAt('debug'),
     trace: function () { var e = new Error(); hostLog('log', consoleIndent + 'Trace: ' + formatArgs(slice.call(arguments)) + '\n' + String(e.stack || '')); },
@@ -2328,7 +2873,10 @@
     getEntriesByName: function (name, type) { return this.getEntries().filter(function (e) { return e.name === name && (!type || e.entryType === type); }); },
     toJSON: function () { return { timeOrigin: this.timeOrigin }; }
   });
-  function markTime(name) { for (var i = perfMarks.length - 1; i >= 0; i--) if (perfMarks[i].name === name) return perfMarks[i].startTime; throw DOMException("Failed to execute 'measure' on 'Performance': The mark '" + name + "' does not exist.", 'SyntaxError'); }
+  // measure() also accepts the PerformanceTiming attribute names as marks (React's dev timings measure from
+  // 'navigationStart'); they are all at the time origin here except the unload/redirect ones, which are 0 (unset)
+  var TIMING_MARKS = /^(navigationStart|fetchStart|domainLookupStart|domainLookupEnd|connectStart|connectEnd|requestStart|responseStart|responseEnd|domLoading|domInteractive|domContentLoadedEventStart|domContentLoadedEventEnd|domComplete|loadEventStart|loadEventEnd)$/;
+  function markTime(name) { for (var i = perfMarks.length - 1; i >= 0; i--) if (perfMarks[i].name === name) return perfMarks[i].startTime; if (TIMING_MARKS.test(name)) return 0; throw DOMException("Failed to execute 'measure' on 'Performance': The mark '" + name + "' does not exist.", 'SyntaxError'); }
   var perfObj = Object.create(Performance.prototype);
   var timeOrigin = Date.now();
   getters(perfObj, { timeOrigin: { get: function () { return timeOrigin; } }, timing: { get: function () { return { navigationStart: timeOrigin, fetchStart: timeOrigin, domainLookupStart: timeOrigin, domainLookupEnd: timeOrigin, connectStart: timeOrigin, connectEnd: timeOrigin, requestStart: timeOrigin, responseStart: timeOrigin, responseEnd: timeOrigin, domLoading: timeOrigin, domInteractive: timeOrigin, domContentLoadedEventStart: timeOrigin, domContentLoadedEventEnd: timeOrigin, domComplete: timeOrigin, loadEventStart: timeOrigin, loadEventEnd: timeOrigin, unloadEventStart: 0, unloadEventEnd: 0, redirectStart: 0, redirectEnd: 0, secureConnectionStart: 0 }; } }, navigation: { get: function () { return { type: 0, redirectCount: 0, TYPE_NAVIGATE: 0, TYPE_RELOAD: 1, TYPE_BACK_FORWARD: 2 }; } }, memory: { get: function () { return { jsHeapSizeLimit: 16777216, totalJSHeapSize: 4194304, usedJSHeapSize: 2097152 }; } }, eventCounts: { get: function () { return new Map(); } }, onresourcetimingbufferfull: { get: function () { return null; }, set: function () { } } });
@@ -3271,17 +3819,23 @@
     var ok = fire(el, 'keydown', init);
     if (!ok) { fire(el, 'keyup', Object.assign({}, init, { cancelable: false })); return false; }
     var editable = el.nodeType === 1 && ((el.localName === 'input' && PRINTABLE_INPUT.test(el.type)) || el.localName === 'textarea' || el.isContentEditable);
-    var printable = key.length === 1 || key === 'Enter' && el.localName === 'textarea';
-    var result = true;
+    // a character with Control or Meta held is a shortcut (Control+a), not text
+    var printable = !(mods.ctrlKey || mods.metaKey) && (key.length === 1 || key === 'Enter' && (el.localName === 'textarea' || el.isContentEditable));
+    var result = true, used = false, custom = typeof global.__swKeyDefault === 'function';
     if (printable) {
       ok = fire(el, 'keypress', Object.assign({}, init, { charCode: key.length === 1 ? key.charCodeAt(0) : 13 }));
-      if (ok && editable) result = editInput(el, 'insertText', key === 'Enter' ? '\n' : key);
-    } else if (key === 'Backspace' && editable) result = editInput(el, 'deleteContentBackward', null);
-    else if (key === 'Delete' && editable) result = editInput(el, 'deleteContentForward', null);
-    else if (key === 'Enter' && el.nodeType === 1) {
-      if (el.localName === 'input') { var f = el.form; if (f) submitForm(f, queryOne(f, 'button[type=submit],input[type=submit],button:not([type])') || null); }
-      else if (el.localName === 'button' || el.localName === 'a' || el.getAttribute('role') === 'button') clickElement(el);
-    } else if (key === ' ' && el.nodeType === 1 && (el.localName === 'button' || (el.localName === 'input' && (el.type === 'checkbox' || el.type === 'radio' || el.type === 'button' || el.type === 'submit')))) clickElement(el);
+      if (ok && custom) { used = true; result = global.__swKeyDefault(el, key, mods); }
+      else if (ok && editable) { used = true; result = editInput(el, 'insertText', key === 'Enter' ? '\n' : key); }
+    } else if (custom) {
+      used = !!global.__swKeyDefault(el, key, mods);
+    } else if (key === 'Backspace' && editable) { used = true; result = editInput(el, 'deleteContentBackward', null); }
+    else if (key === 'Delete' && editable) { used = true; result = editInput(el, 'deleteContentForward', null); }
+    if (!used && !printable) {
+      if (key === 'Enter' && el.nodeType === 1) {
+        if (el.localName === 'input') { var f = el.form; if (f) submitForm(f, queryOne(f, 'button[type=submit],input[type=submit],button:not([type])') || null); }
+        else if (el.localName === 'button' || el.localName === 'a' || el.getAttribute('role') === 'button') clickElement(el);
+      } else if (key === ' ' && el.nodeType === 1 && (el.localName === 'button' || (el.localName === 'input' && (el.type === 'checkbox' || el.type === 'radio' || el.type === 'button' || el.type === 'submit')))) clickElement(el);
+    }
     fire(el, 'keyup', Object.assign({}, init, { cancelable: false }));
     return result;
   }
@@ -3322,10 +3876,17 @@
     fire(el, 'change', { bubbles: true, cancelable: false });
     return true;
   }
+  // the element at a page point (x, y: CSS px from the top-left of the document)
+  function elAtPage(x, y) { return host('elementFromPoint') ? wrap(sw.elementFromPoint(+x || 0, +y || 0)) : null; }
+  function pointerInit(x, y, el) {
+    var p = scrollPos(), cx = (+x || 0) - p[0], cy = (+y || 0) - p[1], ob = el ? hostBox(el[ID]) : null;
+    return { clientX: cx, clientY: cy, pageX: +x || 0, pageY: +y || 0, x: cx, y: cy, screenX: cx, screenY: cy,
+      offsetX: ob ? (+x || 0) - ob.x : 0, offsetY: ob ? (+y || 0) - ob.y : 0 };
+  }
   function mouseFromGo(type, x, y, init) {
-    var el = documentWrapper.elementFromPoint(x, y) || documentWrapper.body || documentWrapper;
+    var el = elAtPage(x, y) || documentWrapper.body || documentWrapper;
     type = String(type);
-    init = Object.assign({ clientX: +x || 0, clientY: +y || 0, button: 0, buttons: /down|move/.test(type) && type !== 'mousemove' ? 1 : 0 }, init || {});
+    init = Object.assign(pointerInit(x, y, el), { button: 0, buttons: /down|move/.test(type) && type !== 'mousemove' ? 1 : 0 }, init || {});
     if (type === 'click') return dispatchFromGo(el[ID], 'click', init) ? (defaultAction(el), true) : false;
     return fire(el, type, init);
   }
@@ -3351,9 +3912,12 @@
     fire(src, 'dragend', { dataTransfer: dt });
     return dropped || overPrevented;
   }
-  function wheelFromGo(dx, dy, x, y) {
-    var el = (x !== undefined ? documentWrapper.elementFromPoint(x, y) : null) || activeElement || documentWrapper.body || documentWrapper;
-    return fire(el, 'wheel', { deltaX: +dx || 0, deltaY: +dy || 0, deltaMode: 0, clientX: +x || 0, clientY: +y || 0 });
+  function wheelFromGo(dx, dy, x, y, mods) {
+    var el = (x !== undefined ? elAtPage(x, y) : null) || activeElement || documentWrapper.body || documentWrapper;
+    var init = x !== undefined ? pointerInit(x, y, el) : {};
+    init.deltaX = +dx || 0; init.deltaY = +dy || 0; init.deltaMode = 0;
+    if (mods) { init.ctrlKey = !!(mods & 2); init.shiftKey = !!(mods & 1); init.altKey = !!(mods & 4); init.metaKey = !!(mods & 8); }
+    return fire(el, 'wheel', init);
   }
   function fireLifecycle(name) {
     name = String(name);
@@ -3361,6 +3925,7 @@
       case 'DOMContentLoaded':
         if (readyState === 'loading') { readyState = 'interactive'; fire(documentWrapper, 'readystatechange', { bubbles: false, cancelable: false }); }
         fire(documentWrapper, 'DOMContentLoaded', { bubbles: true, cancelable: false });
+        try { scrollToFragment(); } catch (e) { /* no fragment */ }
         return true;
       case 'load':
         if (readyState !== 'complete') { readyState = 'complete'; fire(documentWrapper, 'readystatechange', { bubbles: false, cancelable: false }); }
@@ -3456,13 +4021,16 @@
   exportFn('__swMouse', function (type, x, y, init) { try { return mouseFromGo(type, x, y, init); } catch (e) { reportError(e); return true; } });
   exportFn('__swTouch', function (id, type) { try { return touchFromGo(id, type); } catch (e) { reportError(e); return true; } });
   exportFn('__swDrag', function (src, dst) { try { return dragFromGo(src, dst); } catch (e) { reportError(e); return false; } });
-  exportFn('__swWheel', function (dx, dy, x, y) { try { return wheelFromGo(dx, dy, x, y); } catch (e) { reportError(e); return true; } });
+  exportFn('__swWheel', function (dx, dy, x, y, mods) { try { return wheelFromGo(dx, dy, x, y, mods); } catch (e) { reportError(e); return true; } });
+  // true once the page has registered a wheel listener that can cancel (not passive): the host then waits for the page's answer before scrolling
+  exportFn('__swWheelNP', function () { return wheelNP; });
   exportFn('__swSetValueFromGo', function (id, value) { try { return setValueFromGo(id, value); } catch (e) { reportError(e); return false; } });
-  exportFn('__swRunTimers', function (now, withBg) { try { return runTimers(now, !!withBg); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
+  exportFn('__swRunTimers', function (now, withBg, budget) { try { return runTimers(now, !!withBg, budget); } catch (e) { reportError(e); return timers.length ? 0 : -1; } });
   exportFn('__swFlushMutationObservers', function () { try { flushMutationObservers(); } catch (e) { reportError(e); } return pendingObservers.length; });
   exportFn('__swSetHidden', function (h, quiet) { h = !!h; if (h === pageHidden) return false; pageHidden = h; if (!quiet) { try { fire(documentWrapper, 'visibilitychange', { bubbles: true }); } catch (e) { reportError(e); } } return true; });
   exportFn('__swFireLifecycle', function (name) { try { return fireLifecycle(name); } catch (e) { reportError(e); return true; } });
   exportFn('__swSetDocument', function (url, state) { return setDocument(url, state); });
+  exportFn('__swBlockScripts', function () { scriptsBlocked = true; });
   exportFn('__swDefaultAction', function (id) { try { defaultAction(wrap(+id)); return true; } catch (e) { reportError(e); return false; } });
   exportFn('__swSerialize', function (v) { try { return serialize(v); } catch (e) { return { name: e && e.name, message: String(e && e.message || e) }; } });
   exportFn('__swSetCurrentScript', function (id) { currentScript = id ? wrap(+id) : null; return true; });
@@ -3471,6 +4039,8 @@
   exportFn('__swWrap', function (id) { return wrap(+id); });
   exportFn('__swBlobText', function (u) { var b = blobURLs.get(String(u)); return b ? utf8Decode(b._bytes || new Uint8Array(0)) : null; });
   exportFn('__swIdOf', function (node) { return idOf(node); });
+  exportFn('__swElScrolled', function (id) { try { var el = wrap(+id); if (el) queueScrollEvent(el); } catch (e) { reportError(e); } return true; });
+  exportFn('__swElAtPage', function (x, y) { try { return elAtPage(x, y); } catch (e) { return null; } });
 
   // A pooled VM is built before it is bound to a document; __swSetDocument
   // installs the real one at bind time.

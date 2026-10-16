@@ -211,8 +211,42 @@ var refRe = func(role, name string) *regexp.Regexp {
 }
 
 // findRef returns the ref of `role "name"` in the snapshots of the request.
+// userText is the text blocks of the user messages: the starting page's snapshot rides with the task there.
+func userText(body []byte) string {
+	var p struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content any    `json:"content"`
+		} `json:"messages"`
+	}
+	_ = json.Unmarshal(body, &p)
+	var sb strings.Builder
+	for _, m := range p.Messages {
+		if m.Role != "user" {
+			continue
+		}
+		switch c := m.Content.(type) {
+		case string:
+			sb.WriteString(c + "\n")
+		case []any:
+			for _, e := range c {
+				if mm, ok := e.(map[string]any); ok && mm["type"] == "text" {
+					if s, ok := mm["text"].(string); ok {
+						sb.WriteString(s + "\n")
+					}
+				}
+			}
+		}
+	}
+	return sb.String()
+}
+
+// findRef finds the newest ref of a node: in the tool results, or else in the starting page that came with the task.
 func findRef(body []byte, role, name string) string {
 	m := refRe(role, name).FindAllStringSubmatch(toolResultText(body), -1)
+	if len(m) == 0 {
+		m = refRe(role, name).FindAllStringSubmatch(userText(body), -1)
+	}
 	if len(m) == 0 {
 		return ""
 	}

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,6 +64,23 @@ func (t *Tab) jsCall(fn string, args ...any) (any, bool) {
 
 // afterAction lets page scripts react (fetch, re-render) before the tool returns.
 func (t *Tab) afterAction() { t.settle(t.settleBudget() / 3) }
+
+// afterInput follows an action that edits a control rather than the page (fill, type, select, check, hover):
+// the page's handlers already ran inside the event dispatch, so only microtasks, due timers, observers and
+// answers in flight are drained (as Playwright's fill returns once the value is in). It cost a whole quiet
+// window (300 ms) per field, four in a login form. SetFullInputSettle restores afterAction for the last step
+// of a batch, whose observation follows at once.
+func (t *Tab) afterInput() {
+	if t.fullInputSettle.Load() {
+		t.afterAction()
+		return
+	}
+	t.settle(0)
+}
+
+// SetFullInputSettle makes input actions settle like any other action until it is cleared (Batch.run sets it
+// for the last step).
+func (t *Tab) SetFullInputSettle(on bool) { t.fullInputSettle.Store(on) }
 
 // ---- attribute / html getters by backend id ---------------------------------
 
@@ -156,6 +174,7 @@ func (t *Tab) Click(sel string) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	l := t.Locator(sel)
 	// A ref that resolves to something that can never be clicked fails at
 	// once instead of waiting for it to become visible.
@@ -177,6 +196,27 @@ func (t *Tab) Click(sel string) error {
 		return err
 	}
 	return t.clickBackend(bid, sel)
+}
+
+// healRef maps a snapshot ref whose element was hidden or replaced since the snapshot to the control that took
+// its place (fnet.Doc.HealRef: same accessible name, compatible role, unambiguous); other selectors pass through.
+func (t *Tab) healRef(sel string) string {
+	s := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(sel), "@"), "ref=")
+	if len(s) < 2 || s[0] != 'e' {
+		return sel
+	}
+	id, err := strconv.ParseInt(s[1:], 10, 64)
+	if err != nil {
+		return sel
+	}
+	healed := sel
+	_ = t.withDoc(func(d *fnet.Doc) error {
+		if nr, ok := d.HealRef(id); ok {
+			healed = "e" + strconv.FormatInt(nr, 10)
+		}
+		return nil
+	})
+	return healed
 }
 
 var nonRenderable = map[string]bool{"script": true, "style": true, "head": true, "meta": true, "link": true, "title": true, "template": true, "noscript": true}
@@ -246,10 +286,16 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 		if typ == "submit" || typ == "image" || (typ == "" && strings.EqualFold(info.Name, "button")) {
 			inForm := false
 			_ = t.withDoc(func(d *fnet.Doc) error { inForm = d.FormOf(bid) != 0; return nil })
-			if inForm {
-				return t.SubmitFormBackend(bid)
+			if !inForm {
+				return nil
 			}
-			return nil
+			// with a VM the form is submitted the way a browser does it: a cancelable submit event first (the
+			// page's own handler usually takes over: React/Vue/Angular forms, fetch-based logins), then the
+			// navigation. Posting it from here skipped the event: saucedemo's login went out as a plain GET.
+			if _, ok := t.jsCall("__swDefaultAction", bid); ok {
+				return nil
+			}
+			return t.SubmitFormBackend(bid)
 		}
 		if typ == "checkbox" || typ == "radio" {
 			_ = t.withDoc(func(d *fnet.Doc) error { return d.SetChecked(bid, !(info.Checked)) })
@@ -285,7 +331,7 @@ func (t *Tab) Hover(sel string) error {
 	t.fire(bid, "pointerover", nil)
 	t.fire(bid, "mouseover", nil)
 	t.fire(bid, "mouseenter", nil)
-	t.afterAction()
+	t.afterInput()
 	return nil
 }
 
@@ -317,6 +363,7 @@ func (t *Tab) Type(sel, text string, delay time.Duration) error {
 		return err
 	}
 	t.NoteUserActivation()
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -331,7 +378,7 @@ func (t *Tab) Type(sel, text string, delay time.Duration) error {
 		}
 	}
 	t.fire(bid, "change", nil)
-	t.afterAction()
+	t.afterInput()
 	return nil
 }
 
@@ -362,16 +409,17 @@ func (t *Tab) Press(sel, keys string) error {
 		return err
 	}
 	t.NoteUserActivation()
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).BackendID()
 	if err != nil {
 		return err
 	}
 	key := strings.TrimSpace(keys)
-	proceed := true
-	if r, ok := t.jsCall("__swDispatchKey", bid, key); ok {
-		proceed = truthyAny(r)
-	}
-	if proceed && strings.EqualFold(key, "Enter") {
+	// With a VM the page's key handling owns the default action: Enter in a field submits its form through
+	// the submit event (implicit submission), which page code may cancel (React, Vue and Angular forms all do,
+	// then fetch). Submitting here as well sent the form a second time, as a plain GET, past the cancellation.
+	// Only a page without a VM (no scripts at all) is submitted from here.
+	if _, ok := t.dispatchKeyCombo(bid, key); !ok && strings.EqualFold(key, "Enter") {
 		info := t.infoForBackend(bid)
 		if info != nil && strings.EqualFold(info.Name, "input") {
 			return t.SubmitFormFor(sel)
@@ -388,9 +436,78 @@ func (t *Tab) Keyboard(keys string) error {
 		return leaf.Keyboard(keys)
 	}
 	t.NoteUserActivation()
-	t.jsCall("__swDispatchKey", 0, keys)
+	t.dispatchKeyCombo(0, strings.TrimSpace(keys))
 	t.afterAction()
 	return nil
+}
+
+// KeyboardType types text into the focused element one key at a time (keydown,
+// keypress, beforeinput, input, keyup per character), like Playwright's keyboard.type.
+func (t *Tab) KeyboardType(text string, delay time.Duration) error {
+	if leaf := t.FocusedTab(); leaf != t {
+		return leaf.KeyboardType(text, delay)
+	}
+	t.mu.RLock()
+	noVM := t.js == nil
+	t.mu.RUnlock()
+	if noVM { // a page without scripts: no key events to fire, type into the focused field
+		return t.Type("[data-sw-focused]", text, delay)
+	}
+	t.NoteUserActivation()
+	for _, r := range text {
+		k := string(r)
+		if r == '\n' {
+			k = "Enter"
+		}
+		t.jsCall("__swDispatchKey", 0, k)
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+	}
+	t.afterAction()
+	return nil
+}
+
+// dispatchKeyCombo presses one key or a combination such as "Control+a" or
+// "Shift+Tab": the last part is the key, the others set the modifier flags.
+func (t *Tab) dispatchKeyCombo(bid int64, combo string) (any, bool) {
+	key, mods := splitKeyCombo(combo)
+	if mods == nil {
+		return t.jsCall("__swDispatchKey", bid, key)
+	}
+	return t.jsCall("__swDispatchKey", bid, key, mods)
+}
+
+func splitKeyCombo(s string) (string, map[string]any) {
+	if len(s) < 3 || !strings.Contains(s[:len(s)-1], "+") {
+		return s, nil
+	}
+	parts := strings.Split(s, "+")
+	key := parts[len(parts)-1]
+	if key == "" { // "Control++"
+		key = "+"
+		parts = parts[:len(parts)-1]
+	}
+	mods := map[string]any{}
+	for _, m := range parts[:len(parts)-1] {
+		switch strings.ToLower(m) {
+		case "control", "ctrl", "controlormeta":
+			mods["ctrlKey"] = true
+		case "shift":
+			mods["shiftKey"] = true
+		case "alt", "option":
+			mods["altKey"] = true
+		case "meta", "cmd", "command", "super":
+			mods["metaKey"] = true
+		case "":
+		default:
+			return s, nil // not a combination (a key name that contains '+')
+		}
+	}
+	if len(mods) == 0 {
+		return s, nil
+	}
+	return key, mods
 }
 
 // Fill sets a value instantly (Playwright fill fast-path). Works on inputs,
@@ -402,6 +519,7 @@ func (t *Tab) Fill2(sel, value string) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -424,7 +542,7 @@ func (t *Tab) Fill2(sel, value string) error {
 		t.fire(bid, "input", nil)
 		t.fire(bid, "change", nil)
 	}
-	t.afterAction()
+	t.afterInput()
 	return nil
 }
 
@@ -439,6 +557,7 @@ func (t *Tab) setChecked(sel string, want bool) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -448,7 +567,7 @@ func (t *Tab) setChecked(sel string, want bool) error {
 	}
 	t.fire(bid, "input", nil)
 	t.fire(bid, "change", nil)
-	t.afterAction()
+	t.afterInput()
 	return nil
 }
 
@@ -460,6 +579,7 @@ func (t *Tab) SelectOption(sel, value string) error {
 	if err := frameRefUnresolved(sel); err != nil {
 		return err
 	}
+	sel = t.healRef(sel)
 	bid, err := t.Locator(sel).WaitBackend("visible", 5*time.Second)
 	if err != nil {
 		return err
@@ -469,7 +589,7 @@ func (t *Tab) SelectOption(sel, value string) error {
 	}
 	t.fire(bid, "input", nil)
 	t.fire(bid, "change", nil)
-	t.afterAction()
+	t.afterInput()
 	return nil
 }
 

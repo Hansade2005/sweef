@@ -500,13 +500,16 @@ func (cc *ContCond) needsBlock() bool {
 // pseudo-element, n is the originating element and the query may also
 // target n itself).
 func (e *Engine) contMatches(n *html.Node, cc *ContCond, pseudo string) bool {
+	e.cqEvals++
 	for ; cc != nil; cc = cc.Outer {
 		start := n
 		if pseudo != "" {
 			// pseudo-elements query containers from the originating element up
 			if ci := e.conts[n]; ci != nil && (cc.Name == "" || hasName(ci.names, cc.Name)) && (!cc.needsBlock() || ci.typ == "size") {
 				sz := e.contSize[n]
-				if !cc.Expr.eval(ci, sz, e.env) {
+				ok := cc.Expr.eval(ci, sz, e.env)
+				e.logCQ(n, ci, cc.Expr, ok)
+				if !ok {
 					return false
 				}
 				continue
@@ -517,7 +520,49 @@ func (e *Engine) contMatches(n *html.Node, cc *ContCond, pseudo string) bool {
 			return false
 		}
 		sz := e.contSize[an]
-		if !cc.Expr.eval(ci, sz, e.env) {
+		ok := cc.Expr.eval(ci, sz, e.env)
+		e.logCQ(an, ci, cc.Expr, ok)
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// cqRec is one container condition evaluated in this pass (ContainerResultsStable).
+type cqRec struct {
+	an   *html.Node
+	ci   *contInfo
+	expr *cqExpr
+	res  bool
+}
+
+func (e *Engine) logCQ(an *html.Node, ci *contInfo, x *cqExpr, res bool) {
+	if e.cqLogOff {
+		return
+	}
+	if len(e.cqLog) > 1<<16 {
+		e.cqLogOff, e.cqLog = true, nil // too many to replay: the caller lays out again
+		return
+	}
+	e.cqLog = append(e.cqLog, cqRec{an, ci, x, res})
+}
+
+// UsedContainerUnits reports whether this pass resolved a container unit (cqw, cqh ...): those depend on the
+// sizes of containers like a container query does, even on a page without @container rules.
+func (e *Engine) UsedContainerUnits() bool { return e.cqPassUnits || (e.persist == nil && e.cqUsed) }
+
+// ContainerResultsStable reports whether every container condition this pass evaluated gives the same answer
+// with the container sizes the pass measured (sizes), no container unit (cqw ...) was resolved, and no style
+// that depends on container sizes came from the cross-pass cache. Then the styles, and so the layout, of a
+// second pass at those sizes would be the same, and the layout driver keeps this one: the first layout of a
+// page with container queries (github.com, Primer) laid everything out twice.
+func (e *Engine) ContainerResultsStable(sizes map[*html.Node]ContSize) bool {
+	if e.cqLogOff || e.cqPassUnits || (e.persist == nil && e.cqUsed) {
+		return false
+	}
+	for _, r := range e.cqLog {
+		if r.expr.eval(r.ci, sizes[r.an], e.env) != r.res {
 			return false
 		}
 	}

@@ -1,4 +1,4 @@
-package main
+package cliclient
 
 // agentcli.go — the session CLI agents drive one command at a time:
 //
@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sweefbrowser/sweef/internal/batchfmt"
 	"github.com/sweefbrowser/sweef/internal/protocol"
 )
 
@@ -39,11 +40,44 @@ var sessionCommands = map[string]bool{
 	"screenshot": true, "close": true, "quit": true, "exit": true, "stats": true, "set": true, "find": true,
 	"storage": true, "cookies": true, "state": true, "drag": true, "dialog": true,
 	"batch": true, "pdf": true, "downloads": true, "download": true, "route": true, "unroute": true,
-	"bind": true, "bindings": true,
+	"bind": true, "bindings": true, "rpc": true,
 }
 
 // isSessionCommand decides between the one-shot commands (snapshot <url>,
 // eval <url> <expr>) and the daemon-backed session verbs.
+// IsSessionCommand reports whether cmd (with its arguments) is a session command: one the daemon serves.
+func IsSessionCommand(cmd string, args []string) bool { return isSessionCommand(cmd, args) }
+
+// Run runs a session command against the session daemon (starting it when needed) and exits non-zero on
+// failure.
+func Run(cmd string, args []string) { cmdSession(cmd, args) }
+
+// DaemonExe is the executable started as the session daemon ("<exe> serve ..."): the running binary in
+// sweef itself; the engine-free client (cmd/sweef-cli) points it at the sweef binary next to it.
+var DaemonExe = os.Executable
+
+// LeadingGlobalFlags lets the session CLI's global flags come before the verb
+// (`sweef --json get url`, `sweef --session w open ...`): the verb is the first
+// argument that is not one of them, and the flags move after it.
+func LeadingGlobalFlags(argv []string) (string, []string) {
+	var flags []string
+	i := 0
+	for i < len(argv) {
+		a := argv[i]
+		switch {
+		case a == "--json" || strings.HasPrefix(a, "--session=") || strings.HasPrefix(a, "--timeout="):
+			flags = append(flags, a)
+			i++
+		case (a == "--session" || a == "--timeout") && i+1 < len(argv):
+			flags = append(flags, a, argv[i+1])
+			i += 2
+		default:
+			return a, append(append([]string{}, argv[i+1:]...), flags...)
+		}
+	}
+	return "help", nil
+}
+
 func isSessionCommand(cmd string, args []string) bool {
 	if !sessionCommands[cmd] {
 		return false
@@ -125,7 +159,7 @@ func (s *cliSession) ensureDaemon() error {
 		return err
 	}
 	os.Remove(s.sock)
-	self, err := os.Executable()
+	self, err := DaemonExe()
 	if err != nil {
 		return err
 	}
@@ -261,7 +295,9 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 			return s.ok(r, "✓ browser ready"), err
 		}
 		u := args[0]
-		if !looksLikeURL(u) && !strings.HasPrefix(u, "about:") {
+		// a bare host gets https://; data:, about:, blob: URLs and paths of the current page go as they are
+		if !looksLikeURL(u) && !strings.HasPrefix(u, "about:") && !strings.HasPrefix(u, "data:") && !strings.HasPrefix(u, "blob:") &&
+			!strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "?") {
 			u = "https://" + u
 		}
 		r, err := s.call("Page.navigate", map[string]any{"url": u})
@@ -687,6 +723,19 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 		r, err := s.call("Browser.stats", nil)
 		return string(r), err
 
+	case "rpc": // any RPC method against the session: sweef rpc Page.frames '{"tab":"tab-1"}'
+		if err := need(args, 1, "rpc <Method> [params-json]"); err != nil {
+			return "", err
+		}
+		params := map[string]any{}
+		if len(args) > 1 {
+			if err := json.Unmarshal([]byte(args[1]), &params); err != nil {
+				return "", fmt.Errorf("rpc: params must be a JSON object: %v", err)
+			}
+		}
+		r, err := s.call(args[0], params)
+		return string(r), err
+
 	case "set":
 		return s.set(args)
 
@@ -700,6 +749,15 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 		}
 		c.Close()
 		s.call("Browser.shutdown", nil)
+		// wait for the daemon to be gone: one still shutting down when the next command starts a new daemon
+		// removed that daemon's socket on its way out, and the command after got a fresh session ("no such tab")
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			c, err := s.dial()
+			if err != nil {
+				break
+			}
+			c.Close()
+		}
 		os.Remove(s.sock)
 		return "✓ session closed", nil
 	}
@@ -852,7 +910,10 @@ func (s *cliSession) wait(args []string) (string, error) {
 		return "✓ " + *load, err
 	case len(rest) > 0:
 		if ms, err := strconv.Atoi(rest[0]); err == nil {
-			time.Sleep(time.Duration(ms) * time.Millisecond)
+			// the daemon runs the page meanwhile; a sleep here left timers and animations frozen
+			if _, err := s.call("Page.waitForTimeout", map[string]any{"ms": ms}); err != nil {
+				return "", err
+			}
 			return fmt.Sprintf("✓ waited %dms", ms), nil
 		}
 		_, err := s.call("Page.waitForSelector", map[string]any{"selector": normSel(rest[0]), "state": *state, "timeoutMs": to})
@@ -1092,80 +1153,13 @@ func (s *cliSession) batch(args []string) (string, error) {
 	if s.jsonOut {
 		return string(r), nil
 	}
-	var out struct {
-		OK      bool   `json:"ok"`
-		TotalMs int64  `json:"totalMs"`
-		Ran     int    `json:"ran"`
-		Total   int    `json:"total"`
-		URL     string `json:"url"`
-		Title   string `json:"title"`
-		Obs     string `json:"observation"`
-		Steps   []struct {
-			Cmd   string `json:"cmd"`
-			OK    bool   `json:"ok"`
-			Ms    int64  `json:"ms"`
-			Error string `json:"error"`
-			Res   any    `json:"result"`
-		} `json:"steps"`
-	}
-	json.Unmarshal(r, &out)
-	var sb strings.Builder
-	for _, st := range out.Steps {
-		if st.OK {
-			sb.WriteString(fmt.Sprintf("✓ %s (%dms)", st.Cmd, st.Ms))
-			if v := shortResult(st.Res); v != "" {
-				sb.WriteString("  → " + v)
-			}
-			sb.WriteString("\n")
-		} else {
-			sb.WriteString(fmt.Sprintf("✗ %s (%dms): %s\n", st.Cmd, st.Ms, st.Error))
-		}
-	}
-	sb.WriteString(fmt.Sprintf("%d/%d steps in %dms  %s  %s\n", out.Ran, out.Total, out.TotalMs, out.Title, out.URL))
-	if out.Obs != "" {
-		sb.WriteString(out.Obs)
-	}
-	if !out.OK {
+	text, ok := batchfmt.Format(r, 120)
+	if !ok {
 		// Print the per-step report, then exit non-zero.
-		fmt.Print(sb.String())
+		fmt.Print(text)
 		return "", errBatchFailed
 	}
-	return sb.String(), nil
-}
-
-// shortResult renders a step result compactly for the human output.
-func shortResult(v any) string {
-	switch x := v.(type) {
-	case nil:
-		return ""
-	case map[string]any:
-		for _, k := range []string{"text", "title", "url", "value", "count", "visible", "enabled", "checked", "result"} {
-			if val, ok := x[k]; ok {
-				return truncateStr(fmt.Sprint(val), 120)
-			}
-		}
-		if len(x) == 1 {
-			if _, ok := x["ok"]; ok {
-				return ""
-			}
-		}
-		b, _ := json.Marshal(x)
-		return truncateStr(string(b), 120)
-	case string:
-		if strings.Contains(x, "\n") {
-			return "\n" + x
-		}
-		return truncateStr(x, 120)
-	}
-	b, _ := json.Marshal(v)
-	return truncateStr(string(b), 120)
-}
-
-func truncateStr(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
+	return text, nil
 }
 
 // shellSplit tokenises a command line with "double" and 'single' quotes.

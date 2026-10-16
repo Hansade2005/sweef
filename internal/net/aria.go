@@ -2,7 +2,7 @@ package net
 
 import (
 	"fmt"
-	"strconv"
+	"net/url"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -376,10 +376,13 @@ func optionsOf(sel *html.Node) []*html.Node {
 // ---- pruning ---------------------------------------------------------------
 
 // styleHidden reports whether the cascade (inline style plus stylesheets
-// installed with SetStylesheets) hides n: display:none, visibility
-// hidden/collapse, or opacity 0. visibility inherits, so a hidden ancestor
-// hides descendants that do not set visibility:visible themselves; the
-// snapshot walk stops at the first hidden element anyway.
+// installed with SetStylesheets) hides n: display:none or visibility
+// hidden/collapse. visibility inherits, so a hidden ancestor hides
+// descendants that do not set visibility:visible themselves; the snapshot
+// walk stops at the first hidden element anyway. opacity:0 does not hide: it
+// does not remove an element from the accessibility tree (Chromium,
+// Playwright's snapshot), and content that animates in from opacity 0 (GSAP,
+// Framer Motion, AOS) vanished from the snapshot until the animation ran.
 func (d *Doc) styleHidden(n *html.Node) bool {
 	d.cssMu.Lock()
 	cs := d.styleLocked(n)
@@ -389,11 +392,6 @@ func (d *Doc) styleHidden(n *html.Node) bool {
 	}
 	if cs.visibility == "hidden" || cs.visibility == "collapse" {
 		return true
-	}
-	if o := cs.vals[propOpacity]; o != "" {
-		if f, err := strconv.ParseFloat(strings.TrimSuffix(o, "%"), 64); err == nil && f == 0 {
-			return true
-		}
 	}
 	return false
 }
@@ -550,7 +548,7 @@ func (d *Doc) buildSnap(n *html.Node, o *SnapshotOptions, depth int) []*snapNode
 		sn.attrs = append(sn.attrs, "current")
 	}
 	if role == "link" {
-		sn.href = attr(n, "href")
+		sn.href = d.shortHref(attr(n, "href"))
 	}
 	switch n.Data {
 	case "input", "textarea", "select":
@@ -845,5 +843,38 @@ func (d *Doc) SnapshotInfos() []*Info {
 		}
 	}
 	walk(nodes)
+	return out
+}
+
+// shortHref is a link's URL as the snapshot shows it: resolved against the document, then written as a path
+// when it stays on the document's origin ("/wiki/Ada_Lovelace" rather than
+// "https://en.wikipedia.org/wiki/Ada_Lovelace"): link-heavy pages are mostly URLs, and the origin is in the
+// observation's header. Other origins, and anything that does not parse, are left as they are.
+func (d *Doc) shortHref(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(raw, "#") || strings.HasPrefix(strings.ToLower(raw), "javascript:") {
+		return raw
+	}
+	base, err := url.Parse(d.base)
+	if err != nil || base.Host == "" {
+		return raw
+	}
+	u, err := base.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	if u.Scheme != base.Scheme || u.Host != base.Host || u.User != nil {
+		return u.String()
+	}
+	out := u.EscapedPath()
+	if out == "" {
+		out = "/"
+	}
+	if u.RawQuery != "" || u.ForceQuery {
+		out += "?" + u.RawQuery
+	}
+	if u.Fragment != "" {
+		out += "#" + u.EscapedFragment()
+	}
 	return out
 }

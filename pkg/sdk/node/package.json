@@ -1,10 +1,61 @@
 {
   "name": "@sweef/browser",
-  "version": "0.1.0",
-  "description": "Sweef Browser SDK for Node.js — Playwright-style automation over the SWF1 socket protocol",
+  "version": "0.2.1",
+  "description": "Node.js SDK for Sweef, the lightweight browser engine for AI agents: Playwright-shaped API over the SWF1 socket protocol, zero dependencies",
   "main": "index.js",
   "types": "index.d.ts",
-  "license": "MIT",
-  "engines": { "node": ">=14" },
-  "keywords": ["browser", "automation", "ai-agents", "mcp", "playwright", "headless"]
+  "bin": {
+    "sweef": "bin/sweef.js",
+    "sweef-install": "bin/sweef-install.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "install.js",
+    "index.d.ts",
+    "bin/",
+    "scripts/postinstall.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/sdk.test.js test/install.test.js",
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "sweef": {
+    "engineVersion": "0.1.0-alpha.4",
+    "engineSha256": {
+      "sweef_0.1.0-alpha.4_darwin_universal.zip": "78c1ffefe9a0145640fa332ae5f0ef1308be584848dc44f6ab65a097826f4b29",
+      "sweef_0.1.0-alpha.4_linux_amd64.tar.gz": "c21d1ccbe04946136c559f2d23c6e7c6bcaea6e9444c36b449ca35d44d24b1da",
+      "sweef_0.1.0-alpha.4_linux_arm64.tar.gz": "59687026ed6d74f9e1687dce9ed7e99d9b3915105dcb003b97ccde21fe5f1d4f",
+      "sweef_0.1.0-alpha.4_windows_amd64.zip": "7e51c828a2e64813cbb144d0736010f4a4e9c1eabf860215db1b100fdc9a7ef8",
+      "sweef_0.1.0-alpha.4_windows_arm64.zip": "33b7cc71e2429d91fbb525df0cc9ab3da31540104f60fba43846f48609b8de61"
+    }
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sweefbrowser/sweef.git",
+    "directory": "pkg/sdk/node"
+  },
+  "homepage": "https://github.com/sweefbrowser/sweef#readme",
+  "bugs": "https://github.com/sweefbrowser/sweef/issues",
+  "keywords": [
+    "browser",
+    "automation",
+    "ai-agents",
+    "mcp",
+    "playwright",
+    "headless",
+    "scraping"
+  ]
 }

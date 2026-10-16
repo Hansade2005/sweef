@@ -35,7 +35,15 @@ type Entry struct {
 	Pseudo string // "", before, after, marker, first-line, first-letter, placeholder, ...
 	Rule   *Rule
 	key    string // bucket key (for debugging)
+	// dynamic: the selector uses :has(), so whether it matches depends on the element's descendants (or later
+	// siblings), which a cached style does not observe (persist.go)
+	dynamic bool
+	// need: names some ancestor of a matching element must carry (snet.SelectorEntry.AncestorNeed)
+	need snet.Bloom
 }
+
+// AncestorNeed is the entry's ancestor filter (snet.SelectorEntry.AncestorNeed).
+func (en *Entry) AncestorNeed() snet.Bloom { return en.need }
 
 // Rule is a style rule with its declarations.
 type Rule struct {
@@ -67,6 +75,7 @@ type Env struct {
 	ColorScheme   string // light | dark
 	Print         bool
 	ReducedMotion bool
+	Mobile        bool // touch device emulation: hover/pointer answer none/coarse (desktop: hover/fine)
 }
 
 // Parsed is the result of parsing one stylesheet text.
@@ -116,29 +125,97 @@ func ParseSheetQ(text string, env *Env, origin Origin, order *int, layers map[st
 		}
 		return e.out
 	}
+	bk := k
+	bk.order = 0
+	if b, ok := parseCache.base[bk]; ok {
+		// the same sheet parsed when it started at another rule order (a sheet inserted ahead of it shifted
+		// the counter): the rules are the same but for Rule.Order, so a shifted copy replaces the parse
+		e := &parseEntry{out: shiftOrder(b.out, *order-b.start), start: *order, order: b.order + *order - b.start, layers: b.layers}
+		parseCache.putLocked(k, e, len(text)/4)
+		parseCache.Unlock()
+		*order = e.order
+		for n, v := range e.layers {
+			layers[n] = v
+		}
+		return e.out
+	}
 	parseCache.Unlock()
+	start := *order
 	before := make(map[string]int, len(layers))
 	for n, v := range layers {
 		before[n] = v
 	}
 	out := parseSheetQ(text, env, origin, order, layers, quirks)
-	e := &parseEntry{out: out, order: *order, layers: map[string]int{}}
+	e := &parseEntry{out: out, start: start, order: *order, layers: map[string]int{}}
 	for n, v := range layers {
 		if bv, ok := before[n]; !ok || bv != v {
 			e.layers[n] = v
 		}
 	}
 	parseCache.Lock()
-	if parseCache.m == nil {
-		parseCache.m = map[parseKey]*parseEntry{}
+	parseCache.putLocked(k, e, len(text))
+	if parseCache.base == nil {
+		parseCache.base = map[parseKey]*parseEntry{}
 	}
-	if len(parseCache.order) >= 24 {
-		delete(parseCache.m, parseCache.order[0])
-		parseCache.order = parseCache.order[1:]
-	}
-	parseCache.m[k] = e
-	parseCache.order = append(parseCache.order, k)
+	parseCache.base[bk] = e
 	parseCache.Unlock()
+	return out
+}
+
+// putLocked adds an entry. The cache is bounded by entries and by weight (source bytes for a parse, a quarter
+// of that for a shifted copy): github.com alone has two dozen sheets, each parsed for the page cascade and
+// the SVG cascade, and 24 entries made every layout pass reparse most of them.
+func (c *parseCacheT) putLocked(k parseKey, e *parseEntry, weight int) {
+	if c.m == nil {
+		c.m = map[parseKey]*parseEntry{}
+	}
+	e.weight = weight
+	for len(c.order) > 0 && (len(c.order) >= parseCacheEntries || c.bytes+weight > parseCacheBytes) {
+		old := c.order[0]
+		c.order = c.order[1:]
+		if oe := c.m[old]; oe != nil {
+			c.bytes -= oe.weight
+			bk := old
+			bk.order = 0
+			if c.base[bk] == oe {
+				delete(c.base, bk)
+			}
+		}
+		delete(c.m, old)
+	}
+	c.m[k] = e
+	c.order = append(c.order, k)
+	c.bytes += weight
+}
+
+// shiftOrder returns a copy of p whose rules' Order is moved by delta (the rules are otherwise shared
+// immutable values: declarations, selectors and conditions are not copied).
+func shiftOrder(p *Parsed, delta int) *Parsed {
+	if delta == 0 {
+		return p
+	}
+	out := &Parsed{Rules: make([]*Rule, len(p.Rules)), Fonts: p.Fonts}
+	rules := make([]Rule, len(p.Rules))
+	n := 0
+	for _, r := range p.Rules {
+		n += len(r.Entries)
+	}
+	ents := make([]Entry, n)
+	ptrs := make([]*Entry, n)
+	n = 0
+	for i, r := range p.Rules {
+		nr := &rules[i]
+		*nr = *r
+		nr.Order += delta
+		nr.Entries = ptrs[n : n+len(r.Entries) : n+len(r.Entries)]
+		for j, en := range r.Entries {
+			ents[n+j] = *en
+			ents[n+j].Rule = nr
+			nr.Entries[j] = &ents[n+j]
+		}
+		n += len(r.Entries)
+		out.Rules[i] = nr
+	}
 	return out
 }
 
@@ -153,15 +230,27 @@ type parseKey struct {
 
 type parseEntry struct {
 	out    *Parsed
-	order  int
+	start  int // the rule order the parse started at
+	order  int // and ended at
 	layers map[string]int
+	weight int // share of parseCacheBytes
 }
 
-var parseCache struct {
+const (
+	parseCacheEntries = 160
+	parseCacheBytes   = 24 << 20
+)
+
+type parseCacheT struct {
 	sync.Mutex
 	m     map[parseKey]*parseEntry
 	order []parseKey
+	bytes int // weight of the entries
+	// base finds the last parse of a sheet by its key with order 0 (shiftOrder)
+	base map[parseKey]*parseEntry
 }
+
+var parseCache parseCacheT
 
 func layersKey(l map[string]int) string {
 	if len(l) == 0 {
@@ -557,7 +646,7 @@ func (p *parser) addRule(selText string, decls []Decl) {
 			continue
 		}
 		for _, e := range cs.Entries() {
-			r.Entries = append(r.Entries, &Entry{Sel: e, Spec: e.Spec, Pseudo: pseudo, Rule: r, key: base})
+			r.Entries = append(r.Entries, &Entry{Sel: e, Spec: e.Spec, Pseudo: pseudo, Rule: r, key: base, dynamic: e.Features().Has, need: e.AncestorNeed()})
 		}
 	}
 	if len(r.Entries) == 0 {
@@ -830,10 +919,16 @@ func mediaFeature(f string, env *Env) bool {
 	case "inverted-colors", "scan":
 		return false
 	case "hover", "any-hover":
-		// headless Chromium has no pointing device
-		return val == "none"
+		// as headless Chromium answers (Playwright, CDP): a desktop has a mouse, an emulated phone a finger
+		if env.Mobile {
+			return val == "none"
+		}
+		return val == "hover" || val == ""
 	case "pointer", "any-pointer":
-		return val == "none"
+		if env.Mobile {
+			return val == "coarse" || val == ""
+		}
+		return val == "fine" || val == ""
 	case "color":
 		if val == "" {
 			return true

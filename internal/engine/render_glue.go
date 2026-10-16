@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/sweefbrowser/sweef/internal/font"
 	fnet "github.com/sweefbrowser/sweef/internal/net"
 	"github.com/sweefbrowser/sweef/internal/raster"
 	"github.com/sweefbrowser/sweef/internal/render"
@@ -43,6 +44,35 @@ type tabEnv struct {
 	sty *render.Session
 	// fonts is the document's @font-face state (webfonts.go)
 	fonts *webFonts
+	// scroll holds the scroll offsets of overflow containers (scroll.go)
+	scroll scrollOffsets
+	// sel is the selection of the document (selection.go); tix the text index of the layout computed last
+	sel selState
+	tix struct {
+		sync.Mutex
+		res *render.Result
+		ix  *render.TextIndex
+	}
+	// parserLinks are the <link> elements of the document as parsed: their stylesheets block the page's
+	// scripts in a browser, so even a layout a script forces waits for them; a sheet a script inserted does
+	// not hold such a layout (sheetsLate: started in the background, the layout runs again when it is in)
+	parserLinks map[*html.Node]bool
+	sheetsLate  map[string]bool // background reads started, by URL (true: still running)
+}
+
+// scriptForcedLayout: the layout runs inside a host call of the page's script (a geometry read). Like a
+// browser it then does not wait for the network: images, web fonts and script-inserted stylesheets that are
+// not in yet are started in the background and the document lays out again when they arrive (Touch). The
+// layouts the headless commands ask for (snapshot, screenshot, text) still wait for everything, so their
+// results do not depend on how fast the network is.
+func (e *tabEnv) scriptForcedLayout() bool {
+	t := e.t
+	// the browser's own pages (sweef://) have every resource at hand and measure their menus and panels from
+	// script, so their geometry reads must see the finished layout
+	if strings.HasPrefix(t.URL(), "sweef://") {
+		return false
+	}
+	return t.scriptGeom.Load() > 0 && !t.asyncImg.Load() && t.policy() == (DataPolicy{}) && !t.IsOfflineMode()
 }
 
 func (e *tabEnv) source(n *html.Node) BitmapSource {
@@ -68,7 +98,7 @@ func (e *tabEnv) Image(u string) image.Image {
 			data = b
 		}
 	} else if !e.t.IsOfflineMode() || strings.HasPrefix(u, "file:") {
-		if e.asyncOK(u) {
+		if e.asyncOK(u) || (!strings.HasPrefix(u, "file:") && e.scriptForcedLayout()) {
 			e.startAsync(u)
 			return nil // not final: the layout runs again when the bytes are in
 		}
@@ -116,7 +146,90 @@ func (e *tabEnv) prefetchDocImages() {
 		}
 	})
 	if len(urls) > 1 {
+		if e.scriptForcedLayout() {
+			for _, u := range urls {
+				if !strings.HasPrefix(u, "file:") {
+					e.startAsync(u)
+				}
+			}
+			return
+		}
 		e.prefetch(urls)
+	}
+}
+
+// prefetchDocImagesEarly starts downloading the <img> images of a document that was just parsed, for a
+// headless load: the first layout comes only after the page's scripts have run, and it then waited for every
+// image of the page (30 on a Wikipedia article, half a second). Started here the downloads overlap the
+// scripts, as a browser's preload scanner makes them, and that layout's reads join them in the request table.
+// The same images prefetchDocImages would fetch, under the same conditions.
+func (e *tabEnv) prefetchDocImagesEarly() {
+	t := e.t
+	if t.asyncImg.Load() || t.policy() != (DataPolicy{}) || t.IsOfflineMode() {
+		return
+	}
+	base := e.doc.BaseURL()
+	seen := map[string]bool{}
+	walkNodes(e.doc.Root, func(n *html.Node) {
+		if n.Type != html.ElementNode || n.Data != "img" {
+			return
+		}
+		u := imgURL(base, n)
+		if u == "" || seen[u] || strings.HasPrefix(u, "data:") || strings.HasPrefix(u, "file:") {
+			return
+		}
+		seen[u] = true
+		go func(u string) {
+			t.imgSem <- struct{}{} // not preloadSem: the page's scripts and modules come first
+			defer func() { <-t.imgSem }()
+			body, status, err := t.fetchRes(u, fetchOpts{kind: KindImage, prefetch: true})
+			if err != nil || status >= 400 {
+				return // the layout's own read decides (and records) what a failure means
+			}
+			// decoded here, as a browser's image is complete once its bytes are in: a geometry read from the
+			// page's script (naturalWidth, offsetHeight) then sees it instead of starting a background load
+			im, _, _ := image.Decode(strings.NewReader(body))
+			markup := ""
+			if im == nil && strings.Contains(strings.ToLower(body), "<svg") {
+				markup = body
+			}
+			e.mu.Lock()
+			if _, ok := e.imgs[u]; !ok {
+				e.imgs[u] = im
+				if markup != "" {
+					e.svgs[u] = markup
+				}
+			}
+			e.mu.Unlock()
+		}(u)
+	})
+}
+
+// PrefetchImages implements render.ImagePrefetcher: the headless commands wait for every image a layout asks
+// for, so the CSS images of the page start downloading together (through the request table, which the
+// synchronous read in Image then joins) rather than one after another. Windows load images in the background
+// and a Data Saver policy decides image by image, so both skip it, as prefetchDocImages does.
+func (e *tabEnv) PrefetchImages(urls []string) {
+	t := e.t
+	if t.asyncImg.Load() || t.policy() != (DataPolicy{}) || t.IsOfflineMode() {
+		return
+	}
+	for _, u := range urls {
+		if strings.HasPrefix(u, "file:") {
+			continue
+		}
+		e.mu.Lock()
+		_, have := e.imgs[u]
+		_, haveSVG := e.svgs[u]
+		e.mu.Unlock()
+		if have || haveSVG {
+			continue
+		}
+		go func(u string) {
+			t.preloadSem <- struct{}{}
+			defer func() { <-t.preloadSem }()
+			_, _, _ = t.fetchRes(u, fetchOpts{kind: KindImage, prefetch: true})
+		}(u)
 	}
 }
 
@@ -238,6 +351,7 @@ func (e *tabEnv) Focused() *html.Node { return nil }
 // sheets through the resource cache.
 func (e *tabEnv) pageSheets() []render.Sheet {
 	var out []render.Sheet
+	scriptForced := e.scriptForcedLayout()
 	base := e.doc.BaseURL()
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
@@ -264,7 +378,7 @@ func (e *tabEnv) pageSheets() []render.Sheet {
 				}
 				href := strings.TrimSpace(attrOf(n, "href"))
 				if isSheet && !alt && href != "" && attrOf(n, "disabled") == "" {
-					if abs, err := resolveURL(base, href); err == nil {
+					if abs, err := resolveURL(base, href); err == nil && !(scriptForced && e.lateSheet(n, abs)) {
 						if body, status, err := e.t.fetchResourceKind(abs, KindStyle); err == nil && status < 400 {
 							out = append(out, e.withImports(render.Sheet{Text: body, BaseURL: abs, Media: attrOf(n, "media")}, 0, map[string]bool{abs: true})...)
 						}
@@ -278,6 +392,63 @@ func (e *tabEnv) pageSheets() []render.Sheet {
 	}
 	walk(e.doc.Root)
 	return out
+}
+
+// resourcesPending: images, web fonts or stylesheets a layout went without are still on their way.
+func (e *tabEnv) resourcesPending(fonts *font.WebSet) bool {
+	if fonts != nil && fonts.Pending() > 0 {
+		return true
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.inflight) > 0 {
+		return true
+	}
+	for _, running := range e.sheetsLate {
+		if running {
+			return true
+		}
+	}
+	return false
+}
+
+// lateSheet reports whether a layout forced by script should go without the stylesheet of link n: one a
+// script inserted, not in the HTTP cache and not read for this document yet. Its read is then started in the
+// background, and the document lays out again when it is in.
+func (e *tabEnv) lateSheet(n *html.Node, abs string) bool {
+	if e.parserLinks[n] || e.t.knownSizeURL(abs) >= 0 {
+		return false
+	}
+	e.mu.Lock()
+	running, started := e.sheetsLate[abs]
+	if started && !running {
+		e.mu.Unlock()
+		return false // read once already: the cache answers (or the read failed and is not retried here)
+	}
+	if !started {
+		if e.sheetsLate == nil {
+			e.sheetsLate = map[string]bool{}
+		}
+		e.sheetsLate[abs] = true
+	}
+	e.mu.Unlock()
+	if !started {
+		t := e.t
+		go func() {
+			_, _, _ = t.fetchRes(abs, fetchOpts{kind: KindStyle, prefetch: true})
+			e.mu.Lock()
+			e.sheetsLate[abs] = false
+			e.mu.Unlock()
+			t.mu.RLock()
+			d := t.dom
+			t.mu.RUnlock()
+			if d == e.doc {
+				d.Touch()
+			}
+			t.wake()
+		}()
+	}
+	return true
 }
 
 // sheet reads a linked stylesheet. Under the saver levels a sheet is read once
@@ -322,7 +493,12 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 	if !renderEnabled() {
 		return
 	}
-	env := &tabEnv{t: t, doc: doc, imgs: map[string]image.Image{}, svgs: map[string]string{}}
+	env := &tabEnv{t: t, doc: doc, imgs: map[string]image.Image{}, svgs: map[string]string{}, parserLinks: map[*html.Node]bool{}}
+	walkNodes(doc.Root, func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "link" {
+			env.parserLinks[n] = true
+		}
+	})
 	if !noStyleCache {
 		env.sty = render.NewSession()
 	}
@@ -347,16 +523,20 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 		}()
 		env.prefetchDocImages()
 		fontRounds := 0
+		var fontSet *font.WebSet
 		for round := 0; ; round++ {
 			env.lz.resetHints()
 			sheets := env.pageSheets()
 			opts := render.Options{
-				Width: float64(width), Height: float64(vh), DPR: dsf,
+				HideScrollbars: t.eng.opts.HideScrollbars,
+				Mobile:         t.mobile,
+				Width:          float64(width), Height: float64(vh), DPR: dsf,
 				ColorScheme: t.ColorSchemeName(), BaseURL: doc.BaseURL(),
 				Sheets: sheets, Env: env, Session: env.sty,
 				Fonts: env.fonts.sync(sheets, float64(width), float64(vh), dsf, t.ColorSchemeName()),
 			}
 			fgen := opts.Fonts.Gen()
+			fontSet = opts.Fonts
 			res = render.Layout(doc.Root, opts)
 			if layoutCheck && env.sty != nil {
 				// SWEEF_LAYOUT_CHECK: the cached pass must equal a from-scratch one
@@ -370,7 +550,7 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 			}
 			// Without a window the fonts the layout asked for are waited for, so the
 			// result does not depend on how fast the network is (webfonts.go)
-			if fontRounds < maxFontRounds && !t.asyncImg.Load() && env.fonts.settle(opts.Fonts, fgen) {
+			if fontRounds < maxFontRounds && !t.asyncImg.Load() && !env.scriptForcedLayout() && env.fonts.settle(opts.Fonts, fgen) {
 				fontRounds++
 				round--
 				continue
@@ -382,8 +562,11 @@ func (t *Tab) installRender(doc *fnet.Doc) {
 			}
 		}
 		env.updateFrames(res, float64(vh))
-		return layoutFromRender(res, env)
+		l := layoutFromRender(res, env)
+		l.Provisional = env.scriptForcedLayout() && env.resourcesPending(fontSet)
+		return l
 	})
+	doc.SetProvisionalOK(env.scriptForcedLayout)
 }
 
 type renderExt struct {
@@ -415,7 +598,7 @@ func layoutFromRender(res *render.Result, env *tabEnv) *fnet.Layout {
 		if b == nil || b.Display == "none" {
 			return fnet.Geometry{}, false
 		}
-		g := fnet.Geometry{ClientW: b.ClientW, ClientH: b.ClientH, ScrollW: b.ScrollW, ScrollH: b.ScrollH}
+		g := fnet.Geometry{ClientW: b.ClientW, ClientH: b.ClientH, ScrollW: b.ScrollW, ScrollH: b.ScrollH, ScrollLeft: b.ScrollLeft, ScrollTop: b.ScrollTop}
 		g.Border = [4]float64{b.Border.X, b.Border.Y, b.Border.W, b.Border.H}
 		if rc, ok := res.ClientRect(n); ok {
 			g.Client = [4]float64{rc.X, rc.Y, rc.W, rc.H}
@@ -477,6 +660,9 @@ func (t *Tab) paintPage(width, height int, dsf float64, full bool) (*image.RGBA,
 		}
 		list = kept
 	}
+	if !full {
+		list = scrolledList(list, ext.res.FixedRanges, float64(t.ScrollY()))
+	}
 	t.setPaintDSF(dsf)
 	return raster.Paint(list, width, height, dsf, raster.PaintEnv{
 		Bitmap:     ext.env.Bitmap,
@@ -494,3 +680,28 @@ var (
 	layoutCheck  = os.Getenv("SWEEF_LAYOUT_CHECK") != ""
 	noStyleCache = os.Getenv("SWEEF_NO_STYLE_CACHE") != ""
 )
+
+// scrolledList is the display list of the viewport scrolled down by y: everything moves up by y except the
+// ranges painted by position:fixed boxes, which the viewport keeps in place (a viewport screenshot of a
+// scrolled page showed the top of the page instead).
+func scrolledList(list []render.Op, fixed [][2]int, y float64) []render.Op {
+	if y <= 0 || len(list) == 0 {
+		return list
+	}
+	out := make([]render.Op, 0, len(list)+2+2*len(fixed))
+	out = append(out, render.PushTransform{M: [6]float64{1, 0, 0, 1, 0, -y}})
+	fi := 0
+	for i, op := range list {
+		for fi < len(fixed) && fixed[fi][1] <= i {
+			fi++
+		}
+		if fi < len(fixed) && fixed[fi][0] == i {
+			out = append(out, render.PushTransform{M: [6]float64{1, 0, 0, 1, 0, y}})
+		}
+		out = append(out, op)
+		if fi < len(fixed) && fixed[fi][1] == i+1 {
+			out = append(out, render.PopTransform{})
+		}
+	}
+	return append(out, render.PopTransform{})
+}

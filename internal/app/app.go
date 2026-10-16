@@ -129,6 +129,8 @@ type App struct {
 	animOn              atomic.Bool
 	lastTick            time.Time
 	scrollbarT          time.Time // last scroll activity, for the fading scrollbar
+	wlatch              wheelLatch
+	escroll             *elemScroll // the inner scroller a wheel gesture is moving
 	sbAlpha             uint8
 	mouse               mouseState
 	cursorShown         shell.Cursor
@@ -154,6 +156,7 @@ type App struct {
 	zoomBitsV           atomic.Uint64
 	omniSeq             int
 	uiPages             map[*etab]bool // page tabs showing sweef:// pages that said ui.ready
+	dt                  devtoolsState  // Developer Tools binding (devtools.go)
 	compatDismissed     map[string]bool
 	compatErrs          map[string]int
 	pageTypes           pageTypeCache
@@ -163,6 +166,7 @@ type App struct {
 	tabSeq              int
 	fullscreen          bool
 	ovl                 overlayState
+	ctx                 ctxState // the open context menu (ctxmenu.go)
 	dat                 dataSaver
 	media               *appMedia // camera, microphone and screen-share permissions (media.go)
 	clip                *appClip  // the clipboard: text from the window plus the flavours pages put on it (clipboard.go)

@@ -75,7 +75,7 @@ Requires Windows 10 or 11 (64-bit, Intel/AMD or Arm).
    (see [below](#making-sweef-your-default-browser)).
 
 Silent install for IT: `setup.exe /S /currentuser` or `/S /allusers`, optionally `/D=C:\path` (must be last).
-There is also a portable `.zip` (no registry changes: unzip and run `Sweef.exe`), and a
+There is also a portable `.zip` (no registry changes: unzip and run `SweefLauncher.exe`), and a
 [winget](https://learn.microsoft.com/windows/package-manager/) and [Scoop](https://scoop.sh) manifest attached to
 each release for maintainers to submit.
 

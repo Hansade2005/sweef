@@ -996,3 +996,242 @@ func TestModuleGraphDownloadsInParallel(t *testing.T) {
 		t.Fatalf("the module graph took %v: its modules were fetched one after the other", d)
 	}
 }
+
+// An entry module is compiled under its URL: a dynamic import("./x.js") run later (from a timer, after other
+// scripts ran) resolves against the module, import.meta.url is the module's URL (webpack's automatic
+// publicPath reads it), and a chunk importing the entry module back gets the instance that already ran.
+func TestEntryModuleKeepsItsURL(t *testing.T) {
+	mux := http.NewServeMux()
+	js := func(path, body string) {
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/javascript")
+			fmt.Fprint(w, body)
+		})
+	}
+	mux.HandleFunc("/page", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><p id="out">-</p>
+<script type="module" src="/assets/main.js"></script>
+<script src="/third/party.js"></script>`)
+	})
+	js("/assets/main.js", `import { dep } from './dep.js';
+window.runs = (window.runs || 0) + 1;
+export const tag = dep;
+window.metaURL = import.meta.url;
+setTimeout(function () { import('./chunk.js').then(function (m) { document.getElementById('out').textContent = m.v; }, function (e) { document.getElementById('out').textContent = 'ERR ' + e; }); }, 20);`)
+	js("/assets/chunk.js", `import { tag } from './main.js'; export const v = 'chunk:' + tag;`)
+	js("/assets/dep.js", `export const dep = 'main';`) // a static import: compiling the entry module resolves it
+	js("/third/party.js", `window.third = 1;`)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	if err := tab.Navigate(srv.URL+"/page", nil); err != nil {
+		t.Fatal(err)
+	}
+	tab.Settle(300 * time.Millisecond)
+	want := `"chunk:main|` + srv.URL + `/assets/main.js|1"`
+	if v := mustEval(t, tab, `document.getElementById('out').textContent + '|' + window.metaURL + '|' + window.runs`); v != want {
+		t.Fatalf("got %s, want %s\nconsole:\n%s", v, want, consoleText(tab))
+	}
+}
+
+// The chunks of a Promise.all over import() calls download together: QuickJS loads each dynamic import from its
+// own job, one after another, and GitHub's issue page waited ~120 round trips in a row for its rspack chunks.
+func TestQueuedDynamicImportsDownloadTogether(t *testing.T) {
+	var mu sync.Mutex
+	inFlight, peak := 0, 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/page", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><p id="out">-</p><script type="module" src="/assets/main.js"></script>`)
+	})
+	mux.HandleFunc("/assets/main.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprint(w, `setTimeout(function () {
+  var t0 = Date.now(), ids = [1, 2, 3, 4, 5, 6];
+  Promise.all(ids.map(function (i) { return import('./c' + i + '.js'); })).then(function (ms) {
+    document.getElementById('out').textContent = ms.map(function (m) { return m.v; }).join(',');
+  }, function (e) { document.getElementById('out').textContent = 'ERR ' + e; });
+}, 10);`)
+	})
+	mux.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		inFlight++
+		if inFlight > peak {
+			peak = inFlight
+		}
+		mu.Unlock()
+		time.Sleep(150 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprintf(w, `export const v = %q;`, strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/assets/"), ".js"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	if err := tab.Navigate(srv.URL+"/page", nil); err != nil {
+		t.Fatal(err)
+	}
+	tab.Settle(2 * time.Second)
+	if v := mustEval(t, tab, `document.getElementById('out').textContent`); v != `"c1,c2,c3,c4,c5,c6"` {
+		t.Fatalf("got %s\nconsole:\n%s", v, consoleText(tab))
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if peak < 3 {
+		t.Fatalf("at most %d chunk downloads at once: queued import() calls loaded one by one", peak)
+	}
+}
+
+// A request page code marks as a prefetch (Next.js's router prefetch of every link on the page) does not hold
+// a headless load, but its answer still reaches the page when it arrives.
+func TestPrefetchRequestDoesNotHoldSettle(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><script>
+window.log = [];
+fetch('/slow?rsc=1', { headers: { 'Next-Router-Prefetch': '1', 'RSC': '1' } }).then(function (r) { return r.text(); }).then(function (v) { log.push('prefetch:' + v); });
+fetch('/slow?api=1').then(function (r) { return r.text(); }).then(function (v) { log.push('api:' + v); });
+</script>`)
+	})
+	mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("rsc") != "" {
+			time.Sleep(1500 * time.Millisecond)
+		} else {
+			time.Sleep(200 * time.Millisecond)
+		}
+		fmt.Fprint(w, "ok")
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	t0 := time.Now()
+	if err := tab.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d > 1200*time.Millisecond {
+		t.Errorf("headless Navigate took %v: it waited for the prefetch", d)
+	}
+	if v := mustEval(t, tab, `log.join()`); !strings.Contains(v, "api:ok") || strings.Contains(v, "prefetch") {
+		t.Errorf("after load: %q, want the API answer and not yet the prefetch", v)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && !strings.Contains(mustEval(t, tab, `log.join()`), "prefetch:ok") {
+		tab.Settle(50 * time.Millisecond)
+	}
+	if v := mustEval(t, tab, `log.join()`); !strings.Contains(v, "prefetch:ok") {
+		t.Errorf("the prefetch answer never reached the page: %q", v)
+	}
+}
+
+// A headless load starts downloading the document's images when it is parsed, not at the first layout after
+// the scripts: here the image request arrives while the blocking script is still being served.
+func TestHeadlessLoadFetchesImagesEarly(t *testing.T) {
+	var imgAt, scriptDone atomic.Int64
+	t0 := time.Now()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><img src="/a.gif" id="i"><img src="/b.gif"><script src="/slow.js"></script>`)
+	})
+	mux.HandleFunc("/slow.js", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(600 * time.Millisecond)
+		scriptDone.Store(int64(time.Since(t0)))
+		fmt.Fprint(w, `window.ran = 1`)
+	})
+	gif := []byte("GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
+	img := func(w http.ResponseWriter, r *http.Request) {
+		imgAt.CompareAndSwap(0, int64(time.Since(t0)))
+		w.Header().Set("Content-Type", "image/gif")
+		w.Write(gif)
+	}
+	mux.HandleFunc("/a.gif", img)
+	mux.HandleFunc("/b.gif", img)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	tab := newTabForLoad(t)
+	t0 = time.Now()
+	if err := tab.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	if imgAt.Load() == 0 || imgAt.Load() >= scriptDone.Load() {
+		t.Errorf("first image request at %v, blocking script served at %v: images waited for the scripts",
+			time.Duration(imgAt.Load()), time.Duration(scriptDone.Load()))
+	}
+	if v := mustEval(t, tab, `document.getElementById('i').naturalWidth + ',' + window.ran`); !strings.Contains(v, "1,1") {
+		t.Errorf("image and script: %s", v)
+	}
+}
+
+// An animation loop that rewrites a style every frame does not hold a headless settle for its whole budget:
+// only content mutations (nodes, text, other attributes) keep it from going quiet.
+func TestSettleIgnoresEndlessStyleAnimation(t *testing.T) {
+	o := DefaultOptions()
+	o.SettleMs = 3000
+	o.CacheDir = "off"
+	e := New(o)
+	defer e.Close()
+	tab, err := e.NewTab("about:blank")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><div id=spin>x</div><script>
+var a = 0;
+(function f() { a++; document.getElementById('spin').style.transform = 'rotate(' + a + 'deg)'; requestAnimationFrame(f); })();
+setTimeout(function () { var p = document.createElement('p'); p.textContent = 'late content'; document.body.appendChild(p); }, 150);
+</script>`)
+	}))
+	defer srv.Close()
+	t0 := time.Now()
+	if err := tab.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d > 1500*time.Millisecond {
+		t.Errorf("Navigate took %v: the style animation held the settle", d)
+	}
+	if v := mustEval(t, tab, `document.body.textContent.indexOf('late content') >= 0 && a > 3`); v != "true" {
+		t.Errorf("content added at 150 ms missing or the animation never ran: %s", v)
+	}
+}
+
+// Filling a field drains what the input started (microtasks, due timers) but does not wait out a settle on a
+// page that keeps changing; the handler's own update is visible at once. With SetFullInputSettle it settles
+// like a click (the last step of a batch).
+func TestFillSettlesLightly(t *testing.T) {
+	tab := newTabForLoad(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!doctype html><body><input id=q><p id=echo></p><p id=tick></p><script>
+document.getElementById('q').addEventListener('input', function (e) { Promise.resolve().then(function () { document.getElementById('echo').textContent = 'got ' + e.target.value; }); });
+var n = 0; setInterval(function () { document.getElementById('tick').textContent = ++n; }, 50);
+</script>`)
+	}))
+	defer srv.Close()
+	if err := tab.Navigate(srv.URL+"/", nil); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Now()
+	if err := tab.Fill2("#q", "abc"); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d > 80*time.Millisecond {
+		t.Errorf("fill took %v on a page that never goes quiet", d)
+	}
+	if v := mustEval(t, tab, `document.getElementById('echo').textContent`); !strings.Contains(v, "got abc") {
+		t.Errorf("input handler result: %s", v)
+	}
+	tab.SetFullInputSettle(true)
+	defer tab.SetFullInputSettle(false)
+	t0 = time.Now()
+	if err := tab.Fill2("#q", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(t0); d < 50*time.Millisecond {
+		t.Errorf("a full input settle returned after %v", d)
+	}
+}

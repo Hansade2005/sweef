@@ -27,7 +27,7 @@ const wheelNotch = 53
 var atomNames = []string{
 	"WM_PROTOCOLS", "WM_DELETE_WINDOW", "_NET_WM_NAME", "UTF8_STRING", "_NET_WM_STATE",
 	"_NET_WM_STATE_FULLSCREEN", "_NET_WM_ICON", "_NET_WM_PID", "_NET_WM_PING",
-	"CLIPBOARD", "TARGETS", "INCR", "TEXT", "text/plain;charset=utf-8", "text/plain",
+	"CLIPBOARD", "TARGETS", "INCR", "TEXT", "text/plain;charset=utf-8", "text/plain", "text/html",
 	"_SWEEF_CLIP", "_SWEEF_DND", "XdndAware", "XdndEnter", "XdndPosition", "XdndStatus",
 	"XdndLeave", "XdndDrop", "XdndFinished", "XdndSelection", "XdndActionCopy",
 	"XdndTypeList", "text/uri-list", "_GTK_THEME_VARIANT", "_NET_SUPPORTING_WM_CHECK",
@@ -77,6 +77,7 @@ type Window struct {
 	clipMu     sync.Mutex // serialises Clipboard() requests
 	ownMu      sync.Mutex
 	clipText   string
+	clipHTML   string // the HTML form of clipText, when the owner of the clipboard (us) was given one
 	owning     bool
 	incr       map[incrKey]*incrSend
 	selNotify  chan selNotifyEvent
@@ -549,6 +550,7 @@ func (w *Window) onEvent(ev []byte) {
 		if le.Uint32(ev[12:]) == w.atoms["CLIPBOARD"] {
 			w.owning = false
 			w.clipText = ""
+			w.clipHTML = ""
 		}
 		w.ownMu.Unlock()
 	case evSelectionNotify:

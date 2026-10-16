@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -156,7 +157,12 @@ func init() {
 		if sel := str(p, "selector"); sel != "" {
 			return map[string]bool{"ok": true}, t.ScrollIntoView(sel)
 		}
-		return map[string]bool{"ok": true}, t.MouseWheel(int(num(p, "deltaX")), int(num(p, "deltaY")))
+		// the session CLI, batch and the SDKs send x/y; CDP-style callers send deltaX/deltaY
+		dx, dy := num(p, "deltaX"), num(p, "deltaY")
+		if dx == 0 && dy == 0 {
+			dx, dy = num(p, "x"), num(p, "y")
+		}
+		return map[string]bool{"ok": true}, t.MouseWheel(int(dx), int(dy))
 	})
 
 	registerExt("Input.keyboard", func(sv *Server, p Params) (any, error) {
@@ -164,7 +170,20 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return map[string]bool{"ok": true}, t.Keyboard(str(p, "keys"))
+		// text types characters into the focused element; key (or keys) presses one key or a
+		// combination ("Enter", "Control+a"). Reading only "keys" made the CLI's, batch's, MCP's
+		// and the SDKs' key presses (all of which send "key"/"text") no-ops.
+		if txt := str(p, "text"); txt != "" {
+			return map[string]bool{"ok": true}, t.KeyboardType(txt, time.Duration(num(p, "delayMs")*float64(time.Millisecond)))
+		}
+		k := str(p, "key")
+		if k == "" {
+			k = str(p, "keys")
+		}
+		if k == "" {
+			return nil, fmt.Errorf("Input.keyboard: give text (to type) or key (to press, e.g. Enter, Control+a)")
+		}
+		return map[string]bool{"ok": true}, t.Keyboard(k)
 	})
 
 	// ---- DOM getters ----
@@ -280,7 +299,23 @@ func init() {
 		return map[string]bool{"ok": true}, t.WaitForURL(str(p, "pattern"), dur(p, "timeout", 30*time.Second))
 	})
 	registerExt("Page.waitForTimeout", func(sv *Server, p Params) (any, error) {
-		time.Sleep(dur(p, "ms", time.Second) / 1000 * time.Millisecond) // ms value
+		d := time.Second
+		if ms, ok := numMs(p["ms"]); ok && ms >= 0 {
+			d = time.Duration(ms * float64(time.Millisecond))
+		} else if ms, ok := numMs(p["timeout"]); ok && ms >= 0 {
+			d = time.Duration(ms * float64(time.Millisecond))
+		} else if ms, ok := numMs(p["timeoutMs"]); ok && ms >= 0 { // the SDKs' spelling
+			d = time.Duration(ms * float64(time.Millisecond))
+		}
+		if d > 60*time.Second {
+			d = 60 * time.Second
+		}
+		// the page keeps running meanwhile (timers, animations, responses), as it would in a browser
+		if t, err := sv.tab(p); err == nil {
+			t.RunFor(d)
+		} else {
+			time.Sleep(d)
+		}
 		return map[string]bool{"ok": true}, nil
 	})
 
@@ -290,7 +325,9 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		t.ArmDialogResponse(boolv(p, "accept"), str(p, "promptText"))
+		// MCP, the session CLI and the SDKs send action: "accept"|"dismiss"; reading only the boolean
+		// "accept" made every armed dialog dismiss.
+		t.ArmDialogResponse(boolv(p, "accept") || strings.EqualFold(str(p, "action"), "accept"), str(p, "promptText"))
 		return map[string]bool{"ok": true}, nil
 	})
 	registerExt("Page.getDialogs", func(sv *Server, p Params) (any, error) {
@@ -427,7 +464,28 @@ func init() {
 				c = got
 			}
 		}
-		return map[string]bool{"ok": true}, c.LoadState(str(p, "path"))
+		path := str(p, "path")
+		if st, ok := p["state"]; ok && st != nil && st != "" {
+			// inline state (MCP browser_set_storage_state, the SDKs): a JSON string or object
+			var b []byte
+			if s, isStr := st.(string); isStr {
+				b = []byte(s)
+			} else {
+				b, _ = json.Marshal(st)
+			}
+			f, err := os.CreateTemp("", "sweef-state-*.json")
+			if err != nil {
+				return nil, err
+			}
+			defer os.Remove(f.Name())
+			f.Write(b)
+			f.Close()
+			path = f.Name()
+		}
+		if path == "" {
+			return nil, fmt.Errorf("BrowserContext.loadStorageState: give state (JSON) or path")
+		}
+		return map[string]bool{"ok": true}, c.LoadState(path)
 	})
 	registerExt("BrowserContext.addCookies", func(sv *Server, p Params) (any, error) {
 		c := sv.eng.DefaultContext()
@@ -560,8 +618,27 @@ func predicate(fn func(*engine.Locator) (bool, error)) func(*Server, Params) (an
 }
 
 func dur(p Params, k string, def time.Duration) time.Duration {
-	if ms, ok := p[k].(float64); ok && ms > 0 {
-		return time.Duration(ms) * time.Millisecond
+	if ms, ok := numMs(p[k]); ok && ms > 0 {
+		return time.Duration(ms * float64(time.Millisecond))
+	}
+	// the CLI, the batch runner and the SDKs send "timeoutMs": reading only "timeout" made every wait run
+	// for the 30 s default, past the caller's own deadline (the CLI then failed with a socket i/o timeout)
+	if ms, ok := numMs(p[k+"Ms"]); ok && ms > 0 {
+		return time.Duration(ms * float64(time.Millisecond))
 	}
 	return def
+}
+
+// numMs reads a number as JSON decodes it (float64) or as Go callers pass it (the batch runner builds its
+// params in Go: an int "timeoutMs" was ignored and every batch wait and expect-less wait ran 30 s).
+func numMs(v any) (float64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return x, true
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	}
+	return 0, false
 }

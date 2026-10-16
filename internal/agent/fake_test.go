@@ -156,7 +156,8 @@ func (f *fakeAPI) requests() [][]byte {
 }
 
 func (f *fakeAPI) cfg() Config {
-	return Config{APIKey: "sk-ant-test-key-0123456789", BaseURL: f.srv.URL, Sleep: func(ctx context.Context, d time.Duration) error { return ctx.Err() }}
+	// NoInitialObservation: these tests script the model turn by turn from the first read_page on
+	return Config{APIKey: "sk-ant-test-key-0123456789", BaseURL: f.srv.URL, NoInitialObservation: true, Sleep: func(ctx context.Context, d time.Duration) error { return ctx.Err() }}
 }
 
 // usage that looks like a warm cache after the first request

@@ -44,9 +44,11 @@ type Options struct {
 	AcceptLanguage   string // Accept-Language of every request (default "en-US,en;q=0.9"); see Engine.SetAcceptLanguage
 	ViewportWidth    int    // default viewport width (px) for text rendering
 	ViewportHeight   int    // default viewport height (px)
-	SettleMs         int    // event-loop budget after load and after actions (default 1500)
+	SettleMs         int    // event-loop budget after actions (default 1500; an action settles for a third of it)
+	NavSettleMs      int    // event-loop budget of a headless load: half before the load event, all after (default 600, at most SettleMs)
+	SettleQuietMs    int    // a headless settle ends early once only timers are left and the document has not changed for this long (0 = default 300; negative = off, pump to SettleMs)
 	JSMemoryMiB      int    // QuickJS heap cap per tab (default 256: YouTube's player and its BotGuard script need more than 64)
-	JSTimeoutMs      int    // single-eval timeout; a looping script is interrupted (default 5000)
+	JSTimeoutMs      int    // single-eval timeout; a looping script is interrupted (default 30000: a real page's longest tasks, YouTube's first render among them, run past 5 s on a loaded machine, and an interrupted task leaves the page half-built)
 	WarmVMs          int    // JS VMs kept pre-built so navigations skip prelude setup (default 1)
 	DownloadsDir     string // where downloads are saved (default $TMPDIR/sweef-downloads)
 	CacheDir         string // on-disk bytecode cache ("" = $SWEEF_CACHE_DIR or user cache dir; "off" disables)
@@ -54,6 +56,9 @@ type Options struct {
 	StorageQuotaMiB  int    // hard cap per origin for all site storage in MiB (0 = 20% of the budget)
 	StorageBudgetMiB int    // global budget of all origins in MiB (0 = 60% of the profile volume's free space, at most 64 GiB); see docs/storage.md
 	DisableFrames    bool   // do not load <iframe> documents (frames.go): pages see no content window, as before frames existed
+	BlockTrackers    bool   // refuse third-party requests to known ad, analytics and tracking hosts (trackers.go); the agent-facing commands turn it on
+	HideScrollbars   bool   // lay out and paint without scrollbars, as headless Chromium under Playwright/CDP does; the agent-facing commands turn it on
+	NoAutoplay       bool   // media do not preload or autoplay (the page's own play() still loads them), as under the Data Saver; the agent-facing commands turn it on: a background video cost ~150 MB of decoded frames and a core of CPU for nothing an agent reads
 }
 
 func DefaultOptions() Options {
@@ -69,7 +74,7 @@ func DefaultOptions() Options {
 		ViewportHeight:   720,
 		SettleMs:         1500,
 		JSMemoryMiB:      256,
-		JSTimeoutMs:      5000,
+		JSTimeoutMs:      30000,
 		WarmVMs:          1,
 	}
 }
@@ -175,6 +180,7 @@ type Engine struct {
 	res        *httpCache
 	acceptLang atomic.Value // string: Engine.SetAcceptLanguage
 	code       *codeCache
+	pc         *precompiler // background compiles into code (precompile.go)
 
 	wm winRegistry // window ids and the embedder's popup / close / focus hooks (windows.go)
 	// frameRead decides whether the content of a frame document may be read through the
@@ -206,6 +212,7 @@ func New(opts Options) *Engine {
 		cacheDir = ""
 	}
 	e.code = newCodeCache(cacheDir)
+	e.pc = newPrecompiler(e.code)
 	setPreludeCacheDir(e.code.dir)
 	e.res = newHTTPCache(opts.MaxCacheMiB, cacheDir, opts.DiskCacheMiB)
 	e.vms = newVMPool(opts)
@@ -344,6 +351,7 @@ func (e *Engine) Close() error {
 	if !e.closed.CompareAndSwap(false, true) {
 		return nil
 	}
+	e.pc.close()
 	e.mu.Lock()
 	tabs := make([]*Tab, 0, len(e.tabs))
 	for _, t := range e.tabs {

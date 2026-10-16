@@ -21,7 +21,7 @@
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder">
       <Component Id="StartMenuShortcut" Guid="*">
-        <Shortcut Id="SweefStartMenu" Name="Sweef" Target="[INSTALLFOLDER]Sweef.exe" Icon="SweefIcon" />
+        <Shortcut Id="SweefStartMenu" Name="Sweef" Target="[INSTALLFOLDER]SweefLauncher.exe" Icon="SweefIcon" />
         <RegistryValue Root="HKCU" Key="Software\Sweef" Name="startmenu" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </StandardDirectory>
@@ -31,7 +31,7 @@
         <File Id="SweefCli" Source="$(SrcDir)\sweef.exe" KeyPath="yes" />
       </Component>
       <Component Guid="*">
-        <File Id="SweefGui" Source="$(SrcDir)\Sweef.exe" KeyPath="yes" />
+        <File Id="SweefGui" Source="$(SrcDir)\SweefLauncher.exe" KeyPath="yes" />
         <ProgId Id="SweefHTML" Description="Sweef HTML Document" Icon="SweefIcon">
           <Extension Id="html"><Verb Id="open" Command="Open" Argument="&quot;%1&quot;" /></Extension>
           <Extension Id="htm"><Verb Id="open" Command="Open" Argument="&quot;%1&quot;" /></Extension>
@@ -55,7 +55,7 @@
             </RegistryKey>
           </RegistryKey>
           <RegistryKey Key="shell\open\command">
-            <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]Sweef.exe&quot;" />
+            <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]SweefLauncher.exe&quot;" />
           </RegistryKey>
         </RegistryKey>
         <RegistryValue Root="HKMU" Key="Software\RegisteredApplications" Name="Sweef" Type="string"

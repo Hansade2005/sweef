@@ -43,3 +43,23 @@ func TestResponseError(t *testing.T) {
 		t.Fatalf("bad error frame: %+v", m)
 	}
 }
+
+// Responses are spliced, not re-marshalled: no HTML escaping, one frame that
+// decodes to the same result.
+func TestResponseFastPath(t *testing.T) {
+	var buf bytes.Buffer
+	res := json.RawMessage(`{"html":"<p a=\"1\">x & y</p>"}`)
+	if err := WriteMsg(&buf, &Message{JSONRPC: "2.0", ID: 7, Result: res}); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(buf.Bytes(), []byte("\\u003c")) {
+		t.Fatalf("frame is HTML-escaped: %s", buf.Bytes()[8:])
+	}
+	m, _, err := ReadMsg(&buf, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.ID != 7 || string(m.Result) != string(res) || m.Error != nil {
+		t.Fatalf("got id=%d result=%s err=%v", m.ID, m.Result, m.Error)
+	}
+}

@@ -82,7 +82,17 @@ func (h *harness) close() {
 func (h *harness) idle() {
 	h.t.Helper()
 	if !h.app.WaitIdle(120*time.Millisecond, 30*time.Second) {
-		h.t.Fatal("app never went idle")
+		var st []string
+		for _, id := range h.app.model.Order(h.app.winID) {
+			if t, ok := h.app.model.Tab(id); ok {
+				fp := -1
+				if e := h.app.page(id); e != nil && e.t != nil {
+					fp = e.t.FontsPending()
+				}
+				st = append(st, fmt.Sprintf("%s loading=%v fonts=%d", t.URL, t.Loading, fp))
+			}
+		}
+		h.t.Fatalf("app never went idle (pending=%d anim=%v chrome=%v tabs=%v)", h.app.pending.Load(), h.app.animOn.Load(), h.app.chromeLoaded.Load(), st)
 	}
 }
 

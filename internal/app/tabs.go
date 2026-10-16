@@ -243,6 +243,9 @@ func (a *App) activateTab(id string) {
 		a.leaveHTMLFullscreen(true)
 	}
 	prev := a.activeShown()
+	if prev != id {
+		a.ctxDismiss()
+	}
 	a.model.Activate(id)
 	a.setActiveShown(id)
 	if prev != id {
@@ -257,9 +260,13 @@ func (a *App) activateTab(id string) {
 	}
 	e.lastActive.Store(time.Now().UnixNano())
 	if prev != id {
+		a.devtoolsFollow(id)
 		a.comp.SetPage(nil)
 		a.resetScroll()
 		a.paintedDocH = 0
+		if pe := a.page(prev); pe != nil {
+			pe.w.do(func() { pe.t.FindClear() })
+		}
 		a.model.Find = state.Find{}
 	}
 	e.vpW.Store(int32(a.vpLogW()))
@@ -292,12 +299,77 @@ func (a *App) togglePin(id string) {
 // toggleMute mutes or unmutes everything the tab plays (the engine keeps the media clocks running, so a
 // muted video stays in sync) and updates the speaker icon of the tab strip.
 func (a *App) toggleMute(id string) {
-	muted := false
-	a.model.Update(id, func(t *state.Tab) { t.Muted = !t.Muted; muted = t.Muted })
+	st, ok := a.model.Tab(id)
+	if !ok {
+		return
+	}
+	a.setMuted(id, !st.Muted)
+	a.markState()
+}
+
+func (a *App) setMuted(id string, muted bool) {
+	a.model.Update(id, func(t *state.Tab) { t.Muted = muted })
 	if e := a.page(id); e != nil {
 		e.t.SetAudioMuted(muted)
 	}
+}
+
+// siteOf is the host a tab shows ("" for internal and blank pages).
+func siteOf(raw string) string {
+	if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
+		return ""
+	}
+	return strings.ToLower(hostOf(raw))
+}
+
+// muteSite mutes every tab on the same site as id, or unmutes them all when id is already muted.
+func (a *App) muteSite(id string) {
+	st, ok := a.model.Tab(id)
+	if !ok {
+		return
+	}
+	want := !st.Muted
+	host := siteOf(st.URL)
+	for _, o := range a.model.Order(a.winID) {
+		ot, ok := a.model.Tab(o)
+		if ok && (o == id || (host != "" && siteOf(ot.URL) == host)) {
+			a.setMuted(o, want)
+		}
+	}
 	a.markState()
+}
+
+// duplicateTab opens a copy of a tab (same history and scroll) right after it.
+func (a *App) duplicateTab(id string) string {
+	st, ok := a.model.Tab(id)
+	if !ok {
+		return ""
+	}
+	return a.openTab(openOpts{URL: st.URL, Incognito: st.Incognito, Activate: true, After: id,
+		History: st.History, HIdx: st.HIdx, Scroll: st.Scroll, Title: st.Title})
+}
+
+// closeOtherTabs closes every unpinned tab but id.
+func (a *App) closeOtherTabs(id string) {
+	for _, o := range a.model.Order(a.winID) {
+		if st, ok := a.model.Tab(o); ok && o != id && !st.Pinned {
+			a.closeTab(o)
+		}
+	}
+}
+
+// closeTabsRight closes the unpinned tabs after id.
+func (a *App) closeTabsRight(id string) {
+	after := false
+	for _, o := range a.model.Order(a.winID) {
+		if o == id {
+			after = true
+			continue
+		}
+		if st, ok := a.model.Tab(o); ok && after && !st.Pinned {
+			a.closeTab(o)
+		}
+	}
 }
 
 // onTabAudio records that a tab started or stopped making sound (the speaker icon of the tab strip).

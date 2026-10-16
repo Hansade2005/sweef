@@ -34,6 +34,7 @@ type Window struct {
 	cursor    shell.Cursor
 	title     string
 	clip      string
+	clipHTML  string
 	opened    []string
 	fullscr   bool
 	closed    bool
@@ -104,9 +105,17 @@ func (w *Window) Size() (int, int, float64) {
 
 func (w *Window) SetTitle(s string)        { w.mu.Lock(); w.title = s; w.mu.Unlock() }
 func (w *Window) SetCursor(c shell.Cursor) { w.mu.Lock(); w.cursor = c; w.mu.Unlock() }
-func (w *Window) SetClipboard(s string)    { w.mu.Lock(); w.clip = s; w.mu.Unlock() }
-func (w *Window) Clipboard() string        { w.mu.Lock(); defer w.mu.Unlock(); return w.clip }
-func (w *Window) SetFullscreen(b bool)     { w.mu.Lock(); w.fullscr = b; w.mu.Unlock() }
+func (w *Window) SetClipboard(s string)    { w.mu.Lock(); w.clip, w.clipHTML = s, ""; w.mu.Unlock() }
+
+// SetClipboardRich and ClipboardHTML make the headless window a shell.RichClipboard.
+func (w *Window) SetClipboardRich(text, html string) {
+	w.mu.Lock()
+	w.clip, w.clipHTML = text, html
+	w.mu.Unlock()
+}
+func (w *Window) ClipboardHTML() string { w.mu.Lock(); defer w.mu.Unlock(); return w.clipHTML }
+func (w *Window) Clipboard() string     { w.mu.Lock(); defer w.mu.Unlock(); return w.clip }
+func (w *Window) SetFullscreen(b bool)  { w.mu.Lock(); w.fullscr = b; w.mu.Unlock() }
 func (w *Window) OpenURL(u string) error {
 	w.mu.Lock()
 	w.opened = append(w.opened, u)
@@ -150,6 +159,13 @@ func (w *Window) Resize(lw, lh int, scale float64) {
 
 // Presents returns how many frames were presented.
 func (w *Window) Presents() int { w.mu.Lock(); defer w.mu.Unlock(); return w.presents }
+
+// PresentTimes returns the time of every Present so far (capped at 65536).
+func (w *Window) PresentTimes() []time.Time {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]time.Time(nil), w.presentAt...)
+}
 
 // LastPresent returns the time of the last Present.
 func (w *Window) LastPresent() time.Time { w.mu.Lock(); defer w.mu.Unlock(); return w.lastPres }

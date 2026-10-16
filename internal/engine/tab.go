@@ -68,6 +68,13 @@ func (r *Ring) Since(sinceSID int64) []Event {
 
 func (r *Ring) All() []Event { return r.Since(0) }
 
+// Seq is the SID of the newest entry (0 for none).
+func (r *Ring) Seq() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.seq
+}
+
 // Trim halves the live window — called by the memory governor under pressure.
 func (r *Ring) Trim() {
 	r.mu.Lock()
@@ -121,6 +128,8 @@ type Tab struct {
 	netRing     *Ring
 	stateRing   *Ring
 	dialogRing  *Ring
+	devHL       atomic.Int64 // node highlighted by Developer Tools (0 none)
+	dev         *dtLog       // Developer Tools network recorder (devtools_net.go); shared with frames and worker tabs
 
 	js      *jsVM // per-document JavaScript VM (nil when JS is disabled)
 	history []*url.URL
@@ -144,6 +153,9 @@ type Tab struct {
 
 	initScripts []*CompiledScript
 	bindings    []string
+	scrollHook  atomic.Pointer[func(ScrollRequest)] // who moves the viewport when page script scrolls it (scrollapi.go)
+	selHook     atomic.Pointer[func()]              // told when the selection changes (selection.go)
+	quiet       quietState                          // changes that repaint part of the page (quiet.go)
 
 	// Dialog response armed by the agent before the dialog fires
 	dialogAccept bool
@@ -172,21 +184,26 @@ type Tab struct {
 
 	navSite atomic.Pointer[string] // schemeful site of the document being loaded (partition.go)
 
-	asyncImg   atomic.Bool               // layout starts image fetches instead of waiting for them (SetAsyncImages)
-	imgSem     chan struct{}             // images fetched at once
-	preloadSem chan struct{}             // requests the preload scanner has in flight
-	imgTimer   atomic.Bool               // a relayout request for newly arrived images is scheduled
-	onUpdate   atomic.Pointer[func()]    // the window's "repaint me" callback (SetUpdateHook)
-	onWake     atomic.Pointer[func()]    // the window's "give the event loop a slice" callback (SetWakeHook)
-	pl         atomic.Pointer[progLoad]  // load work still pending after NavigateProgressive (progload.go)
-	plMu       sync.Mutex                // one LoadStep at a time
-	progMode   atomic.Bool               // the current navigation is progressive: page-initiated navigations are too
-	tr         atomic.Pointer[loadTrace] // timeline of the current navigation (loadtrace.go)
-	traceNet   atomic.Bool               // record DNS/connect/TLS/first byte of every request
-	win        winState                  // frames, opener/popups, messaging (windows.go, frames.go)
-	audio      tabAudio                  // mix group, mute and audible state (tabaudio.go)
-	fs         tabFullscreen             // element fullscreen (tabfullscreen.go)
-	ms         tabMediaSession           // navigator.mediaSession (tabmediasession.go)
+	asyncImg atomic.Bool // layout starts image fetches instead of waiting for them (SetAsyncImages)
+	// scriptGeom > 0 while a host call of the page's script runs: a layout it forces (getBoundingClientRect,
+	// offsetWidth, an observer) does not wait for the network, as in a browser (scriptForcedLayout)
+	scriptGeom atomic.Int32
+	// fullInputSettle: input actions settle like other actions (SetFullInputSettle)
+	fullInputSettle atomic.Bool
+	imgSem          chan struct{}             // images fetched at once
+	preloadSem      chan struct{}             // requests the preload scanner has in flight
+	imgTimer        atomic.Bool               // a relayout request for newly arrived images is scheduled
+	onUpdate        atomic.Pointer[func()]    // the window's "repaint me" callback (SetUpdateHook)
+	onWake          atomic.Pointer[func()]    // the window's "give the event loop a slice" callback (SetWakeHook)
+	pl              atomic.Pointer[progLoad]  // load work still pending after NavigateProgressive (progload.go)
+	plMu            sync.Mutex                // one LoadStep at a time
+	progMode        atomic.Bool               // the current navigation is progressive: page-initiated navigations are too
+	tr              atomic.Pointer[loadTrace] // timeline of the current navigation (loadtrace.go)
+	traceNet        atomic.Bool               // record DNS/connect/TLS/first byte of every request
+	win             winState                  // frames, opener/popups, messaging (windows.go, frames.go)
+	audio           tabAudio                  // mix group, mute and audible state (tabaudio.go)
+	fs              tabFullscreen             // element fullscreen (tabfullscreen.go)
+	ms              tabMediaSession           // navigator.mediaSession (tabmediasession.go)
 }
 
 func newTab(e *Engine, id string) *Tab {
@@ -198,6 +215,7 @@ func newTab(e *Engine, id string) *Tab {
 		netRing:     NewRing(e.opts.NetworkRingSize),
 		stateRing:   NewRing(e.opts.StateRingSize),
 		dialogRing:  NewRing(64),
+		dev:         newDtLog(),
 		bindingRing: NewRing(256),
 		vpW:         e.opts.ViewportWidth,
 		vpH:         e.opts.ViewportHeight,
@@ -293,6 +311,14 @@ func (t *Tab) navigate(rawurl string, headers map[string]string, progressive boo
 	if t.sw.noNav {
 		return fmt.Errorf("navigation is not available here")
 	}
+	// a path-only URL (snapshots show same-origin links that way) is relative to the current page
+	if r := strings.TrimSpace(rawurl); (strings.HasPrefix(r, "/") && !strings.HasPrefix(r, "//")) || strings.HasPrefix(r, "?") {
+		if cur, err := url.Parse(t.URL()); err == nil && (cur.Scheme == "http" || cur.Scheme == "https") {
+			if abs, err := cur.Parse(r); err == nil {
+				rawurl = abs.String()
+			}
+		}
+	}
 	u, err := url.Parse(rawurl)
 	if err != nil {
 		return fmt.Errorf("bad url %q: %w", rawurl, err)
@@ -386,8 +412,13 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		return &fetchResult{body: string(data), finalURL: u.String(), status: 200}, nil
 	}
 	t.swPrepareNavigation(u.String())
-	synth, method, target, hdrs, _, err := t.routedRequest("GET", u.String(), headers, "")
+	route := t.routedRequestNoBlock // the top-level document is never blocked; a frame's is a subresource
+	if t.isFrame() {
+		route = t.routedRequest
+	}
+	synth, method, target, hdrs, _, err := route("GET", u.String(), headers, "")
 	if err != nil {
+		t.dev.begin(t.documentKind(), "GET", u.String(), headers, "").fail(err.Error())
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvFailure, At: time.Now(), Data: map[string]string{"url": u.String(), "error": err.Error()}})
 		return nil, err
 	}
@@ -405,9 +436,11 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	start := time.Now()
 	var res *http.Response
 	var docMI *meterInfo
+	var dr *dtRec
 	if synth != nil {
 		res = synth
 		rec.Headers = map[string]string{"x-sweef-route": "fulfill"}
+		dr = t.dev.begin(t.documentKind(), method, target, rec.Headers, "")
 	} else {
 		req, err := http.NewRequestWithContext(t.eng.ctx, method, target, nil)
 		if err != nil {
@@ -425,15 +458,18 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		rec.Headers = flattenHeaders(req.Header)
 		t.netRing.Push(Event{Tab: t.ID, Kind: EvRequest, At: time.Now(), Data: rec})
 		t.emit(EvRequest, rec)
+		dr = t.dev.begin(t.documentKind(), method, target, rec.Headers, "")
 		t.touchNet()
 		mreq, mi := withMeter(req, t.Context(), t, t.documentKind(), pol)
 		if res, err = t.eng.clientFor(t.Context()).Do(mreq); err != nil {
+			dr.fail(err.Error())
 			return nil, err
 		}
 		docMI = mi
 	}
 	if isDownloadResponse(res.Header) && res.StatusCode < 400 {
 		defer res.Body.Close()
+		dr.done(res.StatusCode, res.Header, "", 0, nil, target)
 		t.saveDownload(u.String(), suggestedName(res.Header, u.String(), ""), res.Header.Get("Content-Type"), res.Body)
 		return nil, errDownloaded
 	}
@@ -454,6 +490,7 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 		b, err = io.ReadAll(io.LimitReader(res.Body, limit))
 	}
 	if err != nil {
+		dr.fail(err.Error())
 		return nil, err
 	}
 	body = b
@@ -477,6 +514,17 @@ func (t *Tab) fetch(u *url.URL, headers map[string]string) (*fetchResult, error)
 	}
 	t.netRing.Push(Event{Tab: t.ID, Kind: EvResponse, At: time.Now(), Data: rec})
 	t.emit(EvResponse, rec)
+	{
+		var xfer int64
+		cs := rec.Headers["x-sweef-cache"]
+		if docMI != nil {
+			xfer = docMI.hdrBytes.Load() + docMI.rawBytes.Load()
+			if docMI.fromCache.Load() {
+				xfer = 0
+			}
+		}
+		dr.done(res.StatusCode, res.Header, cs, xfer, body, rec.FinalURL)
+	}
 	status, text := res.StatusCode, string(body)
 	return &fetchResult{body: text, finalURL: rec.FinalURL, status: status, har: rec, header: res.Header}, nil
 }
@@ -519,6 +567,11 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	}
 	t.pl.Store(nil) // load work of the previous document is void
 	t.installRender(doc)
+	if !progressive {
+		if env := t.ds.env.Load(); env != nil && env.doc == doc {
+			env.prefetchDocImagesEarly()
+		}
+	}
 	ts := time.Now()
 	t.applyStyles(doc)
 	t.tspan("styles.ready", "", ts)
@@ -676,9 +729,15 @@ func (t *Tab) ConsoleLog(sinceSID int64) []Event { return t.consoleRing.Since(si
 func (t *Tab) NetworkLog(sinceSID int64) []Event { return t.netRing.Since(sinceSID) }
 func (t *Tab) StateLog(sinceSID int64) []Event   { return t.stateRing.Since(sinceSID) }
 
-func (t *Tab) LogConsole(level, text string) {
-	e := t.consoleRing.Push(Event{Tab: t.ID, Kind: EvConsole, At: time.Now(),
-		Data: map[string]string{"level": level, "text": text}})
+func (t *Tab) LogConsole(level, text string) { t.logConsoleAt(level, text, "") }
+
+// logConsoleAt is LogConsole with the place the call came from ("url:line:col"), which Developer Tools shows.
+func (t *Tab) logConsoleAt(level, text, loc string) {
+	d := map[string]string{"level": level, "text": text}
+	if loc != "" {
+		d["loc"] = loc
+	}
+	e := t.consoleRing.Push(Event{Tab: t.ID, Kind: EvConsole, At: time.Now(), Data: d})
 	t.emit(EvConsole, e.Data)
 }
 
@@ -707,7 +766,27 @@ func (t *Tab) Evaluate(expr string) (json.RawMessage, error) {
 
 // ensureJS returns the tab's VM, binding one to the current document when the
 // page loaded without scripts (lazy VM).
-func (t *Tab) ensureJS() (*jsVM, error) {
+func (t *Tab) ensureJS() (*jsVM, error) { return t.ensureJSFor(false) }
+
+// ensureFrameJS is ensureJS for a same-origin script reaching into this frame (contentWindow, frameElement). A frame
+// sandboxed without allow-scripts still has a window object the embedder can read and call (a page that parks an
+// <iframe sandbox="allow-same-origin" src="about:blank"> to borrow its History object does exactly that); only the
+// frame's own scripts and inline handlers stay blocked, which the VM is told about.
+func (t *Tab) ensureFrameJS() (*jsVM, error) { return t.ensureJSFor(true) }
+
+func (t *Tab) ensureJSFor(remote bool) (*jsVM, error) {
+	// the document can be replaced while the VM is built (a frame finishing its load): bind to the new one
+	for try := 0; ; try++ {
+		j, err := t.ensureJSOnce(remote)
+		if err != errDocChanged || try >= 2 {
+			return j, err
+		}
+	}
+}
+
+var errDocChanged = fmt.Errorf("document changed")
+
+func (t *Tab) ensureJSOnce(remote bool) (*jsVM, error) {
 	t.mu.RLock()
 	j, d, u := t.js, t.dom, t.url
 	t.mu.RUnlock()
@@ -717,7 +796,8 @@ func (t *Tab) ensureJS() (*jsVM, error) {
 	if t.eng.opts.DisableJS {
 		return nil, fmt.Errorf("javascript is disabled (--no-js)")
 	}
-	if !t.scriptsAllowed() {
+	blocked := !t.scriptsAllowed()
+	if blocked && !remote {
 		return nil, fmt.Errorf("scripts are blocked by the frame's sandbox")
 	}
 	if d == nil {
@@ -732,6 +812,9 @@ func (t *Tab) ensureJS() (*jsVM, error) {
 		return nil, fmt.Errorf("javascript engine unavailable")
 	}
 	_, _ = j.call("__swSetDocument", docURL, "complete")
+	if blocked {
+		_, _ = j.call("__swBlockScripts")
+	}
 	t.mu.Lock()
 	if t.js == nil && t.dom == d {
 		t.js = j
@@ -740,7 +823,7 @@ func (t *Tab) ensureJS() (*jsVM, error) {
 		t.mu.Unlock()
 		j.close()
 		if other == nil {
-			return nil, fmt.Errorf("document changed")
+			return nil, errDocChanged
 		}
 		return other, nil
 	}
@@ -819,7 +902,7 @@ func (t *Tab) postForm(rawurl string, values map[string]string) error {
 		form.Set(k, v)
 	}
 	encoded := form.Encode()
-	synth, method, target, hdrs, newBody, err := t.routedRequest("POST", rawurl, nil, encoded)
+	synth, method, target, hdrs, newBody, err := t.routedRequestNoBlock("POST", rawurl, nil, encoded)
 	if err != nil {
 		return err
 	}

@@ -297,6 +297,36 @@ func (w *Window) SetClipboard(s string) {
 	})
 }
 
+const pasteboardHTML = "public.html"
+
+// SetClipboardRich puts the text and its HTML form on the pasteboard (shell.RichClipboard).
+func (w *Window) SetClipboardRich(text, html string) {
+	if w.closed.Load() {
+		return
+	}
+	mainthread.Do(func() {
+		pb := send(class("NSPasteboard"), "generalPasteboard")
+		send(pb, "clearContents")
+		send(pb, "setString:forType:", nsString(text), nsString(pasteboardString))
+		if html != "" {
+			send(pb, "setString:forType:", nsString(html), nsString(pasteboardHTML))
+		}
+	})
+}
+
+// ClipboardHTML returns the HTML on the pasteboard ("" if none).
+func (w *Window) ClipboardHTML() string {
+	if w.closed.Load() {
+		return ""
+	}
+	var out string
+	mainthread.Do(func() {
+		pb := send(class("NSPasteboard"), "generalPasteboard")
+		out = goString(send(pb, "stringForType:", nsString(pasteboardHTML)))
+	})
+	return out
+}
+
 func (w *Window) Clipboard() string {
 	if w.closed.Load() {
 		return ""

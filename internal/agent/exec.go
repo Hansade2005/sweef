@@ -203,7 +203,7 @@ func (a *Agent) label(rs *runState, tab string, s Step) string {
 	case OpHover:
 		return "Hovering over " + name()
 	case OpType:
-		if ri, ok := rs.refInfo(tab, s.Ref); ok && reSecret.MatchString(ri.Role+" "+ri.Name+" "+ri.Extra) {
+		if ri, ok := rs.refInfo(tab, s.Ref); ok && reSecret().MatchString(ri.Role+" "+ri.Name+" "+ri.Extra) {
 			return "Typing into " + name()
 		}
 		return fmt.Sprintf("Typing '%s' into %s", clip(s.Text, 30), name())
@@ -278,6 +278,7 @@ func (a *Agent) execAct(ctx context.Context, rs *runState, c *call) *toolOut {
 		s.Tab = tab
 		switch s.Op {
 		case OpNavigate:
+			s.URL = resolveAgainst(cur, s.URL)
 			s.URL = normalizeNavURL(s.URL)
 			if err := checkNavigable(s.URL); err != nil {
 				return errOut(fmt.Sprintf("step %d (navigate): %v", i+1, err))

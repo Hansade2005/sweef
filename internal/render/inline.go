@@ -32,6 +32,24 @@ type textItem struct {
 	marker bool
 	lv     []uint8 // bidi level per rune (nil: not a bidi paragraph)
 	off    int     // offset of runes within the source text box's collapsed text (small-caps segments)
+	// smap[i] is the offset (in runes) in the DOM text node's data of the character shown as runes[i]; nil: the
+	// characters are the node's own, from base on. See srcAt.
+	smap []int32
+	base int
+}
+
+// srcAt is the offset in the DOM text node's data of the character shown as rune i.
+func (it *textItem) srcAt(i int) int {
+	if it.smap != nil {
+		if i >= 0 && i < len(it.smap) {
+			return it.base + int(it.smap[i])
+		}
+		if len(it.smap) > 0 {
+			return it.base + int(it.smap[len(it.smap)-1]) + 1
+		}
+		return it.base
+	}
+	return it.base + i
 }
 
 type atom struct {
@@ -158,10 +176,23 @@ func (f *flatState) text(t *lbox, owner *lbox) {
 	}
 	ws := st.WhiteSpace
 	var out []rune
+	var smap []int32 // for collapsed text: where each shown character came from
 	switch ws {
 	case "pre", "pre-wrap", "break-spaces":
+		orig := s
+		crlf := strings.Contains(s, "\r\n")
 		s = strings.ReplaceAll(s, "\r\n", "\n")
 		out = []rune(s)
+		if crlf { // the \r of a line break is not shown: the characters after it sit one further on in the node
+			or := []rune(orig)
+			smap = make([]int32, 0, len(out))
+			for i := 0; i < len(or); i++ {
+				if or[i] == '\r' && i+1 < len(or) && or[i+1] == '\n' {
+					continue
+				}
+				smap = append(smap, int32(i))
+			}
+		}
 		if len(out) > 0 {
 			f.prevSpace = false
 			f.prevRune = out[len(out)-1]
@@ -169,12 +200,17 @@ func (f *flatState) text(t *lbox, owner *lbox) {
 	default:
 		keepNL := ws == "pre-line"
 		out = make([]rune, 0, len(s))
+		smap = make([]int32, 0, len(s))
+		ri := int32(-1)
 		for _, r := range s {
+			ri++
 			if r == '\n' && keepNL {
 				for len(out) > 0 && out[len(out)-1] == ' ' && !f.prevSpaceFromOutside(len(out)) {
 					out = out[:len(out)-1]
+					smap = smap[:len(smap)-1]
 				}
 				out = append(out, '\n')
+				smap = append(smap, ri)
 				f.prevSpace = true
 				continue
 			}
@@ -183,10 +219,12 @@ func (f *flatState) text(t *lbox, owner *lbox) {
 					continue
 				}
 				out = append(out, ' ')
+				smap = append(smap, ri)
 				f.prevSpace = true
 				continue
 			}
 			out = append(out, r)
+			smap = append(smap, ri)
 			f.prevSpace = false
 		}
 		if len(out) > 0 {
@@ -216,7 +254,13 @@ func (f *flatState) text(t *lbox, owner *lbox) {
 			sfs := f.c.spec(sst)
 			sh := f.c.shapeWith(sfs, sst, seg, f.lastRune, f.lastFace)
 			f.lastRune, f.lastFace = seg[len(seg)-1], sh.faces[len(seg)-1]
-			f.addTextAtoms(&textItem{owner: owner, src: t, runes: seg, sh: sh, fs: sfs, st: sst, off: a})
+			it := &textItem{owner: owner, src: t, runes: seg, sh: sh, fs: sfs, st: sst, off: a, base: t.srcOff}
+			if smap != nil {
+				it.smap = smap[a:e]
+			} else {
+				it.base += a
+			}
+			f.addTextAtoms(it)
 			a = e
 		}
 		return
@@ -226,7 +270,7 @@ func (f *flatState) text(t *lbox, owner *lbox) {
 	if n := len(out); n > 0 {
 		f.lastRune, f.lastFace = out[n-1], sh.faces[n-1]
 	}
-	it := &textItem{owner: owner, src: t, runes: out, sh: sh, fs: fs, st: st}
+	it := &textItem{owner: owner, src: t, runes: out, sh: sh, fs: fs, st: st, smap: smap, base: t.srcOff}
 	f.addTextAtoms(it)
 }
 
@@ -681,6 +725,12 @@ func (c *ctx) layoutInlineContent(b *lbox, cw, cx, cy float64, bfc *bfcState, cb
 	}
 	if b.hasFloat {
 		b.touchesBFC = true
+	}
+	// -webkit-line-clamp: a vertical -webkit-box shows its first N lines; the rest is not laid out or painted
+	if n := c.lineClamp(b); n > 0 && len(b.lines) > n {
+		b.lines = b.lines[:n]
+		last := b.lines[n-1]
+		y = last.y + last.h
 	}
 	// text-align and baseline of the block
 	if len(b.lines) > 0 {
@@ -1474,4 +1524,20 @@ func (fr *frag) justSpaces() int {
 		}
 	}
 	return n
+}
+
+// lineClamp is the -webkit-line-clamp that applies to the lines of b: its own, or that of the vertical
+// -webkit-box whose anonymous block it is (Tailwind's line-clamp-N: display:-webkit-box,
+// -webkit-box-orient:vertical, -webkit-line-clamp:N, overflow:hidden). 0 = none.
+func (c *ctx) lineClamp(b *lbox) int {
+	box := func(x *lbox) bool {
+		return x != nil && x.st != nil && x.st.LineClamp > 0 && (x.st.Display == "-webkit-box" || x.st.Display == "-webkit-inline-box") && x.st.BoxOrient == "vertical"
+	}
+	if box(b) {
+		return b.st.LineClamp
+	}
+	if b.anon && box(b.parent) {
+		return b.parent.st.LineClamp
+	}
+	return 0
 }

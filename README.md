@@ -16,14 +16,14 @@ Sweef is not a fork of Chromium. It has its own CSS layout engine, rasterizer, s
 | Install | ~250 MB browser download | **35.5 MiB static binary** (37.2 MB stripped, linux/amd64, measured 2026-10-14; 4.5 MiB of the 40 MiB release budget left) |
 | Memory | ~90 to 150 MB idle, 1.1 GB process tree under agent-browser | **13 MB idle, 22 MB typical page, 52 MB peak on a script-heavy Wikipedia article** (measured 2026-10-11, before the WebRTC and WebAssembly work; an empty daemon is 3.4 MB resident today; not yet re-measured per page) |
 | CPU | 2 to 4 cores wanted | **1 core** |
-| Agent interface | CDP + language bindings | **MCP native**, plus a framed JSON-RPC socket and a Node SDK |
+| Agent interface | CDP + language bindings | **MCP native**, plus a session CLI, Node and Python SDKs over a framed JSON-RPC socket |
 | Page view for the model | DOM dumps or custom snapshots | **Playwright-format accessibility tree** with small `[ref=eN]` handles |
 | JavaScript | V8 | **QuickJS (ES2023)** via [modernc.org/quickjs](https://pkg.go.dev/modernc.org/quickjs), pure Go, no CGO |
 | Pixels, WebGL, media | Yes | **Yes**, pure Go: CSS layout within 1 px of Chromium on 99.5% of boxes, software WebGL 1/2, Canvas 2D, media and Web Audio |
 
 ## Benchmark against Vercel agent-browser
 
-Same 11-step agent flow (open a landing page, snapshot, click through to a login form, fill it, submit, open a React app, click in it, eval, snapshot) on a local fixture site. Median of 7 runs, a fresh daemon for every run, agent-browser 0.27 on Chromium 1194. Reproduce with `bench/run.sh`.
+Same 11-step agent flow (open a landing page, snapshot, click through to a login form, fill it, submit, open a React app, click in it, eval, snapshot) on a local fixture site. Median of 7 runs, a fresh daemon for every run, agent-browser 0.27 on Chromium 1194. Reproduce with `bench/run.sh`. A harness for the same question on 39 real public sites (including the failures), and for real-LLM agent runs, is in `bench/realsites/`.
 
 | step | Sweef | agent-browser | ratio |
 |---|---|---|---|
@@ -44,6 +44,26 @@ Same 11-step agent flow (open a landing page, snapshot, click through to a login
 Plain steps run 23x to 28x faster. The two React steps are slower (10x to open, 18x to click) because opening the app executes 140 KB of React in a pure-Go JavaScript engine (about 10 ms) and every CLI call pays a process spawn of about 6 ms. Command by command the whole flow is about 18 to 20x, and as one batch about 30 to 37x (run to run variation on this machine). Snapshots are equal or smaller (466 vs 480 bytes on the landing page, 68 vs 137 on the React app).
 
 What makes navigation fast: pages with no scripts get no JavaScript VM at all; pages with scripts take a VM from a pre-warmed pool; framework bundles are compiled to bytecode once and the bytecode is kept on disk across daemon restarts; sub-resources go through an HTTP cache with ETag revalidation; scripts and stylesheets are prefetched in parallel; the previous page is torn down in the background.
+
+Re-measured 2026-10-15 on a slower shared 4-CPU host, Sweef only (agent-browser was not installed): whole flow 199 ms one command at a time, 100 ms as one batch, daemon 47 MB; the previous build (bcabc8e) on the same host: 202 ms, 104 ms, 57 MB. The ratios in the table above are from the original run.
+
+### Real public sites (no LLM)
+
+47 tasks on 41 public sites (Wikipedia, GitHub, MDN, Hacker News, npm, PyPI, Next.js, React, Angular, Vue, login and e-commerce demos, news, the owner's sites), 3 runs per task, each run a fresh process with empty caches, against Playwright driving Chromium 141. A run passes only if the snapshot holds the expected text, every scripted step succeeds and the final state matches. Reproduce with `bench/realsites/node/modea.mjs`; every task and every failure is in [modea-2026-10-15-gaps.md](bench/realsites/results/modea-2026-10-15-gaps.md), and the comparison with the previous build in [modea-2026-10-15-gaps-before-after.md](bench/realsites/results/modea-2026-10-15-gaps-before-after.md). Live network, so single cells are noisy.
+
+| | Sweef (previous build) | Sweef | Playwright + Chromium |
+|---|---|---|---|
+| runs passed | 130/141 | 130/141 | 129/141 |
+| median cold time to a usable snapshot, the 44 tasks both Sweef builds pass | 2939 ms | **2188 ms** | |
+| median cold time to a usable snapshot, the 42 tasks Sweef and Chromium both pass | | 2188 ms | **2029 ms** |
+| tasks where it is faster than Chromium | 16 of 42 | **25** of 42 | 17 |
+| median snapshot size, est. tokens (bytes/4) | 4088 | **4217** | 7356 |
+
+Where Sweef wins: plain and server-rendered pages (Hacker News, news text, docs.python.org, Effective Go, rust-lang.org, httpbin, books.toscrape) and the TodoMVC, quotes and e-commerce demos open 1.1x to 3.8x faster, react.dev 1.8x and Angular's docs 1.2x faster, Wikipedia about even (1.15x slower to 1.12x faster), and snapshots are about 40% smaller. Where it loses: JavaScript-heavy apps. GitHub is 1.6x to 2x slower (4.6 to 6.1 s against 2.5 to 3.1 s; it was 3.3x to 4.6x), MDN 2.5x to 2.7x, PyPI 1.35x, Next.js docs 1.35x, the owner's React/Vite sites 1.2x to 1.8x. Sweef runs page JavaScript in an interpreter (QuickJS), so a site that executes megabytes of framework code before its content is final pays for it; at the load event Chromium has typically run only 13 to 290 ms of script on these pages (CDP metrics). Stack Overflow (a Cloudflare challenge) and old.reddit.com (a login wall) fail for Sweef; old.reddit.com also fails for Chromium.
+
+Noise-free numbers from a local recording of ten pages ([replay-2026-10-15.md](bench/realsites/results/replay-2026-10-15.md), `bench/replay`, 5 runs each, median and spread): GitHub repo 7.7 -> 3.2 s (Chromium 1.2 s), GitHub issue 7.5 -> 3.3 s (1.5 s), Next.js docs 5.4 -> 1.9 s (0.7 s), the3rdacademy.com 4.0 -> 2.1 s (1.0 s), pipilot.dev 3.3 -> 1.6 s (1.1 s), Wikipedia 2.1 -> 1.3 s (1.1 s), MDN 2.8 -> 2.5 s (0.8 s), PyPI 3.6 -> 2.4 s (1.0 s); react.dev 1.2 s against 1.6 s and Hacker News 0.11 s against 0.43 s. Loading those ten pages costs Sweef 28 s of CPU (previous build 41 s, Chromium 14 s) and 6.7 s while they sit idle for 5 s each (Chromium 13.4 s), with a third of the memory ([resources-2026-10-15-replay.md](bench/realsites/results/resources-2026-10-15-replay.md)). The owner's sites in detail: [owner-sites-2026-10-15-gaps.md](bench/realsites/results/owner-sites-2026-10-15-gaps.md) (screenshot SSIM unchanged; a click that changes the route on pipilot.dev still takes 1.1 to 2.3 s against 0.25 to 0.4 s, because Sweef returns once the new route has rendered and Playwright as soon as the click is dispatched).
+
+With real LLM agents (Mode B, `claude-haiku-5-5`, 40 tasks x 3 runs, 2026-10-15/16, this build, files `bench/realsites/results/modeb-2026-10-16.*`): both agents solved 119/120 (the Sweef agent's one miss is Stack Overflow's Cloudflare check; the Chromium agent's is a PyPI run). The Sweef agent took a median 5.2 s per task against 5.0 s for the Chromium agent (it was 9.0 s against 4.8 s before this round), a median of 1 turn against 2, 10.7K prompt tokens against 11.7K, and $0.0009 against $0.0009 per success ($0.102 against $0.106 for the whole run). Both agents use prompt caching, so most of those prompt tokens are cache reads. So on this suite the two are level on success, wall time and cost, with Sweef slightly ahead on turns and tokens; it does not yet win on wall time. What moved it: a 2.8 kB system prompt instead of 18 kB, the starting page sent with the task, route changes moving the tab URL, batch waits honouring their timeouts, and the faster load and input settles above. Wall times include live-network noise and a 3-run median per task.
 
 ## A look at the browser
 
@@ -233,19 +253,37 @@ go build -o sweef ./cmd/sweef          # pure Go; cross-compiles with GOOS/GOARC
 
 Every verb agent-browser has for driving a page, at a fraction of the latency: `open`, `snapshot [-i] [-c] [-d n] [-s sel] [--delta]`, `click`, `dblclick`, `fill`, `type`, `press`, `hover`, `focus`, `check`, `uncheck`, `select`, `scroll`, `drag`, `get text|html|value|attr|title|url|count|box`, `is visible|enabled|checked`, `wait <sel|ms> | --text | --url | --fn | --load`, `eval`, `console`, `network`, `back`, `forward`, `reload`, `tab`, `screenshot [--full]`, `pdf [path]`, `downloads`, `download <url>`, `route <glob> --json v | --abort | --continue …`, `unroute`, `bind <name> [reply]`, `bindings`, `batch`, `find role|text|label|placeholder|alt|testid … click|fill|text`, `set viewport|offline|headers|media|geo|ua`, `cookies`, `storage`, `state save|load`, `dialog`, `close`. Refs are accepted as `@e3`, `e3` or `ref=e3`. `--session <name>` isolates sessions, `--json` gives machine output. The daemon exits after an hour idle (`SWEEF_IDLE_TIMEOUT`).
 
-MCP configuration for any MCP host:
+`sweef-cli` (built next to `sweef` by the release script) serves the same session commands without the browser engine linked in, so each command starts in about half the time (a `get title` round trip 4.3 ms against 9.9 ms for `sweef` and 10.2 ms for agent-browser, [bench/surfaces](bench/surfaces/results/2026-10-15-gaps/report.md)); it starts the `sweef` binary next to it as the daemon and hands every other command to it.
+
+MCP configuration for any MCP host (Claude Code: `claude mcp add sweef -- /usr/local/bin/sweef mcp`):
 
 ```json
 { "mcpServers": { "sweef": { "command": "/usr/local/bin/sweef", "args": ["mcp"] } } }
 ```
 
+SDKs (`sweef` binary on PATH or in `SWEEF_BIN`):
+
+```js
+const { Sweef } = require('@sweef/browser');           // npm install @sweef/browser
+const sw = await Sweef.launch(); const page = await sw.newPage('https://example.com');
+console.log(await page.snapshot({ interactiveOnly: true })); await sw.close();
+```
+
+```python
+from sweef import Sweef                                 # pip install sweef-browser
+with Sweef.launch() as sw:
+    print(sw.new_page("https://example.com").snapshot(interactive_only=True))
+```
+
+Setup for each MCP host, what the tools return, the SDK and CLI references and the RPC method list: [docs/sdk-mcp.md](docs/sdk-mcp.md). Measured against `@playwright/mcp`, `playwright-core` and `agent-browser` on each surface: [bench/surfaces](bench/surfaces/README.md).
+
 ### The agent loop
 
 ```text
 1. browser_navigate      {url}                       → title, final URL
-2. browser_aria_snapshot {}                          → YAML tree, controls carry [ref=eN]
-3. browser_click         {selector: "e12"}           → acts on exactly that element
-4. browser_aria_snapshot {interactiveOnly: true}     → re-read, cheaply
+2. browser_snapshot {}                              → YAML tree, controls carry [ref=eN]
+3. browser_click         {selector: "e12"}           → acts on exactly that element; the reply lists what changed
+4. browser_snapshot      {delta: true}               → only the lines changed since step 2
 ```
 
 A snapshot of the GitHub login page looks like this:
@@ -294,6 +332,7 @@ Three states: **works** (covered by tests), **partial** (works for the common ca
 | Exposed bindings: page calls recorded, JSON replies returned to the page | works |
 | Wait states: attached, visible, hidden, enabled, load, `networkidle` | works |
 | Console, network (incl. POST bodies) and DOM-mutation logs (bounded rings), HAR export | works |
+| Developer Tools: `F12` or `Ctrl+Shift+I` (`Cmd+Opt+I` on macOS) opens a resizable panel docked under the page with a Console (live log, errors with file and line and their stack, a prompt that evaluates in the page), Network (every request with status, type, size, cache state and a waterfall, trackers marked as blocked, headers and a body preview), Elements (DOM tree, the CSS rules that match, computed style, box model, the selected node highlighted on the page, live edits of attributes, text and `style`), Sources (scripts and stylesheets with a pretty printer) and Application (cookies, storage) ([docs/devtools.md](docs/devtools.md)) | works on Linux (X11 and headless); Windows and macOS compile-checked only; no breakpoints, no source maps, no click-to-pick |
 | Cookies (RFC 6265 jar per context), storage state save/load | works |
 | Multiple isolated contexts, tabs, history | works |
 | Emulation: viewport, UA, offline, color scheme, extra headers, geolocation, permissions | works |

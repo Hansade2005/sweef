@@ -22,6 +22,14 @@ func noFix() (float64, float64) { return -1, -1 }
 
 const sbSize = 15
 
+// sbSize is the scrollbar thickness of this layout (0 with Options.HideScrollbars).
+func (c *ctx) sbSize() float64 {
+	if c.opts.HideScrollbars {
+		return 0
+	}
+	return sbSize
+}
+
 type strut struct{ pos, neg float64 }
 
 func (s *strut) add(m float64) {
@@ -358,16 +366,16 @@ func (c *ctx) scrollbars(b *lbox) {
 		return
 	}
 	if st.OverflowY == "scroll" {
-		b.sbW = sbSize
+		b.sbW = c.sbSize()
 	}
 	if st.OverflowX == "scroll" {
-		b.sbH = sbSize
+		b.sbH = c.sbSize()
 	}
 	if b.vscroll {
-		b.sbW = sbSize
+		b.sbW = c.sbSize()
 	}
 	if b.hscroll {
-		b.sbH = sbSize
+		b.sbH = c.sbSize()
 	}
 }
 
@@ -507,7 +515,7 @@ func (c *ctx) layoutFlow(b *lbox, in layoutIn) {
 			b.h = h + b.vExtra() + b.sbH
 		}
 		// scrollbar necessity for overflow:auto
-		if pass < 2 && (st.OverflowY == "auto" || st.OverflowX == "auto") && st.Scrollbar != "none" {
+		if pass < 2 && c.sbSize() > 0 && (st.OverflowY == "auto" || st.OverflowX == "auto") && st.Scrollbar != "none" {
 			need := false
 			ext := contentH
 			if b.inner == iFlex || b.inner == iGrid {
@@ -993,12 +1001,24 @@ func (c *ctx) finishOOF(b *lbox) {
 	if len(b.oofKids) == 0 {
 		return
 	}
-	kids := b.oofKids
-	b.oofKids = nil
-	for _, k := range kids {
-		c.layoutAbs(k, b)
+	// Laying out one of these can register more (a position:fixed box inside an absolutely positioned one has the
+	// viewport, that is the root box, as its containing block): they are added to b.oofKids while it is emptied, so
+	// keep going until nothing new shows up, and keep every kid for later passes.
+	var all []*lbox
+	seen := make(map[*lbox]struct{}, len(b.oofKids))
+	for len(b.oofKids) > 0 {
+		kids := b.oofKids
+		b.oofKids = nil
+		for _, k := range kids {
+			if _, dup := seen[k]; dup {
+				continue
+			}
+			seen[k] = struct{}{}
+			all = append(all, k)
+			c.layoutAbs(k, b)
+		}
 	}
-	b.oofKids = kids
+	b.oofKids = all
 }
 
 func (c *ctx) layoutAbs(k, cb *lbox) {

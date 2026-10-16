@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	snet "github.com/sweefbrowser/sweef/internal/net"
 	"github.com/sweefbrowser/sweef/internal/style"
 )
 
@@ -62,6 +63,8 @@ type SVGDoc struct {
 	depth    int
 	extDone  bool
 	merged   bool
+	// foreign caches needsForeignIDs: 0 not yet known, 1 no, 2 yes
+	foreign  int8
 	sigV     uint64
 	sigState uint32
 }
@@ -128,10 +131,17 @@ type svgCascade struct {
 	idx    *style.EntryIndex
 	rank   map[*style.Rule]int // position of each rule in rules
 	memo   map[*html.Node][]style.Decl
+	anc    map[*html.Node]snet.Bloom // ancestor filters of this pass (reset with memo)
 	// keep carries declsFor answers across passes of a session for elements
 	// whose cascade inputs are known (keyFn, from the style cache)
 	keep  map[*html.Node]*declKept
 	keyFn func(n *html.Node) (anc, own uint64, ok bool)
+	// inhIdx indexes only the rules that declare an inherited SVG property: an inline svg's HTML ancestors
+	// are asked for nothing else (svgBuildLocked), and matching them against every rule of the page repeated
+	// the HTML cascade's work for each svg. inhMemo/inhKeep are its declsFor memo and cross-pass cache.
+	inhIdx  *style.EntryIndex
+	inhMemo map[*html.Node][]style.Decl
+	inhKeep map[*html.Node]*declKept
 }
 
 type declKept struct {
@@ -156,6 +166,16 @@ func newSVGCascade(sheets []Sheet, env *style.Env, extra []string) *svgCascade {
 		sc.rules = append(sc.rules, style.ParseSheet(t, env, style.OriginAuthor, &order, layers).Rules...)
 	}
 	sc.idx = style.NewEntryIndex(sc.rules)
+	var inh []*style.Rule
+	for _, r := range sc.rules {
+		for _, d := range r.Decls {
+			if svgInheritedProps[d.Name] {
+				inh = append(inh, r)
+				break
+			}
+		}
+	}
+	sc.inhIdx = style.NewEntryIndex(inh)
 	sc.rank = make(map[*style.Rule]int, len(sc.rules))
 	for i, r := range sc.rules {
 		sc.rank[r] = i
@@ -182,6 +202,7 @@ func (sc *svgCascade) declsFor(n *html.Node) []style.Decl {
 	}
 	if sc.memo == nil {
 		sc.memo = map[*html.Node][]style.Decl{}
+		sc.anc = map[*html.Node]snet.Bloom{}
 	}
 	if sc.keyFn != nil {
 		if anc, own, ok := sc.keyFn(n); ok {
@@ -203,7 +224,51 @@ func (sc *svgCascade) declsFor(n *html.Node) []style.Decl {
 	return d
 }
 
-func (sc *svgCascade) declsForUncached(n *html.Node) []style.Decl {
+// inhDeclsFor is declsFor restricted to the inherited SVG properties (svgInheritedProps), in the same order.
+func (sc *svgCascade) inhDeclsFor(n *html.Node) []style.Decl {
+	if d, ok := sc.inhMemo[n]; ok {
+		return d
+	}
+	if sc.inhMemo == nil {
+		sc.inhMemo = map[*html.Node][]style.Decl{}
+	}
+	if sc.memo == nil {
+		sc.memo = map[*html.Node][]style.Decl{}
+		sc.anc = map[*html.Node]snet.Bloom{}
+	}
+	compute := func() []style.Decl {
+		var out []style.Decl
+		for _, d := range sc.declsWith(n, sc.inhIdx) {
+			if svgInheritedProps[d.Name] {
+				out = append(out, d)
+			}
+		}
+		return out
+	}
+	if sc.keyFn != nil {
+		if anc, own, ok := sc.keyFn(n); ok {
+			if k := sc.inhKeep[n]; k != nil && k.anc == anc && k.own == own {
+				sc.inhMemo[n] = k.d
+				return k.d
+			}
+			d := compute()
+			if sc.inhKeep == nil || len(sc.inhKeep) > 8192 {
+				sc.inhKeep = map[*html.Node]*declKept{}
+			}
+			sc.inhKeep[n] = &declKept{d: d, anc: anc, own: own}
+			sc.inhMemo[n] = d
+			return d
+		}
+	}
+	d := compute()
+	sc.inhMemo[n] = d
+	return d
+}
+
+func (sc *svgCascade) declsForUncached(n *html.Node) []style.Decl { return sc.declsWith(n, sc.idx) }
+
+// declsWith is declsForUncached over the rules of idx.
+func (sc *svgCascade) declsWith(n *html.Node, idx *style.EntryIndex) []style.Decl {
 	var ds []svgDecl
 	// the rules whose selectors can match n, each with its best matching
 	// specificity, then walked in sheet order (the order the full scan used)
@@ -214,8 +279,21 @@ func (sc *svgCascade) declsForUncached(n *html.Node) []style.Decl {
 	}
 	var hits []hit
 	var byRule map[*style.Rule]int
-	for _, en := range sc.idx.Candidates(n, nil) {
-		if en.Pseudo != "" || !en.Sel.Match(n, nil) {
+	var anc snet.Bloom
+	ancDone := sc.anc == nil // no memo (a scene built outside declsFor): no filter
+	for _, en := range idx.Candidates(n, nil) {
+		if en.Pseudo != "" {
+			continue
+		}
+		if need := en.AncestorNeed(); need != (snet.Bloom{}) && sc.anc != nil {
+			if !ancDone {
+				anc, ancDone = style.AncestorBloom(n, sc.anc), true
+			}
+			if !need.Subset(anc) {
+				continue
+			}
+		}
+		if !en.Sel.Match(n, nil) {
 			continue
 		}
 		if byRule == nil {
@@ -371,12 +449,23 @@ func (sc *svgCascade) node(n *html.Node, doc *SVGDoc) *SVGNode {
 	}
 	sn := &SVGNode{Tag: tag, A: map[string]string{}, dom: n}
 	doc.dom[n] = sn
+	var cased map[string]bool // keys that came from a mixed-case attribute (viewBox, preserveAspectRatio, ...)
 	for _, a := range n.Attr {
 		k := strings.ToLower(a.Key)
 		if a.Namespace == "xlink" || k == "xlink:href" {
 			k = "href"
 		}
 		if k == "href" && sn.A["href"] != "" && a.Namespace == "xlink" {
+			continue
+		}
+		// SVG attribute names are case-sensitive: a script that also calls setAttribute("viewbox", ...) leaves a second,
+		// meaningless attribute next to the real viewBox, and the lowercase one must not override it.
+		if a.Key != k {
+			if cased == nil {
+				cased = map[string]bool{}
+			}
+			cased[k] = true
+		} else if cased[k] {
 			continue
 		}
 		sn.A[k] = a.Val
@@ -460,6 +549,14 @@ func (c *ctx) svgDocFor(n *html.Node, st *style.Computed) *SVGDoc {
 	svgShared.Lock()
 	c.svgInitLocked()
 	doc := c.svgBuildLocked(n, st)
+	if doc != nil && !doc.merged && !doc.needsForeignIDs() {
+		// nothing in the scene refers to an id it does not define itself (the common icon svg): the ids of the
+		// page's other svg elements are not needed, and building every one of them (up to 400) on each layout
+		// pass was most of the svg cost of github.com
+		svgShared.Unlock()
+		c.svgEnsureExt(doc)
+		return doc
+	}
 	if c.sess != nil && doc != nil {
 		// session scenes are never modified: the ids of the page's other svg
 		// elements are merged into a copy that is reused while they stay the same
@@ -493,6 +590,62 @@ func (c *ctx) svgDocFor(n *html.Node, st *style.Computed) *SVGDoc {
 	svgShared.Unlock()
 	c.svgEnsureExt(doc)
 	return doc
+}
+
+// needsForeignIDs reports whether some node of the scene may refer to an id the scene does not define: an
+// href starting with '#', a url(#...) reference in any property, or a var() that could expand to one.
+func (d *SVGDoc) needsForeignIDs() bool {
+	if d.foreign != 0 {
+		return d.foreign == 2
+	}
+	need := false
+	var walk func(n *SVGNode)
+	walk = func(n *SVGNode) {
+		if n == nil || need {
+			return
+		}
+		for k, v := range n.A {
+			if strings.Contains(v, "var(") {
+				need = true
+				return
+			}
+			if (k == "href" || k == "xlink:href") && strings.HasPrefix(strings.TrimSpace(v), "#") {
+				if d.ByID[strings.TrimPrefix(strings.TrimSpace(v), "#")] == nil {
+					need = true
+					return
+				}
+			}
+			for rest := v; ; {
+				i := strings.Index(rest, "url(")
+				if i < 0 {
+					break
+				}
+				rest = rest[i+4:]
+				r := strings.TrimLeft(rest, " \t\n\"'")
+				if !strings.HasPrefix(r, "#") {
+					continue
+				}
+				id := r[1:]
+				if j := strings.IndexAny(id, ")\"' \t\n"); j >= 0 {
+					id = id[:j]
+				}
+				if d.ByID[id] == nil {
+					need = true
+					return
+				}
+			}
+		}
+		for _, k := range n.Kids {
+			walk(k)
+		}
+	}
+	walk(d.Root)
+	if need {
+		d.foreign = 2
+	} else {
+		d.foreign = 1
+	}
+	return need
 }
 
 // svgInitLocked starts the per-pass shared state (cascade, scene table) the
@@ -570,7 +723,7 @@ func (c *ctx) svgBuildLocked(n *html.Node, st *style.Computed) *SVGDoc {
 		}
 		inh := map[string]string{}
 		for _, a := range chain {
-			for _, d := range sc.declsFor(a) {
+			for _, d := range sc.inhDeclsFor(a) {
 				if svgInheritedProps[d.Name] {
 					v := d.Val
 					if strings.Contains(v, "var(") {

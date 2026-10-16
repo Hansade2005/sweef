@@ -102,6 +102,17 @@ type Window interface {
 	Close()
 }
 
+// RichClipboard is implemented by windows whose system clipboard carries HTML next to the plain text (Windows:
+// CF_HTML, X11: text/html, macOS: public.html). Optional: type-assert a Window to it. Without it only text moves
+// through the clipboard.
+type RichClipboard interface {
+	// SetClipboardRich replaces the clipboard with text and its HTML form together.
+	SetClipboardRich(text, html string)
+	// ClipboardHTML returns the HTML the clipboard holds ("" when it has none). The fragment is the markup of the
+	// copied part only, without the wrapper some systems add.
+	ClipboardHTML() string
+}
+
 // IconSetter is implemented by windows that can change their icon at run
 // time. Optional: type-assert a Window to it.
 type IconSetter interface {

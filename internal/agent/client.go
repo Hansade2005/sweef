@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -267,13 +266,13 @@ func (c *Client) CacheStats() CacheStats {
 	return c.stats
 }
 
-var keyRe = regexp.MustCompile(`sk-ant-[A-Za-z0-9_\-]{6,}`)
+var keyRe = lazyRE(`sk-ant-[A-Za-z0-9_\-]{6,}`)
 
 func (c *Client) redact(s string) string {
 	if k := c.cfg.APIKey; k != "" {
 		s = strings.ReplaceAll(s, k, "[REDACTED]")
 	}
-	return keyRe.ReplaceAllString(s, "[REDACTED]")
+	return keyRe().ReplaceAllString(s, "[REDACTED]")
 }
 
 func (c *Client) redactErr(err error) error {

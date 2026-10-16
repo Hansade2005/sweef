@@ -68,6 +68,11 @@ var Schema = []Spec{
 	{Key: "zoom.default", Kind: KInt, Default: 100, Min: 25, Max: 500, Group: "appearance"},
 	{Key: "tabs.discardMinutes", Kind: KInt, Default: 30, Min: 0, Max: 1440, Group: "performance"},
 	{Key: "onboarding.done", Kind: KBool, Default: false, Group: "general"},
+	// New tab page tiles: {original address: {hide, title, url}} (Remove and Edit shortcut in the tile's context menu).
+	{Key: "newtab.sites", Kind: KObject, Default: map[string]any{}, Group: "general", Norm: normNewtabSites},
+	// Developer Tools (docs/devtools.md): the height of the docked panel and the panel that was open last.
+	{Key: "devtools.height", Kind: KInt, Default: 320, Min: 160, Max: 1200, Group: "developer"},
+	{Key: "devtools.panel", Kind: KEnum, Default: "console", Enum: []string{"console", "network", "elements", "sources", "application"}, Group: "developer"},
 
 	// Notifications, Web Push and background sync (docs/notifications.md, docs/push.md).
 	{Key: "notifications.dnd", Kind: KBool, Default: false, Group: "notifications"},
@@ -81,6 +86,41 @@ var Schema = []Spec{
 	{Key: "data.sites", Kind: KObject, Default: map[string]any{}, Group: "data", Norm: normDataSites},
 	{Key: "data.agentLite", Kind: KBool, Default: true, Group: "data"},
 	{Key: "data.showMeter", Kind: KBool, Default: true, Group: "data"},
+}
+
+// normNewtabSites keeps {key: {hide, title, url}} entries that change something.
+func normNewtabSites(v any) (any, error) {
+	in, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("newtab.sites: want an object")
+	}
+	out := map[string]any{}
+	for k, x := range in {
+		m, _ := x.(map[string]any)
+		if k == "" || m == nil || len(out) >= 200 {
+			continue
+		}
+		hide, _ := m["hide"].(bool)
+		title, _ := m["title"].(string)
+		u, _ := m["url"].(string)
+		if len(title) > 200 || len(u) > 2048 {
+			continue
+		}
+		if hide || title != "" || (u != "" && u != k) {
+			e := map[string]any{}
+			if hide {
+				e["hide"] = true
+			}
+			if title != "" {
+				e["title"] = title
+			}
+			if u != "" && u != k {
+				e["url"] = u
+			}
+			out[k] = e
+		}
+	}
+	return out, nil
 }
 
 func normBudget(v any) (any, error) {

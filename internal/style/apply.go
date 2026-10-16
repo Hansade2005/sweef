@@ -1174,6 +1174,30 @@ func (s *cstate) apply(name, v, l string) bool {
 		c.PointerEvents = l
 	case "user-select", "-webkit-user-select", "-moz-user-select":
 		c.UserSelect = l
+	case "scroll-behavior":
+		if l != "auto" && l != "smooth" {
+			return false
+		}
+		c.ScrollBehavior = l
+	case "overscroll-behavior", "overscroll-behavior-x", "overscroll-behavior-y", "overscroll-behavior-inline", "overscroll-behavior-block":
+		f := strings.Fields(l)
+		if len(f) == 0 || len(f) > 2 {
+			return false
+		}
+		for _, w := range f {
+			if w != "auto" && w != "contain" && w != "none" {
+				return false
+			}
+		}
+		x, y := f[0], f[len(f)-1]
+		switch name {
+		case "overscroll-behavior":
+			c.OverscrollX, c.OverscrollY = x, y
+		case "overscroll-behavior-x", "overscroll-behavior-inline":
+			c.OverscrollX = x
+		default:
+			c.OverscrollY = x
+		}
 	case "image-rendering":
 		c.ImageRendering = l
 	case "text-rendering":

@@ -79,7 +79,7 @@ html, body { background: transparent; height: 100%; overflow: hidden; user-selec
 #dlbtn.active { color: var(--accent); }
 
 #wc { display: none; align-self: stretch; margin: -6px -6px 0 4px; }
-:root[data-platform="windows"] #wc, :root[data-platform="linux"] #wc { display: flex; }
+:root[data-platform="linux"] #wc { display: flex; }  /* Windows keeps the native title bar and its buttons: two sets of controls was a bug */
 #wc button { width: 44px; height: 100%; display: inline-flex; align-items: center; justify-content: center; color: var(--text-2); }
 #wc button:hover { background: var(--hover); color: var(--text); }
 #wc button.x:hover { background: #E5334F; color: #fff; }
@@ -98,8 +98,12 @@ html, body { background: transparent; height: 100%; overflow: hidden; user-selec
 #compat .ic { color: var(--warn); } #compat .t { flex: 1; min-width: 0; } #compat .t b { font-weight: 650; } #compat .t span { color: var(--text-2); margin-left: 6px; }
 
 #main { flex: 1; min-height: 0; display: flex; position: relative; }
-#viewport { flex: 1; min-width: 0; background: transparent; }
+#stage { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+#viewport { flex: 1; min-width: 0; min-height: 0; background: transparent; }
+#devtools { flex: none; position: relative; min-height: 0; background: var(--paper); box-shadow: inset 0 1px 0 var(--line); }
 
+.moretools .mi[aria-expanded="true"] { background: var(--hover); }
+.moresub { padding-left: 24px; }
 #find { position: absolute; top: calc(var(--tab-h) + var(--bar-h) + 14px); right: 20px; z-index: 30; display: flex; align-items: center; gap: 4px; height: 44px; padding: 0 8px 0 14px; border-radius: var(--r-2); background: var(--surface); box-shadow: var(--sh-3); animation: pop-in var(--dur-2) var(--ease); }
 #find input { width: 190px; height: 30px; border: 0; background: transparent; font-size: var(--fs-md); }
 #find .cnt { font-size: var(--fs-sm); color: var(--text-3); min-width: 54px; text-align: right; font-variant-numeric: tabular-nums; }

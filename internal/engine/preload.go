@@ -46,7 +46,7 @@ func (t *Tab) scanPreloads(r io.Reader, base string) {
 	js := !t.eng.opts.DisableJS && pol.ScriptMaxBytes == 0 // a script budget reads scripts in document order, see applyStyles
 	baseSet := false
 	seen := map[string]bool{}
-	start := func(kind DataKind, ref string) {
+	start := func(kind DataKind, ref string, module bool) {
 		abs, err := resolveURL(base, strings.TrimSpace(ref))
 		if err != nil || !(strings.HasPrefix(abs, "http://") || strings.HasPrefix(abs, "https://")) || seen[abs] {
 			return
@@ -59,7 +59,14 @@ func (t *Tab) scanPreloads(r io.Reader, base string) {
 		go func() {
 			t.preloadSem <- struct{}{}
 			defer func() { <-t.preloadSem }()
-			_, _, _ = t.fetchRes(abs, fetchOpts{kind: kind, page: base, prefetch: true})
+			body, status, err := t.fetchRes(abs, fetchOpts{kind: kind, page: base, prefetch: true})
+			if kind == KindScript && err == nil && status < 400 { // compiled on another core while the page loads
+				if module {
+					t.eng.pc.submitModule(abs, body)
+				} else {
+					t.eng.pc.submitClassic(body)
+				}
+			}
 		}()
 	}
 	for {
@@ -108,13 +115,13 @@ func (t *Tab) scanPreloads(r io.Reader, base string) {
 			}
 			if isSheet && !alternate && attrs["href"] != "" && !strings.EqualFold(strings.TrimSpace(attrs["media"]), "print") {
 				if _, dis := attrs["disabled"]; !dis {
-					start(KindStyle, attrs["href"])
+					start(KindStyle, attrs["href"], false)
 				}
 			}
 		case "script":
 			if js && attrs["src"] != "" {
 				if _, nm := attrs["nomodule"]; !nm && isJavaScriptType(attrs["type"]) {
-					start(KindScript, attrs["src"])
+					start(KindScript, attrs["src"], strings.EqualFold(strings.TrimSpace(attrs["type"]), "module"))
 				}
 			}
 		}

@@ -20,6 +20,8 @@ type SelFeatures struct {
 	Empty bool
 	// Complex: :has() or :scope; callers should not cache across mutations.
 	Complex bool
+	// Has: :has() is used (the match depends on descendants or later siblings); Scope: :scope is used.
+	Has, Scope bool
 }
 
 // Features reports what the alternative reads.
@@ -63,6 +65,11 @@ func featComplex(c complexSel, f *SelFeatures, add func(string), nested bool) {
 				f.Empty = true
 			case "has", "scope":
 				f.Complex = true
+				if ps.name == "has" {
+					f.Has = true
+				} else {
+					f.Scope = true
+				}
 			case "checked":
 				add("checked")
 				add("selected")
@@ -76,6 +83,8 @@ func featComplex(c complexSel, f *SelFeatures, add func(string), nested bool) {
 				add("data-sw-focused")
 			case "fullscreen", "-webkit-full-screen":
 				add("data-sw-fullscreen")
+			case "popover-open":
+				add("data-sw-popover-open")
 			case "read-only", "read-write":
 				add("readonly")
 			case "lang", "dir":

@@ -12,6 +12,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
+	"sync"
 	"time"
 )
 
@@ -172,7 +174,11 @@ type Config struct {
 	// Context management.
 	SnapshotMaxTokens int // cap per snapshot; default 6000
 	ExtractMaxChars   int // cap per extract result; default 8000
-	Compact           CompactConfig
+	// NoInitialObservation: do not put an observation of the current tab next to the task. By default the
+	// first user message of a run carries the snapshot (or the delta, on a page already read) of the page the
+	// run starts on, which saves the read_page round trip almost every task began with.
+	NoInitialObservation bool
+	Compact              CompactConfig
 
 	// Transport.
 	HTTPClient   *http.Client                               // optional override
@@ -259,5 +265,16 @@ func (c *Config) applyDefaults() {
 func (c *Config) logf(format string, args ...any) {
 	if c.Logf != nil {
 		c.Logf(format, args...)
+	}
+}
+
+// lazyRE compiles a regular expression on first use: compiled at package init they were a third of a
+// millisecond of every sweef command's start, agent or not.
+func lazyRE(expr string) func() *regexp.Regexp {
+	var once sync.Once
+	var re *regexp.Regexp
+	return func() *regexp.Regexp {
+		once.Do(func() { re = regexp.MustCompile(expr) })
+		return re
 	}
 }

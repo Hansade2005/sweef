@@ -1,6 +1,9 @@
 package style
 
 import (
+	"fmt"
+	"math"
+	"os"
 	"unsafe"
 
 	"golang.org/x/net/html"
@@ -30,10 +33,14 @@ import (
 //
 // Nothing here observes mutations: a pass recomputes these values from the
 // tree it is given, so a change that bypasses any DOM notification is still
-// seen. Documents whose rules use :has(), :scope, @scope or @container are not
-// cached (the engine is rebuilt every pass, as before), and so are documents
-// that declare container-type. SWEEF_LAYOUT_CHECK=1 compares every pass with a
-// from-scratch one.
+// seen. A style that read something these keys do not cover (a container
+// query or cq unit: container sizes; a :has() selector: descendants) is reused
+// only when the rules matching the element now, and the size of its query
+// container, are those it was computed from (pent.dep, depSig). Documents with
+// :scope or @scope rules are not cached. SWEEF_LAYOUT_CHECK=1 compares every
+// pass with a from-scratch one; SWEEF_PERSIST_DEBUG=1 prints why an engine is
+// rebuilt or its cache unusable, and the hit counts per pass.
+// SWEEF_PERSIST_DEBUG=1 prints why an engine is rebuilt or its cache unusable, and the hit counts per pass.
 type Persist struct {
 	eng    *Engine
 	env    Env
@@ -47,6 +54,7 @@ type Persist struct {
 	webLoadGen uint64
 
 	usable bool // false: the engine may be reused but styles are not cached
+	whyNot string
 	bad    bool // a container-type was seen: stop caching with this engine
 	rel    map[string]struct{}
 	sib    bool // some selector's subject depends on siblings
@@ -75,6 +83,11 @@ type pent struct {
 	anc    uint64
 	childA uint64
 	epoch  uint32
+	// dep: the style read something the keys above do not cover: container sizes (a query or a cq unit) or a
+	// :has() selector (descendants). Such an entry is reused only when the rules matching it now, and the size of
+	// its query container, are those it was computed from (sig).
+	dep bool
+	sig uint64
 }
 
 // SetWebFonts says which web font set the next passes resolve family names
@@ -87,10 +100,12 @@ func (p *Persist) SetWebFonts(w *font.WebSet) { p.web = w }
 // provider, which runs one pass at a time.
 func NewPersist() *Persist { return &Persist{} }
 
+var dbgPersist = os.Getenv("SWEEF_PERSIST_DEBUG") != ""
+
 // presentational attributes read by the hint code (ua.go) and needsHints.
 var hintAttrs = []string{"width", "height", "bgcolor", "align", "valign", "border", "cellpadding", "cellspacing", "nowrap", "color",
 	"face", "size", "text", "link", "background", "hspace", "vspace", "type", "dir", "frameborder", "marginwidth", "marginheight",
-	"rows", "cols", "span", "noshade", "start", "value", "bordercolor", "leftmargin", "topmargin", "style", "class", "id", "lang"}
+	"rows", "cols", "span", "noshade", "start", "value", "bordercolor", "leftmargin", "topmargin", "style", "class", "id", "lang", AnimAttr}
 
 func sheetsEqual(a, b []SheetIn) bool {
 	if len(a) != len(b) {
@@ -112,10 +127,17 @@ func (p *Persist) Acquire(env *Env, sheets []SheetIn, quirks bool) *Engine {
 	if p.web != nil {
 		wg, lg = p.web.DeclGen(), p.web.Gen()
 	}
-	if p.eng != nil && !p.bad && !p.eng.hasCQ && p.quirks == quirks && p.env == *env && sheetsEqual(p.sheets, sheets) && len(p.eng.share) < 60000 &&
+	if p.eng != nil && !p.bad && p.quirks == quirks && p.env == *env && sheetsEqual(p.sheets, sheets) && len(p.eng.share) < 60000 &&
 		p.eng.web == p.web && p.webGen == wg && !(p.eng.usesWebMetrics && p.webLoadGen != lg) {
 		p.beginPass()
 		return p.eng
+	}
+	if dbgPersist {
+		why := "first"
+		if p.eng != nil {
+			why = fmt.Sprintf("bad=%v cq=%v quirks=%v env=%v sheets=%v share=%d web=%v", p.bad, p.eng.hasCQ, p.quirks != quirks, p.env != *env, !sheetsEqual(p.sheets, sheets), len(p.eng.share), p.eng.web != p.web || p.webGen != wg)
+		}
+		fmt.Fprintln(os.Stderr, "PERSIST rebuild:", why)
 	}
 	p.env = *env
 	p.quirks = quirks
@@ -131,12 +153,26 @@ func (p *Persist) Acquire(env *Env, sheets []SheetIn, quirks bool) *Engine {
 	p.epoch = 0
 	if p.usable {
 		e.persist = p
+	} else if dbgPersist {
+		fmt.Fprintln(os.Stderr, "PERSIST unusable:", p.whyNot)
 	}
 	p.beginPass()
 	return e
 }
 
 func (p *Persist) beginPass() {
+	if p.eng != nil {
+		p.eng.BeginPass()
+	}
+	if p.eng != nil && len(p.eng.share) > 8192 {
+		// the sharing table only grows (styles recomputed every pass, under :has() or container queries, add
+		// new entries each time): start it afresh rather than holding tens of thousands of dead styles
+		p.eng.share = map[uint64]*Computed{}
+	}
+	if p.eng != nil {
+		// query containers and their sizes belong to one pass (the caller sets this pass's sizes)
+		p.eng.conts, p.eng.contSize = nil, nil
+	}
 	p.epoch++
 	p.visited = 0
 	clear(p.sibMemo)
@@ -144,20 +180,22 @@ func (p *Persist) beginPass() {
 
 // analyze derives, from the engine's rules, which inputs styles depend on.
 func (p *Persist) analyze(e *Engine) {
-	p.usable = !e.hasCQ
+	p.usable = true
 	p.sib, p.ancSib, p.empty = false, false, false
 	p.rel = make(map[string]struct{}, 64)
 	for _, a := range hintAttrs {
 		p.rel[a] = struct{}{}
 	}
 	for _, r := range e.rules {
-		if r.Scope != nil || r.Cont != nil {
+		if r.Scope != nil {
 			p.usable = false
+			p.whyNot = "@scope rule"
 		}
 		for _, en := range r.Entries {
 			f := en.Sel.Features()
-			if f.Complex {
+			if f.Scope {
 				p.usable = false
+				p.whyNot = ":scope selector " + en.key
 			}
 			for _, a := range f.Attrs {
 				p.rel[a] = struct{}{}
@@ -171,6 +209,9 @@ func (p *Persist) analyze(e *Engine) {
 
 // EndPass releases entries of nodes the last pass did not reach.
 func (p *Persist) EndPass() {
+	if dbgPersist && p.eng != nil {
+		fmt.Fprintf(os.Stderr, "PERSIST pass usable=%v bad=%v hits=%d misses=%d visited=%d\n", p.usable, p.bad, p.Hits, p.Misses, p.visited)
+	}
 	if p.eng == nil || !p.usable {
 		return
 	}
@@ -291,17 +332,29 @@ func (p *Persist) compute(e *Engine, n *html.Node, parent *Computed, pseudo stri
 		anc, own = he.anc, he.own
 		ent = p.pents[pkey{n, pseudo}]
 	}
-	if ent != nil && ent.own == own && ent.anc == anc && ent.parent == parent {
+	if ent != nil && ent.own == own && ent.anc == anc && ent.parent == parent && (!ent.dep || p.depSig(e, n, pseudo) == ent.sig) {
 		ent.epoch = p.epoch
 		p.visited++
 		p.Hits++
+		if ent.dep {
+			e.cqLogOff = true // its container conditions were evaluated in an earlier pass, not logged in this one
+		}
+		if pseudo == "" && ent.c != nil && ent.c.ContainerType != "" {
+			e.noteContainer(n, ent.c) // containers are registered anew every pass (computeNoCache does it on a miss)
+		}
 		return ent.c
 	}
 	p.Misses++
+	ev0 := e.cqEvals
+	e.cqUsed, e.depTried = false, false
 	c := e.computeNoCache(n, parent, pseudo)
-	if pseudo == "" && c != nil && c.ContainerType != "" && c.ContainerType != "normal" {
-		p.bad = true
-		return c
+	dep := e.cqEvals != ev0 || e.cqUsed || e.depTried
+	if e.cqUsed {
+		e.cqPassUnits = true
+	}
+	var sig uint64
+	if dep {
+		sig = p.depSig(e, n, pseudo)
 	}
 	if ent == nil {
 		ent = &pent{}
@@ -311,7 +364,7 @@ func (p *Persist) compute(e *Engine, n *html.Node, parent *Computed, pseudo stri
 			p.pents[pkey{n, pseudo}] = ent
 		}
 	}
-	ent.c, ent.parent, ent.own, ent.anc, ent.epoch = c, parent, own, anc, p.epoch
+	ent.c, ent.parent, ent.own, ent.anc, ent.epoch, ent.dep, ent.sig = c, parent, own, anc, p.epoch, dep, sig
 	if pseudo == "" {
 		ca := hashMix(hashMix(anc, hashStr(fnvOff, n.Data)), attrsH)
 		if p.ancSib {
@@ -321,6 +374,28 @@ func (p *Persist) compute(e *Engine, n *html.Node, parent *Computed, pseudo stri
 	}
 	p.visited++
 	return c
+}
+
+// depSig fingerprints what a dep entry's style was computed from beyond the keys: which of the :has() and
+// container-conditioned rules match n now (evaluated against the current tree and sizes) and the size of the
+// query container its cq units resolve against.
+func (p *Persist) depSig(e *Engine, n *html.Node, pseudo string) uint64 {
+	// the other entries' matches are fixed by the keys (own, anc, parent), so only these can differ
+	h := uint64(fnvOff)
+	e.collectDyn(n, pseudo, func(en *Entry) { h = hashMix(h, uint64(uintptr(unsafe.Pointer(en)))) })
+	if len(e.conts) > 0 {
+		an, _ := e.nearestContainer(n, "", false)
+		if pseudo != "" {
+			if _, ok := e.conts[n]; ok {
+				an = n
+			}
+		}
+		if an != nil {
+			sz := e.contSize[an]
+			h = hashMix(hashMix(h, math.Float64bits(sz.W)), math.Float64bits(sz.H))
+		}
+	}
+	return h
 }
 
 // NodeKey identifies everything the cascade saw when it last computed the style
@@ -333,7 +408,7 @@ func (p *Persist) NodeKey(n *html.Node) (anc, own uint64, ok bool) {
 		return 0, 0, false
 	}
 	e := p.ents[n]
-	if e == nil || e.epoch != p.epoch {
+	if e == nil || e.epoch != p.epoch || e.dep {
 		return 0, 0, false
 	}
 	return e.anc, e.own, true

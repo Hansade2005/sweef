@@ -18,6 +18,9 @@ import (
 type Session struct {
 	Style *style.Persist
 	svg   svgSess
+	// cq is the container sizes the last layout converged on: the next layout starts its query evaluation
+	// from them, so a document whose containers did not change takes one pass instead of three
+	cq map[*html.Node]style.ContSize
 }
 
 // NewSession returns an empty session.
@@ -167,6 +170,7 @@ func sameSheets(a, b []Sheet) bool {
 func (s *svgSess) cascade(sheets []Sheet, env *style.Env, keyFn func(*html.Node) (uint64, uint64, bool)) *svgCascade {
 	if s.sc != nil && s.scSig.env == *env && sameSheets(s.scSig.sheets, sheets) {
 		s.sc.memo = nil
+		s.sc.inhMemo = nil
 		s.sc.keyFn = keyFn
 		return s.sc
 	}

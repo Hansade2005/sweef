@@ -62,6 +62,7 @@ func cmdGUI(args []string) {
 	defer cancel()
 
 	if !*headlessF {
+		defer installCrashLog()()
 		guiRun(func() {
 			win, err := app.OpenShell(shell.Config{Title: "Sweef", Width: w, Height: h, Incognito: *incognito})
 			if err != nil {

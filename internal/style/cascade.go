@@ -9,6 +9,8 @@ import (
 
 	"golang.org/x/net/html"
 
+	snet "github.com/sweefbrowser/sweef/internal/net"
+
 	"github.com/sweefbrowser/sweef/internal/font"
 )
 
@@ -35,14 +37,63 @@ type Engine struct {
 	share     map[uint64]*Computed
 	scratch   []*Entry
 	hasPseudo bool
-	contSize  map[*html.Node]ContSize
-	conts     map[*html.Node]*contInfo
-	hasCQ     bool
-	curCont   *html.Node
-	persist   *Persist     // cross-pass style cache (persist.go); nil: none
-	web       *font.WebSet // the document's web fonts: declared families get scoped names (webfonts.go)
+	// genContent lists, per pseudo-element ("before", "after"), the entries whose rule declares content: only
+	// those can make the pseudo-element generate a box (HasGeneratedContent)
+	genContent map[string][]*Entry
+	contSize   map[*html.Node]ContSize
+	conts      map[*html.Node]*contInfo
+	hasCQ      bool
+	cqEvals    uint64 // container conditions evaluated so far (Persist: which styles depend on container sizes)
+	cqUsed     bool   // a cq* unit was resolved since Persist last cleared it
+	depTried   bool   // collect tried a :has() entry since Persist last cleared it
+	curCont    *html.Node
+	persist    *Persist     // cross-pass style cache (persist.go); nil: none
+	web        *font.WebSet // the document's web fonts: declared families get scoped names (webfonts.go)
 	// usesWebMetrics: some length was computed from the metrics of a web font (webfonts.go)
 	usesWebMetrics bool
+	// anc memoizes the ancestor filter of the elements matched in this pass (BeginPass; nil: no filter, for an
+	// engine that outlives a DOM mutation); ancN/ancB is the last answer (collect asks for one element at a time)
+	anc  map[*html.Node]snet.Bloom
+	ancN *html.Node
+	ancB snet.Bloom
+	// container conditions evaluated this pass (ContainerResultsStable); cqLogOff: the log is incomplete
+	cqLog       []cqRec
+	cqLogOff    bool
+	cqPassUnits bool // a container unit was resolved this pass
+}
+
+// BeginPass starts a style pass over a document that does not change until the next BeginPass: matching may
+// then use the ancestor filter, memoized per element.
+func (e *Engine) BeginPass() {
+	e.anc = map[*html.Node]snet.Bloom{}
+	e.ancN = nil
+	e.cqLog, e.cqLogOff, e.cqPassUnits = nil, false, false
+}
+
+// ancBloom returns the union of NodeBloom over n's element ancestors.
+func (e *Engine) ancBloom(n *html.Node) snet.Bloom {
+	if n == e.ancN {
+		return e.ancB
+	}
+	b := AncestorBloom(n, e.anc)
+	e.ancN, e.ancB = n, b
+	return b
+}
+
+// AncestorBloom returns the union of snet.NodeBloom over n's element ancestors, memoized in memo (keyed by the
+// element whose ancestors were hashed).
+func AncestorBloom(n *html.Node, memo map[*html.Node]snet.Bloom) snet.Bloom {
+	p := n.Parent
+	if p == nil || p.Type != html.ElementNode {
+		return snet.Bloom{}
+	}
+	if b, ok := memo[n]; ok {
+		return b
+	}
+	b := AncestorBloom(p, memo)
+	b.Add(snet.NodeBloom(p))
+	memo[n] = b
+	return b
 }
 
 var (
@@ -116,6 +167,12 @@ func (e *Engine) addRule(r *Rule) {
 		}
 		if en.Pseudo != "" {
 			e.hasPseudo = true
+			if (en.Pseudo == "before" || en.Pseudo == "after") && declaresContent(r.Decls) {
+				if e.genContent == nil {
+					e.genContent = map[string][]*Entry{}
+				}
+				e.genContent[en.Pseudo] = append(e.genContent[en.Pseudo], en)
+			}
 		}
 		if r.Cont != nil {
 			e.hasCQ = true
@@ -213,6 +270,9 @@ func bucketKey(sel string) (byte, string) {
 	return 0, ""
 }
 
+// AnimAttr is the host attribute holding an element's Web Animations values ("prop: value; ...").
+const AnimAttr = "data-sw-anim"
+
 func identChar(s string, i int) bool {
 	c := s[i]
 	return c == '-' || c == '_' || c == '\\' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= 0x80
@@ -227,6 +287,79 @@ func attrOf(n *html.Node, k string) (string, bool) {
 	return "", false
 }
 
+func declaresContent(ds []Decl) bool {
+	for _, d := range ds {
+		if d.Name == "content" {
+			return true
+		}
+	}
+	return false
+}
+
+// HasGeneratedContent reports whether some rule that declares content matches the ::before or ::after
+// (pseudo "before" / "after") of n. Without one the pseudo-element's content is normal and it generates no
+// box, so layout can skip computing its style: a reset like `*, ::before, ::after { box-sizing: border-box }`
+// otherwise makes every element of the page compute two pseudo-element styles that are thrown away.
+func (e *Engine) HasGeneratedContent(n *html.Node, pseudo string) bool {
+	for _, en := range e.genContent[pseudo] {
+		if e.entryMatches(n, en, pseudo) {
+			return true
+		}
+	}
+	return false
+}
+
+// entryMatches: en applies to n (selector, @scope and @container conditions); the caller checked the pseudo.
+func (e *Engine) entryMatches(n *html.Node, en *Entry, pseudo string) bool {
+	var scopeEl *html.Node
+	if en.Rule.Scope != nil {
+		if scopeEl = scopeRootFor(n, en.Rule.Scope); scopeEl == nil {
+			return false
+		}
+		if scopeEl == n && !strings.Contains(en.key, ":scope") {
+			return false
+		}
+	}
+	if en.need != (snet.Bloom{}) && e.anc != nil && !en.need.Subset(e.ancBloom(n)) {
+		return false
+	}
+	if !en.Sel.Match(n, scopeEl) {
+		return false
+	}
+	return en.Rule.Cont == nil || e.contMatches(n, en.Rule.Cont, pseudo)
+}
+
+// collectDyn is collect restricted to the entries whose match the style cache's keys do not determine (:has()
+// selectors, container conditions); see Persist.depSig.
+func (e *Engine) collectDyn(n *html.Node, pseudo string, visit func(*Entry)) {
+	try := func(list []*Entry) {
+		for _, en := range list {
+			if en.Pseudo != pseudo || !(en.dynamic || en.Rule.Cont != nil) {
+				continue
+			}
+			if e.entryMatches(n, en, pseudo) {
+				visit(en)
+			}
+		}
+	}
+	if id, ok := attrOf(n, "id"); ok && id != "" {
+		if e.Quirks {
+			id = strings.ToLower(id)
+		}
+		try(e.byID[id])
+	}
+	if cl, ok := attrOf(n, "class"); ok && cl != "" {
+		for _, c := range strings.Fields(cl) {
+			if e.Quirks {
+				c = strings.ToLower(c)
+			}
+			try(e.byClass[c])
+		}
+	}
+	try(e.byTag[n.Data])
+	try(e.univ)
+}
+
 func (e *Engine) collect(n *html.Node, pseudo string) []*Entry {
 	out := e.scratch[:0]
 	try := func(list []*Entry) {
@@ -234,19 +367,10 @@ func (e *Engine) collect(n *html.Node, pseudo string) []*Entry {
 			if en.Pseudo != pseudo {
 				continue
 			}
-			var scopeEl *html.Node
-			if en.Rule.Scope != nil {
-				if scopeEl = scopeRootFor(n, en.Rule.Scope); scopeEl == nil {
-					continue
-				}
-				if scopeEl == n && !strings.Contains(en.key, ":scope") {
-					continue
-				}
+			if en.dynamic {
+				e.depTried = true
 			}
-			if en.Sel.Match(n, scopeEl) {
-				if en.Rule.Cont != nil && !e.contMatches(n, en.Rule.Cont, pseudo) {
-					continue
-				}
+			if e.entryMatches(n, en, pseudo) {
 				out = append(out, en)
 			}
 		}
@@ -316,7 +440,7 @@ func (e *Engine) compute(n *html.Node, parent *Computed, pseudo string) *Compute
 	var hasStyle bool
 	if pseudo == "" {
 		styleAttr, hasStyle = attrOf(n, "style")
-		if !hasStyle && !needsHints(n) {
+		if _, anim := attrOf(n, AnimAttr); !hasStyle && !anim && !needsHints(n) {
 			canShare = true
 		}
 	}
@@ -415,6 +539,22 @@ func (e *Engine) compute(n *html.Node, parent *Computed, pseudo string) *Compute
 		for _, d := range inl {
 			if !d.Imp {
 				normal = append(normal, d)
+			}
+		}
+	}
+	// Web Animations: the element's animated values (the engine keeps them in AnimAttr) come after its normal
+	// declarations, inline style included, as the animation origin of the cascade does
+	if pseudo == "" {
+		if av, ok := attrOf(n, AnimAttr); ok && av != "" {
+			ad, ok := e.inline[av]
+			if !ok {
+				ad = ParseInline(av)
+				e.inline[av] = ad
+			}
+			for _, d := range ad {
+				if !d.Imp {
+					normal = append(normal, d)
+				}
 			}
 		}
 	}
@@ -540,6 +680,7 @@ func (e *Engine) computeFrom(decls []Decl, parent *Computed, pseudo string) *Com
 	s := &cstate{c: c, p: parent, env: e.env, eng: e}
 	s.uc = unitCtx{em: parent.FontSize, rem: e.RootFont, vw: e.env.Width, vh: e.env.Height}
 	s.uc.containerW, s.uc.cqH = e.env.Width, e.env.Height
+	s.uc.cqUsed = &e.cqUsed
 	if e.curCont != nil {
 		sz := e.contSize[e.curCont]
 		s.uc.containerW, s.uc.cqH = sz.W, sz.H

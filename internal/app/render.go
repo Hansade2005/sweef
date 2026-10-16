@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/app/state"
+	"github.com/sweefbrowser/sweef/internal/engine"
 )
 
 func (a *App) scaleBits() float64 { return math.Float64frombits(a.scaleBitsV.Load()) }
@@ -27,6 +28,7 @@ func (a *App) pageCSS(v int) int { return int(float64(v)/a.zoomF() + 0.5) }
 
 // resize applies a new window size / device scale.
 func (a *App) resize(w, h int, scale float64) {
+	a.ctxDismiss()
 	if scale <= 0 {
 		scale = 1
 	}
@@ -138,12 +140,15 @@ func (a *App) onChromePainted(kind string, img *image.RGBA, dt time.Duration) {
 }
 
 // onPagePainted installs the page texture of the active tab.
-func (a *App) onPagePainted(id string, img *image.RGBA, docCSS int, dt time.Duration) {
+func (a *App) onPagePainted(id string, img *image.RGBA, originDev, docCSS int, dt time.Duration) {
 	if id != a.model.Active(a.winID) {
 		return
 	}
 	a.comp.RecordPaint("page", dt)
-	a.comp.SetPage(img)
+	spare := a.comp.SetPageAt(img, originDev)
+	if e := a.page(id); e != nil && spare != nil && spare != img {
+		e.spare.Store(spare)
+	}
 	a.setActiveShown(id)
 	a.onPageMetrics(id, docCSS)
 	a.stats.pagePaints.Add(1)
@@ -196,19 +201,20 @@ func (a *App) startAnim() {
 	a.animT = time.NewTimer(frameInterval)
 }
 
-// stepScroll advances the easing by dt seconds and moves the view.
-func (a *App) stepScroll(dt float64) {
-	pos := a.scroll.Tick(dt)
+// stepScroll advances the scroll physics to now and moves the view.
+func (a *App) stepScroll() {
+	pos := a.scroll.TickNow()
 	if a.comp.ScrollTo(pos) {
 		a.noteScrolled(pos)
 	}
+	a.stepElemScroll()
 }
 
 func (a *App) tick() {
 	now := time.Now()
-	dt := now.Sub(a.lastTick).Seconds()
 	a.lastTick = now
-	a.stepScroll(dt)
+	dragging := a.dragScroll() || a.dragHeldOutside() // the selection gesture may not have reported in yet
+	a.stepScroll()
 	// overlay scrollbar: solid for 900 ms after activity, then a 250 ms fade
 	since := now.Sub(a.scrollbarT)
 	var alpha uint8
@@ -221,7 +227,7 @@ func (a *App) tick() {
 		alpha = uint8(150 * (1150*time.Millisecond - since) / (250 * time.Millisecond))
 	}
 	a.comp.SetScrollbar(alpha)
-	if a.scroll.Animating() || alpha > 0 {
+	if a.scroll.Animating() || a.elemAnimating() || alpha > 0 || dragging {
 		a.animT.Reset(frameInterval)
 		return
 	}
@@ -240,24 +246,67 @@ func (a *App) noteScrolled(posDev int) {
 	}
 	css := int(float64(posDev)/a.pageDSF() + 0.5)
 	e.scrollCSS.Store(int32(css))
+	e.t.NoteScrollY(css) // window.scrollY and getBoundingClientRect follow at once
 	if st, ok := a.model.Tab(e.id); ok && st.Scroll != css {
 		a.model.Update(e.id, func(t *state.Tab) { t.Scroll = css })
 		a.scheduleSession()
 	}
 	vp := a.vpDevice()
-	if posDev+2*vp.Dy() > a.comp.PageHeight() {
+	if old := int(e.scrollPosDev.Swap(int32(posDev))); old != posDev {
+		d := int32(1)
+		if posDev < old {
+			d = -1
+		}
+		e.scrollDir.Store(d)
+		now := time.Now().UnixNano()
+		if dt := float64(now-e.scrollAt.Swap(now)) / 1e9; dt > 0.0005 && dt < 0.25 {
+			v := float64(posDev-old) / a.pageDSF() / dt
+			e.scrollVel.Store(int32(0.5*v + 0.5*float64(e.scrollVel.Load())))
+		} else if dt >= 0.25 {
+			e.scrollVel.Store(0)
+		}
+	}
+	// the band of the page that is rasterised must keep covering the view: ask for the next one in good time
+	if y0, y1 := a.comp.PageBand(); y1 > 0 {
+		doc := int(e.docCSS.Load())
+		docDev := int(float64(doc)*a.pageDSF() + 0.5)
+		n0, n1 := pageNeed(int(float64(posDev)/a.pageDSF()), int(float64(vp.Dy())/a.pageDSF()), doc, int(e.scrollVel.Load()))
+		needTop, needBot := int(float64(n0)*a.pageDSF()), min(docDev, int(float64(n1)*a.pageDSF()))
+		if needTop < y0 || needBot > y1 {
+			e.requestPaint(false)
+		}
+	} else {
 		e.requestPaint(false)
 	}
 	if e.scrollNotify.CompareAndSwap(false, true) {
-		time.AfterFunc(120*time.Millisecond, func() {
+		// page script hears about scrolling at most about every third frame, and once more when it stops
+		time.AfterFunc(48*time.Millisecond, func() {
 			e.scrollNotify.Store(false)
 			y := int(e.scrollCSS.Load())
 			e.w.tryDo(func() {
 				_, _ = e.t.Evaluate("__sweefScrollTo(" + itoa(y) + ")")
-				e.drainBindings()
+				e.afterOp() // runs the timers the scroll events were queued on; lazy images follow the scroll
 			})
 		})
 	}
+}
+
+// scriptScroll moves the viewport because page script asked (window.scrollTo and friends, scrollIntoView, a
+// link to a fragment). A smooth request animates; an instant one jumps. UI loop only.
+func (a *App) scriptScroll(e *etab, r engine.ScrollRequest) {
+	if a.activePage() != e {
+		e.scrollCSS.Store(int32(r.Y))
+		return
+	}
+	a.scroll.SetMax(a.scrollMax())
+	target := r.Y * a.pageDSF()
+	a.scrollbarT = time.Now()
+	if r.Smooth {
+		a.scroll.EaseTo(target)
+	} else {
+		a.scroll.ScrollTo(target, true)
+	}
+	a.kickScroll()
 }
 
 // zoom changes page zoom by delta percent (0 resets). Zoom is implemented by
@@ -315,34 +364,49 @@ func (a *App) find(q string, dir int) {
 			}
 		}
 	}
+	f.Index = idx // steps that follow before the answer is in count from here
+	a.model.Find = f
 	e.w.do(func() {
-		var r struct {
-			Count int `json:"count"`
-			Top   int `json:"top"`
+		var r engine.FindResult
+		if dir == 0 {
+			r = e.t.FindStart(q, float64(e.scrollCSS.Load()))
+		} else {
+			r = e.t.FindStep(idx - 1)
 		}
-		if e.eval("__sweefFind("+jsString(q)+","+itoa(idx-1)+")", &r) != nil {
-			return
-		}
+		e.paint(false)
 		a.post(func() {
 			ff := a.model.Find
 			ff.Matches = r.Count
-			ff.Index = idx
-			if r.Count == 0 {
+			ff.Index = r.Index + 1
+			if r.Count == 0 || r.Index < 0 {
 				ff.Index = 0
-			} else if idx > r.Count {
-				ff.Index = 1
 			}
 			a.model.Find = ff
 			a.sendChrome("find.result", map[string]any{"count": ff.Matches, "index": ff.Index})
 			if r.Top >= 0 {
+				// bring the active match into view, a third of the way down, unless it is already comfortably there
 				vh := float64(a.vpDevice().Dy())
-				a.scroll.ScrollTo(float64(r.Top)*a.pageDSF()-vh/3, false)
-				a.scrollbarT = time.Now()
-				a.startAnim()
+				top := r.Top * a.pageDSF()
+				pos := a.scroll.Target
+				if top < pos+vh*0.1 || top+r.H*a.pageDSF() > pos+vh*0.9 {
+					a.scroll.EaseTo(math.Max(0, top-vh/3))
+					a.scrollbarT = time.Now()
+					a.kickScroll()
+				}
 			}
 			a.markState()
 		})
 	})
+}
+
+// findClear removes the find highlights of the active page.
+func (a *App) findClear() {
+	if e := a.activePage(); e != nil {
+		e.w.do(func() {
+			e.t.FindClear()
+			e.paint(false)
+		})
+	}
 }
 
 // applyZoom re-lays-out the active page at the stored zoom.

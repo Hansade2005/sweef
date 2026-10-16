@@ -12,6 +12,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -451,6 +452,7 @@ func load() {
 	}
 	loaded = true
 	if os.Getenv("SWEEF_FONTS") != "embedded" {
+		var paths []string
 		for _, d := range systemDirs() {
 			_ = filepath.WalkDir(d, func(p string, de os.DirEntry, err error) error {
 				if err != nil || de.IsDir() {
@@ -460,9 +462,56 @@ func load() {
 				if ext != ".ttf" && ext != ".otf" && ext != ".ttc" {
 					return nil
 				}
-				entries = append(entries, probeAll(p, ext == ".ttc")...)
+				paths = append(paths, p)
 				return nil
 			})
+		}
+		// Files the font index knows (same size and mtime) need no probing; the rest are
+		// probed in parallel (a few tables each). Discovery order is kept.
+		ixPath := fontIndexPath()
+		ix := readFontIndex(ixPath)
+		found := make([][]*entry, len(paths))
+		infos := make([]os.FileInfo, len(paths))
+		var todo []int
+		for i, p := range paths {
+			infos[i], _ = os.Stat(p)
+			if es, ok := cachedEntries(ix, p, infos[i]); ok {
+				found[i] = es
+			} else {
+				todo = append(todo, i)
+			}
+		}
+		var wg sync.WaitGroup
+		next := make(chan int)
+		workers := runtime.GOMAXPROCS(0)
+		if workers > 8 {
+			workers = 8
+		}
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := range next {
+					found[i] = probeAll(paths[i], strings.EqualFold(filepath.Ext(paths[i]), ".ttc"))
+				}
+			}()
+		}
+		for _, i := range todo {
+			next <- i
+		}
+		close(next)
+		wg.Wait()
+		if len(todo) > 0 || len(ix) != len(paths) {
+			nix := make(map[string]indexFile, len(paths))
+			for i, p := range paths {
+				if infos[i] != nil {
+					nix[p] = indexEntry(infos[i], found[i])
+				}
+			}
+			writeFontIndex(ixPath, nix)
+		}
+		for _, es := range found {
+			entries = append(entries, es...)
 		}
 	}
 	entries = append(entries, embedded()...)
@@ -478,11 +527,12 @@ func probeAll(path string, coll bool) []*entry {
 		}
 		return nil
 	}
-	data, err := os.ReadFile(path)
+	fh, err := os.Open(path)
 	if err != nil {
 		return nil
 	}
-	c, err := sfnt.ParseCollection(data)
+	c, err := sfnt.ParseCollectionReaderAt(fh)
+	fh.Close()
 	if err != nil {
 		return nil
 	}
@@ -496,7 +546,35 @@ func probeAll(path string, coll bool) []*entry {
 }
 
 // probe reads just enough of a font file to learn family and style.
+//
+// It reads only the table directory and the tables it looks at (name, post)
+// through a ReaderAt; reading every system font whole (118 MB on a stock Linux
+// font set) made the first layout of a process take ~180 ms. Files the lazy
+// parser rejects take the whole-file path.
 func probe(path string, idx int) *entry {
+	if fh, err := os.Open(path); err == nil {
+		var f *sfnt.Font
+		if idx < 0 {
+			f, err = sfnt.ParseReaderAt(fh)
+		} else {
+			var c *sfnt.Collection
+			if c, err = sfnt.ParseCollectionReaderAt(fh); err == nil {
+				f, err = c.Font(idx)
+			}
+		}
+		if err == nil {
+			e := probeFont(f, path, idx)
+			fh.Close()
+			return e
+		}
+		fh.Close()
+	}
+	return probeFull(path, idx)
+}
+
+// probeFull is probe on the whole file (parseSFNT's extraction handles fonts
+// the lazy parser does not).
+func probeFull(path string, idx int) *entry {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -505,6 +583,10 @@ func probe(path string, idx int) *entry {
 	if err != nil {
 		return nil
 	}
+	return probeFont(f, path, idx)
+}
+
+func probeFont(f *sfnt.Font, path string, idx int) *entry {
 	var b sfnt.Buffer
 	fam, _ := f.Name(&b, sfnt.NameIDTypographicFamily)
 	if fam == "" {

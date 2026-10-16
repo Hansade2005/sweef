@@ -16,6 +16,7 @@
     opts.forEach(function (o) { var b = h("button", { role: "radio", "aria-checked": cur === o[0] ? "true" : "false", onclick: function () { SW.set(key, typeof def === "number" ? +o[0] : o[0]); SW.$$("button", el).forEach(function (x) { x.setAttribute("aria-checked", x === b ? "true" : "false"); }); } }, o[1]); el.appendChild(b); }); return el;
   }
   function row(title, desc, ctl) { return h("div.srow", h("div.st", h("b", { text: title }), desc ? h("div.d", { text: S.f(desc) }) : null), ctl ? h("div.ctl", ctl) : null); }
+  function ctxRow(el, items) { el.addEventListener("contextmenu", function (e) { SW.ctxMenu(e, items); }); return el; }
   function group(title, rows) { return h("div.group", title ? h("div.gh", { text: title }) : null, rows); }
   var btn = function (t, f, cls) { return h("button.btn.sm" + (cls ? "." + cls : ""), { text: t, onclick: f }); };
 
@@ -48,7 +49,7 @@
       return [h("h2", S.perm.label), h("p.lead", F(g.lead)),
         group(g.gAll, [row(g.dnd, g.dndD, toggle("notifications.dnd", false)), row(g.dflt, "", seg("notifications.default", [["ask", g.ask], ["blocked", g.blocked]], "ask"))]),
         group(g.gPush, [row(g.push, F(g.pushD), [key, btn(g.save, function () { SW.set("push.service", key.value.trim()); }, "primary")]), row(ps.push ? F(g.pushOn) : g.pushOff, "", null)]),
-        group(g.gSites, sites.length ? sites.map(function (s) { return row(SW.host(s.origin), s.embargo ? g.embargo : "", choose(s)); }) : [row(g.none, "", null)])];
+        group(g.gSites, sites.length ? sites.map(function (s) { return ctxRow(row(SW.host(s.origin), s.embargo ? g.embargo : "", choose(s)), [{ label: S.ctx.reset, on: function () { post("perm.set", { origin: s.origin, name: "notifications", state: "" }); } }, { label: S.ctx.copyLink, on: function () { post("clipboard.write", { text: s.origin }); } }]); }) : [row(g.none, "", null)])];
     },
     data: function () { return SW.dataSet({ row: row, group: group, btn: btn, toggle: toggle }); },
     agent: function () {
@@ -57,7 +58,7 @@
         group(g.gModel, [row(g.model, g.modelD, h("span.badge.acc", ag.model || "claude")), row(g.key, hasKey ? g.keyOn : g.keyOff, [key, btn(g.save, function () { if (/^sk-ant-/.test(key.value.trim())) { post("agent.setKey", { key: key.value.trim() }); key.value = ""; } }, "primary"), hasKey ? btn(g.remove, function () { post("agent.clearKey"); }) : null])]),
         group(g.gSafe, [row(g.vis, g.visD, select("agent.visibilityDefault", [["ask", g.visAsk], ["allowed", g.visAllowed], ["blocked", g.visBlocked]], "ask")), row(g.confirm, g.confirmD, toggle("agent.confirmations", true)), row(g.mode, g.modeD, seg("agent.mode", [["ask", S.agent.ask], ["agent", S.agent.agent]], "ask"))]),
         group(g.gDisp, [row(g.latency, g.latencyD, toggle("agent.latencyStrip", true))]),
-        sites.length ? group(g.gSites, sites.map(function (s) { return row(SW.host(s.origin), s.allowed ? g.allowed : g.blocked, btn(g.forget, function () { post("agent.pageVisibility", { origin: s.origin, allowed: null }); })); })) : null];
+        sites.length ? group(g.gSites, sites.map(function (s) { return ctxRow(row(SW.host(s.origin), s.allowed ? g.allowed : g.blocked, btn(g.forget, function () { post("agent.pageVisibility", { origin: s.origin, allowed: null }); })), [{ label: S.ctx.forget, danger: true, on: function () { post("agent.pageVisibility", { origin: s.origin, allowed: null }); } }, { label: S.ctx.copyLink, on: function () { post("clipboard.write", { text: s.origin }); } }]); })) : null];
     },
     appearance: function () {
       var g = T.appearance;

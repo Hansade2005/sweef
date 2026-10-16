@@ -260,7 +260,7 @@ func parseUnicodeRange(l string) ([]font.URange, bool) {
 func parseFaceSrc(v string) []font.Source {
 	var out []font.Source
 	for _, item := range splitTop(v, ',') {
-		toks := fields(strings.TrimSpace(item))
+		toks := srcTokens(strings.TrimSpace(item))
 		if len(toks) == 0 {
 			continue
 		}
@@ -291,6 +291,58 @@ func parseFaceSrc(v string) []font.Source {
 		if ok {
 			out = append(out, s)
 		}
+	}
+	return out
+}
+
+// srcTokens splits one src entry into its parts: `url(a.woff2) format("woff2")`, and minified
+// `url(a.woff2)format("woff2")` the same way (a function ends a part even without a space after it).
+func srcTokens(item string) []string {
+	var out []string
+	depth, start := 0, -1
+	var q byte
+	for i := 0; i < len(item); i++ {
+		c := item[i]
+		if q != 0 {
+			if c == '\\' {
+				i++
+			} else if c == q {
+				q = 0
+			}
+			continue
+		}
+		switch {
+		case c == '"' || c == '\'':
+			q = c
+			if start < 0 {
+				start = i
+			}
+		case c == '(':
+			depth++
+			if start < 0 {
+				start = i
+			}
+		case c == ')':
+			if depth > 0 {
+				depth--
+			}
+			if depth == 0 && start >= 0 {
+				out = append(out, item[start:i+1])
+				start = -1
+			}
+		case depth == 0 && (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'):
+			if start >= 0 {
+				out = append(out, item[start:i])
+				start = -1
+			}
+		default:
+			if start < 0 {
+				start = i
+			}
+		}
+	}
+	if start >= 0 {
+		out = append(out, item[start:])
 	}
 	return out
 }

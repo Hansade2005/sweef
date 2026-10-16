@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"image"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -33,11 +34,20 @@ type etab struct {
 		scroll int
 		scale  float64
 	}
-	dlSeen    int
-	netSID    int64 // last network-log entry examined by the cookie sweep
-	lastTitle string
-	certError atomic.Bool
-	vpApplied struct {
+	band         bandState                  // page tabs: the band of the document last rasterised (worker only)
+	spare        atomic.Pointer[image.RGBA] // a band texture the compositor has let go of, for the next paint to reuse
+	scrollPosDev atomic.Int32               // last scroll offset the compositor was moved to (device px)
+	wheelState   atomic.Int32               // wheelUnknown | wheelPassive | wheelCancelled (wheel.go), reset by each navigation
+	elemPos      atomic.Int64               // scroll offsets an inner scroller is to be moved to (x<<32 | y)
+	elemBusy     atomic.Bool                // a job moving an inner scroller is queued or running on the worker
+	scrollVel    atomic.Int32               // scroll velocity, CSS px/s (negative: up), 0 when the view rests
+	scrollAt     atomic.Int64               // unix nanos of the last scroll movement
+	scrollDir    atomic.Int32               // sign of the last scroll movement: -1 up, 0 unknown, 1 down
+	dlSeen       int
+	netSID       int64 // last network-log entry examined by the cookie sweep
+	lastTitle    string
+	certError    atomic.Bool
+	vpApplied    struct {
 		w, h int
 		dsf  float64
 	} // viewport last given to the engine (worker only): setting it again would drop the layout cache
@@ -56,6 +66,7 @@ type etab struct {
 	topURL        atomic.Value // string: URL of the top-level page, for the shield
 	navTarget     atomic.Value // string: document URL currently being fetched
 	navSeq        atomic.Int64
+	driveCb       func()       // worker only: the load-finished callback a later driveLoad of the same navigation handed over
 	loadMode      atomic.Int32 // 0 none, 1 push, 2 replace, 3 traverse
 	blocked       atomic.Int32
 	reqN, respN   atomic.Int32
@@ -87,6 +98,16 @@ func (a *App) newEtab(kind, id string, t *engine.Tab, incog bool) *etab {
 	e.navTarget.Store("")
 	e.loadOnce.Store("")
 	e.installHooks()
+	// the selection changed (mouse, keys or script): page script hears selectionchange, and the window repaints
+	t.SetSelectionHook(func() {
+		if e.closed.Load() {
+			return
+		}
+		e.w.tryDo(func() {
+			_, _ = e.t.Evaluate("__swSelChanged()")
+			e.afterOp()
+		})
+	})
 	if kind == "page" {
 		// pages are shown while they load: images and the rest of the load arrive after the first frame
 		// and repaint it; the agent switches this off for the tabs it drives (see loadURL)
@@ -96,6 +117,7 @@ func (a *App) newEtab(kind, id string, t *engine.Tab, incog bool) *etab {
 		e.t.SetWakeHook(e.wakePump)
 		e.t.SetActivationWindow(2 * time.Second) // a click or key press keeps allowing popups for 2 s (the engine default is 5 s)
 		e.t.SetMediaBroker(a.media)
+		e.t.SetScrollHook(func(r engine.ScrollRequest) { a.post(func() { a.scriptScroll(e, r) }) })
 	}
 	return e
 }
@@ -127,6 +149,7 @@ func (e *etab) route(req *http.Request) (int, string, bool) {
 	}
 	top, _ := e.topURL.Load().(string)
 	if d := e.a.priv.Check(top, raw); d.Block {
+		e.t.DevNoteBlocked(raw, "blocked by the tracker blocker ("+u.Hostname()+")")
 		e.blocked.Add(1)
 		e.a.prof.Stats.AddBlocked(1)
 		e.a.noteBlocked(e, u.Hostname())
@@ -380,37 +403,216 @@ func (e *etab) paint(force bool) {
 		kind := e.kind
 		e.a.post(func() { e.a.onChromePainted(kind, img, dt) })
 	default:
-		e.checkMeta()
-		scale = a.pageDSF()
-		vw, vh = a.pageCSS(vw), a.pageCSS(vh)
-		var doc int
-		_ = e.eval(`__sweefDocH()`, &doc)
-		if doc <= 0 {
-			doc = vh
+		e.paintPage(force, vw, vh)
+	}
+}
+
+// pageBandAlign is the granularity (CSS px) of band edges for a device scale: the smallest step that is a whole
+// number of device pixels, so every band is rasterised on the same pixel grid and bands can be stitched.
+func pageBandAlign(scale float64) int {
+	for _, q := range []int{8, 40, 200, 1000, 10000} {
+		d := float64(q) * scale
+		if math.Abs(d-math.Round(d)) < 1e-6 {
+			return q
 		}
-		e.docCSS.Store(int32(doc))
-		sc := int(e.scrollCSS.Load())
-		// paint ahead: the visible window plus two more screens, never past the document
-		need := sc + 3*vh
-		if need > doc {
-			need = doc
+	}
+	return 1
+}
+
+// pageBand chooses the rows of the document (CSS px) to keep rasterised around scroll offset sc for a viewport
+// of height vh: the visible rows plus a screen behind and two ahead in the direction of travel (dir < 0 is
+// upwards). Edges are multiples of q (see pageBandAlign) and the band never extends past the document.
+func pageBand(sc, vh, doc, vel, q int) (y0, y1 int) {
+	// vel is the scroll velocity in CSS px per second (negative: upwards). The faster the view moves, the more
+	// rows ahead of it are worth having: half a second of travel, between two and six screens.
+	reach := min(max(2*vh, absInt(vel)/2), 6*vh)
+	behind, ahead := vh, reach
+	if vel < 0 {
+		behind, ahead = reach, vh
+	}
+	y0 = sc - behind
+	if y0 < 0 {
+		y0 = 0
+	}
+	y0 = y0 / q * q
+	y1 = sc + vh + ahead
+	y1 = (y1 + q - 1) / q * q
+	if y1 > doc {
+		y1 = doc
+	}
+	if y1 <= y0 {
+		y1 = y0 + vh
+	}
+	return
+}
+
+// pageNeed is the part of the document that has to be rasterised for the view at sc to look right while it
+// moves a little: half a screen of margin on either side.
+func pageNeed(sc, vh, doc, vel int) (y0, y1 int) {
+	ahead := min(max(vh/2, absInt(vel)/4), 3*vh)
+	back := vh / 2
+	if vel < 0 {
+		back, ahead = ahead, back
+	}
+	y0 = sc - back
+	if y0 < 0 {
+		y0 = 0
+	}
+	y1 = sc + vh + ahead
+	if y1 > doc {
+		y1 = doc
+	}
+	return
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// paintPage rasterises the band of the page around the scroll position and posts it to the compositor. A band
+// is repainted only when the document changed or the view is about to leave the band; when only the view moved,
+// rows the previous band already holds are copied and only the new rows are rasterised, so the cost of a
+// scroll step does not grow with the length of the page or with how far down the view is. Worker only.
+func (e *etab) paintPage(force bool, vw, vh int) {
+	a := e.a
+	e.checkMeta()
+	e.t.NormalizeScroll() // inner scrollers whose content shrank or whose box got smaller come back into range
+	gen := e.t.Generation()
+	scale := a.pageDSF()
+	vw, vh = a.pageCSS(vw), a.pageCSS(vh)
+	var doc int
+	_ = e.eval(`__sweefDocH()`, &doc)
+	if doc <= 0 {
+		doc = vh
+	}
+	e.docCSS.Store(int32(doc))
+	sc := int(e.scrollCSS.Load())
+	if sc > doc {
+		sc = doc
+	}
+	b := &e.band
+	same := !force && b.img != nil && b.gen == gen && b.w == vw && b.scale == scale
+	vel := int(e.scrollVel.Load())
+	n0, n1 := pageNeed(sc, vh, doc, vel)
+	if same && b.y0 <= n0 && b.y1 >= n1 {
+		// same content and the band covers the view: only the document height may differ
+		e.a.post(func() { e.a.onPageMetrics(e.id, doc) })
+		return
+	}
+	q := pageBandAlign(scale)
+	y0, y1 := pageBand(sc, vh, doc, vel, q)
+	targets := [][2]int{{y0, y1}}
+	if same {
+		ov := max(0, min(y1, b.y1)-max(y0, b.y0))
+		if (y1-y0)-ov > vh*3/2 {
+			// The view has moved a long way from the old band (a fling, End, a jump): paint the rows it needs
+			// first and send them at once, then fill in the rest of the band around them.
+			qy0, qy1 := n0/q*q, (n1+q-1)/q*q
+			qy0, qy1 = max(qy0, y0), min(qy1, y1)
+			if qy1 > qy0 && (qy1-qy0)*4 < (y1-y0)*3 {
+				targets = [][2]int{{qy0, qy1}, {y0, y1}}
+			}
 		}
-		if need < vh {
-			need = vh
+	} else if (y1-y0) > vh*3/2 && force {
+		// a new document or size: the first frame needs only the view
+		qy0, qy1 := n0/q*q, (n1+q-1)/q*q
+		qy0, qy1 = max(qy0, y0), min(qy1, y1)
+		if qy1 > qy0 && (qy1-qy0)*4 < (y1-y0)*3 {
+			targets = [][2]int{{qy0, qy1}, {y0, y1}}
 		}
-		if !force && gen == e.paintedAt.gen && vw == e.paintedAt.w && need <= e.paintedAt.h && scale == e.paintedAt.scale {
-			// same content and already painted far enough: only the doc height may differ
-			e.a.post(func() { e.a.onPageMetrics(e.id, doc) })
+	}
+	for _, t := range targets {
+		if !e.buildBand(t[0], t[1], vw, scale, gen, doc, same) {
 			return
 		}
-		t0 := time.Now()
-		img, ok := e.t.PaintRGBA(vw, need, scale, false)
-		if !ok || img == nil {
+		if len(targets) > 1 && e.closed.Load() {
 			return
 		}
-		dt := time.Since(t0)
-		e.paintedAt.gen, e.paintedAt.w, e.paintedAt.h, e.paintedAt.scale = gen, vw, need, scale
-		e.a.post(func() { e.a.onPagePainted(e.id, img, doc, dt) })
+	}
+}
+
+// buildBand rasterises the document rows [y0, y1) (CSS px) into the band texture and posts it to the compositor,
+// copying the rows the previous band already holds when reuse is set and the content has not changed (a forced
+// paint never reuses: a new document can have the generation of the one before). Worker only.
+func (e *etab) buildBand(y0, y1, vw int, scale float64, gen uint64, doc int, reuse bool) bool {
+	b := &e.band
+	same := reuse && b.img != nil && b.gen == gen && b.w == vw && b.scale == scale
+	dev := func(y int) int { return int(math.Round(float64(y) * scale)) }
+	W := int(math.Round(float64(vw) * scale))
+	H := dev(y1) - dev(y0)
+	if W < 1 || H < 1 {
+		return false
+	}
+	t0 := time.Now()
+	paintRows := func(r0, r1 int) *image.RGBA {
+		img, ok := e.t.PaintRGBAOpts(engine.PaintOptions{Width: vw, Height: r1 - r0, DSF: scale, ScrollY: r0, Cull: true})
+		if !ok {
+			return nil
+		}
+		return img
+	}
+	var out *image.RGBA
+	ov0, ov1 := y0, y0
+	if same {
+		ov0, ov1 = max(y0, b.y0), min(y1, b.y1)
+	}
+	if same && ov1 > ov0 && b.img.Bounds().Dx() == W {
+		// reuse the overlap with the previous band
+		out = e.spare.Swap(nil)
+		if out == nil || out.Bounds().Dx() != W || len(out.Pix) < H*4*W {
+			out = image.NewRGBA(image.Rect(0, 0, W, H))
+		} else {
+			out.Rect = image.Rect(0, 0, W, H)
+			out.Stride = 4 * W
+		}
+		rows := dev(ov1) - dev(ov0)
+		src := b.img.PixOffset(0, dev(ov0)-dev(b.y0))
+		dst := out.PixOffset(0, dev(ov0)-dev(y0))
+		copy(out.Pix[dst:dst+rows*out.Stride], b.img.Pix[src:src+rows*b.img.Stride])
+		// the rows next to the view first would be better still, but the two parts are painted back to back
+		for _, part := range [][2]int{{y0, ov0}, {ov1, y1}} {
+			if part[1] <= part[0] {
+				continue
+			}
+			img := paintRows(part[0], part[1])
+			if img == nil {
+				return false
+			}
+			blitRows(out, img, dev(part[0])-dev(y0))
+		}
+	} else {
+		img := paintRows(y0, y1)
+		if img == nil {
+			return false
+		}
+		out = img
+	}
+	dt := time.Since(t0)
+	*b = bandState{img: out, y0: y0, y1: y1, w: vw, scale: scale, gen: gen}
+	e.a.post(func() { e.a.onPagePainted(e.id, out, dev(y0), doc, dt) })
+	return true
+}
+
+type bandState struct {
+	img    *image.RGBA
+	y0, y1 int // CSS px
+	w      int // CSS px
+	scale  float64
+	gen    uint64
+}
+
+// blitRows copies src into dst starting at row y of dst.
+func blitRows(dst, src *image.RGBA, y int) {
+	n := src.Bounds().Dy()
+	if y+n > dst.Bounds().Dy() {
+		n = dst.Bounds().Dy() - y
+	}
+	w := 4 * min(src.Bounds().Dx(), dst.Bounds().Dx())
+	for r := 0; r < n; r++ {
+		copy(dst.Pix[(y+r)*dst.Stride:][:w], src.Pix[r*src.Stride:][:w])
 	}
 }
 

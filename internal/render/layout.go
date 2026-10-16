@@ -27,6 +27,7 @@ type ctx struct {
 	svgUDone    bool
 	svgNoSess   bool // the session's scene cache is off for this pass (duplicate ids)
 	env         Env
+	scrollEnv   ScrollEnv // env's scroll offsets, when it keeps any
 	eng         *style.Engine
 	vw, vh      float64
 	sbViewport  float64
@@ -70,15 +71,27 @@ type ctx struct {
 func Layout(root *html.Node, o Options) *Result {
 	cv := &cvState{open: map[*html.Node]bool{}}
 	run := func() *Result {
-		res, obs, has := layoutPass(root, o, nil, cv)
+		// A pass whose container sizes are about to be measured again is never read: only the last one is
+		// finished (boxes, display list, hit testing), the others are dropped after layout.
+		var used map[*html.Node]style.ContSize
+		if o.Session != nil {
+			used = o.Session.cq
+		}
+		p, obs, has := layoutPass(root, o, used, cv)
 		if has {
-			var used map[*html.Node]style.ContSize
 			for pass := 0; pass < 5 && !sameContSizes(used, obs); pass++ {
+				if p.c != nil && p.c.eng != nil && p.c.eng.ContainerResultsStable(obs) {
+					break // the next pass would compute the same styles at these sizes
+				}
 				used = obs
-				res, obs, _ = layoutPass(root, o, used, cv)
+				p.release()
+				p, obs, _ = layoutPass(root, o, used, cv)
 			}
 		}
-		return res
+		if o.Session != nil {
+			o.Session.cq = obs
+		}
+		return p.complete()
 	}
 	res := run()
 	if len(cv.cands) == 0 {
@@ -112,10 +125,40 @@ func sameContSizes(a, b map[*html.Node]style.ContSize) bool {
 	return true
 }
 
-// layoutPass is one full layout. It returns the sizes of the document's query
-// containers as laid out, and whether the style engine saw any @container
-// rule (a re-run is only needed then).
-func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv *cvState) (*Result, map[*html.Node]style.ContSize, bool) {
+// pendingPass is a layout pass that has been laid out but not finished.
+type pendingPass struct {
+	c        *ctx
+	rb       *lbox // nil: the result is already complete (an empty document)
+	tk       stageClock
+	released bool
+}
+
+// complete finishes the pass (boxes, display list, hit testing) and returns its result.
+func (p *pendingPass) complete() *Result {
+	if p.rb != nil {
+		p.c.finishResult(p.rb)
+		p.tk.lap("finish")
+	}
+	p.release()
+	return p.c.res
+}
+
+// release ends the pass's use of the layout session (its style and SVG caches).
+func (p *pendingPass) release() {
+	if p.released {
+		return
+	}
+	p.released = true
+	if s := p.c.sess; s != nil {
+		s.Style.EndPass()
+		s.svg.sweep()
+	}
+}
+
+// layoutPass is one full layout, up to but not including finishResult (see pendingPass). It returns the sizes
+// of the document's query containers as laid out, and whether the style engine saw any @container rule (a
+// re-run is only needed then).
+func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv *cvState) (*pendingPass, map[*html.Node]style.ContSize, bool) {
 	if o.Width <= 0 {
 		o.Width = 1280
 	}
@@ -132,6 +175,7 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 	if c.env == nil {
 		c.env = nilEnv{}
 	}
+	c.scrollEnv, _ = c.env.(ScrollEnv)
 	c.docEl = findDocEl(root)
 	res := &Result{Boxes: map[*html.Node]*Box{}}
 	c.res = res
@@ -139,7 +183,7 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 	if scheme == "" {
 		scheme = "light"
 	}
-	env := &style.Env{Width: o.Width, Height: o.Height, DPR: o.DPR, ColorScheme: scheme, Print: o.Print, ReducedMotion: o.ReducedMotion}
+	env := &style.Env{Width: o.Width, Height: o.Height, DPR: o.DPR, ColorScheme: scheme, Print: o.Print, ReducedMotion: o.ReducedMotion, Mobile: o.Mobile}
 	var sheets []style.SheetIn
 	for _, s := range o.Sheets {
 		if s.UserAgent {
@@ -152,9 +196,9 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 		c.sess = o.Session
 		o.Session.Style.SetWebFonts(o.Fonts)
 		c.eng = o.Session.Style.Acquire(env, sheets, c.quirks)
-		defer func() { o.Session.Style.EndPass(); o.Session.svg.sweep() }()
 	} else {
 		c.eng = style.NewEngineQ(env, sheets, c.quirks)
+		c.eng.BeginPass()
 	}
 	c.eng.SysFont = "arial"
 	c.eng.SetWebFonts(o.Fonts)
@@ -166,7 +210,7 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 		res.Width, res.Height = o.Width, o.Height
 		res.Viewport = Rect{0, 0, o.Width, o.Height}
 		res.Hit = func(x, y float64) *html.Node { return nil }
-		return res, nil, false
+		return &pendingPass{c: c}, nil, false
 	}
 	var top []*lbox
 	tk := newStageClock()
@@ -176,7 +220,7 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 		res.Width, res.Height = o.Width, o.Height
 		res.Viewport = Rect{0, 0, o.Width, o.Height}
 		res.Hit = func(x, y float64) *html.Node { return nil }
-		return res, nil, false
+		return &pendingPass{c: c}, nil, false
 	}
 	rb := top[0]
 	rb.kind = kBlock
@@ -184,10 +228,9 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 	c.findBody(rb)
 	c.layoutRoot(rb)
 	tk.lap("layout")
-	c.finishResult(rb)
-	tk.lap("finish")
-	if !c.eng.HasContainerQueries() {
-		return res, nil, false
+	p := &pendingPass{c: c, rb: rb, tk: tk}
+	if !c.eng.HasContainerQueries() && !c.eng.UsedContainerUnits() {
+		return p, nil, false
 	}
 	obs := map[*html.Node]style.ContSize{}
 	for _, n := range c.eng.ContainerNodes() {
@@ -195,12 +238,16 @@ func layoutPass(root *html.Node, o Options, cq map[*html.Node]style.ContSize, cv
 			if b.pseudo != "" {
 				continue
 			}
-			obs[n] = style.ContSize{W: b.w - b.bor[1] - b.bor[3] - b.pad[1] - b.pad[3] - b.sbW, H: b.h - b.bor[0] - b.bor[2] - b.pad[0] - b.pad[2] - b.sbH}
+			// in 1/64 px, the layout unit browsers use: passes that start from different sizes (the previous
+			// layout's, or none) settle on exactly the same values instead of ones a rounding error apart
+			obs[n] = style.ContSize{W: q64(b.w - b.bor[1] - b.bor[3] - b.pad[1] - b.pad[3] - b.sbW), H: q64(b.h - b.bor[0] - b.bor[2] - b.pad[0] - b.pad[2] - b.sbH)}
 			break
 		}
 	}
-	return res, obs, true
+	return p, obs, true
 }
+
+func q64(v float64) float64 { return math.Round(v*64) / 64 }
 
 func findDocEl(n *html.Node) *html.Node {
 	if n == nil {
@@ -245,7 +292,7 @@ func (c *ctx) layoutRoot(rb *lbox) {
 	_, oy := c.viewportOverflow()
 	c.sbViewport = 0
 	if oy == "scroll" {
-		c.sbViewport = sbSize
+		c.sbViewport = c.sbSize()
 	}
 	for pass := 0; pass < 4; pass++ {
 		c.resetKids(rb)
@@ -258,12 +305,12 @@ func (c *ctx) layoutRoot(rb *lbox) {
 		docH := math.Max(rb.ovBottom, rb.y+rb.h+rb.mar[2])
 		docW := math.Max(rb.ovRight, rb.x+rb.w+rb.mar[1])
 		ox, _ := c.viewportOverflow()
-		if c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh-c.sbViewportH+0.01 {
-			c.sbViewport = sbSize
+		if c.sbSize() > 0 && c.sbViewport == 0 && (oy == "auto" || oy == "visible") && docH > c.vh-c.sbViewportH+0.01 {
+			c.sbViewport = c.sbSize()
 			continue
 		}
-		if c.sbViewportH == 0 && (ox == "auto" || ox == "visible" || ox == "scroll") && docW > c.vw-c.sbViewport+0.01 {
-			c.sbViewportH = sbSize
+		if c.sbSize() > 0 && c.sbViewportH == 0 && (ox == "auto" || ox == "visible" || ox == "scroll") && docW > c.vw-c.sbViewport+0.01 {
+			c.sbViewportH = c.sbSize()
 			continue
 		}
 		break
@@ -284,6 +331,7 @@ func (c *ctx) finishResult(rb *lbox) {
 	tk.lap("finish:fo")
 	c.buildBoxes()
 	tk.lap("finish:boxes")
+	c.prefetchPaintImages()
 	c.paintAll(rb)
 	tk.lap("finish:paint")
 	c.installHit(rb)
@@ -316,6 +364,11 @@ func (c *ctx) place(b *lbox, ox, oy float64) {
 	c.all = append(c.all, b)
 	b.relX, b.relY = c.relativeOffset(b)
 	b.ax, b.ay = ox+b.relX, oy+b.relY
+	// A scroll container places its content as if the box sat at its scrolled position, so every box, line and
+	// hit record of the content comes out where it appears on screen; the box itself is put back below.
+	scx, scy := c.scrollOf(b)
+	b.scx, b.scy = scx, scy
+	b.ax, b.ay = b.ax-scx, b.ay-scy
 	b.ovRight, b.ovBottom = b.ax+b.w, b.ay+b.h
 	b.ovLeft, b.ovTop = b.ax, b.ay
 	cx, cy := b.ax+b.bor[3]+b.pad[3], b.ay+b.bor[0]+b.pad[0]
@@ -398,13 +451,16 @@ func (c *ctx) place(b *lbox, ox, oy float64) {
 			acc(k)
 		}
 	}
+	// scroll sizes
+	b.scrollW = math.Max(b.ovRight, b.ax+b.w) - b.ax
+	b.scrollH = math.Max(b.ovBottom, b.ay+b.h) - b.ay
+	// the box goes back to where it is; what its content overflows by is measured from there
+	b.ax, b.ay = b.ax+scx, b.ay+scy
+	b.ovRight, b.ovBottom, b.ovLeft, b.ovTop = b.ovRight+scx, b.ovBottom+scy, b.ovLeft+scx, b.ovTop+scy
 	// sticky positioning at scroll offset 0
 	if b.st.Position == "sticky" {
 		c.applySticky(b)
 	}
-	// scroll sizes
-	b.scrollW = math.Max(b.ovRight, b.ax+b.w) - b.ax
-	b.scrollH = math.Max(b.ovBottom, b.ay+b.h) - b.ay
 	if b.clips() {
 		// content overflow of a scroll container does not propagate
 		myR, myB := b.ax+b.w, b.ay+b.h
@@ -412,6 +468,22 @@ func (c *ctx) place(b *lbox, ox, oy float64) {
 		b.ovRight, b.ovBottom = myR, myB
 		b.ovLeft, b.ovTop = b.ax, b.ay
 	}
+}
+
+// scrollOf is the scroll offset of b when it is a scroll container with a scrolled position (the document's
+// scroll offsets are kept by the embedder, see ScrollEnv).
+func (c *ctx) scrollOf(b *lbox) (float64, float64) {
+	if c.scrollEnv == nil || b.n == nil || b.pseudo != "" || b.rep != nil || b == c.rootBox || (b.kind != kBlock && b.kind != kAtomic) || !b.clips() {
+		return 0, 0
+	}
+	x, y := c.scrollEnv.ScrollOffset(b.n)
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	return math.Round(x), math.Round(y)
 }
 
 func (b *lbox) hidden() bool { return false }
@@ -742,6 +814,7 @@ func (c *ctx) buildBoxes() {
 			bx.Content = Rect{bx.Padding.X + main.pad[3], bx.Padding.Y + main.pad[0], bx.Padding.W - main.pad[1] - main.pad[3] - main.sbW, bx.Padding.H - main.pad[0] - main.pad[2] - main.sbH}
 			bx.ClientW, bx.ClientH = bx.Padding.W-main.sbW, bx.Padding.H-main.sbH
 			bx.ScrollW, bx.ScrollH = math.Max(main.scrollW, bx.ClientW), math.Max(main.scrollH, bx.ClientH)
+			bx.ScrollLeft, bx.ScrollTop = main.scx, main.scy
 			if main.clips() {
 				sw := main.scrollR - main.ax - main.bor[3]
 				sh := main.scrollB - main.ay - main.bor[0]

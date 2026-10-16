@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/engine"
+	"github.com/sweefbrowser/sweef/internal/shell"
 )
 
 type appClip struct {
@@ -39,20 +40,33 @@ func (c *appClip) readNow() []engine.ClipboardEntry {
 	if text == "" {
 		return nil
 	}
-	return []engine.ClipboardEntry{{Type: "text/plain", Data: []byte(text)}}
+	out := []engine.ClipboardEntry{{Type: "text/plain", Data: []byte(text)}}
+	if rc, ok := c.a.win.(shell.RichClipboard); ok { // HTML copied in another application
+		if h := rc.ClipboardHTML(); h != "" {
+			out = append(out, engine.ClipboardEntry{Type: "text/html", Data: []byte(h)})
+		}
+	}
+	return out
 }
 
 // writeNow replaces the clipboard. UI loop only.
 func (c *appClip) writeNow(es []engine.ClipboardEntry) error {
-	var text string
+	var text, html string
 	hasText := false
 	for _, e := range es {
-		if e.Type == "text/plain" {
+		switch e.Type {
+		case "text/plain":
 			text, hasText = string(e.Data), true
+		case "text/html":
+			html = string(e.Data)
 		}
 	}
 	if hasText {
-		c.a.win.SetClipboard(text)
+		if rc, ok := c.a.win.(shell.RichClipboard); ok && html != "" {
+			rc.SetClipboardRich(text, html)
+		} else {
+			c.a.win.SetClipboard(text)
+		}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()

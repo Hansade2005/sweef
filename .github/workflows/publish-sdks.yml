@@ -1,0 +1,101 @@
+# Publishes the SDKs: @sweef/browser (npm) and sweef-browser (PyPI), from pkg/sdk/node and pkg/sdk/py.
+#
+# Manual only (workflow_dispatch), nothing is published by a push. Each target needs credentials stored as
+# repository secrets (never in the repo or in a chat):
+#   npm:  NPM_TOKEN         an npm automation token with publish rights to the @sweef scope
+#   PyPI: PYPI_API_TOKEN    a PyPI API token (or register this workflow as a trusted publisher on PyPI and leave it unset)
+# A target whose credentials are missing fails with an explanation instead of publishing something half-done.
+# Run it first with dry_run = true (the default): it builds, tests and packs both packages without uploading.
+name: publish-sdks
+
+on:
+  workflow_dispatch:
+    inputs:
+      npm:
+        description: "Publish @sweef/browser to npm"
+        type: boolean
+        default: true
+      pypi:
+        description: "Publish sweef-browser to PyPI"
+        type: boolean
+        default: true
+      dry_run:
+        description: "Build, test and pack only; upload nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    if: inputs.npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    defaults:
+      run:
+        working-directory: pkg/sdk/node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build the engine the tests drive
+        working-directory: .
+        run: CGO_ENABLED=0 go build -o "$RUNNER_TEMP/sweef" ./cmd/sweef
+      - name: Test
+        env:
+          SWEEF_BIN: ${{ runner.temp }}/sweef
+          PATH: ${{ runner.temp }}:${{ env.PATH }}
+        run: node --test
+      - name: Pack (dry run of the tarball)
+        run: npm pack --dry-run
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then echo "::error::secret NPM_TOKEN is not set (Settings > Secrets and variables > Actions)"; exit 1; fi
+          npm publish --access public --provenance
+
+  python:
+    if: inputs.pypi
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pkg/sdk/py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build the engine the tests drive
+        working-directory: .
+        run: CGO_ENABLED=0 go build -o "$RUNNER_TEMP/sweef" ./cmd/sweef
+      - name: Test
+        env:
+          SWEEF_BIN: ${{ runner.temp }}/sweef
+          PATH: ${{ runner.temp }}:${{ env.PATH }}
+        run: python -m unittest discover -s tests -v
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          python -m twine check dist/*
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -z "$TWINE_PASSWORD" ]; then echo "::error::secret PYPI_API_TOKEN is not set (Settings > Secrets and variables > Actions)"; exit 1; fi
+          python -m twine upload dist/*

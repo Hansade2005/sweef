@@ -9,3 +9,4 @@ package engine
 // and commit both. TestEmbeddedJSIsCurrent fails when a .z file is missing or stale.
 //
 //go:generate go run ../../tools/zpack blob *.js platformjs/*.js
+//go:generate go run ../../tools/genprelude

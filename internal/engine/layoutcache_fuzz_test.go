@@ -151,3 +151,43 @@ func TestLayoutCacheFuzzUIPages(t *testing.T) {
 		})
 	}
 }
+
+// Container queries, container units and :has() make a style depend on things the style cache's keys do not
+// cover (container sizes, descendants); the cache recomputes those styles when the matching rules or the
+// container size change. Mutating such a page at random must keep every cached pass equal to a fresh one.
+func TestLayoutCacheFuzzContainerHas(t *testing.T) {
+	engine.SetLayoutCheck(true)
+	defer engine.SetLayoutCheck(false)
+	const page = `<!doctype html><html><head><style>
+*,::before,::after{box-sizing:border-box}
+.wrap{container-type:inline-size;width:60%;border:1px solid #ccc}
+.side{container:side/inline-size;width:300px}
+.card{padding:4px;background:#eee}
+@container (min-width: 500px){ .card{display:flex;gap:8px;background:#cfc} .card .t{font-size:20px} }
+@container side (max-width: 320px){ .card{background:#fcc} }
+.u{width:50cqw;height:2cqh;background:#08f}
+.list:has(> li.on){border-left:4px solid red}
+.box:has(.x) .t{color:blue}
+li:has(+ li.on){font-weight:bold}
+.t::before{content:"> "}
+.q::after{content:attr(data-x)}
+</style></head><body>
+<div class="wrap"><div class="card box"><span class="t">title</span><span class="x q" data-x="!">x</span><div class="u"></div></div>
+<ul class="list"><li>a</li><li class="on">b</li><li>c</li></ul></div>
+<div class="side"><div class="card"><span class="t">side</span><div class="u"></div></div></div>
+<div class="wrap" style="width:90%"><div class="card"><p class="t">wide</p><div class="u"></div></div></div>
+</body></html>`
+	e := engine.New(engine.DefaultOptions())
+	defer e.Close()
+	tab, err := e.NewTab("about:blank")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tab.SetViewport(1280, 800, 1, false, false)
+	tab.SetDocument(page, "https://fuzz.test/cq.html")
+	for seed := 1; seed <= fuzzCount(4); seed++ {
+		for _, w := range []int{1280, 700} {
+			fuzzPass(t, "cq-has", tab, seed, 30, w)
+		}
+	}
+}

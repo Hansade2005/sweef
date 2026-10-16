@@ -34,7 +34,10 @@ type Doc struct {
 	css   *cssState
 
 	// mutGen counts tree mutations; layout results are cached per value.
-	mutGen         atomic.Uint64
+	mutGen atomic.Uint64
+	// contentGen counts the mutations that can change what the page says: all but style attribute writes
+	// (an animation loop rewrites a transform or an opacity every frame), see ContentGen
+	contentGen     atomic.Uint64
 	paintGen       atomic.Uint64 // repaint-only changes (video frames), see TouchPaint
 	layoutMu       sync.Mutex
 	layoutCache    *Layout
@@ -42,6 +45,14 @@ type Doc struct {
 	layoutCacheGen uint64
 	viewportW      atomic.Int64
 	layoutProvider func(width int) *Layout
+	provisionalOK  func() bool // Layout.Provisional; nil: never reuse a provisional layout
+}
+
+// SetProvisionalOK sets which callers may be answered with a cached provisional layout (Layout.Provisional).
+func (d *Doc) SetProvisionalOK(fn func() bool) {
+	d.layoutMu.Lock()
+	d.provisionalOK = fn
+	d.layoutMu.Unlock()
 }
 
 // SetLayoutProvider replaces the built-in flow layout with fn (the render
@@ -90,7 +101,11 @@ func (d *Doc) SetMutationListener(fn func(Mutation)) {
 }
 
 func (d *Doc) note(m Mutation) {
-	d.invalidateStyles()
+	if ((m.Op == "set-attr" || m.Op == "remove-attr") && (m.Key == "style" || m.Key == "data-sw-anim")) || m.Op == "event" {
+		d.invalidateStylesOnly()
+	} else {
+		d.invalidateStyles()
+	}
 	d.mu.RLock()
 	ls := append([]func(Mutation){}, d.listeners...)
 	d.mu.RUnlock()

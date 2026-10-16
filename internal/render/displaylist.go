@@ -232,17 +232,18 @@ type Box struct {
 	Margin  [4]float64 // top, right, bottom, left
 	Frags   []Rect     // one border-box fragment per line box for inline elements, per column for blocks split across columns (getClientRects)
 	// Scroll sizes for overflow containers and the viewport.
-	ScrollW, ScrollH float64
-	ClientW, ClientH float64 // padding box minus scrollbars
-	Display          string
-	Position         string
-	Visible          bool       // false for display:none / visibility:hidden
-	Transform        [6]float64 // identity when no transform
-	HasTransform     bool
-	Xf3              *Xf3D // 3D transform data (nil without 3D involvement)
-	OffsetParent     *html.Node
-	ZIndex           int
-	Style            *style.Computed // the element's computed style (getComputedStyle)
+	ScrollW, ScrollH      float64
+	ScrollLeft, ScrollTop float64 // how far the content of a scroll container is scrolled
+	ClientW, ClientH      float64 // padding box minus scrollbars
+	Display               string
+	Position              string
+	Visible               bool       // false for display:none / visibility:hidden
+	Transform             [6]float64 // identity when no transform
+	HasTransform          bool
+	Xf3                   *Xf3D // 3D transform data (nil without 3D involvement)
+	OffsetParent          *html.Node
+	ZIndex                int
+	Style                 *style.Computed // the element's computed style (getComputedStyle)
 }
 
 // Result is the output of Layout.
@@ -251,6 +252,12 @@ type Result struct {
 	Viewport      Rect
 	Boxes         map[*html.Node]*Box
 	List          []Op
+	// FixedRanges are the [start, end) ranges of List painted by position:fixed boxes (outermost only, in
+	// order): a screenshot of the page scrolled by y draws List moved up by y except these, which stay where
+	// the viewport has them.
+	FixedRanges [][2]int
+	// Text records every run of text that was painted, in paint order (see TextBox).
+	Text []TextBox
 	// Hit returns the topmost element at a document point, honoring paint
 	// order, pointer-events and clipping; nil when the point hits only the canvas.
 	Hit func(x, y float64) *html.Node
@@ -281,6 +288,15 @@ type Env interface {
 	Focused() *html.Node
 }
 
+// ScrollEnv is an optional extension of Env for embedders that scroll overflow containers: ScrollOffset returns
+// how far the content of n (an element with overflow other than visible) is scrolled. Layout places the content
+// of such a box at its scrolled position, so geometry, hit testing and painting all agree; an offset beyond the
+// scrollable range is not clamped here (Box.ScrollTop and ScrollLeft report what was applied, and the embedder
+// brings its offsets back into range).
+type ScrollEnv interface {
+	ScrollOffset(n *html.Node) (x, y float64)
+}
+
 // FrameEnv is an optional extension of Env for embedders that render <iframe>
 // documents. When HasFrame reports true for an iframe element, layout emits a
 // Bitmap op at its content box and the frame's pixels come from Env.Bitmap(n)
@@ -292,14 +308,18 @@ type FrameEnv interface {
 
 // Options configure one layout pass.
 type Options struct {
-	Width, Height float64 // viewport in CSS px
-	DPR           float64 // device pixel ratio (for image-set, resolution media)
-	ColorScheme   string  // "light" | "dark"
-	BaseURL       string
-	Sheets        []Sheet // author sheets in order; the UA sheet is built in
-	Env           Env
-	ReducedMotion bool
-	Print         bool // media type print instead of screen
+	// HideScrollbars lays out and paints without scrollbars (no space reserved for them), as headless Chromium
+	// does under Playwright and CDP (--hide-scrollbars); scrolling still works
+	HideScrollbars bool
+	Mobile         bool    // touch device emulation (media features hover/pointer)
+	Width, Height  float64 // viewport in CSS px
+	DPR            float64 // device pixel ratio (for image-set, resolution media)
+	ColorScheme    string  // "light" | "dark"
+	BaseURL        string
+	Sheets         []Sheet // author sheets in order; the UA sheet is built in
+	Env            Env
+	ReducedMotion  bool
+	Print          bool // media type print instead of screen
 	// ScrollX, ScrollY is the viewport's scroll position, used to decide which
 	// content-visibility:auto subtrees are on screen.
 	ScrollX, ScrollY float64

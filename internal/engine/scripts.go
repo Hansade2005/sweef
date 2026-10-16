@@ -40,6 +40,39 @@ func (t *Tab) settleBudget() time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+// navSettleBudget is the event-loop budget of a headless load: half of it before the load event, all of it
+// after (Options.NavSettleMs, default 600). A headless navigation used the action budget (1500 ms) there
+// and returned only after the page's scripts had run for up to 2.25 s past DOMContentLoaded even when its
+// content was in the document at once (github.com hydrating React, Wikipedia's ResourceLoader modules); a
+// browser automation tool returns at the load event. What the page still does afterwards runs between
+// commands (the daemon's background pump) and in the settle of the next command.
+func (t *Tab) navSettleBudget() time.Duration {
+	ms := t.eng.opts.NavSettleMs
+	if ms <= 0 {
+		ms = 600
+	}
+	if s := t.settleBudget(); time.Duration(ms)*time.Millisecond > s {
+		return s
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+// settleQuiet is how long the document must stay unchanged, with nothing but timers left to run, before a
+// headless pump stops ahead of its budget (Options.SettleQuietMs; 0 = off). A page with a ticking clock, a
+// carousel or a poller always has a timer due, so without it every load and every action paid the whole
+// budget; a page whose content is still arriving keeps changing the document, or has requests in flight,
+// and the pump goes on.
+func (t *Tab) settleQuiet() time.Duration {
+	ms := t.eng.opts.SettleQuietMs
+	if ms < 0 {
+		return 0
+	}
+	if ms == 0 {
+		ms = 300
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
 // runScriptEl fetches (if needed) and executes one <script> element, then
 // dispatches load or error on it.
 func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {

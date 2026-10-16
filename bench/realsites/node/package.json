@@ -1,0 +1,10 @@
+{
+  "name": "sweef-realsites-bench",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Playwright baseline for the Sweef real-site benchmark. Uses the preinstalled Chromium; never run `playwright install`.",
+  "dependencies": {
+    "playwright-core": "1.56.1"
+  }
+}

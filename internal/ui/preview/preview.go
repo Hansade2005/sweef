@@ -25,6 +25,11 @@ import (
 //go:embed mock.js
 var mockJS string
 
+// devtoolsMockJS answers the Developer Tools panel's devtools.req calls from fixed fixtures (devtools_mock.js).
+//
+//go:embed devtools_mock.js
+var devtoolsMockJS string
+
 // Scenario is one screenshot: a page, a viewport, a state snapshot and a script.
 type Scenario struct {
 	Name     string // file stem
@@ -80,7 +85,7 @@ func Open(e *engine.Engine, base string, sc Scenario, scale float64) (*Session, 
 	if err != nil {
 		return nil, err
 	}
-	t.AddInitScript(mockJS)
+	t.AddInitScript(mockJS + "\n" + devtoolsMockJS)
 	t.SetViewport(sc.W, sc.H, scale, false, false)
 	if err := t.Navigate(base+"/"+sc.Page+sc.Query, nil); err != nil {
 		return nil, err

@@ -1,0 +1,208 @@
+{
+ "meta": {
+  "started": "2026-10-14T22:39:29.122Z",
+  "mock": false,
+  "config": {
+   "model": "claude-haiku-5-5",
+   "runs": 1,
+   "max_turns": 40,
+   "max_tokens": 8192,
+   "effort": "low",
+   "thinking": "adaptive",
+   "max_cost_usd": 0.5,
+   "snapshot_max_tokens": 6000,
+   "task_timeout_s": 300,
+   "pw_observe": "snapshot",
+   "tools": [
+    "sweef-agent",
+    "playwright-agent"
+   ],
+   "tasks": 3,
+   "base_url": "https://api.anthropic.com"
+  },
+  "versions": {
+   "sweef": "sweef 0.1.0",
+   "node": "v22.22.0"
+  },
+  "prices": {
+   "_note": "USD per million tokens, first-party API list prices (claude-api model table cached 2026-10-06). Edit and verify against your invoice. Cost in Mode B results is computed from reported token usage with this one table for BOTH agents; the Sweef binary's own cost estimate is recorded separately.",
+   "cache_read_mult": 0.1,
+   "cache_write_mult": 1.25,
+   "models": {
+    "claude-haiku-5-5": {
+     "in": 0.1,
+     "out": 0.5,
+     "long_threshold": 100000,
+     "in_long": 0.5,
+     "out_long": 2.5
+    },
+    "claude-sonnet-5-5": {
+     "in": 2,
+     "out": 10
+    },
+    "claude-opus-5-5": {
+     "in": 4,
+     "out": 20
+    }
+   }
+  }
+ },
+ "runs": [
+  {
+   "tool": "sweef-agent",
+   "wall_ms": 9021.578698000001,
+   "exit": 0,
+   "stop": "done",
+   "answer": "Alan Turing's date of birth is 23 June 1912, as written in the article (infobox: \"23 June 1912\", Maida Vale, London, England; Early life section: \"born on 23 June 1912\"). Source: https://en.wikipedia.org/wiki/Alan_Turing",
+   "turns": 3,
+   "requests": 3,
+   "retries": 0,
+   "tool_calls": 4,
+   "tool_ms": 107,
+   "model_ms": null,
+   "snapshots": 0,
+   "delta_snapshots": 0,
+   "usage": {
+    "input_tokens": 85,
+    "output_tokens": 532,
+    "cache_read_input_tokens": 16162,
+    "cache_creation_input_tokens": 11989
+   },
+   "cost_usd": 0.0019347449999999999,
+   "cost_usd_sweef_estimate": 0.0019347449999999999,
+   "agent_elapsed_ms": 3328,
+   "task": "wiki-turing",
+   "run": 1,
+   "answer_ok": true
+  },
+  {
+   "tool": "playwright-agent",
+   "stop": "done",
+   "answer": "Alan Turing's date of birth, as written in the article, is 23 June 1912 (born in Maida Vale, London, England). This appears in the infobox and the lead sentence (\"Alan Mathison Turing (...; 23 June 1912 – 7 June 1954)\").",
+   "turns": 2,
+   "requests": 2,
+   "retries": 0,
+   "tool_calls": 2,
+   "snapshots": 1,
+   "usage": {
+    "input_tokens": 6,
+    "output_tokens": 205,
+    "cache_read_input_tokens": 1355,
+    "cache_creation_input_tokens": 10742
+   },
+   "model_ms": 1837.609751,
+   "tool_ms": 676.601528000001,
+   "cost_usd": 0.0014594,
+   "error": null,
+   "success_flag": true,
+   "wall_ms": 3762.1822949999987,
+   "task": "wiki-turing",
+   "run": 1,
+   "answer_ok": true
+  },
+  {
+   "tool": "playwright-agent",
+   "stop": "done",
+   "answer": "The user \"pg\" submitted Hacker News item 1, the \"Y Combinator\" post (ycombinator.com), on Oct 9, 2006. It has 57 points and 3 comments.",
+   "turns": 2,
+   "requests": 2,
+   "retries": 0,
+   "tool_calls": 2,
+   "snapshots": 1,
+   "usage": {
+    "input_tokens": 6,
+    "output_tokens": 215,
+    "cache_read_input_tokens": 2565,
+    "cache_creation_input_tokens": 4859
+   },
+   "model_ms": 1809.3337450000017,
+   "tool_ms": 60.50730499999918,
+   "cost_usd": 0.000741125,
+   "error": null,
+   "success_flag": true,
+   "wall_ms": 3190.5712750000002,
+   "task": "hn-item-1",
+   "run": 1,
+   "answer_ok": true
+  },
+  {
+   "tool": "sweef-agent",
+   "wall_ms": 3413.7402760000004,
+   "exit": 0,
+   "stop": "done",
+   "answer": "The user who submitted Hacker News item 1 (the \"Y Combinator\" post, linking to ycombinator.com, 57 points, 3 comments, posted Oct 9, 2006) is pg. Source: https://news.ycombinator.com/item?id=1, where the byline reads \"57 points by pg\".",
+   "turns": 2,
+   "requests": 2,
+   "retries": 0,
+   "tool_calls": 2,
+   "tool_ms": 302,
+   "model_ms": null,
+   "snapshots": 1,
+   "delta_snapshots": 0,
+   "usage": {
+    "input_tokens": 56,
+    "output_tokens": 396,
+    "cache_read_input_tokens": 15929,
+    "cache_creation_input_tokens": 2305
+   },
+   "cost_usd": 0.000651015,
+   "cost_usd_sweef_estimate": 0.000651015,
+   "agent_elapsed_ms": 2716,
+   "task": "hn-item-1",
+   "run": 1,
+   "answer_ok": true
+  },
+  {
+   "tool": "sweef-agent",
+   "wall_ms": 6826.066394999998,
+   "exit": 0,
+   "stop": "done",
+   "answer": "The Travel category shows 11 results. It is at https://books.toscrape.com/catalogue/category/books/travel_2/index.html, and the page header reads \"Travel 11 results.\" I reached it by navigating to that URL directly rather than clicking the sidebar link.",
+   "turns": 3,
+   "requests": 4,
+   "retries": 0,
+   "tool_calls": 4,
+   "tool_ms": 929,
+   "model_ms": null,
+   "snapshots": 1,
+   "delta_snapshots": 0,
+   "usage": {
+    "input_tokens": 85,
+    "output_tokens": 631,
+    "cache_read_input_tokens": 31252,
+    "cache_creation_input_tokens": 8179
+   },
+   "cost_usd": 0.0016588950000000003,
+   "cost_usd_sweef_estimate": 0.001658895,
+   "agent_elapsed_ms": 5821,
+   "task": "books-travel",
+   "run": 1,
+   "answer_ok": true
+  },
+  {
+   "tool": "playwright-agent",
+   "stop": "done",
+   "answer": "The Travel category shows 11 results.",
+   "turns": 3,
+   "requests": 3,
+   "retries": 0,
+   "tool_calls": 4,
+   "snapshots": 3,
+   "usage": {
+    "input_tokens": 8,
+    "output_tokens": 230,
+    "cache_read_input_tokens": 13017,
+    "cache_creation_input_tokens": 26089
+   },
+   "model_ms": 3030.1011340000005,
+   "tool_ms": 364.9233400000012,
+   "cost_usd": 0.003507095,
+   "error": null,
+   "success_flag": true,
+   "wall_ms": 4510.195429000003,
+   "task": "books-travel",
+   "run": 1,
+   "answer_ok": true
+  }
+ ]
+}

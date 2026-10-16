@@ -66,7 +66,10 @@ func (j *jsVM) hostHTTPAsync(a []any) (any, error) {
 	}
 	token := httpToken.Add(1)
 	r := j.rt()
-	if !beacon {
+	// a speculative request (a router prefetch of the links on the page) is answered like any other, but the
+	// settle does not wait for it: nothing on the page changes until the user follows the link
+	counted := !beacon && !isPrefetchRequest(hdr)
+	if counted {
 		r.httpPending.Add(1)
 		r.mu.Lock()
 		if r.httpAt == nil {
@@ -92,10 +95,28 @@ func (j *jsVM) hostHTTPAsync(a []any) (any, error) {
 		delete(r.httpAt, token)
 		r.queue = append(r.queue, asyncEvent{kind: "http", id: token})
 		r.mu.Unlock()
-		r.httpPending.Add(-1)
+		if counted {
+			r.httpPending.Add(-1)
+		}
 		t.wake()
 	}()
 	return token, nil
+}
+
+// isPrefetchRequest reports whether page code marked a request as speculative: Next.js's router prefetch
+// (Next-Router-Prefetch), or a Purpose / Sec-Purpose of prefetch.
+func isPrefetchRequest(hdr map[string]string) bool {
+	for k, v := range hdr {
+		switch strings.ToLower(k) {
+		case "next-router-prefetch":
+			return strings.TrimSpace(v) != "" && strings.TrimSpace(v) != "0"
+		case "purpose", "sec-purpose", "x-purpose", "x-moz":
+			if strings.Contains(strings.ToLower(v), "prefetch") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func argAt(a []any, i int) any {
@@ -122,8 +143,12 @@ func (j *jsVM) hostHTTPTake(a []any) (any, error) {
 	return out.res, nil
 }
 
-// httpInFlight reports whether a page request younger than httpGrace is unanswered.
-func (j *jsVM) httpInFlight() bool {
+// httpInFlightBefore reports whether a page request that started before cutoff (zero = any) and is younger
+// than httpGrace is unanswered. The
+// settle pump passes its deadline: a request the page had already sent when the budget ran out gets its grace,
+// but one started afterwards does not extend the wait, or a page that keeps issuing requests (Next.js prefetches
+// every link it renders, one batch after another; a poller) would hold the load until it stops on its own.
+func (j *jsVM) httpInFlightBefore(cutoff time.Time) bool {
 	r := j.realtime
 	if r == nil || r.httpPending.Load() == 0 {
 		return false
@@ -131,7 +156,7 @@ func (j *jsVM) httpInFlight() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, at := range r.httpAt {
-		if time.Since(at) < httpGrace {
+		if (cutoff.IsZero() || at.Before(cutoff)) && time.Since(at) < httpGrace {
 			return true
 		}
 	}

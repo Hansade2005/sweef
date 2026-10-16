@@ -494,6 +494,13 @@ type unitCtx struct {
 	capH            float64
 	dvh, svh, lvh   float64
 	containerW, cqH float64
+	cqUsed          *bool // set when a container unit is resolved (nil: nobody asks)
+}
+
+func (u *unitCtx) noteCQ() {
+	if u.cqUsed != nil {
+		*u.cqUsed = true
+	}
 }
 
 // unitPx converts value+unit to px; pct reports a percentage.
@@ -542,9 +549,17 @@ func (u *unitCtx) unitPx(v float64, unit string) (px float64, pct bool, ok bool)
 	case "pc":
 		return v * 16, false, true
 	case "cqw", "cqi":
+		u.noteCQ()
 		return v * u.containerW / 100, false, true
 	case "cqh", "cqb":
+		u.noteCQ()
 		return v * u.cqH / 100, false, true
+	case "cqmin", "cqmax":
+		u.noteCQ()
+		if unit == "cqmin" {
+			return v * math.Min(u.containerW, u.cqH) / 100, false, true
+		}
+		return v * math.Max(u.containerW, u.cqH) / 100, false, true
 	}
 	return 0, false, false
 }

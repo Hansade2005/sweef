@@ -1,0 +1,127 @@
+{
+ "date": "2026-10-15T15:23:19.105Z",
+ "rounds": 7,
+ "warmCache": true,
+ "products": [
+  {
+   "product": "sweef",
+   "succeeded": 7,
+   "rounds": 7,
+   "flowTotalMs": 222.8,
+   "peakRssMiB": 54.5,
+   "cpuSecPerRound": 0.19,
+   "steps": {
+    "open": {
+     "medianMs": 27.7,
+     "medianBytes": 35,
+     "medianTokens": 9
+    },
+    "snapshot-i": {
+     "medianMs": 11.5,
+     "medianBytes": 466,
+     "medianTokens": 117
+    },
+    "click": {
+     "medianMs": 16.1,
+     "medianBytes": 26,
+     "medianTokens": 7
+    },
+    "snapshot": {
+     "medianMs": 10.8,
+     "medianBytes": 352,
+     "medianTokens": 88
+    },
+    "fill": {
+     "medianMs": 10.3,
+     "medianBytes": 16,
+     "medianTokens": 4
+    },
+    "eval": {
+     "medianMs": 10,
+     "medianBytes": 10,
+     "medianTokens": 3
+    },
+    "screenshot": {
+     "medianMs": 35.3,
+     "medianBytes": 37,
+     "medianTokens": 9
+    },
+    "back": {
+     "medianMs": 12.1,
+     "medianBytes": 35,
+     "medianTokens": 9
+    },
+    "get-title": {
+     "medianMs": 10,
+     "medianBytes": 5,
+     "medianTokens": 1
+    },
+    "close": {
+     "medianMs": 73.4,
+     "medianBytes": 19,
+     "medianTokens": 5
+    }
+   }
+  },
+  {
+   "product": "agent-browser",
+   "succeeded": 7,
+   "rounds": 7,
+   "flowTotalMs": 1535.8,
+   "peakRssMiB": 1119,
+   "cpuSecPerRound": 3.45,
+   "steps": {
+    "open": {
+     "medianMs": 578.3,
+     "medianBytes": 35,
+     "medianTokens": 9
+    },
+    "snapshot-i": {
+     "medianMs": 28.8,
+     "medianBytes": 480,
+     "medianTokens": 120
+    },
+    "click": {
+     "medianMs": 54.7,
+     "medianBytes": 9,
+     "medianTokens": 2
+    },
+    "snapshot": {
+     "medianMs": 59.4,
+     "medianBytes": 374,
+     "medianTokens": 94
+    },
+    "fill": {
+     "medianMs": 26.7,
+     "medianBytes": 9,
+     "medianTokens": 2
+    },
+    "eval": {
+     "medianMs": 8.3,
+     "medianBytes": 10,
+     "medianTokens": 3
+    },
+    "screenshot": {
+     "medianMs": 73.1,
+     "medianBytes": 65,
+     "medianTokens": 16
+    },
+    "back": {
+     "medianMs": 518.2,
+     "medianBytes": 24,
+     "medianTokens": 6
+    },
+    "get-title": {
+     "medianMs": 9.2,
+     "medianBytes": 5,
+     "medianTokens": 1
+    },
+    "close": {
+     "medianMs": 186.5,
+     "medianBytes": 19,
+     "medianTokens": 5
+    }
+   }
+  }
+ ]
+}

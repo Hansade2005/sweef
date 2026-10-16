@@ -3,6 +3,7 @@ package agent
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -32,6 +33,9 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	verbose := fs.Bool("v", false, "print status events and debug lines")
 	thoughts := fs.Bool("thoughts", false, "request and print thought summaries")
 	noThink := fs.Bool("no-thinking", false, "disable thinking (valid at effort <= high)")
+	allowTrackers := fs.Bool("allow-trackers", false, "load third-party ad, analytics and tracking requests (blocked by default)")
+	jsonOut := fs.Bool("json", false, "machine-readable: print only one JSON object {answer,text,stop,stats} on stdout (for benchmarks)")
+	noInitObs := fs.Bool("no-initial-snapshot", false, "do not send the starting page's snapshot with the task (the model then reads it with a tool call)")
 	baseURL := fs.String("base-url", "", "API base URL (default $ANTHROPIC_BASE_URL or https://api.anthropic.com)")
 	fs.Usage = func() {
 		fmt.Fprintf(out, "usage: sweef agent [flags] \"<task>\"\n\nRuns the browser agent headlessly. Needs ANTHROPIC_API_KEY.\n\n")
@@ -53,8 +57,13 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 		fmt.Fprintln(out, "sweef agent: ANTHROPIC_API_KEY is not set")
 		return 2
 	}
+	realOut := out
+	if *jsonOut {
+		out = io.Discard // human-readable progress is suppressed; the JSON object goes to realOut
+	}
 	cfg := Config{APIKey: key, Model: *model, Effort: *effort, MaxTurns: *maxTurns, MaxCostUSD: *maxCost, ThoughtSummaries: *thoughts}
 	cfg.BaseURL = *baseURL
+	cfg.NoInitialObservation = *noInitObs
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = os.Getenv("ANTHROPIC_BASE_URL")
 	}
@@ -65,9 +74,15 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 		cfg.Logf = func(f string, a ...any) { fmt.Fprintf(out, "[debug] "+f+"\n", a...) }
 	}
 
-	eng := engine.New(engine.DefaultOptions())
+	eo := engine.DefaultOptions()
+	eo.BlockTrackers = !*allowTrackers && os.Getenv("SWEEF_ALLOW_TRACKERS") == "" // see engine/trackers.go
+	eo.HideScrollbars = true
+	eo.NoAutoplay = os.Getenv("SWEEF_AUTOPLAY") == ""
+	eng := engine.New(eo)
 	defer eng.Close()
 	be := NewRPCBackend(eng)
+	be.StartBackgroundPump()
+	defer be.Close()
 	inR := bufio.NewReader(in)
 	var outMu sync.Mutex
 	be.ConfirmFunc = func(ctx context.Context, r ConfirmRequest) (bool, error) {
@@ -110,11 +125,14 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 	var final RunStats
 	exit := 0
 	midline := false
+	var textBuf strings.Builder
+	var doneText, errText string
 	st, _ := ag.Run(ctx, task, func(e Event) {
 		outMu.Lock()
 		defer outMu.Unlock()
 		switch e.Kind {
 		case EventText:
+			textBuf.WriteString(e.Text)
 			fmt.Fprint(out, e.Text)
 			midline = !strings.HasSuffix(e.Text, "\n")
 		case EventThought:
@@ -134,6 +152,7 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 		case EventConfirm:
 			// prompting happens in ConfirmFunc
 		case EventDone:
+			doneText = e.Text
 			if midline {
 				fmt.Fprintln(out)
 				midline = false
@@ -147,10 +166,22 @@ func RunCLI(args []string, in io.Reader, out io.Writer) int {
 				midline = false
 			}
 			fmt.Fprintf(out, "\nerror: %s\n", e.Text)
+			errText = e.Text
 			exit = 1
 		}
 	})
 	final = st
+	if *jsonOut {
+		b, _ := json.Marshal(struct {
+			Answer string   `json:"answer"` // the done-tool summary (what the user reads)
+			Text   string   `json:"text"`   // all assistant text
+			Stop   string   `json:"stop"`
+			Error  string   `json:"error,omitempty"` // why a run with stop "error" ended (the API's message)
+			Stats  RunStats `json:"stats"`
+		}{doneText, textBuf.String(), final.Stop, errText, final})
+		fmt.Fprintln(realOut, string(b))
+		return exit
+	}
 	printStats(out, final)
 	return exit
 }

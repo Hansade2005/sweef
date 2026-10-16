@@ -9,6 +9,166 @@ How to add an entry: see "Changelog" in [CONTRIBUTING.md](CONTRIBUTING.md). Main
 
 ## [Unreleased]
 
+### SDKs install the engine themselves (0.2.1)
+
+- `@sweef/browser` and `sweef-browser` 0.2.1 no longer require a manual download: the engine is resolved from `binary`, `SWEEF_BIN`, `sweef` on PATH, a per-user cache, and otherwise downloaded once from GitHub Releases (pinned `0.1.0-alpha.4`, SHA-256 verified before execution, no PATH changes, safe under concurrent first runs). Overrides: `SWEEF_VERSION`, `SWEEF_DOWNLOAD_BASE` (mirrors), `SWEEF_ENGINE_CACHE`, `SWEEF_SKIP_DOWNLOAD=1` (old behavior), standard proxy variables.
+- New: `ensureBinary()` / `ensure_binary()`, a `sweef` command from `npm i -g @sweef/browser` and `pip` / `pipx install sweef-browser`, `sweef-install` / `python -m sweef` to pre-fetch (`--print-path`), and a best-effort npm `postinstall` that never fails the install. Still zero dependencies; `import sweef` is side-effect free.
+
+### Script-heavy pages, the agent loop and CLI start
+
+Measured 2026-10-15 on a 4 vCPU Xeon against Chromium 141 / Playwright 1.56 (`bench/realsites/results/*-gaps*`, `replay-2026-10-15.md`, `resources-2026-10-15-replay.md`, `bench/surfaces/results/2026-10-15-gaps/`):
+
+- Mode A (47 tasks x 3 fresh runs, live network): median cold time to a usable snapshot 2939 -> 2188 ms on the 44 tasks both builds pass (Chromium 2029 ms on the 42 both pass); faster than Chromium on 25 tasks (was 16), slower on 17; runs passed 130/141 (Chromium 129/141). Through a local recording (5 runs): GitHub repo 7.7 -> 3.2 s (Chromium 1.2), GitHub issue 7.5 -> 3.3 s (1.5), Next.js docs 5.4 -> 1.9 s (0.7), the3rdacademy.com 4.0 -> 2.1 s (1.0), pipilot.dev 3.3 -> 1.6 s (1.1), Wikipedia 2.1 -> 1.3 s (1.1). Load CPU over ten pages 41 -> 28 s (Chromium 14 s). JavaScript-heavy pages stay slower than Chromium.
+- Loading: ancestor bloom filter for selector matching; an inline svg is built only when laid out, without building every other svg for an id union it does not need; inherited SVG properties from an index of only the rules that declare them; a parsed-stylesheet cache of 160 entries with order-shifted reuse; one layout pass where a container-query page needed two; images requested when the document is parsed; layouts forced by page script no longer wait for images, web fonts or script-inserted stylesheets; scripts and modules compiled on up to three worker runtimes as they arrive, read back by a new module loader; the module prefetcher skips non-module specifiers and no longer uses a regexp.
+- Readiness: a headless load settles for at most 600 ms (`--nav-settle-ms`, half before the load event) instead of the 1.5 s action budget; router prefetches (`Next-Router-Prefetch`, `Purpose: prefetch`) do not hold a settle; style-only mutations (animation loops) do not keep a settle from going quiet; fill, type, select, check and hover drain what they started instead of a full settle (330 -> ~15 ms per field).
+- Fixed: `history.pushState`/`replaceState` never moved the tab URL (the prelude called a host function that did not exist), so `wait --url`, `expect url` and the agent's `wait {url}` never matched after a client-side route change; batch steps ignored their timeouts (a `wait 500` slept 1 s, a `wait url|text` ran 30 s instead of 10 s); a frame about to load counted as idle (the race behind the flaky `TestSandboxedFrameWindowIsReachable`).
+- Agent (`sweef agent`): the starting page's snapshot comes with the task (`-no-initial-snapshot` turns it off), the system prompt is 2.8 kB instead of 18 kB and the tool schema 3.3 kB instead of 5.2 kB (Haiku 5.5 caches from 512 tokens), and pages keep running between model turns. The Mode B report shows uncached, cache-read and cache-write tokens for both agents. A new Mode B run is pending.
+- CLI: the compiled prelude is embedded (`make embeds`; first eval in a fresh session 155 -> 15 ms in the surfaces flow); new `sweef-cli`, the session client without the engine: `get title` 9.9 -> 4.3 ms (agent-browser 10.2 ms); the agent's regexps and the MCP tool table are built on first use.
+- Screenshots encode PNG with one row filter, RGB when opaque (35 -> 9 ms per 1280x800 encode).
+- Agent mode also blocks self-hosted analytics hosts (`analytics.`, `stats.`, Plausible, Matomo, Umami paths) and developer-site ad networks.
+- Bench: `bench/replay` (record pages once, serve them from localhost), `replay_table.mjs` (median and spread), `resources.mjs` over ten sites; the session CLI smoke test runs on Windows (AF_UNIX probe).
+
+### Agent interfaces: MCP, SDKs and CLI brought up to date, tested and benchmarked
+
+Measured in [bench/surfaces](bench/surfaces/README.md) on 2026-10-15 (4 vCPU Xeon, local fixture unless noted):
+
+- MCP (`sweef mcp`) against `@playwright/mcp` 0.0.83: cold start to first snapshot 20 ms vs 810 ms; the fixture flow (navigate, snapshot, click, snapshot, fill, evaluate, screenshot, back) 22.5 ms vs 1388 ms of call latency and 425 vs 856 text tokens; peak RSS 91 vs 945 MiB. Real script-heavy pages navigate slower in Sweef (GitHub 7.1 s vs 0.9 s, Wikipedia 2.4 s vs 1.0 s); see the report.
+- MCP replies are leaner: plain text instead of JSON wrappers, log lines with cursors, a 20k-character cap with an `offset` to continue, image-only screenshots (the Wikipedia text render was 32k tokens per screenshot), and after an action the snapshot lines that changed (`SWEEF_MCP_AUTO_DELTA=0` turns it off). `browser_snapshot` returns the YAML tree; new tools `browser_type`, `browser_scroll`, `browser_reload`, `browser_wait`, `browser_wait_for_url` and `browser_call` (any RPC method).
+- Fixed: `browser_emulate` ignored `kind`; armed dialogs were always dismissed (MCP, CLI and SDKs send `action: "accept"`); raw key presses and scrolling from the CLI, batch, MCP and SDKs were no-ops (parameter names); `sweef --json get url` was rejected; inline storage state was ignored.
+- Node SDK 0.2.0 (`@sweef/browser`) and Python SDK 0.2.0 (`sweef-browser`): `launch()`, `session()` (shares the CLI's daemon), batch, keyboard/mouse, `getBy*`, waits, routes, bindings, PNG screenshots, `call()`; the 0.1 SDKs called a method that does not exist (`url()`, `title()`) and read every `is*()` as false. Publish-ready, Apache-2.0, not yet published. SDK vs `playwright-core`: process start to first snapshot 77 vs 720 ms.
+- Session CLI against `agent-browser` 0.39.1: the flow in 445 ms vs 1554 ms with cold caches and 223 ms vs 1536 ms with warm ones; `eval` with a cold cache directory is slower (155 ms vs 7 ms). New `sweef rpc <Method> [json]`.
+- Engine: the first layout of a process no longer reads every system font file (lazy probe plus a font index in the cache directory: first screenshot 208 ms -> 68 ms cold, CLI screenshot 97 -> 35 ms warm); the warm JS VM pool builds in parallel and agent servers keep two ready (SDK evaluate 13.9 -> 0.84 ms); RPC frames are written unescaped in one write.
+- Tests: `internal/mcp` (handshake, schemas, a full flow, batch, errors, truncation), a session CLI smoke test, Node and Python SDK suites against a real `sweef serve` (`make test-sdk`, run in CI on Linux).
+
+### Agent browsing: speed and reliability on real sites
+Measured on 47 tasks / 41 public sites, 3 fresh-process runs each with empty caches, against Playwright + Chromium 141
+(`bench/realsites/results/modea-2026-10-15*.md`): runs passed 95/141 -> 130/141 (Chromium 127/141); median cold time to
+a usable snapshot on the tasks both builds pass 2221 -> 2237 ms (flat overall: GitHub now runs its scripts and is slower,
+most other sites are faster, e.g. Next.js docs 15.0 -> 6.7 s, MDN 9.7 -> 4.7 s, React docs 6.4 -> 2.4 s, Angular 6.3 ->
+3.1 s, Effective Go 5.0 -> 0.8 s). Against Chromium Sweef is faster on 16 of 42 tasks and slower on 26 (median 2.9 s vs
+2.1 s); JavaScript-heavy sites (GitHub, Next.js, MDN, the owner's React/Vite sites) stay 1.8x to 4.6x slower.
+- Headless settle is bounded and adaptive: it ends after 300 ms of quiet, and requests started after the settle deadline
+  no longer extend it; a batch of due timers stops at the pump deadline.
+- Entry modules compile and run under their URL (`import.meta.url`, relative `import()`), so GitHub's code view and
+  pipilot.dev's chunks load (pipilot.dev used to reload itself in a loop); queued `import()` calls download in parallel
+  (GitHub issue page 16 -> 10 s).
+- Cheaper layouts: the cross-pass style cache works with `@container` and `:has()`, intermediate container-query passes are
+  not finished, CSS background images are fetched in parallel before painting, the SVG filter precheck is exact;
+  IntersectionObserver / ResizeObserver deliveries are batched per task.
+- Known third-party trackers are not loaded in agent sessions (`--allow-trackers` / `SWEEF_ALLOW_TRACKERS=1` loads them).
+- Agent sessions do not preload media or decode a playing video past its first picture (`SWEEF_AUTOPLAY=1` restores it):
+  pipilot.dev idle CPU 9.2 -> 0.8 CPU-s per 5 s, peak memory 707 -> 334 MiB (one run before, median of 3 after).
+- Platform functions print as native code (the prelude is compiled without its source): Optimizely deleted element.style
+  on the-internet.herokuapp.com and jQuery did not start. Fixture flow total 218 -> 199 ms, daemon 58 -> 47 MB.
+- Forms submit through the `submit` event (React forms, saucedemo); Enter no longer submits twice; snapshot refs whose
+  element was replaced by an equivalent control are healed; waits honour `timeoutMs` and keep the page running;
+  `innerText` follows the rendering; `opacity: 0` no longer hides content from snapshots; same-origin links are listed as
+  paths and navigation accepts them.
+- Web Animations (`Element.animate`) run and finish as a task after the frame; `matchMedia` agrees with CSS (hover and
+  pointer are desktop's); scrollbars are hidden in agent screenshots like headless Chromium; viewport screenshots of a
+  scrolled page show the scrolled viewport; `-webkit-line-clamp`.
+- The snapshot's visibility cascade handles CSS escapes and nesting (Tailwind v4): pipilot.dev's desktop navigation was
+  missing and a click on it waited 35 s. `@font-face` `url()format()` without a space loads the font (nextjs.org).
+- The agent loop survives an API rejection of a thinking block (every failed Sweef run of the 2026-10-14 Mode B baseline
+  ended this way; not yet re-measured) and records the error of failed runs.
+- Bench: cold runs start with empty caches (the 2026-10-14 Sweef cold numbers were partly warm), owner-site tasks
+  (the3rdacademy.com, pipilot.dev, zaide.com), `fidelity.mjs` (screenshots and interaction parity vs Chromium),
+  `resources.mjs` (memory, CPU, idle CPU vs Chromium's process tree), `compare.mjs` (before/after tables), `loadtl`
+  `-init/-eval/-run-ms/-memprofile`.
+
+### Added
+- **Right-click menus everywhere.** One themed menu (light, dark, incognito) drawn by the chrome above the page, so it can extend
+  outside the page area and looks the same on every OS. Arrow keys, Enter, Esc, submenus; it closes on an outside click, scroll,
+  resize, window blur and tab change, and a right click elsewhere opens the menu for that spot. Web pages get link, image,
+  selection, editable-field, video/audio and plain-page menus (the page sees `contextmenu` first and can cancel it); the tab strip,
+  the empty strip, the omnibox, the bookmarks bar, the new tab page (tiles, background), History, Bookmarks, Downloads, Settings
+  site rows and the Sidekick (messages, input, conversation) have their own. See [docs/context-menus.md](docs/context-menus.md).
+- Tab actions: Duplicate (keeps history), Close other tabs, Close tabs to the right, Mute site, New tab to the right.
+- New tab page: Edit shortcut and Remove on top-site tiles (`newtab.sites` setting); bookmarks can be edited from the bar.
+- Undo and Redo in text fields; a page that cancels `mousedown` keeps the focus where it was.
+- `Inspect` opens Developer Tools for the tab.
+- **The Popover API** (`popover`, `showPopover` / `hidePopover` / `togglePopover`, `popovertarget`, `:popover-open`, `beforetoggle` /
+  `toggle`): a closed popover is no longer painted (YouTube's tooltips showed as grey squares). See [docs/web-platform.md](docs/web-platform.md).
+
+### Fixed
+- **youtube.com renders and plays.** Search results and the watch page show real titles, thumbnails and avatars, and the player plays
+  AV1 + Opus through MSE (see "youtube.com" in [docs/compat.md](docs/compat.md) for what was measured and what is still wrong: no
+  icons in the mini guide, no sound check, slow first paint, and a home page without videos because the server sends none to a visit
+  without cookies). Each of these was a difference from browsers that a library YouTube ships depends on:
+  - `host` and `mode` moved from `DocumentFragment.prototype` to `ShadowRoot.prototype`, and the `Node.prototype` accessors
+    (`firstChild`, `lastChild`, `childNodes`, `parentNode`, `nextSibling`, `textContent`, ...) work on fragments: the Shady DOM
+    polyfill failed with an empty `Uncaught` in `attachShadow` and saw every shadow root as empty.
+  - An uncaught value is printed as `Name: message` plus the stack, or, for a thrown string, number, object or `null`, with its
+    type (`Uncaught non-Error string thrown: "..."`); engine stacks have no header, so errors used to read as an empty `Uncaught`.
+  - `Element.attributes` is array-like (`Array.prototype.map/slice/forEach.call(el.attributes)` returned holes).
+  - Custom elements in `<template>` content and in nodes made by the template's owner document are inert (not constructed until
+    imported or inserted), as in browsers; Polymer walks its templates with bindings still in the attributes.
+  - Reflected properties live on the interfaces that own them (`href`, `src`, `data`, `name`, `type`, ... no longer exist on every
+    `HTMLElement`), `form`/`labels`/`validity`/`willValidate`/`checkValidity` are on form controls only, and
+    `createElement(name, {is})` no longer sets an `is` attribute. Polymer Resin replaced the `data` of every custom element with
+    its placeholder because of these.
+  - A same-origin `<iframe sandbox="allow-same-origin">` has a window the embedder can use (`contentWindow.history`); its own
+    scripts and inline handlers stay blocked. `bind`/`call`/`apply` of a method taken from another window run on the caller's
+    `this`: a page that borrows an iframe's `History.prototype.replaceState` and binds it to its own `window.history` no longer
+    fails with "origin 'null'".
+  - A `position: fixed` box inside an absolutely positioned one is laid out (it stayed 0x0: YouTube's masthead was invisible).
+  - A lowercase `viewbox` attribute next to the real `viewBox` of an inline SVG no longer overrides it (the logo was drawn at the
+    wrong scale).
+  - The default single-task script timeout is 30 s instead of 5 s (`--js-timeout-ms`): YouTube's first render has tasks longer than
+    5 s on a loaded machine, and the interrupted task left the watch page at "Video unavailable".
+- The embedded UI archive (`internal/ui/web.zar`) was out of date with `chrome.css`; regenerated (`make embeds`).
+- **Windows: the Start-menu and desktop shortcut started a console that closed at once.** The GUI launcher (`Sweef.exe`) and the
+  command-line binary (`sweef.exe`) differ only in case, so on Windows (and on macOS inside `Sweef.app`) one overwrote the other.
+  The launcher is now `SweefLauncher.exe` / `SweefLauncher`. This also explains why the macOS `.app` failed `codesign`.
+- Windows showed two sets of window buttons (the native title bar and one drawn by the page chrome); only the native ones remain.
+- Response bodies were cut silently at 8 MiB, which broke pages with large scripts (YouTube's main script is about 11 MB) with a
+  `SyntaxError` at the cut. The limit is now 128 MiB.
+- A tab that left its `sweef://` page no longer logs a `ReferenceError` for every UI state update.
+- The GUI writes panics and fatal runtime errors to `crash.log` (`%LocalAppData%\Sweef` on Windows).
+- **Developer Tools.** `F12`, `Ctrl+Shift+I` (`Cmd+Opt+I` on macOS), the menu (More tools, Developer tools) and the command
+  palette open a resizable panel docked under the page (the height is the setting `devtools.height`). Console: live
+  `console.*` and uncaught errors with level and text filters, `file:line`, stacks and repeat counts, plus a prompt that
+  evaluates in the page with history. Network: every request with status, type, size, time, cache state (`x-sweef-cache`)
+  and a waterfall, entries blocked by the tracker blocker marked, a preserve-log switch, request and response headers and a
+  text, JSON or image preview. Elements: the DOM tree, the matched CSS rules (with the losing declarations struck through),
+  computed style and box model, the selected node highlighted on the page, and live edits of attributes, text, nodes and
+  `element.style`. Sources: the page's scripts and stylesheets with line numbers and a pretty printer. Application: cookies,
+  `localStorage`, `sessionStorage`. Windows and macOS are unverified at runtime. Adds 148 KB to the Linux binary
+  (37,175,422 to 37,326,974 bytes stripped). See [docs/devtools.md](docs/devtools.md).
+- Engine inspection API on `Tab` (`internal/engine/devtools_*.go`): a network recorder with bodies under a budget, the DOM and
+  CSS views, a node highlight drawn into the page's display list, an evaluator that describes its result, sources and storage.
+  Console entries carry the script and line they came from when the engine knows it.
+- App entry points for a page context menu's "Inspect": `openDevTools(tabID)` and `openDevToolsAt(tabID, x, y)`.
+
+### Fixed
+- An uncaught error raised from a listener, timer or microtask is logged with its name and message, not only its stack.
+- The app no longer evaluates its UI messages (state patches, which now include the Developer Tools binding) in a tab whose
+  document is a web page, which could have defined `window.sweef` while the tab was still on the internal-page list.
+- Scrolling: the page texture is a window (band) around the view instead of the whole prefix of the page, which removes the
+  80 ms to 1.7 s repaints on deep pages and the blank frames of a fast flick (long text page, headless 1920x1080: repaint p50
+  80-150 ms to 17-23 ms, blank frames 348/425 to 0). Wheel notches and arrows use a critically damped spring, precision
+  touchpad deltas follow the finger and then fling with exponential decay, PageUp/PageDown/Space/Home/End ease. Scrolling
+  chains inner scroller, frame, viewport and honours `overflow` and `overscroll-behavior`. `scroll` / `scrollend`,
+  `scroll-behavior: smooth`, `scrollTo/By/IntoView` and fragment navigation work. Wheel events reach the page first
+  (`preventDefault` cancels; window/document/body wheel listeners are passive by default).
+- Text selection: drag with autoscroll, double click (word), triple click (paragraph), shift+click, shift/ctrl+shift+arrows,
+  Ctrl/Cmd+A, a highlight painted from the layout (so it matches `getSelection()` / `Range`), `user-select: none`, text controls
+  with `selectionStart/End`, `setSelectionRange`, `setRangeText`, find-in-page highlights with the active match scrolled in.
+- Clipboard: copy (Ctrl+C, Ctrl+Insert) puts `text/plain` and `text/html` on the system clipboard, cut (Ctrl+X, Shift+Delete),
+  paste (Ctrl+V, Shift+Insert) with cancelable `copy`/`cut`/`paste` events, a paste sanitiser for `contenteditable`, undo/redo
+  (Ctrl+Z, Ctrl+Y). `shell.RichClipboard`: CF_HTML on Windows, `text/html` on X11, `public.html` on macOS.
+  The Windows and macOS clipboard code is UNVERIFIED: it builds (GOOS=windows/darwin) and the CF_HTML framing is unit tested,
+  but it was not run on those systems.
+
+### Fixed
+- A page-initiated navigation whose load was started by the page pump before it was reported to the app could stay "loading"
+  forever.
+
+### Known gaps
+- `::selection` colours (the default colours are used), caret blink, wheel scrolling of a textarea, horizontal viewport scroll,
+  `position: fixed` elements inside the scrolled page texture, selection painting inside frames, smooth programmatic scrolling
+  of inner elements (instant).
+
 ## [0.1.0-alpha] - 2026-10-14
 
 ### Security

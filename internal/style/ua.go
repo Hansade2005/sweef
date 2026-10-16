@@ -15,6 +15,9 @@ slot { display: contents }
 head, link, meta, script, style, title, base, area, datalist, noembed, noframes, param, rp, template, noscript, source, track { display: none }
 [hidden]:not([hidden="until-found" i]):not(embed) { display: none }
 dialog:not([open]) { display: none }
+[popover]:not(:popover-open):not(dialog[open]) { display: none }
+[popover] { position: fixed; inset: 0; width: fit-content; height: fit-content; margin: auto; border: solid; padding: 0.25em; overflow: auto; color: black; background-color: white }
+[popover]:popover-open { z-index: 2147483647 }
 [data-sw-fullscreen] { position: fixed !important; inset: 0 !important; width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; margin: 0 !important; box-sizing: border-box !important; z-index: 2147483647 !important; background-color: black }
 html { color: black }
 body { margin: 8px }

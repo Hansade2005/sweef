@@ -13,7 +13,7 @@ ARCHES="${*:-amd64 arm64}"
 
 for arch in $ARCHES; do
   src="$(bin_dir windows "$arch")"
-  [ -f "$src/sweef.exe" ] && [ -f "$src/Sweef.exe" ] || die "missing exes in $src; run build.sh"
+  [ -f "$src/sweef.exe" ] && [ -f "$src/SweefLauncher.exe" ] || die "missing exes in $src; run build.sh"
   out="$DIST/sweef_${VERSION}_windows_${arch}_setup.exe"
   mkdir -p "$DIST"
   makensis -V2 -INPUTCHARSET UTF8 \
@@ -25,9 +25,9 @@ for arch in $ARCHES; do
   # portable zip
   work="$DIST/work/winzip_$arch"; top="sweef-$VERSION-windows-$arch"
   rm -rf "$work"; mkdir -p "$work/$top"
-  cp "$src/sweef.exe" "$src/Sweef.exe" "$work/$top/"
+  cp "$src/sweef.exe" "$src/SweefLauncher.exe" "$work/$top/"
   cp "$ROOT/NOTICE" "$work/$top/NOTICE"
-  printf 'Sweef %s (alpha), Windows %s - portable\r\n\r\n  Sweef.exe   starts the browser (runs "sweef.exe gui")\r\n  sweef.exe   command line tools: sweef.exe help\r\n\r\nDelete this folder to remove Sweef. The portable build does not register itself as a browser;\r\nuse the setup installer for that.\r\n' "$VERSION" "$arch" > "$work/$top/README.txt"
+  printf 'Sweef %s (alpha), Windows %s - portable\r\n\r\n  SweefLauncher.exe   starts the browser (runs "sweef.exe gui")\r\n  sweef.exe   command line tools: sweef.exe help\r\n\r\nDelete this folder to remove Sweef. The portable build does not register itself as a browser;\r\nuse the setup installer for that.\r\n' "$VERSION" "$arch" > "$work/$top/README.txt"
   zip_out="$DIST/$(asset_name zip windows "$arch" zip)"
   rm -f "$zip_out"
   make_zip "$work" "$top" "$zip_out"

@@ -48,10 +48,10 @@
     if (typeof v === 'function') { var id = ++cbSeq; cbs.set(id, v); return { k: 'cb', win: me().win, id: id }; }
     return { k: 'j', s: global.__swSer(v, []) };
   }
-  function decode(win, d, parentId) {
+  function decode(win, d, parentId, name) {
     switch (d.k) {
       case 'j': return global.__swDe(d.s, []);
-      case 'o': return remoteProxy(win, d.id, d.t, parentId);
+      case 'o': return remoteProxy(win, d.id, d.t, parentId, name);
       case 'e': throw mkErr(d.n, d.m);
     }
     return undefined;
@@ -60,9 +60,9 @@
     var encoded = [];
     if (args) for (var i = 0; i < args.length; i++) encoded.push(encode(args[i], win));
     var r = host('frOp', win, op, id, prop === undefined ? '' : String(prop), JSON.stringify(encoded), thisId || 0);
-    return decode(win, JSON.parse(r), id);
+    return decode(win, JSON.parse(r), id, op === 'get' ? String(prop) : undefined);
   }
-  function remoteProxy(win, id, type, thisId) {
+  function remoteProxy(win, id, type, thisId, name) {
     var key = win + ':' + id;
     if (type !== 'function') { var c = remoteCache.get(key); if (c) return c; }
     var base = type === 'function' ? function () { }.bind(null) : (type === 'array' ? [] : {});
@@ -75,6 +75,9 @@
           return undefined;
         }
         if (k === 'then') return undefined; // never a thenable: it would be unwrapped by await
+        // bind/call/apply of a remote function run here, on the proxy: the call then reaches the apply trap with the caller's
+        // `this` (a remote bind would copy that `this` into the other window instead)
+        if (type === 'function' && (k === 'bind' || k === 'call' || k === 'apply')) return Function.prototype[k];
         return remoteCall(win, 'get', id, k);
       },
       set: function (t, k, v) { if (typeof k === 'symbol') return false; remoteCall(win, 'set', id, k, [v]); return true; },
@@ -87,6 +90,13 @@
       },
       apply: function (t, thisArg, args) {
         var tr = thisArg !== null && thisArg !== undefined ? thisArg[REMOTE] : null;
+        // A platform method taken from another window and applied to an object of this one (a page borrows an iframe's
+        // pristine History.prototype.replaceState and binds it to its own window.history) runs on that object, as a
+        // cross-realm method does in a browser: run this window's implementation of the same method.
+        if (name && !tr && thisId && thisArg !== null && typeof thisArg === 'object') {
+          var iface = remoteCall(win, 'tag', thisId), C = typeof iface === 'string' ? global[iface] : undefined;
+          if (typeof C === 'function' && C.prototype && thisArg instanceof C && typeof C.prototype[name] === 'function') return C.prototype[name].apply(thisArg, args);
+        }
         return remoteCall(win, 'call', id, '', args, tr && tr.win === win ? tr.id : thisId);
       },
       construct: function (t, args) { return remoteCall(win, 'new', id, '', args); },
@@ -147,6 +157,7 @@
         case 'call': { var self = objOf(thisId); res = Function.prototype.apply.call(obj, self === undefined ? undefined : self, args); break; }
         case 'new': res = Reflect.construct(obj, args); break;
         case 'str': res = String(obj); break;
+        case 'tag': res = Object.prototype.toString.call(obj).slice(8, -1); break;
         default: throw mkErr('TypeError', 'unknown operation');
       }
       return JSON.stringify(result(res));

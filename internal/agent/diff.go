@@ -2,7 +2,6 @@ package agent
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -183,7 +182,7 @@ func multisetOps(a, b []string) []diffOp {
 // English/markup, which slightly over-estimates snapshot YAML).
 func EstimateTokens(s string) int { return (len(s) + 3) / 4 }
 
-var refRe = regexp.MustCompile(`ref=(e\d+)`)
+var refRe = lazyRE(`ref=(e\d+)`)
 
 func hasRef(line string) bool { return strings.Contains(line, "ref=e") }
 
@@ -249,8 +248,8 @@ func TruncateSnapshot(s string, maxTokens int) (string, bool) {
 
 // ---- ref labels ------------------------------------------------------------
 
-var lineRe = regexp.MustCompile(`^\s*(?:[+-] )?- ([A-Za-z][\w-]*)(?: "((?:[^"\\]|\\.)*)")?.*?ref=(e\d+)`)
-var urlRe = regexp.MustCompile(`^\s*(?:[+-] )?- /url: (\S+)`)
+var lineRe = lazyRE(`^\s*(?:[+-] )?- ([A-Za-z][\w-]*)(?: "((?:[^"\\]|\\.)*)")?.*?ref=(e\d+)`)
+var urlRe = lazyRE(`^\s*(?:[+-] )?- /url: (\S+)`)
 
 // refInfo is what we remember about a ref from the latest snapshot text.
 type refInfo struct {
@@ -271,7 +270,7 @@ func (r refInfo) label() string {
 func parseRefs(s string, into map[string]refInfo) {
 	lastRef := ""
 	for _, line := range strings.Split(s, "\n") {
-		if m := lineRe.FindStringSubmatch(line); m != nil {
+		if m := lineRe().FindStringSubmatch(line); m != nil {
 			info := refInfo{Role: m[1], Name: strings.ReplaceAll(m[2], `\"`, `"`)}
 			if i := strings.Index(line, "["); i >= 0 {
 				if j := strings.LastIndex(line, "]"); j > i {
@@ -282,7 +281,7 @@ func parseRefs(s string, into map[string]refInfo) {
 			lastRef = m[3]
 			continue
 		}
-		if m := urlRe.FindStringSubmatch(line); m != nil && lastRef != "" {
+		if m := urlRe().FindStringSubmatch(line); m != nil && lastRef != "" {
 			info := into[lastRef]
 			info.Href = m[1]
 			into[lastRef] = info

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/sweefbrowser/sweef/internal/zpack"
 )
@@ -56,5 +57,16 @@ func TestPreludeKeyIgnoresInflation(t *testing.T) {
 	}
 	if !strings.Contains(fullPrelude(), "var x = 1;") {
 		t.Fatal("fullPrelude lacks a registered raw prelude")
+	}
+}
+
+// The compiled prelude in the binary is the prelude this build makes (run make embeds after editing the
+// preludes or the extensions that register JavaScript).
+func TestEmbeddedPreludeBytecodeIsCurrent(t *testing.T) {
+	if unsafe.Sizeof(uintptr(0)) != 8 {
+		t.Skip("the embedded prelude is for 64-bit builds")
+	}
+	if embeddedPrelude() == nil {
+		t.Fatal("internal/engine/prelude.qjsbc.{z,key} are stale or missing: run make embeds (go generate ./internal/engine)")
 	}
 }

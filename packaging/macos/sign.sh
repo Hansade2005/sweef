@@ -35,7 +35,7 @@ IDENTITY="$(security find-identity -v -p codesigning "$KC" | awk -F'"' '/Develop
 log "signing as: $IDENTITY"
 
 # Inside-out: nested code first, then the bundle. No --deep (Apple discourages it for signing).
-for f in "$APP/Contents/MacOS/sweef" "$APP/Contents/MacOS/Sweef"; do
+for f in "$APP/Contents/MacOS/sweef" "$APP/Contents/MacOS/SweefLauncher"; do
   codesign --force --timestamp --options runtime --entitlements "$ENT" --sign "$IDENTITY" "$f"
 done
 codesign --force --timestamp --options runtime --entitlements "$ENT" --sign "$IDENTITY" "$APP"

@@ -73,6 +73,11 @@ func (s *Server) batch(p Params) (any, error) {
 	failed := 0
 	for i, st := range steps {
 		t0 := time.Now()
+		// an input step settles fully only when it ends the batch: its observation follows at once
+		if t, terr := s.tab(Params{"tab": tab}); terr == nil {
+			t.SetFullInputSettle(i == len(steps)-1)
+			defer t.SetFullInputSettle(false)
+		}
 		name := st.Cmd
 		var res any
 		var err error
@@ -260,7 +265,9 @@ func (s *Server) runVerb(tab, verb string, args []string) (any, error) {
 		if ms > 30000 {
 			ms = 30000
 		}
-		time.Sleep(time.Duration(ms) * time.Millisecond)
+		if _, err := call("Page.waitForTimeout", map[string]any{"ms": ms}); err != nil { // the page runs meanwhile
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
 		return map[string]any{"slept": ms}, nil
 	case "snapshot":
 		mode := "full"
