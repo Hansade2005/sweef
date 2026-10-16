@@ -645,7 +645,7 @@ func (e *entry) get() *Face {
 		}
 	} else {
 		var err error
-		if data, err = os.ReadFile(e.path); err != nil {
+		if data, err = readFontFile(e.path); err != nil {
 			return nil
 		}
 	}

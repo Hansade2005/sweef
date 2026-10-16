@@ -82,6 +82,9 @@ func (r *Ring) Trim() {
 	defer r.mu.Unlock()
 	if r.n > 1 {
 		drop := r.n / 2
+		for i := 0; i < drop; i++ { // clear the slots too, or the events they hold stay reachable
+			r.items[(r.head+i)%r.size] = Event{}
+		}
 		r.head = (r.head + drop) % r.size
 		r.n -= drop
 	}
@@ -634,6 +637,7 @@ func (t *Tab) setDocument(htmlSrc, finalURL string, progressive bool) {
 	old := t.js
 	t.js = nil
 	t.mu.Unlock()
+	dropBitmapSourcesExcept(t.ID, doc)
 	t.swDocumentCommitted(finalURL)
 	// Freeing every object the previous page allocated takes milliseconds;
 	// nothing can reach the old VM any more, so do it off the critical path.

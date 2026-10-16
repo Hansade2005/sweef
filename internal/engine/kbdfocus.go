@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"weak"
 
 	fnet "github.com/sweefbrowser/sweef/internal/net"
 )
@@ -15,7 +16,7 @@ import (
 // its current document here instead.
 
 type kbdFocusRec struct {
-	doc *fnet.Doc
+	doc weak.Pointer[fnet.Doc] // weak: the record must not keep a page that was navigated away alive
 	id  int64
 }
 
@@ -38,7 +39,7 @@ func (t *Tab) setKbdFocus(bid int64) {
 		t.kbdFocus.Store(nil)
 		return
 	}
-	t.kbdFocus.Store(&kbdFocusRec{doc: d, id: bid})
+	t.kbdFocus.Store(&kbdFocusRec{doc: weak.Make(d), id: bid})
 }
 
 // kbdFocused is the element setKbdFocus recorded, 0 when it belongs to an
@@ -51,7 +52,7 @@ func (t *Tab) kbdFocused() int64 {
 	t.mu.RLock()
 	d := t.dom
 	t.mu.RUnlock()
-	if d == nil || r.doc != d {
+	if d == nil || r.doc.Value() != d {
 		return 0
 	}
 	if n := d.NodeByID(r.id); n == nil || !attachedTo(d, n) {

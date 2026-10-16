@@ -136,6 +136,7 @@ func cmdMCP(args []string) {
 	}
 	o := engineOptsFrom(fs)
 	o.WarmVMs = 2 // long-lived agent server: keep two JS VMs ready (engine vmPool)
+	engine.SetProcessMemoryBudget(o.MaxRSSMiB)
 	e := engine.New(o)
 	defer e.Close()
 	srv := mcp.New(e, os.Stdout)
@@ -162,6 +163,7 @@ func cmdServe(args []string) {
 	}
 	o := engineOptsFrom(fs)
 	o.WarmVMs = 2 // long-lived agent server: keep two JS VMs ready (engine vmPool)
+	engine.SetProcessMemoryBudget(o.MaxRSSMiB)
 	e := engine.New(o)
 	defer e.Close()
 	srv := rpc.NewServer(e)

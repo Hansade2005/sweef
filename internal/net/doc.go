@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -123,8 +124,19 @@ func ParseDocument(src, base string) (*Doc, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Doc{Root: hn, base: base, tab: newIDTable()}, nil
+	d := &Doc{Root: hn, base: base, tab: newIDTable()}
+	liveDocs.Add(1)
+	runtime.AddCleanup(d, func(struct{}) { liveDocs.Add(-1) }, struct{}{})
+	return d, nil
 }
+
+// liveDocs counts parsed documents not yet garbage collected.
+var liveDocs atomic.Int64
+
+// LiveDocs is the number of parsed documents the garbage collector has not
+// reclaimed yet (after a GC: the ones still referenced). A count that keeps
+// growing across navigations is a leak: Browser.stats reports it.
+func LiveDocs() int64 { return liveDocs.Load() }
 
 // ---- helpers on html.Node -------------------------------------------------
 

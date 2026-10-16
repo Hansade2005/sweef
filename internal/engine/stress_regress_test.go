@@ -1,10 +1,16 @@
 package engine
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
+	"weak"
+
+	fnet "github.com/sweefbrowser/sweef/internal/net"
 )
 
 // Regression tests for failures an external tester hit driving real sites
@@ -279,5 +285,50 @@ func TestInnerHTMLElementsHaveStyle(t *testing.T) {
 	}
 	if txt, _ := tab.Locator("#out").TextContent(); txt != "object" {
 		t.Fatalf("handlers after the probe: %q", txt)
+	}
+}
+
+// Navigating away must free the page left behind. Canvases (and videos)
+// register a bitmap source keyed by their document; the registry was only
+// cleared when the tab closed, so every page with a canvas (Wikipedia has
+// some) stayed in memory with its tree and layout: a 40-page run grew to
+// ~790 MiB resident.
+func TestNavigationFreesPreviousDocuments(t *testing.T) {
+	pages := map[string]string{}
+	for i := 0; i < 8; i++ {
+		pages[fmt.Sprintf("/p%d", i)] = fmt.Sprintf(`<!doctype html><title>p%d</title><canvas id="c" width="64" height="64"></canvas>
+<input id="f"><p>%s</p><script>var g = document.getElementById('c').getContext('2d'); g.fillRect(0, 0, 10, 10);</script>`, i, strings.Repeat("text ", 2000))
+	}
+	base := serveFixtures(t, pages)
+	tab := fixtureTab(t, base, "/p0")
+	var docs []weak.Pointer[fnet.Doc]
+	for i := 1; i < 8; i++ {
+		if err := tab.Click("#f"); err != nil { // keyboard focus records must not pin the page either
+			t.Fatal(err)
+		}
+		tab.mu.RLock()
+		docs = append(docs, weak.Make(tab.dom))
+		tab.mu.RUnlock()
+		if err := tab.Navigate(fmt.Sprintf("%s/p%d", base, i), nil); err != nil {
+			t.Fatal(err)
+		}
+		tab.Screenshot(0)
+	}
+	alive := 0
+	for try := 0; try < 50; try++ { // the old VMs close in the background
+		runtime.GC()
+		alive = 0
+		for _, w := range docs {
+			if w.Value() != nil {
+				alive++
+			}
+		}
+		if alive == 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if alive > 0 {
+		t.Fatalf("%d of %d documents navigated away from are still alive", alive, len(docs))
 	}
 }
