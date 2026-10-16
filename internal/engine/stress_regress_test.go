@@ -212,3 +212,72 @@ func TestKeyboardTypeWithoutFocusNoVM(t *testing.T) {
 		t.Fatal("typing with nothing focused should fail on a script-less page")
 	}
 }
+
+// the-internet.herokuapp.com loads an Optimizely snippet whose "Cleanse"
+// step walks HTMLElement.prototype and Object.prototype and deletes every
+// property whose getter, setter or value does not print as "[native code]"
+// (to hide page polyfills while it runs). When the engine's DOM, written in
+// JS, printed its source, Cleanse deleted Element.style and the rest: the
+// snippet's own jQuery 1.6 support probe threw "cannot read property
+// 'opacity' of undefined", jQuery 1.11's support tests threw on cssText,
+// and jQuery UI, Foundation and the page's handlers never ran. The fixture
+// runs Cleanse's algorithm, then both support probes. The probes also read
+// style.opacity back after writing ".5": a value not serialized as "0.5"
+// makes jQuery fall back to IE filters.
+const supportProbeFixture = `<!doctype html><html><head><script>
+window.R = [];
+HTMLElement.prototype.pagePolyfill = function () {}; // Cleanse must remove this one
+(function () { // optly.Cleanse.start, as shipped
+  var native = function (f) { return f && String(f).indexOf("[native code]") !== -1; }, cleansed = 0;
+  [HTMLElement, Object].forEach(function (T) {
+    var p = T.prototype;
+    for (var k in p) if (p.hasOwnProperty(k)) {
+      var g = p.__lookupGetter__(k), st = p.__lookupSetter__(k), v = g ? null : p[k];
+      if (native(v) || native(g) || native(st)) continue;
+      delete p[k]; cleansed++;
+    }
+  });
+  R.push("cleansed:" + cleansed + "," + typeof HTMLElement.prototype.pagePolyfill);
+})();
+(function () {
+  try {
+    var o = document.createElement("div");
+    o.setAttribute("className", "t");
+    o.innerHTML = "   <link/><table></table><a href='/a' style='top:1px;float:left;opacity:.55;'>a</a><input type='checkbox'/>";
+    var C = o.getElementsByTagName("a")[0];
+    R.push("leading:" + (o.firstChild.nodeType === 3));
+    R.push("link:" + !!o.getElementsByTagName("link").length);
+    R.push("style:" + /top/.test(C.getAttribute("style")));
+    R.push("opacity:" + /^0.55$/.test(C.style.opacity));
+    R.push("cssFloat:" + !!C.style.cssFloat);
+    var d = document.createElement("div");
+    d.innerHTML = "  <link/><table></table><a href='/a'>a</a><input type='checkbox'/>";
+    var c = d.getElementsByTagName("a")[0].style;
+    c.cssText = "float:left;opacity:.5";
+    R.push("cssText:" + (c.opacity === "0.5") + "," + !!c.cssFloat);
+    var frag = document.createDocumentFragment(), x = document.createElement("div");
+    frag.appendChild(x);
+    x.innerHTML = "<textarea>x</textarea><span>s</span>";
+    var m = document.createElement("div").style;
+    m.cssText = "margin: -.5em 1.50px +2px 0; background: url(a.5.png); transition: opacity .3s";
+    R.push("canon:" + m.margin + "/" + m.transitionDuration + m.transition.slice(-5) + "/" + (m.background.indexOf("a.5.png") > 0));
+    R.push("frag:" + (typeof x.lastChild.style) + "," + (typeof getComputedStyle(document.documentElement).opacity));
+  } catch (e) { R.push("ERR " + e); }
+})();
+</script></head><body><button onclick="document.getElementById('out').textContent = typeof window.R">go</button><p id="out"></p></body></html>`
+
+func TestInnerHTMLElementsHaveStyle(t *testing.T) {
+	base := serveFixtures(t, map[string]string{"/p": supportProbeFixture})
+	tab := fixtureTab(t, base, "/p")
+	got := mustEval(t, tab, `R.join(" ")`)
+	want := `"cleansed:1,undefined leading:true link:true style:true opacity:true cssFloat:true cssText:true,true canon:-0.5em 1.5px 2px 0/ 0.3s/true frag:object,string"`
+	if got != want {
+		t.Fatalf("support probe:\n got %s\nwant %s", got, want)
+	}
+	if err := tab.Click("button"); err != nil {
+		t.Fatal(err)
+	}
+	if txt, _ := tab.Locator("#out").TextContent(); txt != "object" {
+		t.Fatalf("handlers after the probe: %q", txt)
+	}
+}

@@ -724,10 +724,26 @@
       var name = decl.slice(0, i).trim().toLowerCase(), value = decl.slice(i + 1).trim(), imp = false;
       if (!name) return;
       var m = /^(.*?)\s*!\s*important$/i.exec(value); if (m) { value = m[1]; imp = true; }
+      value = canonNumbers(value);
       for (var j = 0; j < out.length; j++) if (out[j].name === name) { out.splice(j, 1); break; }
       out.push({ name: name, value: value, important: imp });
     });
     return out;
+  }
+  // numbers in a declared value serialize the way browsers do (".5" -> "0.5", "1.50px" -> "1.5px", "+2" -> "2"):
+  // jQuery's support tests read style.opacity back after writing "opacity:.5" and switch to IE filters otherwise
+  var NUM_RE = /(^|[\s,(\/])([+-]?)(\d*)\.?(\d*)(?=[a-z%]*(?=$|[\s,)\/]))/gi;
+  function canonNumbers(v) {
+    if (v.indexOf('.') < 0 && v.indexOf('+') < 0 || /["'\\]|url\(/i.test(v)) return v;
+    return v.replace(NUM_RE, function (all, pre, sign, int, frac, off, str) {
+      if (int === '' && frac === '') return all;
+      if (str.charAt(off + all.length) === '.') return all; // "1.2.3": not a number
+      var dot = all.indexOf('.') >= 0;
+      if (!dot && sign !== '+') return all;
+      frac = dot ? frac.replace(/0+$/, '') : '';
+      int = int.replace(/^0+(?=\d)/, '') || '0';
+      return pre + (sign === '-' ? '-' : '') + int + (frac ? '.' + frac : '');
+    });
   }
   function serializeCss(decls) { return decls.map(function (d) { return d.name + ': ' + d.value + (d.important ? ' !important' : '') + ';'; }).join(' '); }
 
