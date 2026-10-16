@@ -19,12 +19,14 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/sweefbrowser/sweef/internal/engine"
+	fnet "github.com/sweefbrowser/sweef/internal/net"
 	"github.com/sweefbrowser/sweef/internal/protocol"
 )
 
@@ -228,11 +230,34 @@ func (s *Server) dispatch(method string, p Params) (any, error) {
 		}
 		return map[string]bool{"ok": true}, nil
 	case "Browser.stats":
+		// gc: collect first (numbers without garbage); heapProfile: also write a pprof heap profile there
+		// (a development aid for memory work, like SWEEF_CPUPROFILE)
+		if b, _ := p["gc"].(bool); b || str(p, "heapProfile") != "" {
+			runtime.GC()
+		}
+		if path := str(p, "heapProfile"); path != "" {
+			f, err := os.Create(path)
+			if err != nil {
+				return nil, err
+			}
+			err = pprof.WriteHeapProfile(f)
+			f.Close()
+			if err != nil {
+				return nil, err
+			}
+		}
 		var ms runtime.MemStats
 		runtime.ReadMemStats(&ms)
+		rss, ok := engine.ProcessRSS()
+		if !ok {
+			rss = ms.Sys // no OS figure: what the Go runtime holds (misses the QuickJS heaps)
+		}
 		return map[string]any{
-			"rssMiB":     ms.Sys >> 20,
+			"rssMiB":     rss >> 20,
+			"goSysMiB":   ms.Sys >> 20,
 			"heapMiB":    ms.HeapAlloc >> 20,
+			"budgetMiB":  s.eng.Opts().MaxRSSMiB,
+			"liveDocs":   fnet.LiveDocs(),
 			"goroutines": runtime.NumGoroutine(),
 			"tabs":       len(s.eng.ListTabs()),
 		}, nil

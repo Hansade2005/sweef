@@ -724,10 +724,26 @@
       var name = decl.slice(0, i).trim().toLowerCase(), value = decl.slice(i + 1).trim(), imp = false;
       if (!name) return;
       var m = /^(.*?)\s*!\s*important$/i.exec(value); if (m) { value = m[1]; imp = true; }
+      value = canonNumbers(value);
       for (var j = 0; j < out.length; j++) if (out[j].name === name) { out.splice(j, 1); break; }
       out.push({ name: name, value: value, important: imp });
     });
     return out;
+  }
+  // numbers in a declared value serialize the way browsers do (".5" -> "0.5", "1.50px" -> "1.5px", "+2" -> "2"):
+  // jQuery's support tests read style.opacity back after writing "opacity:.5" and switch to IE filters otherwise
+  var NUM_RE = /(^|[\s,(\/])([+-]?)(\d*)\.?(\d*)(?=[a-z%]*(?=$|[\s,)\/]))/gi;
+  function canonNumbers(v) {
+    if (v.indexOf('.') < 0 && v.indexOf('+') < 0 || /["'\\]|url\(/i.test(v)) return v;
+    return v.replace(NUM_RE, function (all, pre, sign, int, frac, off, str) {
+      if (int === '' && frac === '') return all;
+      if (str.charAt(off + all.length) === '.') return all; // "1.2.3": not a number
+      var dot = all.indexOf('.') >= 0;
+      if (!dot && sign !== '+') return all;
+      frac = dot ? frac.replace(/0+$/, '') : '';
+      int = int.replace(/^0+(?=\d)/, '') || '0';
+      return pre + (sign === '-' ? '-' : '') + int + (frac ? '.' + frac : '');
+    });
   }
   function serializeCss(decls) { return decls.map(function (d) { return d.name + ': ' + d.value + (d.important ? ' !important' : '') + ';'; }).join(' '); }
 
@@ -1976,7 +1992,7 @@
       set: function (v) { var b = this.body; if (b) b.replaceWith(v); else this.documentElement.appendChild(v); }
     },
     title: {
-      get: function () { var t = queryOne(this, 'title'); return t ? t.textContent.replace(/\s+/g, ' ').trim() : ''; },
+      get: function () { var t = queryOne(this, 'title'); return t ? t.textContent.replace(/[\t\n\f\r ]+/g, ' ').replace(/^ | $/g, '') : ''; },
       set: function (v) { var t = queryOne(this, 'title'); if (!t) { var h = this.head; if (!h) return; t = h.appendChild(this.createElement('title')); } t.textContent = toStr(v); }
     },
     doctype: { get: function () { return wrapAll(sw.children(this[ID])).filter(function (n) { return n.nodeType === 10; })[0] || null; } },
@@ -3831,7 +3847,15 @@
     } else if (key === 'Backspace' && editable) { used = true; result = editInput(el, 'deleteContentBackward', null); }
     else if (key === 'Delete' && editable) { used = true; result = editInput(el, 'deleteContentForward', null); }
     if (!used && !printable) {
-      if (key === 'Enter' && el.nodeType === 1) {
+      if (key === 'Tab' && !mods.ctrlKey && !mods.metaKey && !mods.altKey && host('nextTabStop')) {
+        // sequential focus navigation: the keyup goes to the newly focused element, as in a browser
+        var nid = sw.nextTabStop(el.nodeType === 1 && el === activeElement ? el[ID] : 0, !!mods.shiftKey), next = nid ? wrap(+nid) : null;
+        if (next && next !== el) {
+          focusElement(next);
+          if ((next.localName === 'input' && PRINTABLE_INPUT.test(next.type)) || next.localName === 'textarea') { var nl = next.value.length; slots(next).selStart = 0; slots(next).selEnd = nl; }
+          el = next;
+        }
+      } else if (key === 'Enter' && el.nodeType === 1) {
         if (el.localName === 'input') { var f = el.form; if (f) submitForm(f, queryOne(f, 'button[type=submit],input[type=submit],button:not([type])') || null); }
         else if (el.localName === 'button' || el.localName === 'a' || el.getAttribute('role') === 'button') clickElement(el);
       } else if (key === ' ' && el.nodeType === 1 && (el.localName === 'button' || (el.localName === 'input' && (el.type === 'checkbox' || el.type === 'radio' || el.type === 'button' || el.type === 'submit')))) clickElement(el);
@@ -3888,7 +3912,19 @@
     type = String(type);
     init = Object.assign(pointerInit(x, y, el), { button: 0, buttons: /down|move/.test(type) && type !== 'mousemove' ? 1 : 0 }, init || {});
     if (type === 'click') return dispatchFromGo(el[ID], 'click', init) ? (defaultAction(el), true) : false;
-    return fire(el, type, init);
+    var ok = fire(el, type, init);
+    if (type === 'mousedown' && ok) focusForPointer(el);
+    return ok;
+  }
+  // the default action of a mousedown: focus the clicked focusable area (the element or its nearest focusable
+  // ancestor), or blur the focused element when the press lands on something that takes no focus
+  function focusForPointer(el) {
+    for (var e = el; e && e.nodeType === 1; e = e.parentNode) {
+      var n = e.localName;
+      if (((n === 'input' && e.type !== 'hidden') || n === 'textarea' || n === 'select' || n === 'button') && !e.disabled) { focusElement(e); return; }
+      if ((n === 'a' && e.hasAttribute('href')) || e.hasAttribute('tabindex') || e.isContentEditable || n === 'summary') { focusElement(e); return; }
+    }
+    if (activeElement) blurActive(null);
   }
   function touchFromGo(id, type) {
     var el = targetOf(id); if (!el) return true;

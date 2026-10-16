@@ -9,6 +9,7 @@ Pick your system:
 - [macOS](#macos)
 - [Windows](#windows)
 - [Verify your download](#verify-your-download)
+- [For SDK, CLI and MCP users](#for-sdk-cli-and-mcp-users)
 - [Making Sweef your default browser](#making-sweef-your-default-browser)
 - [For maintainers: cutting a release](#for-maintainers-cutting-a-release)
 
@@ -110,6 +111,22 @@ gh attestation verify sweef_<version>_linux_amd64.deb --repo sweefbrowser/sweef
 `install.sh` checks the tarball against `SHA256SUMS` from the same release. That catches corrupted or
 mismatched downloads; to guard against a compromised release page, pass a hash you got elsewhere:
 `--sha256 <hex>`.
+
+## For SDK, CLI and MCP users
+
+The headless engine is the same `sweef` binary. Three ways to get it:
+
+- **The SDKs fetch it for you.** `npm install @sweef/browser` or `pip install sweef-browser` downloads the
+  pinned engine release on first use (verified against the release checksums, cached per user) and puts a
+  `sweef` command on PATH with `npm i -g` / `pipx install`. See [sdk-mcp.md](sdk-mcp.md).
+- **A release binary**: the archives on the [Releases page](https://github.com/sweefbrowser/sweef/releases)
+  hold the `sweef` executable; put it on PATH or point `SWEEF_BIN` at it.
+- **From source**: `git clone https://github.com/sweefbrowser/sweef && cd sweef && go build -o sweef ./cmd/sweef`
+  (pure Go, `CGO_ENABLED=0` works, cross-compiles with `GOOS`/`GOARCH`).
+
+`go install github.com/sweefbrowser/sweef/cmd/sweef@latest` is rejected by Go: go.mod replaces two audio
+modules with trimmed copies in `third_party/`, and `go install pkg@version` refuses modules with `replace`
+directives. Build from a clone instead.
 
 ## Making Sweef your default browser
 

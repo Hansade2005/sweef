@@ -367,6 +367,11 @@ func (d *Doc) GetAttr(id int64, name string) (string, bool) {
 		return "", false
 	}
 	name = strings.ToLower(name)
+	if name == "selected" {
+		if sh, ok := d.scriptSelectedAttr(n); ok {
+			return sh.val, sh.has
+		}
+	}
 	for _, a := range n.Attr {
 		if a.Key == name {
 			return a.Val, true
@@ -377,14 +382,22 @@ func (d *Doc) GetAttr(id int64, name string) (string, bool) {
 
 func (d *Doc) SetAttr(id int64, name, val string) {
 	if n := d.find(id); n != nil && n.Type == html.ElementNode {
-		setAttr(n, strings.ToLower(name), val)
+		name = strings.ToLower(name)
+		if name == "selected" && d.scriptSetSelected(n, val, false) {
+			return
+		}
+		setAttr(n, name, val)
 		d.note(Mutation{Op: "set-attr", BackendID: id, Key: name, Value: val})
 	}
 }
 
 func (d *Doc) RemoveAttr(id int64, name string) {
 	if n := d.find(id); n != nil {
-		removeAttr(n, strings.ToLower(name))
+		name = strings.ToLower(name)
+		if name == "selected" && d.scriptSetSelected(n, "", true) {
+			return
+		}
+		removeAttr(n, name)
 		d.note(Mutation{Op: "remove-attr", BackendID: id, Key: name})
 	}
 }
@@ -394,9 +407,16 @@ func (d *Doc) AttrNames(id int64) []string {
 	if n == nil {
 		return nil
 	}
-	out := make([]string, 0, len(n.Attr))
+	sh, dirty := d.scriptSelectedAttr(n)
+	out := make([]string, 0, len(n.Attr)+1)
 	for _, a := range n.Attr {
+		if dirty && a.Key == "selected" {
+			continue
+		}
 		out = append(out, a.Key)
+	}
+	if dirty && sh.has {
+		out = append(out, "selected")
 	}
 	return out
 }
@@ -593,6 +613,7 @@ func (d *Doc) SetSelectedIndex(id int64, i int) {
 	if n == nil {
 		return
 	}
+	d.markOptionsDirty(n)
 	for k, o := range optionsOf(n) {
 		if k == i {
 			setAttr(o, "selected", "")

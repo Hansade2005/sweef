@@ -68,10 +68,16 @@ func (t *Tab) BitmapSourceFor(n *html.Node) BitmapSource {
 }
 
 // dropBitmapSources forgets every source of a closed tab.
-func dropBitmapSources(tabID string) {
+func dropBitmapSources(tabID string) { dropBitmapSourcesExcept(tabID, nil) }
+
+// dropBitmapSourcesExcept forgets the tab's sources that belong to another
+// document than keep. A navigation calls it: the canvases and videos of the
+// page being left were registered under its document, and the entries kept
+// that whole document (tree, layout, bitmaps) alive for the life of the tab.
+func dropBitmapSourcesExcept(tabID string, keep *fnet.Doc) {
 	bitmapMu.Lock()
 	for k := range bitmapSources {
-		if k.tab == tabID {
+		if k.tab == tabID && k.doc != keep {
 			delete(bitmapSources, k)
 		}
 	}

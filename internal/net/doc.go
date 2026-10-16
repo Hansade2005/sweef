@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -46,6 +47,10 @@ type Doc struct {
 	viewportW      atomic.Int64
 	layoutProvider func(width int) *Layout
 	provisionalOK  func() bool // Layout.Provisional; nil: never reuse a provisional layout
+
+	// option selectedness kept apart from script-written `selected` attributes (optsel.go)
+	optOnce sync.Once
+	optSel  *optSelState
 }
 
 // SetProvisionalOK sets which callers may be answered with a cached provisional layout (Layout.Provisional).
@@ -119,8 +124,19 @@ func ParseDocument(src, base string) (*Doc, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Doc{Root: hn, base: base, tab: newIDTable()}, nil
+	d := &Doc{Root: hn, base: base, tab: newIDTable()}
+	liveDocs.Add(1)
+	runtime.AddCleanup(d, func(struct{}) { liveDocs.Add(-1) }, struct{}{})
+	return d, nil
 }
+
+// liveDocs counts parsed documents not yet garbage collected.
+var liveDocs atomic.Int64
+
+// LiveDocs is the number of parsed documents the garbage collector has not
+// reclaimed yet (after a GC: the ones still referenced). A count that keeps
+// growing across navigations is a leak: Browser.stats reports it.
+func LiveDocs() int64 { return liveDocs.Load() }
 
 // ---- helpers on html.Node -------------------------------------------------
 
@@ -145,13 +161,11 @@ func hasAttr(n *html.Node, k string) bool {
 // ---- text / title ----------------------------------------------------------
 
 func (d *Doc) Title() string {
-	var t string
+	var t *html.Node
 	var walk func(*html.Node) bool
 	walk = func(n *html.Node) bool {
-		if n.Type == html.ElementNode && n.Data == "title" {
-			if n.FirstChild != nil {
-				t = n.FirstChild.Data
-			}
+		if n.Type == html.ElementNode && n.Data == "title" && n.Namespace == "" {
+			t = n
 			return true
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -162,7 +176,39 @@ func (d *Doc) Title() string {
 		return false
 	}
 	walk(d.Root)
-	return t
+	if t == nil {
+		return ""
+	}
+	var sb strings.Builder
+	for c := t.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.TextNode {
+			sb.WriteString(c.Data)
+		}
+	}
+	return StripCollapseASCIIWhitespace(sb.String())
+}
+
+// StripCollapseASCIIWhitespace is the HTML "strip and collapse ASCII
+// whitespace" (what document.title returns): runs of tab, LF, FF, CR and
+// space become one space, leading and trailing ones go. Other whitespace
+// (no-break space and friends) is kept.
+func StripCollapseASCIIWhitespace(s string) string {
+	var sb strings.Builder
+	sb.Grow(len(s))
+	space := false
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; c {
+		case '\t', '\n', '\f', '\r', ' ':
+			space = true
+		default:
+			if space && sb.Len() > 0 {
+				sb.WriteByte(' ')
+			}
+			space = false
+			sb.WriteByte(c)
+		}
+	}
+	return sb.String()
 }
 
 // innerText: whitespace-normalised visible text under a node.
@@ -425,22 +471,35 @@ func (d *Doc) SelectOption(backendID int64, want string) error {
 	if n == nil || n.Data != "select" {
 		return fmt.Errorf("not a select element")
 	}
-	for o := n.FirstChild; o != nil; o = o.NextSibling {
-		if o.Type != html.ElementNode || o.Data != "option" {
-			continue
-		}
-		if attr(o, "value") == want || innerText(o) == want {
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				if c.Type == html.ElementNode && c.Data == "option" {
-					removeAttr(c, "selected")
-				}
-			}
-			setAttr(o, "selected", "")
-			d.invalidateStyles()
-			return nil
+	opts := optionsOf(n) // includes options inside <optgroup>
+	var pick *html.Node
+	for _, o := range opts { // an exact value wins over a label
+		if v, ok := attrVal(o, "value"); ok && v == want {
+			pick = o
+			break
 		}
 	}
-	return fmt.Errorf("no option matches %q", want)
+	if pick == nil {
+		w := normWS(want)
+		for _, o := range opts {
+			if normWS(innerText(o)) == w || attr(o, "label") == want {
+				pick = o
+				break
+			}
+		}
+	}
+	if pick == nil {
+		return fmt.Errorf("no option matches %q", want)
+	}
+	d.markOptionsDirty(n)
+	for _, c := range opts {
+		if c != pick {
+			removeAttr(c, "selected")
+		}
+	}
+	setAttr(pick, "selected", "")
+	d.invalidateStyles()
+	return nil
 }
 
 // CheckState toggles checkbox/radio state in the tree.
@@ -622,6 +681,7 @@ func (d *Doc) SetValue(backendID int64, value string) error {
 		}
 		d.note(Mutation{Op: "set-value", BackendID: backendID, Value: value})
 	case "select":
+		d.markOptionsDirty(target)
 		for c := target.FirstChild; c != nil; c = c.NextSibling {
 			if c.Data == "option" {
 				if normWS(innerText(c)) == value || attr(c, "value") == value {
@@ -1139,6 +1199,13 @@ func (d *Doc) ByTestId(id string) []*Info {
 // text=..., text="exact", role=button[name="Ok"], label=..., placeholder=...,
 // alt=..., testid=..., and engine prefixes css=/xpath-less variants.
 func (d *Doc) ResolveEngine(sel string) ([]*Info, error) {
+	if parts := splitChain(sel); len(parts) > 1 {
+		return d.resolveChain(sel, parts)
+	}
+	return d.resolveEngineOne(sel)
+}
+
+func (d *Doc) resolveEngineOne(sel string) ([]*Info, error) {
 	s := strings.TrimSpace(sel)
 	// ref handles from AriaSnapshotYAML: "e42", "ref=e42", or "backend://e42"
 	refStr := ""

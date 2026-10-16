@@ -22,6 +22,19 @@ const pages = {
 <select id="plan"><option value="free">Free</option><option value="pro">Pro</option></select>
 <button type="submit">Sign in</button></form>`,
   '/welcome': null,
+  '/regress': `<!doctype html><title>
+    Tester   regressions
+</title><body style="margin:0"><form id="checkboxes"><input type="checkbox" id="c1"> one<br><input type="checkbox" id="c2" checked> two</form>
+<input id="user" style="position:absolute;left:10px;top:100px;width:200px;height:30px"><input id="pass" style="position:absolute;left:10px;top:150px;width:200px;height:30px">
+<select id="dropdown" style="position:absolute;left:10px;top:200px"><option value="" disabled selected>Please select an option</option><option value="1">Option 1</option><option value="2">Option 2</option></select>
+<script>
+var dd = document.getElementById('dropdown');
+dd.onchange = function (e) {
+  var o = dd.getElementsByTagName('option');
+  for (var i = 0; i < o.length; i++) o[i].removeAttribute('selected');
+  document.querySelector("#dropdown option[value='" + e.target.value + "']").setAttribute('selected', 'selected');
+};
+</script>`,
 };
 
 let server, base, sw;
@@ -81,6 +94,31 @@ test('forms: fill, check, select, keyboard, getByRole, press Enter', async () =>
   assert.equal(await page.textContent('h1'), 'Welcome ada@example.com');
   await page.goBack();
   assert.equal(await page.title(), 'Sign in');
+  await page.close();
+});
+
+test('tester regressions: title, first/last/nth, click then type, select with a rewriting handler', async () => {
+  const page = await sw.newPage(`${base}/regress`);
+  assert.equal(await page.title(), 'Tester regressions');
+  const boxes = page.locator('input[type=checkbox]');
+  assert.equal(await boxes.count(), 2);
+  assert.equal(await boxes.first.count(), 1);
+  await boxes.first.check();
+  assert.equal(await page.locator('#c1').isChecked(), true);
+  assert.equal(await boxes.last.isChecked(), true);
+  assert.equal(await boxes.nth(1).getAttribute('id'), 'c2');
+  assert.equal(await page.locator('#checkboxes').locator('input').nth(-1).getAttribute('id'), 'c2');
+  await page.click('#user');
+  await page.keyboard.type('tomsmith');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('secret');
+  await page.mouse.click(50, 115);
+  await page.keyboard.type('!');
+  assert.equal(await page.evaluate("document.querySelector('#user').value + '|' + document.querySelector('#pass').value"), 'tomsmith!|secret');
+  await page.selectOption('#dropdown', '2');
+  assert.equal(await page.evaluate("(() => { const s = document.querySelector('#dropdown'); return s.value + '|' + s.selectedIndex })()"), '2|2');
+  await page.selectOption('#dropdown', 'Option 1');
+  assert.equal(await page.evaluate("document.querySelector('#dropdown').value"), '1');
   await page.close();
 });
 

@@ -28,6 +28,19 @@ PAGES = {
 <label><input type="checkbox" id="remember"> Remember me</label>
 <select id="plan"><option value="free">Free</option><option value="pro">Pro</option></select>
 <button type="submit">Sign in</button></form>""",
+    "/regress": """<!doctype html><title>
+    Tester   regressions
+</title><body style="margin:0"><form id="checkboxes"><input type="checkbox" id="c1"> one<br><input type="checkbox" id="c2" checked> two</form>
+<input id="user" style="position:absolute;left:10px;top:100px;width:200px;height:30px"><input id="pass" style="position:absolute;left:10px;top:150px;width:200px;height:30px">
+<select id="dropdown" style="position:absolute;left:10px;top:200px"><option value="" disabled selected>Please select an option</option><option value="1">Option 1</option><option value="2">Option 2</option></select>
+<script>
+var dd = document.getElementById('dropdown');
+dd.onchange = function (e) {
+  var o = dd.getElementsByTagName('option');
+  for (var i = 0; i < o.length; i++) o[i].removeAttribute('selected');
+  document.querySelector("#dropdown option[value='" + e.target.value + "']").setAttribute('selected', 'selected');
+};
+</script>""",
 }
 
 
@@ -87,6 +100,31 @@ class SDKTest(unittest.TestCase):
         self.assertEqual(page.locator("#out").text_content(), "clicked")
         self.assertIn("clicked", page.snapshot(delta=True))
         self.assertTrue(any(e["data"]["text"] == "ready" for e in page.console_messages()))
+        page.close()
+
+    def test_tester_regressions(self):
+        # failures an external tester hit on real sites, reproduced offline
+        page = self.sw.new_page(self.base + "/regress")
+        self.assertEqual(page.title(), "Tester regressions")  # Page.title strips and collapses like document.title
+        boxes = page.locator("input[type=checkbox]")
+        self.assertEqual(boxes.count(), 2)
+        self.assertEqual(boxes.first.count(), 1)  # first/last/nth build "sel >> nth=N"
+        boxes.first.check()
+        self.assertTrue(page.locator("#c1").is_checked())
+        self.assertTrue(boxes.last.is_checked())
+        self.assertEqual(boxes.nth(1).get_attribute("id"), "c2")
+        self.assertEqual(page.locator("#checkboxes").locator("input").nth(-1).get_attribute("id"), "c2")
+        page.click("#user")  # click, then type with no selector
+        page.keyboard.type("tomsmith")
+        page.keyboard.press("Tab")
+        page.keyboard.type("secret")
+        page.mouse.click(50, 115)
+        page.keyboard.type("!")
+        self.assertEqual(page.evaluate("document.querySelector('#user').value + '|' + document.querySelector('#pass').value"), "tomsmith!|secret")
+        page.select_option("#dropdown", "2")  # the change handler rewrites option[selected]
+        self.assertEqual(page.evaluate("(() => { const s = document.querySelector('#dropdown'); return s.value + '|' + s.selectedIndex })()"), "2|2")
+        page.select_option("#dropdown", "Option 1")
+        self.assertEqual(page.evaluate("document.querySelector('#dropdown').value"), "1")
         page.close()
 
     def test_forms_keyboard_locators(self):

@@ -505,6 +505,10 @@ func (s *cliSession) run(cmd string, args []string) (string, error) {
 		return s.ok(r, "✓ "+cmd+" "+args[0]), nil
 
 	case "fill", "type":
+		if cmd == "type" && len(args) == 1 { // "sweef type <text>": into the focused element (after sweef click)
+			r, err := s.call("Input.keyboard", map[string]any{"text": args[0]})
+			return s.ok(r, "✓ typed"), err
+		}
 		if err := need(args, 2, cmd+" <selector> <text>"); err != nil {
 			return "", err
 		}

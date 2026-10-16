@@ -11,7 +11,11 @@ Sweef offers four ways for an agent or a script to drive pages. All of them run 
 
 Measured against `@playwright/mcp`, `playwright-core` and Vercel's `agent-browser` in [bench/surfaces](../bench/surfaces/README.md).
 
-The SDK packages are publish-ready but not yet on npm or PyPI; until they are, install them from a checkout: `npm install ./pkg/sdk/node`, `pip install ./pkg/sdk/py`.
+The SDKs are on npm (`npm install @sweef/browser`) and PyPI (`pip install sweef-browser`); both download the
+engine binary on first use, so nothing else needs installing. To use the SDKs from a checkout instead:
+`npm install ./pkg/sdk/node`, `pip install ./pkg/sdk/py`, with `SWEEF_BIN` pointing at a `go build -o sweef ./cmd/sweef`.
+`go install github.com/sweefbrowser/sweef/cmd/sweef@latest` does not work: go.mod replaces two audio modules with
+trimmed copies under `third_party/`, and `go install pkg@version` refuses modules with `replace` directives.
 
 ## MCP server
 

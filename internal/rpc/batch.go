@@ -216,7 +216,10 @@ func (s *Server) runVerb(tab, verb string, args []string) (any, error) {
 		}
 		return call("Input.fill", map[string]any{"selector": normRef(args[0]), "value": strings.Join(args[1:], " ")})
 	case "type":
-		if err := need(2, "type <selector> <text>"); err != nil {
+		if len(args) == 1 { // "type <text>": into the focused element, after a click
+			return call("Input.keyboard", map[string]any{"text": args[0]})
+		}
+		if err := need(2, "type [selector] <text>"); err != nil {
 			return nil, err
 		}
 		return call("Input.type", map[string]any{"selector": normRef(args[0]), "text": strings.Join(args[1:], " ")})
