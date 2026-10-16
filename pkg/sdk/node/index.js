@@ -15,7 +15,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const MAGIC = 'SWF1';
-const VERSION = '0.2.1';
+const VERSION = '0.2.2';
 const { ensureBinary, SweefInstallError } = require('./install.js');
 
 class RpcError extends Error {

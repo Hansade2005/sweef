@@ -16,7 +16,7 @@ You do not download Sweef or edit PATH. The SDK finds the engine in this order:
 2. `$SWEEF_BIN`
 3. `sweef` on PATH
 4. the per-user cache: `$XDG_CACHE_HOME/sweef/<engine-version>/sweef` (default `~/.cache/...`), `~/Library/Caches/sweef/...` on macOS, `%LOCALAPPDATA%\sweef\cache\<engine-version>\sweef.exe` on Windows
-5. otherwise it downloads the pinned engine (`0.1.0-alpha.5`) from the [GitHub release](https://github.com/sweefbrowser/sweef/releases) into that cache, once, and prints one line to stderr. The archive's SHA-256 is checked before anything is executed; the SDK pins the expected hashes for its default version and falls back to the release's `SHA256SUMS` for other versions.
+5. otherwise it downloads the pinned engine (`0.1.0-alpha.6`) from the [GitHub release](https://github.com/sweefbrowser/sweef/releases) into that cache, once, and prints one line to stderr. The archive's SHA-256 is checked before anything is executed; the SDK pins the expected hashes for its default version and falls back to the release's `SHA256SUMS` for other versions.
 
 `npm install -g @sweef/browser` also puts a `sweef` command on PATH (it runs the same engine, downloading it first if needed). `npx -p @sweef/browser sweef-install` downloads the engine ahead of time and prints where it is (`--print-path` only looks, never downloads). A best-effort `postinstall` step fetches the engine at `npm install`; it never fails the install and is skipped with `SWEEF_SKIP_DOWNLOAD=1` or `npm install --ignore-scripts` (the engine is then fetched on first use). In code, `await ensureBinary()` returns the engine path, downloading it if necessary.
 

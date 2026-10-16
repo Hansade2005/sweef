@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 from ._install import SweefInstallError, ensure_binary
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 MAGIC = b"SWF1"
 __all__ = ["ensure_binary", "SweefInstallError", "Sweef", "Page", "Locator", "BrowserContext", "Keyboard", "Mouse", "Connection", "RpcError", "__version__"]
 
