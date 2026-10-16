@@ -14,7 +14,7 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 
 const pkg = require('./package.json');
-const DEFAULT_VERSION = (pkg.sweef && pkg.sweef.engineVersion) || '0.1.0-alpha.4';
+const DEFAULT_VERSION = (pkg.sweef && pkg.sweef.engineVersion) || '0.1.0-alpha.5';
 const PINNED = (pkg.sweef && pkg.sweef.engineSha256) || {};
 const DEFAULT_BASE = 'https://github.com/sweefbrowser/sweef/releases/download';
 const LAUNCHER_MARKER = 'SWEEF_SDK_LAUNCHER';

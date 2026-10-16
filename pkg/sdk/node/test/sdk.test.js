@@ -175,7 +175,7 @@ test('contexts isolate cookies', async () => {
 });
 
 test('Sweef.session shares pages with the session CLI', async () => {
-  const bin = process.env.SWEEF_BIN;
+  const bin = process.env.SWEEF_BIN || await require('..').ensureBinary();
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sweef-home-'));
   const env = { ...process.env, SWEEF_HOME: home };
   const saved = process.env.SWEEF_HOME;
