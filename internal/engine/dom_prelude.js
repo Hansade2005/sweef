@@ -1976,7 +1976,7 @@
       set: function (v) { var b = this.body; if (b) b.replaceWith(v); else this.documentElement.appendChild(v); }
     },
     title: {
-      get: function () { var t = queryOne(this, 'title'); return t ? t.textContent.replace(/\s+/g, ' ').trim() : ''; },
+      get: function () { var t = queryOne(this, 'title'); return t ? t.textContent.replace(/[\t\n\f\r ]+/g, ' ').replace(/^ | $/g, '') : ''; },
       set: function (v) { var t = queryOne(this, 'title'); if (!t) { var h = this.head; if (!h) return; t = h.appendChild(this.createElement('title')); } t.textContent = toStr(v); }
     },
     doctype: { get: function () { return wrapAll(sw.children(this[ID])).filter(function (n) { return n.nodeType === 10; })[0] || null; } },

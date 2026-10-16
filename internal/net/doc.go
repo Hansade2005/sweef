@@ -149,13 +149,11 @@ func hasAttr(n *html.Node, k string) bool {
 // ---- text / title ----------------------------------------------------------
 
 func (d *Doc) Title() string {
-	var t string
+	var t *html.Node
 	var walk func(*html.Node) bool
 	walk = func(n *html.Node) bool {
-		if n.Type == html.ElementNode && n.Data == "title" {
-			if n.FirstChild != nil {
-				t = n.FirstChild.Data
-			}
+		if n.Type == html.ElementNode && n.Data == "title" && n.Namespace == "" {
+			t = n
 			return true
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -166,7 +164,39 @@ func (d *Doc) Title() string {
 		return false
 	}
 	walk(d.Root)
-	return t
+	if t == nil {
+		return ""
+	}
+	var sb strings.Builder
+	for c := t.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.TextNode {
+			sb.WriteString(c.Data)
+		}
+	}
+	return StripCollapseASCIIWhitespace(sb.String())
+}
+
+// StripCollapseASCIIWhitespace is the HTML "strip and collapse ASCII
+// whitespace" (what document.title returns): runs of tab, LF, FF, CR and
+// space become one space, leading and trailing ones go. Other whitespace
+// (no-break space and friends) is kept.
+func StripCollapseASCIIWhitespace(s string) string {
+	var sb strings.Builder
+	sb.Grow(len(s))
+	space := false
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; c {
+		case '\t', '\n', '\f', '\r', ' ':
+			space = true
+		default:
+			if space && sb.Len() > 0 {
+				sb.WriteByte(' ')
+			}
+			space = false
+			sb.WriteByte(c)
+		}
+	}
+	return sb.String()
 }
 
 // innerText: whitespace-normalised visible text under a node.

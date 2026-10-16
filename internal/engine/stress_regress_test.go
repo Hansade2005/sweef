@@ -108,3 +108,33 @@ func TestOptionSelectedAttributeOnCleanSelect(t *testing.T) {
 		t.Fatalf("got %s", got)
 	}
 }
+
+// Page.title (Tab.Title) must match document.title (strip and collapse ASCII
+// whitespace) and never hand tab state a control or line-separator character.
+func TestTitleStripsAndCollapsesWhitespace(t *testing.T) {
+	base := serveFixtures(t, map[string]string{
+		"/t": "<!doctype html><title>\n    All products | Books\tto Scrape\r\n</title><p>x",
+		"/c": "<!doctype html><title>a b\u0001c\u007f d e</title>",
+	})
+	tab := fixtureTab(t, base, "/t")
+	if got, want := tab.Title(), "All products | Books to Scrape"; got != want {
+		t.Fatalf("Title() = %q, want %q", got, want)
+	}
+	if got := mustEval(t, tab, `document.title`); got != `"All products | Books to Scrape"` {
+		t.Fatalf("document.title = %s", got)
+	}
+	if err := tab.Navigate(base+"/c", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := tab.Title(), "a b c d e"; got != want {
+		t.Fatalf("control characters: Title() = %q, want %q", got, want)
+	}
+	// a title set by script goes through the same path
+	mustEval(t, tab, `document.title = "  x\n\ny  "`)
+	if got := tab.Title(); got != "x y" {
+		t.Fatalf("script title: %q", got)
+	}
+	if got := CleanTabURL("https://e.test/a b\x01"); got != "https://e.test/a%E2%80%A8b%01" {
+		t.Fatalf("CleanTabURL: %q", got)
+	}
+}
