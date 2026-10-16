@@ -29,13 +29,13 @@
     "postinstall": "node scripts/postinstall.js"
   },
   "sweef": {
-    "engineVersion": "0.1.0-alpha.4",
+    "engineVersion": "0.1.0-alpha.5",
     "engineSha256": {
-      "sweef_0.1.0-alpha.4_darwin_universal.zip": "78c1ffefe9a0145640fa332ae5f0ef1308be584848dc44f6ab65a097826f4b29",
-      "sweef_0.1.0-alpha.4_linux_amd64.tar.gz": "c21d1ccbe04946136c559f2d23c6e7c6bcaea6e9444c36b449ca35d44d24b1da",
-      "sweef_0.1.0-alpha.4_linux_arm64.tar.gz": "59687026ed6d74f9e1687dce9ed7e99d9b3915105dcb003b97ccde21fe5f1d4f",
-      "sweef_0.1.0-alpha.4_windows_amd64.zip": "7e51c828a2e64813cbb144d0736010f4a4e9c1eabf860215db1b100fdc9a7ef8",
-      "sweef_0.1.0-alpha.4_windows_arm64.zip": "33b7cc71e2429d91fbb525df0cc9ab3da31540104f60fba43846f48609b8de61"
+      "sweef_0.1.0-alpha.5_darwin_universal.zip": "7bf211216085afd631ba90a3c98adec235c759b720c0de995022395b95db21f8",
+      "sweef_0.1.0-alpha.5_linux_amd64.tar.gz": "2089d242bbe8e8cd071263601f7bbcba9526b4cd188983dab9778e89806e4091",
+      "sweef_0.1.0-alpha.5_linux_arm64.tar.gz": "d8fbe2a733277da2e1a7e10ff27c3a60ce03059ec10f6649b3f9a49a1083db8e",
+      "sweef_0.1.0-alpha.5_windows_amd64.zip": "cfee0a4157ff770cbc9cb3e636b8e8e2d947a055d04f54deba6292a1c21a8758",
+      "sweef_0.1.0-alpha.5_windows_arm64.zip": "1c0411891f591c479bbf054c43c76d76cec92cb287549d5ddae387c526830ccc"
     }
   },
   "engines": {

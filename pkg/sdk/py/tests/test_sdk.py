@@ -197,7 +197,7 @@ class SDKTest(unittest.TestCase):
         self.assertIn("Sweef", self.sw.version()["product"])
 
     def test_session_shares_pages_with_cli(self):
-        binp = os.environ["SWEEF_BIN"]
+        binp = os.environ.get("SWEEF_BIN") or __import__("sweef").ensure_binary()
         home = tempfile.mkdtemp(prefix="sweef-home-")
         env = dict(os.environ, SWEEF_HOME=home)
         saved = os.environ.get("SWEEF_HOME")
