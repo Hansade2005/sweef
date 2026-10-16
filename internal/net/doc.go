@@ -46,6 +46,10 @@ type Doc struct {
 	viewportW      atomic.Int64
 	layoutProvider func(width int) *Layout
 	provisionalOK  func() bool // Layout.Provisional; nil: never reuse a provisional layout
+
+	// option selectedness kept apart from script-written `selected` attributes (optsel.go)
+	optOnce sync.Once
+	optSel  *optSelState
 }
 
 // SetProvisionalOK sets which callers may be answered with a cached provisional layout (Layout.Provisional).
@@ -425,22 +429,35 @@ func (d *Doc) SelectOption(backendID int64, want string) error {
 	if n == nil || n.Data != "select" {
 		return fmt.Errorf("not a select element")
 	}
-	for o := n.FirstChild; o != nil; o = o.NextSibling {
-		if o.Type != html.ElementNode || o.Data != "option" {
-			continue
-		}
-		if attr(o, "value") == want || innerText(o) == want {
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				if c.Type == html.ElementNode && c.Data == "option" {
-					removeAttr(c, "selected")
-				}
-			}
-			setAttr(o, "selected", "")
-			d.invalidateStyles()
-			return nil
+	opts := optionsOf(n) // includes options inside <optgroup>
+	var pick *html.Node
+	for _, o := range opts { // an exact value wins over a label
+		if v, ok := attrVal(o, "value"); ok && v == want {
+			pick = o
+			break
 		}
 	}
-	return fmt.Errorf("no option matches %q", want)
+	if pick == nil {
+		w := normWS(want)
+		for _, o := range opts {
+			if normWS(innerText(o)) == w || attr(o, "label") == want {
+				pick = o
+				break
+			}
+		}
+	}
+	if pick == nil {
+		return fmt.Errorf("no option matches %q", want)
+	}
+	d.markOptionsDirty(n)
+	for _, c := range opts {
+		if c != pick {
+			removeAttr(c, "selected")
+		}
+	}
+	setAttr(pick, "selected", "")
+	d.invalidateStyles()
+	return nil
 }
 
 // CheckState toggles checkbox/radio state in the tree.
@@ -622,6 +639,7 @@ func (d *Doc) SetValue(backendID int64, value string) error {
 		}
 		d.note(Mutation{Op: "set-value", BackendID: backendID, Value: value})
 	case "select":
+		d.markOptionsDirty(target)
 		for c := target.FirstChild; c != nil; c = c.NextSibling {
 			if c.Data == "option" {
 				if normWS(innerText(c)) == value || attr(c, "value") == value {
