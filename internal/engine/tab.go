@@ -122,7 +122,8 @@ type Tab struct {
 	title      string
 	url        *url.URL
 	html       string
-	dom        *fnet.Doc // parsed tree held by our DOM layer
+	dom        *fnet.Doc                   // parsed tree held by our DOM layer
+	kbdFocus   atomic.Pointer[kbdFocusRec] // focused element of a page without a VM (kbdfocus.go)
 	scripts    []*CompiledScript
 
 	consoleRing *Ring

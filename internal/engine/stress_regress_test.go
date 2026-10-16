@@ -138,3 +138,77 @@ func TestTitleStripsAndCollapsesWhitespace(t *testing.T) {
 		t.Fatalf("CleanTabURL: %q", got)
 	}
 }
+
+const typingFixture = `<!doctype html><html><head><title>F</title></head><body style="margin:0">
+<input id="a" style="position:absolute;left:10px;top:10px;width:200px;height:30px">
+<input id="b" style="position:absolute;left:10px;top:60px;width:200px;height:30px">
+<input id="skip" tabindex="-1" style="position:absolute;left:300px;top:10px;width:50px;height:30px">
+<textarea id="ta" style="position:absolute;left:10px;top:110px;width:200px;height:60px"></textarea>
+<div id="ce" contenteditable="true" style="position:absolute;left:10px;top:200px;width:200px;height:40px"></div>
+SCRIPT</body></html>`
+
+// Click (by coordinates or selector) then type with no selector: the most
+// common agent pattern. It must reach the clicked field with and without a
+// script VM, and Tab / Shift+Tab must move focus.
+func TestClickThenTypeReachesFocusedField(t *testing.T) {
+	base := serveFixtures(t, map[string]string{
+		"/vm":   strings.Replace(typingFixture, "SCRIPT", `<script>window.K=[];document.addEventListener('keydown',function(e){K.push(e.key)})</script>`, 1),
+		"/novm": strings.Replace(typingFixture, "SCRIPT", "", 1),
+	})
+	for _, path := range []string{"/vm", "/novm"} {
+		t.Run(path, func(t *testing.T) {
+			tab := fixtureTab(t, base, path)
+			if got, want := tab.hasVM(), path == "/vm"; got != want {
+				t.Fatalf("hasVM = %v, want %v", got, want)
+			}
+			must := func(err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			must(tab.MouseClick(50, 25)) // #a
+			must(tab.KeyboardType("AA", 0))
+			must(tab.Keyboard("Tab")) // -> #b (#skip has tabindex=-1)
+			must(tab.KeyboardType("BB", 0))
+			must(tab.Keyboard("Shift+Tab")) // -> #a; a browser selects the field's text on tab focus
+			must(tab.Keyboard("Tab"))
+			must(tab.MouseClick(50, 130)) // textarea: a newline is text there
+			must(tab.KeyboardType("T1\nT2", 0))
+			must(tab.MouseClick(50, 215)) // contenteditable
+			must(tab.KeyboardType("CE", 0))
+			tab.MouseDown(50, 70) // a press alone focuses too (computer-use left_mouse_down/up)
+			tab.MouseUp(50, 70)
+			must(tab.KeyboardType("+", 0))
+			must(tab.Keyboard("Backspace"))
+			must(tab.Click("#a"))
+			must(tab.KeyboardType("x", 0))
+			want := map[string]string{"#a": "AAx", "#b": "BB", "#ta": "T1\nT2"}
+			for sel, w := range want {
+				bid, err := tab.Locator(sel).BackendID()
+				must(err)
+				got, _, _ := tab.GetAttributeByBackend(bid, "value")
+				if path == "/vm" {
+					got = strings.Trim(mustEval(t, tab, `document.querySelector('`+sel+`').value`), `"`)
+					got = strings.ReplaceAll(got, `\n`, "\n")
+				}
+				if got != w {
+					t.Errorf("%s = %q, want %q", sel, got, w)
+				}
+			}
+			if txt, _ := tab.Locator("#ce").TextContent(); txt != "CE" {
+				t.Errorf("#ce = %q, want CE", txt)
+			}
+		})
+	}
+}
+
+// Without a VM, typing with nothing focused is an error (with a VM keys go to
+// the body, as in a browser).
+func TestKeyboardTypeWithoutFocusNoVM(t *testing.T) {
+	base := serveFixtures(t, map[string]string{"/p": strings.Replace(typingFixture, "SCRIPT", "", 1)})
+	tab := fixtureTab(t, base, "/p")
+	if err := tab.KeyboardType("x", 0); err == nil {
+		t.Fatal("typing with nothing focused should fail on a script-less page")
+	}
+}

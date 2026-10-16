@@ -227,7 +227,12 @@ func (t *Tab) clickBackend(bid int64, sel string) error {
 	// pointer sequence first: page JS may preventDefault or navigate itself
 	t.fire(bid, "pointerdown", nil)
 	t.fire(bid, "mousedown", nil)
-	t.fire(bid, "focus", nil)
+	// the press focuses the clicked control, or the focusable element it sits in (a <span> inside a <button>)
+	if fa := t.focusAfterPointer(bid); fa != 0 {
+		t.fire(fa, "focus", nil)
+	} else {
+		t.fire(bid, "focus", nil)
+	}
 	t.fire(bid, "pointerup", nil)
 	t.fire(bid, "mouseup", nil)
 	proceed := t.fire(bid, "click", nil)
@@ -347,9 +352,7 @@ func (t *Tab) Focus(sel string) error {
 	if err != nil {
 		return err
 	}
-	if err := t.withDoc(func(d *fnet.Doc) error { return d.SetAttribute(bid, "data-sw-focused", "1") }); err != nil {
-		return err
-	}
+	t.setKbdFocus(bid)
 	t.fire(bid, "focus", nil)
 	return nil
 }
@@ -436,6 +439,11 @@ func (t *Tab) Keyboard(keys string) error {
 		return leaf.Keyboard(keys)
 	}
 	t.NoteUserActivation()
+	if !t.hasVM() {
+		err := t.keyboardNoVM(keys)
+		t.afterAction()
+		return err
+	}
 	t.dispatchKeyCombo(0, strings.TrimSpace(keys))
 	t.afterAction()
 	return nil
@@ -451,7 +459,7 @@ func (t *Tab) KeyboardType(text string, delay time.Duration) error {
 	noVM := t.js == nil
 	t.mu.RUnlock()
 	if noVM { // a page without scripts: no key events to fire, type into the focused field
-		return t.Type("[data-sw-focused]", text, delay)
+		return t.typeNoVM(text, delay)
 	}
 	t.NoteUserActivation()
 	for _, r := range text {
@@ -632,6 +640,14 @@ func (t *Tab) mouseEvent(typ string, x, y int) {
 	}
 	if typ == "mousedown" {
 		leaf.NoteUserActivation()
+		if !leaf.hasVM() { // no prelude to give focus: record what the press focuses
+			if bid, err := leaf.hitTest(lx, ly); err == nil {
+				leaf.focusAfterPointer(bid)
+			} else {
+				leaf.setKbdFocus(0)
+			}
+			return
+		}
 	}
 	leaf.jsCall("__swMouse", typ, lx, ly)
 }
@@ -646,6 +662,7 @@ func (t *Tab) MouseClick(x, y int) error {
 	t.FocusFrame(t)
 	bid, err := t.hitTest(x, y)
 	if err != nil {
+		t.setKbdFocus(0) // a press on nothing blurs
 		t.jsCall("__swMouse", "click", x, y)
 		return nil // no element at point — harmless, like clicking whitespace
 	}
