@@ -148,7 +148,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/download-artifact@v4 # TODO: pin by SHA
+      - uses: actions/download-artifact@v8 # TODO: pin by SHA
         with:
           name: bin
           path: dist
@@ -193,7 +193,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/download-artifact@v4 # TODO: pin by SHA
+      - uses: actions/download-artifact@v8 # TODO: pin by SHA
         with:
           name: bin
           path: dist
@@ -240,7 +240,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/download-artifact@v4 # TODO: pin by SHA
+      - uses: actions/download-artifact@v8 # TODO: pin by SHA
         with:
           pattern: packages-*
           path: dist
