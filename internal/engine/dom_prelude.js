@@ -543,6 +543,17 @@
   // every list[i] and list.length by calling its producer, so a loop over getElementsByTagName('*')
   // (jQuery/Sizzle do exactly that) re-read the whole tree once per index: quadratic, seconds on a
   // long page. The document's mutation counter says when the answer can differ.
+  // treeCached is genCached keyed on structural mutations only (sw.treeGen): for lists whose membership depends
+  // only on tree shape and immutable node properties, so attribute/style writes do not force a rebuild.
+  function treeCached(fn) {
+    if (!host('treeGen')) return genCached(fn);
+    var g = -1, v = null;
+    return function () {
+      var cur = sw.treeGen();
+      if (v === null || cur !== g) { v = fn(); g = cur; }
+      return v;
+    };
+  }
   function genCached(fn) {
     var g = -1, v = null;
     return function () {
@@ -839,6 +850,14 @@
   var XHTML_NS = 'http://www.w3.org/1999/xhtml', SVG_NS = 'http://www.w3.org/2000/svg', MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
   var NS = Symbol('namespace'), ORIG_TAG = Symbol('origTag'), FRAG = Symbol('fragmentParent'), SLOT = Symbol('slots');
   function slots(w) { var s = w[SLOT]; if (!s) { s = {}; Object.defineProperty(w, SLOT, { value: s }); } return s; }
+  // structMemo caches a value derived only from tree shape (e.g. document.body) on obj until the next structural
+  // mutation (sw.treeGen) or a change of obj._detachedRoot; attribute and style writes keep the cached value.
+  function structMemo(obj, key, fn) {
+    if (!host('treeGen')) return fn();
+    var s = slots(obj), g = sw.treeGen(), c = s[key];
+    if (c && c.g === g && c.r === obj._detachedRoot) return c.v;
+    var v = fn(); s[key] = { g: g, r: obj._detachedRoot, v: v }; return v;
+  }
 
   // live Range objects follow the tree (edit_prelude.js turns __swRangesLive on when the first one is made)
   function rn(kind, a, b, c, d) { if (global.__swRangesLive) global.__swRangeNotify(kind, a, b, c, d); }
@@ -941,7 +960,7 @@
     nodeName: { get: function () { var t = this.nodeType; return t === 11 ? '#document-fragment' : t === 1 ? this.tagName : t === 3 ? '#text' : t === 8 ? '#comment' : t === 9 ? '#document' : t === 10 ? (sw.tagName(this[ID]) || 'html') : '#node'; } },
     parentNode: { get: function () { return isFrag(this) ? null : this[FRAG] || wrap(sw.parent(this[ID])); } },
     parentElement: { get: function () { var p = this.parentNode; return p && p.nodeType === 1 ? p : null; } },
-    childNodes: { get: function () { var self = this; var s = slots(this); return s.childNodes || (s.childNodes = isFrag(this) ? liveList(NodeList, function () { return self._kids.slice(); }) : liveList(NodeList, genCached(function () { return wrapAll(sw.children(self[ID])); }))); } },
+    childNodes: { get: function () { var self = this; var s = slots(this); return s.childNodes || (s.childNodes = isFrag(this) ? liveList(NodeList, function () { return self._kids.slice(); }) : liveList(NodeList, treeCached(function () { return wrapAll(sw.children(self[ID])); }))); } },
     firstChild: { get: function () { return isFrag(this) ? this._kids[0] || null : wrap(sw.firstChild(this[ID])); } },
     lastChild: { get: function () { return isFrag(this) ? this._kids[this._kids.length - 1] || null : wrap(sw.lastChild(this[ID])); } },
     nextSibling: { get: function () { if (isFrag(this)) return null; if (this[FRAG]) { var k = this[FRAG]._kids; return k[k.indexOf(this) + 1] || null; } return wrap(sw.nextSibling(this[ID])); } },
@@ -1033,7 +1052,7 @@
   function childElements(id) { var ids = sw.children(id), out = []; for (var i = 0; i < ids.length; i++) if (sw.nodeType(ids[i]) === 1) out.push(wrap(ids[i])); return out; }
   function nextElement(id, dir) { for (var s = sw[dir](id); s; s = sw[dir](s)) if (sw.nodeType(s) === 1) return wrap(s); return null; }
   var ParentNodeGetters = {
-    children: { get: function () { var self = this; var s = slots(this); return s.children || (s.children = liveList(HTMLCollection, self.nodeType === 11 ? function () { return self._kids.filter(function (k) { return k.nodeType === 1; }); } : genCached(function () { return childElements(self[ID]); }))); } },
+    children: { get: function () { var self = this; var s = slots(this); return s.children || (s.children = liveList(HTMLCollection, self.nodeType === 11 ? function () { return self._kids.filter(function (k) { return k.nodeType === 1; }); } : treeCached(function () { return childElements(self[ID]); }))); } },
     firstElementChild: { get: function () { return this.children[0] || null; } },
     lastElementChild: { get: function () { var c = this.children; return c[c.length - 1] || null; } },
     childElementCount: { get: function () { return this.children.length; } }
@@ -1044,7 +1063,7 @@
     replaceChildren: function () { while (this.firstChild) this.removeChild(this.firstChild); if (arguments.length) this.appendChild(toNodes(arguments)); },
     querySelector: function (sel) { return queryOne(this, sel); },
     querySelectorAll: function (sel) { return nodeListOf(queryAll(this, sel)); },
-    getElementsByTagName: function (tag) { var self = this; tag = String(tag).toLowerCase(); return liveList(HTMLCollection, genCached(function () { return wrapAll(sw.elementsByTag(queryRoot(self), tag)); })); },
+    getElementsByTagName: function (tag) { var self = this; tag = String(tag).toLowerCase(); return liveList(HTMLCollection, treeCached(function () { return wrapAll(sw.elementsByTag(queryRoot(self), tag)); })); },
     getElementsByTagNameNS: function (ns, tag) { return this.getElementsByTagName(tag); },
     getElementsByClassName: function (cls) { var self = this; cls = String(cls); return liveList(HTMLCollection, genCached(function () { return wrapAll(sw.elementsByClass(queryRoot(self), cls)); })); }
   };
@@ -1090,6 +1109,16 @@
       get: function () { return sw.innerHTML(this[ID]); },
       set: function (v) {
         v = v === null || v === undefined ? '' : String(v);
+        // Fast path: with no custom-element definitions, page MutationObservers, live Ranges or opened popovers, the
+        // per-node hooks below are all no-ops (fresh parser output has no wrappers or state), so skip wrapping every
+        // old and new child. Markup that can create a top-level <img>/<link> (whose load events afterConnect
+        // schedules), or media markup the platform media observer acts on, takes the full path.
+        if (ceDefinitions.size === 0 && onlyMediaObservers() && !global.__swRangesLive && !popoverEverOpened &&
+            !/<(img|image|link|video|audio|track|source)\b/i.test(v) && this.localName !== 'video' && this.localName !== 'audio') {
+          sw.setInnerHTML(this[ID], v);
+          hostMutation('innerHTML', this[ID]);
+          return;
+        }
         var removed = wrapAll(sw.children(this[ID]));
         removed.forEach(function (n) { if (wasConnected(n)) ceDisconnected(n); });
         sw.setInnerHTML(this[ID], v);
@@ -1515,7 +1544,9 @@
   var popoverStack = [], popoverDismissInstalled = false;
   function popoverType(el) { var v = el.getAttribute('popover'); if (v === null) return null; v = v.toLowerCase(); return v === '' || v === 'auto' ? 'auto' : 'manual'; }
   function popoverOpen(el) { var s = el[SLOT]; return !!(s && s.popoverOpen); }
+  var popoverEverOpened = false; // innerHTML's fast path is only exact while no popover has ever been opened
   function setPopoverOpen(el, on) {
+    if (on) popoverEverOpened = true;
     slots(el).popoverOpen = on;
     try { if (on) sw.setAttr(el[ID], 'data-sw-popover-open', ''); else sw.removeAttr(el[ID], 'data-sw-popover-open'); } catch (e) { /* ignore */ }
     hostMutation('attr', el[ID]);
@@ -1985,10 +2016,10 @@
   getters(Document.prototype, {
     nodeType: { get: function () { return 9; } }, nodeName: { get: function () { return '#document'; } },
     parentNode: { get: function () { return null; } }, ownerDocument: { get: function () { return null; } },
-    documentElement: { get: function () { if (this._detachedRoot) return this._detachedRoot; return childElements(this[ID]).filter(function (e) { return e.localName === 'html'; })[0] || childElements(this[ID])[0] || null; } },
-    head: { get: function () { var h = this.documentElement; return h ? childElements(h[ID]).filter(function (e) { return e.localName === 'head'; })[0] || null : null; } },
+    documentElement: { get: function () { if (this._detachedRoot) return this._detachedRoot; var self = this; return structMemo(this, 'docEl', function () { var kids = childElements(self[ID]); return kids.filter(function (e) { return e.localName === 'html'; })[0] || kids[0] || null; }); } },
+    head: { get: function () { var self = this; return structMemo(this, 'head', function () { var h = self.documentElement; return h ? childElements(h[ID]).filter(function (e) { return e.localName === 'head'; })[0] || null : null; }); } },
     body: {
-      get: function () { var h = this.documentElement; return h ? childElements(h[ID]).filter(function (e) { return e.localName === 'body' || e.localName === 'frameset'; })[0] || null : null; },
+      get: function () { var self = this; return structMemo(this, 'body', function () { var h = self.documentElement; return h ? childElements(h[ID]).filter(function (e) { return e.localName === 'body' || e.localName === 'frameset'; })[0] || null : null; }); },
       set: function (v) { var b = this.body; if (b) b.replaceWith(v); else this.documentElement.appendChild(v); }
     },
     title: {
@@ -2285,6 +2316,9 @@
   defineHandlerProps(global, COMMON_EVENTS.concat(WINDOW_EVENTS));
 
   // ==== 7. Observers =======================================================
+  // true when every registered observer is the platform media observer (media_prelude.js), which only acts on
+  // <video>/<audio>/<track>/<source> nodes and on child changes inside media elements
+  function onlyMediaObservers() { for (var i = 0; i < observers.length; i++) if (!observers[i].__swMedia) return false; return true; }
   var observers = [];          // every MutationObserver with at least one observe()
   var pendingObservers = [];   // observers with queued records
   var moFlushScheduled = false;

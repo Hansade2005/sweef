@@ -47,6 +47,8 @@ type Options struct {
 	SettleMs         int    // event-loop budget after actions (default 1500; an action settles for a third of it)
 	NavSettleMs      int    // event-loop budget of a headless load: half before the load event, all after (default 600, at most SettleMs)
 	SettleQuietMs    int    // a headless settle ends early once only timers are left and the document has not changed for this long (0 = default 300; negative = off, pump to SettleMs)
+	NavQuietMs       int    // quiet window of a headless navigation's pre-load and settle pumps: they end once only timers are left and the document has not changed for this long (0 = SettleQuietMs, the library default; > 0 also caps the pre-load pump's window at 10 ms)
+	NavPostLoadMs    int    // event-loop budget of a headless load after the load event (0 = NavSettleMs); the page goes on in the background pump and the next command's settle
 	JSMemoryMiB      int    // QuickJS heap cap per tab (default 256: YouTube's player and its BotGuard script need more than 64)
 	JSTimeoutMs      int    // single-eval timeout; a looping script is interrupted (default 30000: a real page's longest tasks, YouTube's first render among them, run past 5 s on a loaded machine, and an interrupted task leaves the page half-built)
 	WarmVMs          int    // JS VMs kept pre-built so navigations skip prelude setup (default 1)

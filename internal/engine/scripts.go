@@ -73,6 +73,31 @@ func (t *Tab) settleQuiet() time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+// navPostLoadBudget is how long a headless load keeps pumping after the load event (Options.NavPostLoadMs,
+// default navSettleBudget). Automation tools return at the load event; what the page does later (hydration,
+// lazily loaded modules) runs in the background pump and in the settle of the next command.
+func (t *Tab) navPostLoadBudget() time.Duration {
+	if ms := t.eng.opts.NavPostLoadMs; ms > 0 {
+		if d := time.Duration(ms) * time.Millisecond; d < t.navSettleBudget() {
+			return d
+		}
+	}
+	return t.navSettleBudget()
+}
+
+// navQuiet is settleQuiet for a headless navigation's pre-load and post-load pumps (Options.NavQuietMs; 0 =
+// settleQuiet, so the library default is unchanged; the agent daemon sets 60 ms). A page that always has a timer due (an analytics poller, a carousel) otherwise paid the whole 300 ms
+// settleQuiet before the load event and again after it, although the browser fires load once resources finish
+// and automation tools return there; timers that are due almost at once (a lazily inserted chunk) still run.
+// What the page does later runs in the background pump and in the settle of the next command.
+func (t *Tab) navQuiet() time.Duration {
+	ms := t.eng.opts.NavQuietMs
+	if ms <= 0 {
+		return t.settleQuiet() // the library default keeps the full window (a headless load runs a page's early timers)
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
 // runScriptEl fetches (if needed) and executes one <script> element, then
 // dispatches load or error on it.
 func (t *Tab) runScriptEl(j *jsVM, s fnet.ScriptEl) {

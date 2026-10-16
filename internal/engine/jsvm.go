@@ -263,6 +263,8 @@ func compiledPrelude() []byte {
 }
 
 type jsVM struct {
+	quietOverride time.Duration // when > 0, a shorter quiet window for this pump (Tab.navQuiet); set by the headless loader
+
 	modDocURL string      // the document URL bare module specifiers resolve against (installModuleLoader)
 	fullPump  atomic.Bool // RunFor: pump for the whole duration (no quiet early stop)
 	holdBG    atomic.Bool // explicit waits also wait on background (media clock) timers
@@ -837,6 +839,9 @@ func (j *jsVM) pumpUntil(deadline, soft time.Time) (navigated, finished bool) {
 	lastChange := time.Now()
 	if soft.IsZero() && j.tab != nil && !j.tab.progMode.Load() && !j.fullPump.Load() {
 		quiet = j.tab.settleQuiet()
+		if q := j.quietOverride; q > 0 && (quiet == 0 || q < quiet) {
+			quiet = q
+		}
 		lastGen = j.docGen()
 	}
 	var tTimers, tSleep, tDrain, tObs time.Duration
@@ -1391,6 +1396,7 @@ func (j *jsVM) registerHost() error {
 		// tree
 		{"docId", doc(func(d *fnet.Doc, a []any) (any, error) { return d.DocID(), nil })},
 		{"docGen", doc(func(d *fnet.Doc, a []any) (any, error) { return int64(d.MutationGen() & (1<<52 - 1)), nil })},
+		{"treeGen", doc(func(d *fnet.Doc, a []any) (any, error) { return int64(d.TreeGen() & (1<<52 - 1)), nil })},
 		{"nodeType", doc(func(d *fnet.Doc, a []any) (any, error) { return d.NodeType(argI(a, 0)), nil })},
 		{"tagName", doc(func(d *fnet.Doc, a []any) (any, error) { return d.TagName(argI(a, 0)), nil })},
 		{"namespace", doc(func(d *fnet.Doc, a []any) (any, error) { return d.Namespace(argI(a, 0)), nil })},
@@ -1962,7 +1968,9 @@ func (j *jsVM) registerHost() error {
 		}
 		sb.WriteString(strconv.Quote(x.name))
 	}
-	sb.WriteString("]; n.forEach(function (k, i) { o[k] = function (...a) { return c(i, ...a); }; }); return o; })(__sw_call); delete globalThis.__sw_call;")
+	// Fixed-arity fast paths: a rest parameter plus spread allocates an array and goes through apply on every host
+	// call in QuickJS. arguments.length keeps the exact argument count the host sees, so behaviour is unchanged.
+	sb.WriteString("]; n.forEach(function (k, i) { o[k] = function (a0, a1, a2, a3) { switch (arguments.length) { case 0: return c(i); case 1: return c(i, a0); case 2: return c(i, a0, a1); case 3: return c(i, a0, a1, a2); case 4: return c(i, a0, a1, a2, a3); } var r = [i]; for (var j = 0; j < arguments.length; j++) r.push(arguments[j]); return c.apply(null, r); }; }); return o; })(__sw_call); delete globalThis.__sw_call;")
 	if j.cv != nil {
 		if err := j.cv.registerBufferFns(); err != nil {
 			return err

@@ -36,6 +36,9 @@ type Doc struct {
 
 	// mutGen counts tree mutations; layout results are cached per value.
 	mutGen atomic.Uint64
+	// treeGen counts child-list (structural) mutations only; attribute and style changes do not bump it,
+	// so live collections that depend only on tree shape (children, childNodes, getElementsByTagName) can be cached across them.
+	treeGen atomic.Uint64
 	// contentGen counts the mutations that can change what the page says: all but style attribute writes
 	// (an animation loop rewrites a transform or an opacity every frame), see ContentGen
 	contentGen     atomic.Uint64
@@ -389,6 +392,7 @@ func (d *Doc) OuterHTML(backendID int64) (string, error) {
 }
 
 func (d *Doc) SetInnerHTML(backendID int64, frag string) error {
+	d.treeGen.Add(1)
 	n := d.find(backendID)
 	if n == nil {
 		return fmt.Errorf("no node with backendNodeId %d", backendID)
@@ -668,6 +672,7 @@ func (d *Doc) AriaSnapshot() ([]*Info, error) {
 
 // SetValue writes value into input/textarea/select option matching.
 func (d *Doc) SetValue(backendID int64, value string) error {
+	d.treeGen.Add(1)
 	target := d.find(backendID)
 	if target == nil {
 		return fmt.Errorf("node %d vanished", backendID)
@@ -701,6 +706,7 @@ func (d *Doc) SetValue(backendID int64, value string) error {
 // AppendHTML parses frag and appends it as children of the element matching
 // sel (Playwright locator.evaluateHandle insertAdjacentHTML('beforeend')).
 func (d *Doc) AppendHTML(sel, frag string) error {
+	d.treeGen.Add(1)
 	n, err := d.queryOne(sel)
 	if err != nil {
 		return err
@@ -718,6 +724,7 @@ func (d *Doc) AppendHTML(sel, frag string) error {
 
 // RemoveNode detaches the element matching sel from its parent.
 func (d *Doc) RemoveNode(sel string) error {
+	d.treeGen.Add(1)
 	n, err := d.queryOne(sel)
 	if err != nil {
 		return err
@@ -1302,3 +1309,6 @@ func (d *Doc) ElementFromPoint(x, y int) int64 {
 	}
 	return d.idOf(best)
 }
+
+// TreeGen returns the structural mutation counter (see treeGen).
+func (d *Doc) TreeGen() uint64 { return d.treeGen.Load() }

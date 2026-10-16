@@ -128,6 +128,7 @@ func (d *Doc) CreateFragment() int64 {
 }
 
 func (d *Doc) AppendChild(parentID, childID int64) error {
+	d.treeGen.Add(1)
 	p, c := d.find(parentID), d.find(childID)
 	if p == nil || c == nil {
 		return fmt.Errorf("appendChild: unknown node")
@@ -156,6 +157,7 @@ func (d *Doc) AppendChild(parentID, childID int64) error {
 }
 
 func (d *Doc) InsertBefore(parentID, childID, refID int64) error {
+	d.treeGen.Add(1)
 	if refID == 0 {
 		return d.AppendChild(parentID, childID)
 	}
@@ -188,6 +190,7 @@ func (d *Doc) InsertBefore(parentID, childID, refID int64) error {
 }
 
 func (d *Doc) RemoveChild(parentID, childID int64) error {
+	d.treeGen.Add(1)
 	p, c := d.find(parentID), d.find(childID)
 	if p == nil || c == nil {
 		return fmt.Errorf("removeChild: unknown node")
@@ -201,6 +204,7 @@ func (d *Doc) RemoveChild(parentID, childID int64) error {
 }
 
 func (d *Doc) CloneNode(id int64, deep bool) int64 {
+	d.treeGen.Add(1)
 	n := d.find(id)
 	if n == nil {
 		return 0
@@ -261,6 +265,7 @@ func (d *Doc) TextContent(id int64) string {
 }
 
 func (d *Doc) SetTextContent(id int64, s string) {
+	d.treeGen.Add(1)
 	n := d.find(id)
 	if n == nil {
 		return
@@ -279,6 +284,7 @@ func (d *Doc) SetTextContent(id int64, s string) {
 // SetInnerHTMLCtx parses frag in the context of the element itself (so
 // <tr> inside <table> parses correctly) and replaces its children.
 func (d *Doc) SetInnerHTMLCtx(id int64, frag string) error {
+	d.treeGen.Add(1)
 	n := d.find(id)
 	if n == nil {
 		return fmt.Errorf("no node with id %d", id)
@@ -303,6 +309,7 @@ func (d *Doc) SetInnerHTMLCtx(id int64, frag string) error {
 }
 
 func (d *Doc) InsertAdjacentHTML(id int64, position, frag string) error {
+	d.treeGen.Add(1)
 	n := d.find(id)
 	if n == nil {
 		return fmt.Errorf("no node with id %d", id)

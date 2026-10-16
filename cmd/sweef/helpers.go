@@ -23,6 +23,9 @@ func addCommonFlags(fs *flag.FlagSet) {
 	fs.String("user-agent", opts.DefaultUserAgent, "default UA string")
 	fs.Int("settle-ms", opts.SettleMs, "JavaScript event-loop budget after each action (an action settles for a third of it)")
 	fs.Int("nav-settle-ms", 600, "JavaScript event-loop budget of a page load: half before the load event, all after (at most settle-ms)")
+	fs.Int("settle-quiet-ms", 60, "an action's settle ends early once only timers are left and the document has not changed for this long (agents observe again with the next command; 0 = engine default 300; negative = off)")
+	fs.Int("nav-post-load-ms", 150, "JavaScript event-loop budget of a page load after the load event, like an automation tool returning at load (0 = nav-settle-ms)")
+	fs.Int("nav-quiet-ms", 60, "the same quiet window for a page load's settle after the load event, and a 10 ms one before it, like a browser firing load once subresources are in (0 = engine default: settle-quiet-ms throughout)")
 	fs.Int("js-mem-mib", opts.JSMemoryMiB, "QuickJS heap cap per tab")
 	fs.Int("js-timeout-ms", opts.JSTimeoutMs, "single script evaluation timeout")
 	fs.Bool("allow-trackers", false, "load third-party ad, analytics and tracking requests (blocked by default for agents)")
@@ -51,7 +54,7 @@ func engineOptsFrom(fs *flag.FlagSet) engine.Options {
 	if f := fs.Lookup("allow-trackers"); f != nil && f.Value.String() == "true" {
 		opts.BlockTrackers = false
 	}
-	for name, dst := range map[string]*int{"settle-ms": &opts.SettleMs, "nav-settle-ms": &opts.NavSettleMs, "js-mem-mib": &opts.JSMemoryMiB, "js-timeout-ms": &opts.JSTimeoutMs} {
+	for name, dst := range map[string]*int{"settle-ms": &opts.SettleMs, "nav-settle-ms": &opts.NavSettleMs, "settle-quiet-ms": &opts.SettleQuietMs, "nav-quiet-ms": &opts.NavQuietMs, "nav-post-load-ms": &opts.NavPostLoadMs, "js-mem-mib": &opts.JSMemoryMiB, "js-timeout-ms": &opts.JSTimeoutMs} {
 		if f := fs.Lookup(name); f != nil {
 			if n, err := strconv.Atoi(f.Value.String()); err == nil {
 				*dst = n
