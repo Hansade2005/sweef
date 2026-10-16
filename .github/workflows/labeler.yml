@@ -10,6 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # pull_request_target runs with write access: it only reads the base branch's labeler.yml and never checks out PR code.
-      - uses: actions/labeler@v5
+      - uses: actions/labeler@v7
         with:
           sync-labels: true
