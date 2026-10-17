@@ -1,0 +1,951 @@
+{
+ "date": "2026-10-17T01:54:36.355Z",
+ "base": "http://127.0.0.1:18080",
+ "iterations": 9,
+ "realIterations": 7,
+ "host": {
+  "cpus": 4,
+  "model": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "node": "v22.22.0"
+ },
+ "products": [
+  {
+   "product": "sweef",
+   "fixture": {
+    "iterations": 9,
+    "succeeded": 9,
+    "steps": {
+     "navigate": {
+      "n": 8,
+      "medianMs": 1.09,
+      "firstMs": 2.43,
+      "medianBytes": 104,
+      "medianTextBytes": 28,
+      "medianTextTokens": 7,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "snapshot": {
+      "n": 8,
+      "medianMs": 0.25,
+      "firstMs": 0.47,
+      "medianBytes": 1144,
+      "medianTextBytes": 1009,
+      "medianTextTokens": 252,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "click": {
+      "n": 8,
+      "medianMs": 0.77,
+      "firstMs": 1.11,
+      "medianBytes": 162,
+      "medianTextBytes": 86,
+      "medianTextTokens": 22,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "snapshot-2": {
+      "n": 8,
+      "medianMs": 0.18,
+      "firstMs": 0.41,
+      "medianBytes": 452,
+      "medianTextBytes": 352,
+      "medianTextTokens": 88,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "fill": {
+      "n": 8,
+      "medianMs": 0.16,
+      "firstMs": 0.4,
+      "medianBytes": 219,
+      "medianTextBytes": 136,
+      "medianTextTokens": 34,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "evaluate": {
+      "n": 8,
+      "medianMs": 2.58,
+      "firstMs": 51.96,
+      "medianBytes": 86,
+      "medianTextBytes": 9,
+      "medianTextTokens": 2,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "screenshot": {
+      "n": 8,
+      "medianMs": 12.75,
+      "firstMs": 158.76,
+      "medianBytes": 26903,
+      "medianTextBytes": 0,
+      "medianTextTokens": 0,
+      "medianImageBytes": 26804,
+      "errors": 0
+     },
+     "back": {
+      "n": 8,
+      "medianMs": 0.91,
+      "firstMs": 1.63,
+      "medianBytes": 154,
+      "medianTextBytes": 78,
+      "medianTextTokens": 20,
+      "medianImageBytes": 0,
+      "errors": 0
+     }
+    },
+    "flowMedianMs": 18.7,
+    "flowTextTokens": 425,
+    "flowBytes": 29224
+   },
+   "real": {
+    "https://en.wikipedia.org/wiki/Alan_Turing": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 862.8,
+       "firstMs": 1393.33,
+       "medianBytes": 141,
+       "medianTextBytes": 65,
+       "medianTextTokens": 16,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 57.33,
+       "firstMs": 44.14,
+       "medianBytes": 62575,
+       "medianTextBytes": 60041,
+       "medianTextTokens": 15010,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 0.78,
+       "firstMs": 0.68,
+       "medianBytes": 102,
+       "medianTextBytes": 25,
+       "medianTextTokens": 6,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 311.08,
+       "firstMs": 656.29,
+       "medianBytes": 393775,
+       "medianTextBytes": 0,
+       "medianTextTokens": 0,
+       "medianImageBytes": 393676,
+       "errors": 0
+      }
+     }
+    },
+    "https://github.com/golang/go": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 1807.52,
+       "firstMs": 4291.73,
+       "medianBytes": 163,
+       "medianTextBytes": 86,
+       "medianTextTokens": 22,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 158.82,
+       "firstMs": 10.91,
+       "medianBytes": 16858,
+       "medianTextBytes": 16019,
+       "medianTextTokens": 4005,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 0.57,
+       "firstMs": 0.55,
+       "medianBytes": 137,
+       "medianTextBytes": 59,
+       "medianTextTokens": 15,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 41.8,
+       "firstMs": 332.01,
+       "medianBytes": 164416,
+       "medianTextBytes": 0,
+       "medianTextTokens": 0,
+       "medianImageBytes": 164316,
+       "errors": 0
+      }
+     }
+    },
+    "https://news.ycombinator.com/": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 115.8,
+       "firstMs": 471.64,
+       "medianBytes": 118,
+       "medianTextBytes": 41,
+       "medianTextTokens": 10,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 2.83,
+       "firstMs": 4,
+       "medianBytes": 33607,
+       "medianTextBytes": 32173,
+       "medianTextTokens": 8043,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 0.4,
+       "firstMs": 0.49,
+       "medianBytes": 91,
+       "medianTextBytes": 13,
+       "medianTextTokens": 3,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 36.77,
+       "firstMs": 161.88,
+       "medianBytes": 257176,
+       "medianTextBytes": 0,
+       "medianTextTokens": 0,
+       "medianImageBytes": 257076,
+       "errors": 0
+      }
+     }
+    },
+    "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 1804.52,
+       "firstMs": 3362.41,
+       "medianBytes": 208,
+       "medianTextBytes": 131,
+       "medianTextTokens": 33,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 10.78,
+       "firstMs": 15.86,
+       "medianBytes": 56174.5,
+       "medianTextBytes": 53985.5,
+       "medianTextTokens": 13496,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 0.65,
+       "firstMs": 1.18,
+       "medianBytes": 120,
+       "medianTextBytes": 42,
+       "medianTextTokens": 11,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 124.02,
+       "firstMs": 121.46,
+       "medianBytes": 197080,
+       "medianTextBytes": 0,
+       "medianTextTokens": 0,
+       "medianImageBytes": 196980,
+       "errors": 0
+      }
+     }
+    },
+    "https://docs.python.org/3/library/json.html": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 477.5,
+       "firstMs": 1535.45,
+       "medianBytes": 186,
+       "medianTextBytes": 109,
+       "medianTextTokens": 27,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 6.95,
+       "firstMs": 7.45,
+       "medianBytes": 62782,
+       "medianTextBytes": 60064,
+       "medianTextTokens": 15016,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 0.77,
+       "firstMs": 0.82,
+       "medianBytes": 145,
+       "medianTextBytes": 67,
+       "medianTextTokens": 17,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 36.28,
+       "firstMs": 362.63,
+       "medianBytes": 277908,
+       "medianTextBytes": 0,
+       "medianTextTokens": 0,
+       "medianImageBytes": 277808,
+       "errors": 0
+      }
+     }
+    },
+    "https://books.toscrape.com/": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 219.71,
+       "firstMs": 894.6,
+       "medianBytes": 145,
+       "medianTextBytes": 68,
+       "medianTextTokens": 17,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 2.51,
+       "firstMs": 2.17,
+       "medianBytes": 17469,
+       "medianTextBytes": 16721,
+       "medianTextTokens": 4180,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 0.45,
+       "firstMs": 0.42,
+       "medianBytes": 120,
+       "medianTextBytes": 42,
+       "medianTextTokens": 11,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 39.41,
+       "firstMs": 427.58,
+       "medianBytes": 230076,
+       "medianTextBytes": 0,
+       "medianTextTokens": 0,
+       "medianImageBytes": 229976,
+       "errors": 0
+      }
+     }
+    },
+    "https://www.rust-lang.org/": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 7.39,
+       "firstMs": 1018.98,
+       "medianBytes": 125,
+       "medianTextBytes": 48,
+       "medianTextTokens": 12,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 1.55,
+       "firstMs": 1.71,
+       "medianBytes": 8517,
+       "medianTextBytes": 8099,
+       "medianTextTokens": 2025,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 0.42,
+       "firstMs": 1.73,
+       "medianBytes": 105,
+       "medianTextBytes": 27,
+       "medianTextTokens": 7,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 53.23,
+       "firstMs": 497.72,
+       "medianBytes": 136040,
+       "medianTextBytes": 0,
+       "medianTextTokens": 0,
+       "medianImageBytes": 135940,
+       "errors": 0
+      }
+     }
+    },
+    "https://example.com": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 51.03,
+       "firstMs": 206.58,
+       "medianBytes": 111,
+       "medianTextBytes": 34,
+       "medianTextTokens": 9,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 0.53,
+       "firstMs": 0.58,
+       "medianBytes": 1519,
+       "medianTextBytes": 1433,
+       "medianTextTokens": 358,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 0.36,
+       "firstMs": 0.31,
+       "medianBytes": 94,
+       "medianTextBytes": 16,
+       "medianTextTokens": 4,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 23.35,
+       "firstMs": 25.39,
+       "medianBytes": 131548,
+       "medianTextBytes": 0,
+       "medianTextTokens": 0,
+       "medianImageBytes": 131448,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "errors": [],
+   "initializeMs": 2.4,
+   "toolsListBytes": 15706,
+   "toolsListTokens": 3927,
+   "toolCount": 54,
+   "coldStartToFirstSnapshotMs": 20,
+   "coldFirstNavigateMs": 5.6,
+   "fixtureResources": {
+    "peakRssMiB": 94.3,
+    "cpuSec": 0.76
+   },
+   "realResources": {
+    "peakRssMiB": 656.1,
+    "cpuSec": 63.06
+   }
+  },
+  {
+   "product": "playwright",
+   "fixture": {
+    "iterations": 9,
+    "succeeded": 9,
+    "steps": {
+     "navigate": {
+      "n": 8,
+      "medianMs": 51.98,
+      "firstMs": 55.72,
+      "medianBytes": 289,
+      "medianTextBytes": 206,
+      "medianTextTokens": 52,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "snapshot": {
+      "n": 8,
+      "medianMs": 9.57,
+      "firstMs": 14.42,
+      "medianBytes": 1797,
+      "medianTextBytes": 1644,
+      "medianTextTokens": 411,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "click": {
+      "n": 8,
+      "medianMs": 610.33,
+      "firstMs": 635.13,
+      "medianBytes": 392,
+      "medianTextBytes": 307,
+      "medianTextTokens": 77,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "snapshot-2": {
+      "n": 8,
+      "medianMs": 8.66,
+      "firstMs": 9.88,
+      "medianBytes": 686,
+      "medianTextBytes": 579,
+      "medianTextTokens": 145,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "fill": {
+      "n": 8,
+      "medianMs": 39.9,
+      "firstMs": 55.24,
+      "medianBytes": 187,
+      "medianTextBytes": 109,
+      "medianTextTokens": 27,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "evaluate": {
+      "n": 8,
+      "medianMs": 509.28,
+      "firstMs": 511.56,
+      "medianBytes": 181,
+      "medianTextBytes": 99,
+      "medianTextTokens": 25,
+      "medianImageBytes": 0,
+      "errors": 0
+     },
+     "screenshot": {
+      "n": 8,
+      "medianMs": 40.83,
+      "firstMs": 43.88,
+      "medianBytes": 24084,
+      "medianTextBytes": 293,
+      "medianTextTokens": 73,
+      "medianImageBytes": 23656,
+      "errors": 0
+     },
+     "back": {
+      "n": 8,
+      "medianMs": 51.14,
+      "firstMs": 54.76,
+      "medianBytes": 266,
+      "medianTextBytes": 183,
+      "medianTextTokens": 46,
+      "medianImageBytes": 0,
+      "errors": 0
+     }
+    },
+    "flowMedianMs": 1321.7,
+    "flowTextTokens": 856,
+    "flowBytes": 27882
+   },
+   "real": {
+    "https://en.wikipedia.org/wiki/Alan_Turing": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 934.52,
+       "firstMs": 1586.14,
+       "medianBytes": 344,
+       "medianTextBytes": 261,
+       "medianTextTokens": 65,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 457.63,
+       "firstMs": 525.33,
+       "medianBytes": 647498,
+       "medianTextBytes": 631655.5,
+       "medianTextTokens": 157914,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 515.24,
+       "firstMs": 524.65,
+       "medianBytes": 197,
+       "medianTextBytes": 115,
+       "medianTextTokens": 29,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 129.67,
+       "firstMs": 122.16,
+       "medianBytes": 325710,
+       "medianTextBytes": 293,
+       "medianTextTokens": 73,
+       "medianImageBytes": 325282,
+       "errors": 0
+      }
+     }
+    },
+    "https://github.com/golang/go": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 897,
+       "firstMs": 11489.05,
+       "medianBytes": 353,
+       "medianTextBytes": 269,
+       "medianTextTokens": 67,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 116.93,
+       "firstMs": 69.42,
+       "medianBytes": 28952.5,
+       "medianTextBytes": 28033.5,
+       "medianTextTokens": 7008,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 1034.27,
+       "firstMs": 1128.04,
+       "medianBytes": 470,
+       "medianTextBytes": 381,
+       "medianTextTokens": 95,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 114.01,
+       "firstMs": 83.05,
+       "medianBytes": 189029,
+       "medianTextBytes": 293,
+       "medianTextTokens": 73,
+       "medianImageBytes": 188600,
+       "errors": 0
+      }
+     }
+    },
+    "https://news.ycombinator.com/": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 245.09,
+       "firstMs": 735.05,
+       "medianBytes": 309,
+       "medianTextBytes": 225,
+       "medianTextTokens": 56,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 57.42,
+       "firstMs": 53.77,
+       "medianBytes": 51108,
+       "medianTextBytes": 49302,
+       "medianTextTokens": 12326,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 511.63,
+       "firstMs": 509.29,
+       "medianBytes": 186,
+       "medianTextBytes": 103,
+       "medianTextTokens": 26,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 64.41,
+       "firstMs": 57.37,
+       "medianBytes": 205297,
+       "medianTextBytes": 293,
+       "medianTextTokens": 73,
+       "medianImageBytes": 204868,
+       "errors": 0
+      }
+     }
+    },
+    "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 325.54,
+       "firstMs": 779.08,
+       "medianBytes": 576,
+       "medianTextBytes": 489,
+       "medianTextTokens": 122,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 462.42,
+       "firstMs": 2622.52,
+       "medianBytes": 64469,
+       "medianTextBytes": 62629,
+       "medianTextTokens": 15657,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 508.85,
+       "firstMs": 508.48,
+       "medianBytes": 298,
+       "medianTextBytes": 213,
+       "medianTextTokens": 53,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 75.2,
+       "firstMs": 74.25,
+       "medianBytes": 182419,
+       "medianTextBytes": 293,
+       "medianTextTokens": 73,
+       "medianImageBytes": 181990,
+       "errors": 0
+      }
+     }
+    },
+    "https://docs.python.org/3/library/json.html": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 333.43,
+       "firstMs": 1402.57,
+       "medianBytes": 391,
+       "medianTextBytes": 307,
+       "medianTextTokens": 77,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 97.71,
+       "firstMs": 93.12,
+       "medianBytes": 107881,
+       "medianTextBytes": 104577,
+       "medianTextTokens": 26144,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 512.27,
+       "firstMs": 510.45,
+       "medianBytes": 240,
+       "medianTextBytes": 157,
+       "medianTextTokens": 39,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 77.46,
+       "firstMs": 81.31,
+       "medianBytes": 223729,
+       "medianTextBytes": 293,
+       "medianTextTokens": 73,
+       "medianImageBytes": 223300,
+       "errors": 0
+      }
+     }
+    },
+    "https://books.toscrape.com/": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 111.5,
+       "firstMs": 831.53,
+       "medianBytes": 447,
+       "medianTextBytes": 360,
+       "medianTextTokens": 90,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 35.4,
+       "firstMs": 35.39,
+       "medianBytes": 34352,
+       "medianTextBytes": 33444,
+       "medianTextTokens": 8361,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 509.01,
+       "firstMs": 510.8,
+       "medianBytes": 215,
+       "medianTextBytes": 132,
+       "medianTextTokens": 33,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 60.06,
+       "firstMs": 62.2,
+       "medianBytes": 201781,
+       "medianTextBytes": 293,
+       "medianTextTokens": 73,
+       "medianImageBytes": 201352,
+       "errors": 0
+      }
+     }
+    },
+    "https://www.rust-lang.org/": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 87.34,
+       "firstMs": 927.05,
+       "medianBytes": 313,
+       "medianTextBytes": 229,
+       "medianTextTokens": 57,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 16.29,
+       "firstMs": 17.68,
+       "medianBytes": 12297,
+       "medianTextBytes": 11839,
+       "medianTextTokens": 2960,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 508.17,
+       "firstMs": 509.67,
+       "medianBytes": 200,
+       "medianTextBytes": 117,
+       "medianTextTokens": 29,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 55.02,
+       "firstMs": 45.99,
+       "medianBytes": 119009,
+       "medianTextBytes": 293,
+       "medianTextTokens": 73,
+       "medianImageBytes": 118580,
+       "errors": 0
+      }
+     }
+    },
+    "https://example.com": {
+     "succeeded": 7,
+     "steps": {
+      "navigate": {
+       "n": 6,
+       "medianMs": 49.84,
+       "firstMs": 521.3,
+       "medianBytes": 293,
+       "medianTextBytes": 209,
+       "medianTextTokens": 52,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "snapshot": {
+       "n": 6,
+       "medianMs": 7.77,
+       "firstMs": 7.53,
+       "medianBytes": 1772,
+       "medianTextBytes": 1680,
+       "medianTextTokens": 420,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "evaluate": {
+       "n": 6,
+       "medianMs": 508.33,
+       "firstMs": 508.46,
+       "medianBytes": 189,
+       "medianTextBytes": 106,
+       "medianTextTokens": 27,
+       "medianImageBytes": 0,
+       "errors": 0
+      },
+      "screenshot": {
+       "n": 6,
+       "medianMs": 50.92,
+       "firstMs": 45.22,
+       "medianBytes": 103305,
+       "medianTextBytes": 293,
+       "medianTextTokens": 73,
+       "medianImageBytes": 102876,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "errors": [],
+   "initializeMs": 416.9,
+   "toolsListBytes": 20331,
+   "toolsListTokens": 5083,
+   "toolCount": 25,
+   "coldStartToFirstSnapshotMs": 2611,
+   "coldFirstNavigateMs": 2165.6,
+   "fixtureResources": {
+    "peakRssMiB": 903.6,
+    "cpuSec": 5.86
+   },
+   "realResources": {
+    "peakRssMiB": 1340.9,
+    "cpuSec": 91.93
+   }
+  }
+ ]
+}

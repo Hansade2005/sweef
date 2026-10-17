@@ -1,0 +1,103 @@
+{
+ "date": "2026-10-17T01:57:14.805Z",
+ "rounds": 5,
+ "iterations": 9,
+ "products": [
+  {
+   "product": "sweef",
+   "errors": [],
+   "succeeded": 45,
+   "attempted": 45,
+   "scriptStartMs": 43.6,
+   "importMs": 28,
+   "launchMs": 18.8,
+   "newPageMs": 4.8,
+   "processStartToFirstSnapshotMs": 100.9,
+   "closeMs": 74.8,
+   "peakRssMiB": 152.4,
+   "cpuSecPerRound": 0.89,
+   "steps": {
+    "goto": {
+     "n": 40,
+     "medianMs": 0.92
+    },
+    "snapshot": {
+     "n": 40,
+     "medianMs": 0.37
+    },
+    "click": {
+     "n": 40,
+     "medianMs": 0.85
+    },
+    "snapshot-2": {
+     "n": 40,
+     "medianMs": 0.25
+    },
+    "fill": {
+     "n": 40,
+     "medianMs": 0.21
+    },
+    "evaluate": {
+     "n": 40,
+     "medianMs": 0.89
+    },
+    "screenshot": {
+     "n": 40,
+     "medianMs": 13.1
+    },
+    "back": {
+     "n": 40,
+     "medianMs": 0.95
+    }
+   }
+  },
+  {
+   "product": "playwright",
+   "errors": [],
+   "succeeded": 45,
+   "attempted": 45,
+   "scriptStartMs": 43.1,
+   "importMs": 268.2,
+   "launchMs": 143.8,
+   "newPageMs": 105.5,
+   "processStartToFirstSnapshotMs": 637.8,
+   "closeMs": 87.8,
+   "peakRssMiB": 848.5,
+   "cpuSecPerRound": 5.23,
+   "steps": {
+    "goto": {
+     "n": 40,
+     "medianMs": 14.05
+    },
+    "snapshot": {
+     "n": 40,
+     "medianMs": 20.04
+    },
+    "click": {
+     "n": 40,
+     "medianMs": 49.58
+    },
+    "snapshot-2": {
+     "n": 40,
+     "medianMs": 18.26
+    },
+    "fill": {
+     "n": 40,
+     "medianMs": 6.08
+    },
+    "evaluate": {
+     "n": 40,
+     "medianMs": 2.29
+    },
+    "screenshot": {
+     "n": 40,
+     "medianMs": 48.04
+    },
+    "back": {
+     "n": 40,
+     "medianMs": 14.01
+    }
+   }
+  }
+ ]
+}
