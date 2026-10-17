@@ -1,0 +1,187 @@
+{
+ "date": "2026-10-17T01:57:28.978Z",
+ "rounds": 7,
+ "warmCache": false,
+ "products": [
+  {
+   "product": "sweef",
+   "succeeded": 7,
+   "rounds": 7,
+   "flowTotalMs": 253.9,
+   "peakRssMiB": 96.8,
+   "cpuSecPerRound": 0.28,
+   "steps": {
+    "open": {
+     "medianMs": 27.9,
+     "medianBytes": 35,
+     "medianTokens": 9
+    },
+    "snapshot-i": {
+     "medianMs": 11.2,
+     "medianBytes": 466,
+     "medianTokens": 117
+    },
+    "click": {
+     "medianMs": 9.5,
+     "medianBytes": 26,
+     "medianTokens": 7
+    },
+    "snapshot": {
+     "medianMs": 8.6,
+     "medianBytes": 352,
+     "medianTokens": 88
+    },
+    "fill": {
+     "medianMs": 7.2,
+     "medianBytes": 16,
+     "medianTokens": 4
+    },
+    "eval": {
+     "medianMs": 19.4,
+     "medianBytes": 10,
+     "medianTokens": 3
+    },
+    "screenshot": {
+     "medianMs": 81.8,
+     "medianBytes": 35,
+     "medianTokens": 9
+    },
+    "back": {
+     "medianMs": 8.8,
+     "medianBytes": 35,
+     "medianTokens": 9
+    },
+    "get-title": {
+     "medianMs": 7.4,
+     "medianBytes": 5,
+     "medianTokens": 1
+    },
+    "close": {
+     "medianMs": 70.1,
+     "medianBytes": 19,
+     "medianTokens": 5
+    }
+   }
+  },
+  {
+   "product": "sweef-cli",
+   "succeeded": 7,
+   "rounds": 7,
+   "flowTotalMs": 234.4,
+   "peakRssMiB": 92.3,
+   "cpuSecPerRound": 0.28,
+   "steps": {
+    "open": {
+     "medianMs": 19.9,
+     "medianBytes": 35,
+     "medianTokens": 9
+    },
+    "snapshot-i": {
+     "medianMs": 4.3,
+     "medianBytes": 466,
+     "medianTokens": 117
+    },
+    "click": {
+     "medianMs": 5.1,
+     "medianBytes": 26,
+     "medianTokens": 7
+    },
+    "snapshot": {
+     "medianMs": 3.4,
+     "medianBytes": 352,
+     "medianTokens": 88
+    },
+    "fill": {
+     "medianMs": 3.8,
+     "medianBytes": 16,
+     "medianTokens": 4
+    },
+    "eval": {
+     "medianMs": 38,
+     "medianBytes": 10,
+     "medianTokens": 3
+    },
+    "screenshot": {
+     "medianMs": 81.4,
+     "medianBytes": 39,
+     "medianTokens": 10
+    },
+    "back": {
+     "medianMs": 5.3,
+     "medianBytes": 35,
+     "medianTokens": 9
+    },
+    "get-title": {
+     "medianMs": 3.2,
+     "medianBytes": 5,
+     "medianTokens": 1
+    },
+    "close": {
+     "medianMs": 64.9,
+     "medianBytes": 19,
+     "medianTokens": 5
+    }
+   }
+  },
+  {
+   "product": "agent-browser",
+   "succeeded": 7,
+   "rounds": 7,
+   "flowTotalMs": 1358.4,
+   "peakRssMiB": 1118.9,
+   "cpuSecPerRound": 2.86,
+   "steps": {
+    "open": {
+     "medianMs": 517.9,
+     "medianBytes": 35,
+     "medianTokens": 9
+    },
+    "snapshot-i": {
+     "medianMs": 17.3,
+     "medianBytes": 480,
+     "medianTokens": 120
+    },
+    "click": {
+     "medianMs": 19.3,
+     "medianBytes": 9,
+     "medianTokens": 2
+    },
+    "snapshot": {
+     "medianMs": 57.4,
+     "medianBytes": 374,
+     "medianTokens": 94
+    },
+    "fill": {
+     "medianMs": 19.2,
+     "medianBytes": 9,
+     "medianTokens": 2
+    },
+    "eval": {
+     "medianMs": 8.4,
+     "medianBytes": 10,
+     "medianTokens": 3
+    },
+    "screenshot": {
+     "medianMs": 64.6,
+     "medianBytes": 63,
+     "medianTokens": 16
+    },
+    "back": {
+     "medianMs": 511.1,
+     "medianBytes": 24,
+     "medianTokens": 6
+    },
+    "get-title": {
+     "medianMs": 7.8,
+     "medianBytes": 5,
+     "medianTokens": 1
+    },
+    "close": {
+     "medianMs": 120.3,
+     "medianBytes": 19,
+     "medianTokens": 5
+    }
+   }
+  }
+ ]
+}
